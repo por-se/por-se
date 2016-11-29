@@ -2622,6 +2622,159 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // instructions.
     terminateStateOnExecError(state, "Unexpected ShuffleVector instruction");
     break;
+
+  case Instruction::AtomicRMW: {
+    // An atomic instruction gets a pointer and a value. It reads the value at the pointer, perfoms its operation, stores the result and returns the value that was originally at the pointer.
+    AtomicRMWInst *ai = cast<AtomicRMWInst>(i);
+    switch (ai->getOperation()) {
+    case AtomicRMWInst::Xchg: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+
+      executeMemoryOperation(state, true, pointer, value, 0);
+      break;
+    }
+    case AtomicRMWInst::Add: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = AddExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Sub: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SubExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::And: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = AndExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Nand: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = XorExpr::create(AndExpr::create(oldValue, value), ConstantExpr::create(-1, value->getWidth()));
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Or: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = OrExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Xor: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = XorExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Max: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(SgtExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Min: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(SltExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::UMax: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(UgtExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::UMin: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(UltExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::BAD_BINOP: terminateStateOnExecError(state, "Bad atomicrmw operation"); break;
+    }
+    break;
+  }
+
+  case Instruction::AtomicCmpXchg: {
+    ref<Expr> pointer = eval(ki, 0, state).value;
+    ref<Expr> compare = eval(ki, 1, state).value;
+    ref<Expr> newValue = eval(ki, 2, state).value;
+
+    executeMemoryOperation(state, false, pointer, 0, ki);
+    ref<Expr> oldValue = getDestCell(state, ki).value;
+
+    ref<Expr> write = SelectExpr::create(EqExpr::create(oldValue, compare), newValue, oldValue);
+
+    executeMemoryOperation(state, true, pointer, write, 0);
+    break;
+  }
+
   // Other instructions...
   // Unhandled
   default:
