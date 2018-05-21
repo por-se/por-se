@@ -761,7 +761,11 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
       statsTracker->elapsed() > 60.) {
     StatisticManager &sm = *theStatisticManager;
-    CallPathNode *cpn = current.stack.back().callPathNode;
+
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = current.getCurrentThreadReference();
+    CallPathNode *cpn = thread->stack.back().callPathNode;
+
     if ((MaxStaticForkPct<1. &&
          sm.getIndexedValue(stats::forks, sm.getIndex()) > 
          stats::forks*MaxStaticForkPct) ||
@@ -790,7 +794,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
-    current.pc = current.prevPC;
+    // Since we were unsuccessful, restore the previous program counter for the current thread
+    Thread* thread = current.getCurrentThreadReference();
+    thread->pc = thread->prevPc;
+
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
   }
@@ -1026,7 +1033,8 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    StackFrame &sf = state.stack.back();
+    Thread* thread = state.getCurrentThreadReference();
+    StackFrame &sf = thread->stack.back();
     return sf.locals[index];
   }
 }
@@ -1076,11 +1084,14 @@ Executor::toConstant(ExecutionState &state,
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
 
+  Thread* thread = state.getCurrentThreadReference();
+
   std::string str;
   llvm::raw_string_ostream os(str);
+
   os << "silently concretizing (reason: " << reason << ") expression " << e
-     << " to value " << value << " (" << (*(state.pc)).info->file << ":"
-     << (*(state.pc)).info->line << ")";
+     << " to value " << value << " (" << (*(thread->pc)).info->file << ":"
+     << (*(thread->pc)).info->line << ")";
 
   if (AllExternalWarnings)
     klee_warning(reason, os.str().c_str());
@@ -1148,18 +1159,20 @@ void Executor::printDebugInstructions(ExecutionState &state) {
   else
     stream = &debugLogBuffer;
 
+  Thread* thread = state.getCurrentThreadReference();
+
   if (!DebugPrintInstructions.isSet(STDERR_COMPACT) &&
       !DebugPrintInstructions.isSet(FILE_COMPACT)) {
     (*stream) << "     ";
-    state.pc->printFileLine(*stream);
+    thread->pc->printFileLine(*stream);
     (*stream) << ":";
   }
 
-  (*stream) << state.pc->info->assemblyLine;
+  (*stream) << thread->pc->info->assemblyLine;
 
   if (DebugPrintInstructions.isSet(STDERR_ALL) ||
       DebugPrintInstructions.isSet(FILE_ALL))
-    (*stream) << ":" << *(state.pc->inst);
+    (*stream) << ":" << *(thread->pc->inst);
   (*stream) << "\n";
 
   if (DebugPrintInstructions.isSet(FILE_ALL) ||
@@ -1176,10 +1189,12 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
+  Thread* thread = state.getCurrentThreadReference();
+
   ++stats::instructions;
   ++state.steppedInstructions;
-  state.prevPC = state.pc;
-  ++state.pc;
+  thread->prevPc = thread->pc;
+  ++thread->pc;
 
   if (stats::instructions==StopAfterNInstructions)
     haltExecution = true;
@@ -1190,6 +1205,8 @@ void Executor::executeCall(ExecutionState &state,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
   Instruction *i = ki->inst;
+  Thread* thread = state.getCurrentThreadReference();
+
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
@@ -1200,7 +1217,7 @@ void Executor::executeCall(ExecutionState &state,
       // va_arg is handled by caller and intrinsic lowering, see comment for
       // ExecutionState::varargs
     case Intrinsic::vastart:  {
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = thread->stack.back();
 
       // varargs can be zero if no varargs were provided
       if (!sf.varargs)
@@ -1259,11 +1276,11 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    state.pushFrame(state.prevPC, kf);
-    state.pc = kf->instructions;
+    thread->pushFrame(thread->prevPc, kf);
+    thread->pc = kf->instructions;
 
     if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
+      statsTracker->framePushed(state, &thread->stack[thread->stack.size() - 2]);
 
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1288,7 +1305,7 @@ void Executor::executeCall(ExecutionState &state,
         return;
       }
 
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = thread->stack.back();
       unsigned size = 0;
       bool requires16ByteAlignment = false;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -1312,7 +1329,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       MemoryObject *mo = sf.varargs =
-          memory->allocate(size, true, false, state.prevPC->inst,
+          memory->allocate(size, true, false, thread->prevPc->inst,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
         terminateStateOnExecError(state, "out of memory (varargs)");
@@ -1368,13 +1385,15 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   //
   // With that done we simply set an index in the state so that PHI
   // instructions know which argument to eval, set the pc, and continue.
-  
+
+  Thread* thread = state.getCurrentThreadReference();
+
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().kf;
+  KFunction *kf = thread->stack.back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
-  state.pc = &kf->instructions[entry];
-  if (state.pc->inst->getOpcode() == Instruction::PHI) {
-    PHINode *first = static_cast<PHINode*>(state.pc->inst);
+  thread->pc = &kf->instructions[entry];
+  if (thread->pc->inst->getOpcode() == Instruction::PHI) {
+    PHINode *first = static_cast<PHINode*>(thread->pc->inst);
     state.incomingBBIndex = first->getBasicBlockIndex(src);
   }
 }
@@ -1444,11 +1463,13 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
+  Thread* thread = state.getCurrentThreadReference();
+
   switch (i->getOpcode()) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
-    KInstIterator kcaller = state.stack.back().caller;
+    KInstIterator kcaller = thread->stack.back().caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
@@ -1457,7 +1478,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = eval(ki, 0, state).value;
     }
     
-    if (state.stack.size() <= 1) {
+    if (thread->stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       terminateStateOnExit(state);
     } else {
@@ -1469,8 +1490,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
-        state.pc = kcaller;
-        ++state.pc;
+        thread->pc = kcaller;
+        ++thread->pc;
       }
 
       if (!isVoidReturn) {
@@ -1485,7 +1506,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
                            CallSite(cast<CallInst>(caller)));
 
             // XXX need to check other param attrs ?
-      bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+            bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
             if (isSExt) {
               result = SExtExpr::create(result, to);
             } else {
@@ -1521,7 +1542,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
       // up with convenient instruction specific data.
-      if (statsTracker && state.stack.back().kf->trackCoverage)
+      if (statsTracker && thread->stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
       if (branches.first)
@@ -2694,7 +2715,8 @@ void Executor::run(ExecutionState &initialState) {
       lastState = it->first;
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
-      KInstruction *ki = state.pc;
+      Thread* thread = state.getCurrentThreadReference();
+      KInstruction *ki = thread->pc;
       stepInstruction(state);
 
       executeInstruction(state, ki);
@@ -2747,7 +2769,8 @@ void Executor::run(ExecutionState &initialState) {
 
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
-    KInstruction *ki = state.pc;
+    Thread* thread = state.getCurrentThreadReference();
+    KInstruction *ki = thread->pc;
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -2848,8 +2871,9 @@ void Executor::terminateState(ExecutionState &state) {
 
   std::vector<ExecutionState *>::iterator it =
       std::find(addedStates.begin(), addedStates.end(), &state);
-  if (it==addedStates.end()) {
-    state.pc = state.prevPC;
+  if (it == addedStates.end()) {
+    Thread* thread = state.getCurrentThreadReference();
+    thread->pc = thread->prevPc;
 
     removedStates.push_back(&state);
   } else {
@@ -2882,18 +2906,20 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 
 const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const ExecutionState &state,
     Instruction ** lastInstruction) {
+  Thread* thread = state.getCurrentThreadReference();
+
   // unroll the stack of the applications state and find
   // the last instruction which is not inside a KLEE internal function
-  ExecutionState::stack_ty::const_reverse_iterator it = state.stack.rbegin(),
-      itE = state.stack.rend();
+  ExecutionState::stack_ty::const_reverse_iterator it = thread->stack.rbegin(),
+      itE = thread->stack.rend();
 
   // don't check beyond the outermost function (i.e. main())
   itE--;
 
   const InstructionInfo * ii = 0;
   if (kmodule->internalFunctions.count(it->kf->function) == 0){
-    ii =  state.prevPC->info;
-    *lastInstruction = state.prevPC->inst;
+    ii = thread->prevPc->info;
+    *lastInstruction = thread->prevPc->inst;
     //  Cannot return yet because even though
     //  it->function is not an internal function it might of
     //  been called from an internal function.
@@ -2917,8 +2943,8 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
 
   if (!ii) {
     // something went wrong, play safe and return the current instruction info
-    *lastInstruction = state.prevPC->inst;
-    return *state.prevPC->info;
+    *lastInstruction = thread->prevPc->inst;
+    return *thread->prevPc->info;
   }
   return *ii;
 }
@@ -3074,7 +3100,8 @@ void Executor::callExternalFunction(ExecutionState &state,
 	os << ", ";
     }
     os << ") at ";
-    state.pc->printFileLine(os);
+    Thread* thread = state.getCurrentThreadReference();
+    thread->pc->printFileLine(os);
     
     if (AllExternalWarnings)
       klee_warning("%s", os.str().c_str());
@@ -3150,8 +3177,10 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // will put multiple copies on this list, but it doesn't really
   // matter because all we use this list for is to unbind the object
   // on function return.
-  if (isLocal)
-    state.stack.back().allocas.push_back(mo);
+  if (isLocal) {
+    Thread* thread = state.getCurrentThreadReference();
+    thread->stack.back().allocas.push_back(mo);
+  }
 
   return os;
 }
@@ -3162,9 +3191,13 @@ void Executor::executeAlloc(ExecutionState &state,
                             KInstruction *target,
                             bool zeroMemory,
                             const ObjectState *reallocFrom) {
+  // TODO: Here we should assign the ownership over the memory region to the
+  //       current thread
+  Thread* thread = state.getCurrentThreadReference();
+
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    const llvm::Value *allocSite = state.prevPC->inst;
+    const llvm::Value *allocSite = thread->prevPc->inst;
     size_t allocationAlignment = getAllocationAlignment(allocSite);
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
@@ -3331,6 +3364,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> address,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
+  Thread* thread = state.getCurrentThreadReference();
   Expr::Width type = (isWrite ? value->getWidth() : 
                      getWidthForLLVMType(target->inst->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -3368,7 +3402,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       inBounds);
     solver->setTimeout(0);
     if (!success) {
-      state.pc = state.prevPC;
+      thread->pc = thread->prevPc;
       terminateStateEarly(state, "Query timed out (bounds check).");
       return;
     }
@@ -3574,6 +3608,9 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+  // By default the state should create the main thread
+  // TODO: maybe we should expllicitly set the main thread here up?
+  Thread* thread = state->getCurrentThreadReference();
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -3601,7 +3638,7 @@ void Executor::runFunctionAsMain(Function *f,
 
         MemoryObject *arg =
             memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
-                             /*allocSite=*/state->pc->inst, /*alignment=*/8);
+                             /*allocSite=*/thread->pc->inst, /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
         ObjectState *os = bindObjectInState(*state, arg, false);

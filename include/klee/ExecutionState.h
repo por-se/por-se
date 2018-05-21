@@ -14,6 +14,7 @@
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/TreeStream.h"
 #include "klee/MergeHandler.h"
+#include "klee/Thread.h"
 
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
@@ -35,37 +36,11 @@ struct InstructionInfo;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
-struct StackFrame {
-  KInstIterator caller;
-  KFunction *kf;
-  CallPathNode *callPathNode;
-
-  std::vector<const MemoryObject *> allocas;
-  Cell *locals;
-
-  /// Minimum distance to an uncovered instruction once the function
-  /// returns. This is not a good place for this but is used to
-  /// quickly compute the context sensitive minimum distance to an
-  /// uncovered instruction. This value is updated by the StatsTracker
-  /// periodically.
-  unsigned minDistToUncoveredOnReturn;
-
-  // For vararg functions: arguments not passed via parameter are
-  // stored (packed tightly) in a local (alloca) memory object. This
-  // is set up to match the way the front-end generates vaarg code (it
-  // does not pass vaarg through as expected). VACopy is lowered inside
-  // of intrinsic lowering.
-  MemoryObject *varargs;
-
-  StackFrame(KInstIterator caller, KFunction *kf);
-  StackFrame(const StackFrame &s);
-  ~StackFrame();
-};
-
 /// @brief ExecutionState representing a path under exploration
 class ExecutionState {
 public:
   typedef std::vector<StackFrame> stack_ty;
+  typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
 private:
   // unsupported, use copy constructor
@@ -73,18 +48,14 @@ private:
 
   std::map<std::string, std::string> fnAliases;
 
+  /// @brief Pointer to the thread that is currently executed
+  threads_ty::iterator currentThreadIterator;
+
 public:
   // Execution - Control Flow specific
 
-  /// @brief Pointer to instruction to be executed after the current
-  /// instruction
-  KInstIterator pc;
-
-  /// @brief Pointer to instruction which is currently executed
-  KInstIterator prevPC;
-
-  /// @brief Stack representing the current instruction stream
-  stack_ty stack;
+  /// @brief Thread map representing all threads that exist at the moment
+  threads_ty threads;
 
   /// @brief Remember from which Basic Block control flow arrived
   /// (i.e. to select the right phi values)
@@ -168,7 +139,9 @@ public:
 
   ExecutionState *branch();
 
-  void pushFrame(KInstIterator caller, KFunction *kf);
+  Thread* getCurrentThreadReference() const;
+
+  void popFrameOfThread(Thread* thread);
   void popFrame();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);

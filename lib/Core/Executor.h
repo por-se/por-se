@@ -351,12 +351,16 @@ private:
   Cell& getArgumentCell(ExecutionState &state,
                         KFunction *kf,
                         unsigned index) {
-    return state.stack.back().locals[kf->getArgRegister(index)];
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = state.getCurrentThreadReference();
+    return thread->stack.back().locals[kf->getArgRegister(index)];
   }
 
   Cell& getDestCell(ExecutionState &state,
                     KInstruction *target) {
-    return state.stack.back().locals[target->dest];
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = state.getCurrentThreadReference();
+    return thread->stack.back().locals[target->dest];
   }
 
   void bindLocal(KInstruction *target, 

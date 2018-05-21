@@ -15,6 +15,7 @@
 #include "klee/Internal/Module/KModule.h"
 
 #include "klee/Expr.h"
+#include "klee/Thread.h"
 
 #include "Memory.h"
 #include "llvm/IR/Function.h"
@@ -38,33 +39,9 @@ namespace {
 
 /***/
 
-StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
-  : caller(_caller), kf(_kf), callPathNode(0), 
-    minDistToUncoveredOnReturn(0), varargs(0) {
-  locals = new Cell[kf->numRegisters];
-}
-
-StackFrame::StackFrame(const StackFrame &s) 
-  : caller(s.caller),
-    kf(s.kf),
-    callPathNode(s.callPathNode),
-    allocas(s.allocas),
-    minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
-    varargs(s.varargs) {
-  locals = new Cell[s.kf->numRegisters];
-  for (unsigned i=0; i<s.kf->numRegisters; i++)
-    locals[i] = s.locals[i];
-}
-
-StackFrame::~StackFrame() { 
-  delete[] locals; 
-}
-
-/***/
-
 ExecutionState::ExecutionState(KFunction *kf) :
-    pc(kf->instructions),
-    prevPC(pc),
+    // pc(kf->instructions),
+    // prevPC(pc),
 
     queryCost(0.), 
     weight(1),
@@ -74,8 +51,13 @@ ExecutionState::ExecutionState(KFunction *kf) :
     coveredNew(false),
     forkDisabled(false),
     ptreeNode(0),
-    steppedInstructions(0){
-  pushFrame(0, kf);
+    steppedInstructions(0) {
+
+  // Thread 0 is always the main function thread
+  Thread thread = Thread(0, kf);
+  auto result = threads.insert(std::make_pair(thread.getThreadId(), thread));
+  assert(result.second);
+  currentThreadIterator = result.first;
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
@@ -95,15 +77,24 @@ ExecutionState::~ExecutionState() {
     cur_mergehandler->removeOpenState(this);
   }
 
+  // We have to clean up all stack frames of all threads
+  for (auto it = threads.begin(); it != threads.end(); it++) {
+    Thread thread = (*it).second;
 
-  while (!stack.empty()) popFrame();
+    while (!thread.stack.empty()) {
+      popFrameOfThread(&thread);
+    }
+  }
 }
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
-    pc(state.pc),
-    prevPC(state.prevPC),
-    stack(state.stack),
+// These are now handled by the individual threads
+//    pc(state.pc),
+//    prevPC(state.prevPC),
+//    stack(state.stack),
+    threads(state.threads),
+
     incomingBBIndex(state.incomingBBIndex),
 
     addressSpace(state.addressSpace),
@@ -126,6 +117,10 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions)
 {
+  // Since we copied the threads, we can use the thread id to look it up
+  Thread* curStateThread = state.getCurrentThreadReference();
+  currentThreadIterator = threads.find(curStateThread->getThreadId());
+
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
 
@@ -146,16 +141,25 @@ ExecutionState *ExecutionState::branch() {
   return falseState;
 }
 
-void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack.push_back(StackFrame(caller,kf));
+Thread* ExecutionState::getCurrentThreadReference() const {
+  return &(currentThreadIterator->second);
+}
+
+void ExecutionState::popFrameOfThread(Thread* thread) {
+  // TODO: we should probably do this in the tread?
+  // We want to unbind all the objects from the current tread frame
+  StackFrame &sf = thread->stack.back();
+  for (auto it = sf.allocas.begin(), ie = sf.allocas.end(); it != ie; ++it) {
+    addressSpace.unbindObject(*it);
+  }
+
+  // Let the thread class handle the rest
+  thread->popStackFrame();
 }
 
 void ExecutionState::popFrame() {
-  StackFrame &sf = stack.back();
-  for (std::vector<const MemoryObject*>::iterator it = sf.allocas.begin(), 
-         ie = sf.allocas.end(); it != ie; ++it)
-    addressSpace.unbindObject(*it);
-  stack.pop_back();
+  Thread* thread = getCurrentThreadReference();
+  popFrameOfThread(thread);
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
@@ -198,7 +202,11 @@ bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     llvm::errs() << "-- attempting merge of A:" << this << " with B:" << &b
                  << "--\n";
-  if (pc != b.pc)
+
+  Thread* curThread = getCurrentThreadReference();
+  Thread* curThreadB = b.getCurrentThreadReference();
+
+  if (curThread->pc != curThreadB->pc)
     return false;
 
   // XXX is it even possible for these to differ? does it matter? probably
@@ -207,16 +215,17 @@ bool ExecutionState::merge(const ExecutionState &b) {
     return false;
 
   {
-    std::vector<StackFrame>::const_iterator itA = stack.begin();
-    std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-    while (itA!=stack.end() && itB!=b.stack.end()) {
+    std::vector<StackFrame>::const_iterator itA = curThread->stack.begin();
+    std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
+    while (itA != curThread->stack.end() && itB != curThreadB->stack.end()) {
       // XXX vaargs?
-      if (itA->caller!=itB->caller || itA->kf!=itB->kf)
+      if (itA->caller != itB->caller || itA->kf != itB->kf)
         return false;
       ++itA;
       ++itB;
     }
-    if (itA!=stack.end() || itB!=b.stack.end())
+
+    if (itA != curThread->stack.end() || itB != curThreadB->stack.end())
       return false;
   }
 
@@ -312,9 +321,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = stack.begin();
-  std::vector<StackFrame>::const_iterator itB = b.stack.begin();
-  for (; itA!=stack.end(); ++itA, ++itB) {
+  std::vector<StackFrame>::iterator itA = curThread->stack.begin();
+  std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
+  for (; itA != curThread->stack.end(); ++itA, ++itB) {
     StackFrame &af = *itA;
     const StackFrame &bf = *itB;
     for (unsigned i=0; i<af.kf->numRegisters; i++) {
@@ -357,9 +366,13 @@ bool ExecutionState::merge(const ExecutionState &b) {
 
 void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
   unsigned idx = 0;
-  const KInstruction *target = prevPC;
+  // TODO: if we dump the stack, then we should probably also write
+  //       of what thread this stack is
+  Thread* thread = getCurrentThreadReference();
+
+  const KInstruction *target = thread->prevPc;
   for (ExecutionState::stack_ty::const_reverse_iterator
-         it = stack.rbegin(), ie = stack.rend();
+         it = thread->stack.rbegin(), ie = thread->stack.rend();
        it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;

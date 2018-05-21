@@ -513,9 +513,10 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning");
+  Thread* thread = state.getCurrentThreadReference();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning("%s: %s", state.stack.back().kf->function->getName().data(), 
+  klee_warning("%s: %s", thread->stack.back().kf->function->getName().data(),
                msg_str.c_str());
 }
 
@@ -524,9 +525,10 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_warning_once");
+  Thread* thread = state.getCurrentThreadReference();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning_once(0, "%s: %s", state.stack.back().kf->function->getName().data(),
+  klee_warning_once(0, "%s: %s", thread->stack.back().kf->function->getName().data(),
                     msg_str.c_str());
 }
 
@@ -730,10 +732,12 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
          "expect constant address argument to klee_define_fixed_object");
   assert(isa<ConstantExpr>(arguments[1]) &&
          "expect constant size argument to klee_define_fixed_object");
+
+  Thread* thread = state.getCurrentThreadReference();
   
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
-  MemoryObject *mo = executor.memory->allocateFixed(address, size, state.prevPC->inst);
+  MemoryObject *mo = executor.memory->allocateFixed(address, size, thread->prevPc->inst);
   executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
 }
