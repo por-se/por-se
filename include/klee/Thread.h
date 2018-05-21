@@ -71,6 +71,10 @@ namespace klee {
       /// @brief thread id that should be unique for the program
       ThreadId tid;
 
+      /// @brief Remember from which Basic Block control flow arrived
+      /// (i.e. to select the right phi values)
+      unsigned incomingBBIndex;
+
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       ThreadId getThreadId();

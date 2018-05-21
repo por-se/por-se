@@ -95,8 +95,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 //    stack(state.stack),
     threads(state.threads),
 
-    incomingBBIndex(state.incomingBBIndex),
-
     addressSpace(state.addressSpace),
     constraints(state.constraints),
 

@@ -1394,7 +1394,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   thread->pc = &kf->instructions[entry];
   if (thread->pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread->pc->inst);
-    state.incomingBBIndex = first->getBasicBlockIndex(src);
+    thread->incomingBBIndex = first->getBasicBlockIndex(src);
   }
 }
 
@@ -1852,7 +1852,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     break;
   }
   case Instruction::PHI: {
-    ref<Expr> result = eval(ki, state.incomingBBIndex, state).value;
+    ref<Expr> result = eval(ki, thread->incomingBBIndex, state).value;
     bindLocal(ki, state, result);
     break;
   }

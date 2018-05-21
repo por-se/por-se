@@ -57,10 +57,6 @@ public:
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
 
-  /// @brief Remember from which Basic Block control flow arrived
-  /// (i.e. to select the right phi values)
-  unsigned incomingBBIndex;
-
   // Overall state of the state - Data specific
 
   /// @brief Address space used by this state (e.g. Global and Heap)
