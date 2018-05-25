@@ -26,7 +26,7 @@ namespace klee {
     /// quickly compute the context sensitive minimum distance to an
     /// uncovered instruction. This value is updated by the StatsTracker
     /// periodically.
-    unsigned minDistToUncoveredOnReturn;
+    uint64_t minDistToUncoveredOnReturn;
 
     // For vararg functions: arguments not passed via parameter are
     // stored (packed tightly) in a local (alloca) memory object. This
@@ -57,6 +57,13 @@ namespace klee {
       /// @brief Type for all thread ids
       typedef uint64_t ThreadId;
 
+      enum ThreadState {
+        PREEMPTED = 0,
+        SLEEPING = 1,
+        RUNNABLE = 2,
+        EXITED = 3,
+      };
+
     private:
       /// @brief Pointer to instruction to be executed after the current
       /// instruction
@@ -75,10 +82,15 @@ namespace klee {
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;
 
+      /// @brief the current sync point this thread is at
+      uint64_t synchronizationPoint;
+
+      /// @brief the state this thread is in
+      ThreadState state;
+
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       ThreadId getThreadId();
-
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);

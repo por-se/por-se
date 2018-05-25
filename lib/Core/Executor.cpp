@@ -320,6 +320,7 @@ const char *Executor::TerminateReasonNames[] = {
   [ ReadOnly ] = "readonly",
   [ ReportError ] = "reporterror",
   [ User ] = "user",
+  [ Deadlock ] = "deadlock",
   [ Unhandled ] = "xxx",
 };
 
@@ -1204,10 +1205,13 @@ void Executor::executeCall(ExecutionState &state,
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
-  Instruction *i = ki->inst;
+  Instruction *i = nullptr;
   Thread* thread = state.getCurrentThreadReference();
 
-  if (f && f->isDeclaration()) {
+  if (ki)
+    i = ki->inst;
+
+  if (ki && f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
@@ -1279,8 +1283,10 @@ void Executor::executeCall(ExecutionState &state,
     thread->pushFrame(thread->prevPc, kf);
     thread->pc = kf->instructions;
 
-    if (statsTracker)
-      statsTracker->framePushed(state, &thread->stack[thread->stack.size() - 2]);
+    if (statsTracker) {
+      StackFrame* current = &thread->stack.back();
+      statsTracker->framePushed(current, &thread->stack[thread->stack.size() - 2]);
+    }
 
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1480,9 +1486,24 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     
     if (thread->stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      terminateStateOnExit(state);
+      state.exitThread(thread->getThreadId());
+      bool success = state.scheduleNextThread();
+      if (!success) {
+        bool oneBlocked = false;
+        for (auto& threadIt : state.threads) {
+           if (threadIt.second.state == Thread::ThreadState::SLEEPING) {
+              oneBlocked = true;
+           }
+        }
+
+        if (oneBlocked) {
+          terminateStateOnError(state, "all threads are sleeping", Deadlock);
+        } else {
+          terminateStateOnExit(state);
+        }
+      }
     } else {
-      state.popFrame();
+      state.popFrameOfCurrentThread();
 
       if (statsTracker)
         statsTracker->framePopped(state);
@@ -2782,7 +2803,7 @@ void Executor::run(ExecutionState &initialState) {
   }
 
   delete searcher;
-  searcher = 0;
+  searcher = nullptr;
 
   doDumpStates();
 }
@@ -3618,8 +3639,10 @@ void Executor::runFunctionAsMain(Function *f,
     state->symPathOS = symPathWriter->open();
 
 
-  if (statsTracker)
-    statsTracker->framePushed(*state, 0);
+  if (statsTracker) {
+    StackFrame* currentFrame = &thread->stack.back();
+    statsTracker->framePushed(currentFrame, 0);
+  }
 
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
@@ -3883,6 +3906,120 @@ void Executor::prepareForEarlyExit() {
   if (statsTracker) {
     // Make sure stats get flushed out
     statsTracker->done();
+  }
+}
+
+
+KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
+  for (auto f : kmodule->functions) {
+    ref<Expr> addr = Expr::createPointer((uint64_t) (void*) f->function);
+
+    if (addr == address) {
+      return f;
+    }
+  }
+
+  return nullptr;
+}
+
+void Executor::createThread(ExecutionState &state, Thread::ThreadId tid,
+                            ref<Expr> startRoutine, ref<Expr> arg) {
+  KFunction *kf = obtainFunctionFromExpression(startRoutine);
+  assert(kf && "could not obtain the start routine");
+
+  Thread::ThreadId parentThreadId = state.getCurrentThreadReference()->getThreadId();
+
+  std::string Str;
+  llvm::raw_string_ostream msg(Str);
+  msg << "Creating thread: " << tid  << " Function: "
+    << kf->function->getName().str() << " Parent: " << parentThreadId;
+  klee_message("New %s", msg.str().c_str());
+
+  Thread* thread = state.createThread(tid, kf);
+  StackFrame* threadStartFrame = &thread->stack.back();
+
+  threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
+
+  if (statsTracker)
+    statsTracker->framePushed(&thread->stack.back(), 0);
+}
+
+void Executor::sleepThread(ExecutionState &state) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "sleepThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
+  state.sleepCurrentThread();
+  bool successful = state.scheduleNextThread();
+
+  state.dumpSchedulingInfo(os);
+  klee_warning("New %s", os.str().c_str());
+
+  if (!successful) {
+    terminateStateOnError(state, "all threads are sleeping", Deadlock);
+  }
+}
+
+void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "wakeUpThread(" << tid << ") from " << state.getCurrentThreadReference()->getThreadId() << "\n";
+  state.wakeUpThread(tid);
+  bool successful = state.scheduleNextThread();
+
+  state.dumpSchedulingInfo(os);
+  klee_warning("New %s", os.str().c_str());
+
+  if (!successful) {
+    terminateStateOnError(state, "all threads are sleeping", Deadlock);
+  }
+}
+
+void Executor::wakeUpThreads(ExecutionState &state, std::vector<Thread::ThreadId> tids) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  std::string str(tids.begin(), tids.end());
+
+  os << "wakeUpThreads(" << str << ") from " << state.getCurrentThreadReference()->getThreadId() << "\n";
+  state.wakeUpThreads(tids);
+  bool successful = state.scheduleNextThread();
+
+  state.dumpSchedulingInfo(os);
+  klee_warning("New %s", os.str().c_str());
+
+  if (!successful) {
+    terminateStateOnError(state, "all threads are sleeping", Deadlock);
+  }
+}
+
+void Executor::preemptThread(ExecutionState &state) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "preemptThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
+
+  state.preemptCurrentThread();
+  bool successful = state.scheduleNextThread();
+
+  state.dumpSchedulingInfo(os);
+  klee_warning("New %s", os.str().c_str());
+
+  if (!successful) {
+    terminateStateOnError(state, "all threads are sleeping", Deadlock);
+  }
+}
+
+void Executor::exitThread(ExecutionState &state) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "exitThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
+
+  state.exitThread(state.getCurrentThreadReference()->getThreadId());
+  bool successful = state.scheduleNextThread();
+
+  state.dumpSchedulingInfo(os);
+  klee_warning("%s", os.str().c_str());
+
+  if (!successful) {
+    terminateStateOnError(state, "all threads are sleeping", Deadlock);
   }
 }
 

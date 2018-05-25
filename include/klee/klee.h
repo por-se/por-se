@@ -17,7 +17,7 @@
 extern "C" {
 #endif
   
-  /* Add an accesible memory object at a user specified location. It
+  /* Add an accessible memory object at a user specified location. It
    * is the users responsibility to make sure that these memory
    * objects do not overlap. These memory objects will also
    * (obviously) not correctly interact with external function
@@ -160,6 +160,20 @@ extern "C" {
 
   /* Get errno value of the current state */
   int klee_get_errno(void);
+
+  void klee_create_thread(uint64_t tid, void *(*start_routine)(void*), void *arg);
+
+  void klee_sleep_thread(void);
+
+  void klee_wake_up_thread(uint64_t tid);
+
+  void klee_wake_up_threads(uint64_t* ids, size_t size);
+
+  uint64_t klee_get_thread_id(void);
+
+  void klee_preempt_thread(void);
+
+  void klee_exit_thread(void);
 #ifdef __cplusplus
 }
 #endif

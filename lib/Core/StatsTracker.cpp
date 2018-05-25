@@ -339,35 +339,30 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 ///
 
 /* Should be called _after_ the es->pushFrame() */
-void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
-  Thread* thread = es.getCurrentThreadReference();
-
+void StatsTracker::framePushed(StackFrame *current, StackFrame *parentFrame) {
   if (OutputIStats) {
-    StackFrame &sf = thread->stack.back();
-
     if (UseCallPaths) {
-      CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
-      CallPathNode *cp = callPathManager.getCallPath(parent, 
-                                                     sf.caller ? sf.caller->inst : 0, 
-                                                     sf.kf->function);
-      sf.callPathNode = cp;
+      CallPathNode *parent = parentFrame ? parentFrame->callPathNode : nullptr;
+      CallPathNode *cp = callPathManager.getCallPath(
+              parent,
+              current->caller ? current->caller->inst : nullptr,
+              current->kf->function);
+      current->callPathNode = cp;
       cp->count++;
     }
   }
 
   if (updateMinDistToUncovered) {
-    StackFrame &sf = thread->stack.back();
-
     uint64_t minDistAtRA = 0;
     if (parentFrame)
       minDistAtRA = parentFrame->minDistToUncoveredOnReturn;
 
-    sf.minDistToUncoveredOnReturn =
-        sf.caller ? computeMinDistToUncovered(sf.caller, minDistAtRA) : 0;
+    current->minDistToUncoveredOnReturn =
+            current->caller ? computeMinDistToUncovered(current->caller, minDistAtRA) : 0;
   }
 }
 
-/* Should be called _after_ the es->popFrame() */
+/* Should be called _after_ the es->popFrameOfCurrentThread() */
 void StatsTracker::framePopped(ExecutionState &es) {
   // XXX remove me?
 }

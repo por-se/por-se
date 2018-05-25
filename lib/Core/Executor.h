@@ -112,6 +112,7 @@ public:
     ReadOnly,
     ReportError,
     User,
+    Deadlock,
     Unhandled
   };
 
@@ -467,6 +468,8 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
+  KFunction* obtainFunctionFromExpression(ref<Expr> address);
+
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
       InterpreterHandler *ie);
@@ -543,6 +546,13 @@ public:
 
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
+
+  void createThread(ExecutionState &state, Thread::ThreadId tid, ref<Expr> startRoutine, ref<Expr> arg);
+  void sleepThread(ExecutionState &state);
+  void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);
+  void wakeUpThreads(ExecutionState &state, std::vector<Thread::ThreadId> tids);
+  void preemptThread(ExecutionState &state);
+  void exitThread(ExecutionState &state);
 };
   
 } // End klee namespace

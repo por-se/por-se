@@ -51,6 +51,9 @@ private:
   /// @brief Pointer to the thread that is currently executed
   threads_ty::iterator currentThreadIterator;
 
+  /// @brief The sync point where we wait for the threads
+  uint64_t currentSynchronizationPoint;
+
 public:
   // Execution - Control Flow specific
 
@@ -122,6 +125,11 @@ public:
 private:
   ExecutionState() : ptreeNode(0) {}
 
+  void popFrameOfThread(Thread* thread);
+
+  void wakeUpThreadInternal(Thread::ThreadId tid);
+
+  bool moveToNewSyncPhase();
 public:
   ExecutionState(KFunction *kf);
 
@@ -135,16 +143,37 @@ public:
 
   ExecutionState *branch();
 
+  /// @brief returns the reference to the current thread (only valid for one 'klee instruction')
   Thread* getCurrentThreadReference() const;
 
-  void popFrameOfThread(Thread* thread);
-  void popFrame();
+  // The method below is a bit 'unstable' with regards to the thread id
+  // -> probably at a later state the thread id will be created by the ExecutionState
+  /// @brief will create a new thread with the given thread id
+  Thread* createThread(Thread::ThreadId tid, KFunction *kf);
+
+  //// @brief will put the current thread into sleep mode
+  void sleepCurrentThread();
+
+  /// @brief wakes a specific thread up
+  void wakeUpThread(Thread::ThreadId tid);
+
+  /// @brief wakes up a number of threads at once
+  void wakeUpThreads(std::vector<Thread::ThreadId> tids);
+
+  void preemptCurrentThread();
+
+  bool scheduleNextThread();
+
+  void exitThread(Thread::ThreadId tid);
+
+  void popFrameOfCurrentThread();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
 
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
+  void dumpSchedulingInfo(llvm::raw_ostream &out) const;
 };
 }
 

@@ -43,6 +43,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
     // pc(kf->instructions),
     // prevPC(pc),
 
+    currentSynchronizationPoint(0),
+
     queryCost(0.), 
     weight(1),
     depth(0),
@@ -58,10 +60,15 @@ ExecutionState::ExecutionState(KFunction *kf) :
   auto result = threads.insert(std::make_pair(thread.getThreadId(), thread));
   assert(result.second);
   currentThreadIterator = result.first;
+
+  Thread* curThread = getCurrentThreadReference();
+  curThread->state = Thread::ThreadState::RUNNABLE;
+  curThread->synchronizationPoint = 0;
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0) {}
+    : constraints(assumptions), queryCost(0.), ptreeNode(0),
+      currentSynchronizationPoint(0) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -78,8 +85,8 @@ ExecutionState::~ExecutionState() {
   }
 
   // We have to clean up all stack frames of all threads
-  for (auto it = threads.begin(); it != threads.end(); it++) {
-    Thread thread = (*it).second;
+  for (auto& it : threads) {
+    Thread thread = it.second;
 
     while (!thread.stack.empty()) {
       popFrameOfThread(&thread);
@@ -94,6 +101,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 //    prevPC(state.prevPC),
 //    stack(state.stack),
     threads(state.threads),
+    currentSynchronizationPoint(state.currentSynchronizationPoint),
 
     addressSpace(state.addressSpace),
     constraints(state.constraints),
@@ -147,17 +155,140 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
   // TODO: we should probably do this in the tread?
   // We want to unbind all the objects from the current tread frame
   StackFrame &sf = thread->stack.back();
-  for (auto it = sf.allocas.begin(), ie = sf.allocas.end(); it != ie; ++it) {
-    addressSpace.unbindObject(*it);
+  for (auto &it : sf.allocas) {
+    addressSpace.unbindObject(it);
   }
 
   // Let the thread class handle the rest
   thread->popStackFrame();
 }
 
-void ExecutionState::popFrame() {
+void ExecutionState::popFrameOfCurrentThread() {
   Thread* thread = getCurrentThreadReference();
   popFrameOfThread(thread);
+}
+
+Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
+  Thread thread = Thread(tid, kf);
+  auto result = threads.insert(std::make_pair(tid, thread));
+  assert(result.second);
+
+  Thread* newThread = &result.first->second;
+  newThread->synchronizationPoint = currentSynchronizationPoint + 1;
+  newThread->state = Thread::ThreadState::PREEMPTED;
+
+  // TODO: determine if we want the current thread to wait
+  //       if we branch, then we should consider to preempt
+  //       the current thread to determine the next schedule
+
+  return newThread;
+}
+
+bool ExecutionState::moveToNewSyncPhase() {
+  currentSynchronizationPoint++;
+  bool oneRunnable = false;
+
+  for (auto& threadIt : threads) {
+    Thread* thread = &threadIt.second;
+
+    if (thread->state == Thread::ThreadState::RUNNABLE) {
+      oneRunnable = true;
+    }
+
+    if (thread->state == Thread::ThreadState::PREEMPTED) {
+      thread->state = Thread::ThreadState::RUNNABLE;
+      oneRunnable = true;
+    }
+
+    thread->synchronizationPoint = currentSynchronizationPoint;
+  }
+
+  // It is save to use minimal recursion here, because now at least one should be
+  // runnable or we can error out
+  if (oneRunnable) {
+    return scheduleNextThread();
+  } else {
+    return false;
+  }
+}
+
+
+bool ExecutionState::scheduleNextThread() {
+  // TODO: check if all are sleeping -> error!
+  std::vector<Thread*> runnableThreads;
+
+  // First determine all that are runnable
+  for (auto& threadIt : threads) {
+    Thread* thread = &threadIt.second;
+
+    if (thread->synchronizationPoint == currentSynchronizationPoint
+        && thread->state == Thread::ThreadState::RUNNABLE) {
+      runnableThreads.push_back(thread);
+    }
+  }
+
+  if (runnableThreads.empty()) {
+    // So all have reached the current sync point, move to the new one
+    return moveToNewSyncPhase();
+  }
+
+  // We should potentially branch here
+  Thread* newScheduledThread = runnableThreads.front();
+  currentThreadIterator = threads.find(newScheduledThread->getThreadId());
+  return true;
+}
+
+void ExecutionState::sleepCurrentThread() {
+  Thread* thread = getCurrentThreadReference();
+  thread->synchronizationPoint++;
+  thread->state = Thread::ThreadState::SLEEPING;
+}
+
+void ExecutionState::preemptCurrentThread() {
+  Thread* thread = getCurrentThreadReference();
+  thread->synchronizationPoint++;
+  thread->state = Thread::ThreadState::PREEMPTED;
+}
+
+void ExecutionState::wakeUpThreadInternal(Thread::ThreadId tid) {
+  auto pair = threads.find(tid);
+  assert(pair != threads.end() && "Could not find thread by id");
+
+  Thread* thread = &pair->second;
+  thread->state = thread->PREEMPTED;
+  thread->synchronizationPoint++;
+}
+
+void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
+  wakeUpThreadInternal(tid);
+
+  Thread* thread = getCurrentThreadReference();
+  thread->state = thread->PREEMPTED;
+  thread->synchronizationPoint++;
+}
+
+void ExecutionState::wakeUpThreads(std::vector<Thread::ThreadId> tids) {
+  for (auto tid : tids) {
+    wakeUpThreadInternal(tid);
+  }
+
+  Thread* thread = getCurrentThreadReference();
+  thread->state = thread->PREEMPTED;
+  thread->synchronizationPoint++;
+}
+
+void ExecutionState::exitThread(Thread::ThreadId tid) {
+  auto pair = threads.find(tid);
+  assert(pair != threads.end() && "Could not find thread by id");
+
+  Thread* thread = &pair->second;
+  thread->state = thread->EXITED;
+  thread->synchronizationPoint++;
+
+  // Now remove all stack frames to cleanup
+  // while (!thread->stack.empty()) {
+  //  popFrameOfThread(thread);
+  //}
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
@@ -360,6 +491,15 @@ bool ExecutionState::merge(const ExecutionState &b) {
   constraints.addConstraint(OrExpr::create(inA, inB));
 
   return true;
+}
+
+void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
+  out << "Thread scheduling:\n";
+  for (const auto& threadId : threads) {
+    const Thread* thread = &threadId.second;
+    out << "Tid: " << thread->tid << " in state: " << thread->state
+        << " at point: " << thread->synchronizationPoint << "\n";
+  }
 }
 
 void ExecutionState::dumpStack(llvm::raw_ostream &out) const {

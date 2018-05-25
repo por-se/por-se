@@ -140,6 +140,11 @@ namespace {
 		cl::init(false));
 
   cl::opt<bool>
+  WithPThreadRuntime("pthread-runtime",
+    cl::desc("Link with pthread runtime."),
+    cl::init(false));
+
+  cl::opt<bool>
   OptimizeModule("optimize",
                  cl::desc("Optimize before execution"),
 		 cl::init(false));
@@ -733,6 +738,13 @@ static const char *modelledExternals[] = {
   "klee_warning_once",
   "klee_alias_function",
   "klee_stack_trace",
+  "klee_create_thread",
+  "klee_sleep_thread",
+  "klee_wake_up_thread",
+  "klee_wake_up_threads",
+  "klee_get_thread_id",
+  "klee_preempt_thread",
+  "klee_exit_thread",
   "llvm.dbg.declare",
   "llvm.dbg.value",
   "llvm.va_start",
@@ -1241,6 +1253,14 @@ int main(int argc, char **argv, char **envp) {
     klee_message("NOTE: Using model: %s", Path.c_str());
     mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
     assert(mainModule && "unable to link with simple model");
+  }
+
+  if (WithPThreadRuntime) {
+    SmallString<128> Path(Opts.LibraryDir);
+    llvm::sys::path::append(Path, "libkleeRuntimePThread.bca");
+    klee_message("NOTE: Using model: %s", Path.c_str());
+    mainModule = klee::linkWithLibrary(mainModule, Path.c_str());
+    assert(mainModule && "unable to link with pthread model");
   }
 
   std::vector<std::string>::iterator libs_it;
