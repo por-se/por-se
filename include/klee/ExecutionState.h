@@ -127,8 +127,6 @@ private:
 
   void popFrameOfThread(Thread* thread);
 
-  void wakeUpThreadInternal(Thread::ThreadId tid);
-
   bool moveToNewSyncPhase();
 public:
   ExecutionState(KFunction *kf);
@@ -160,11 +158,16 @@ public:
   /// @brief wakes up a number of threads at once
   void wakeUpThreads(std::vector<Thread::ThreadId> tids);
 
+  /// @brief will preempt the current thread for the current sync phase
   void preemptCurrentThread();
 
-  bool scheduleNextThread();
-
   void exitThread(Thread::ThreadId tid);
+
+  /// @brief returns all runnable threads
+  std::vector<Thread::ThreadId> calculateRunnableThreads();
+
+  /// @brief update the current scheduled thread
+  void setCurrentScheduledThread(Thread::ThreadId tid);
 
   void popFrameOfCurrentThread();
 

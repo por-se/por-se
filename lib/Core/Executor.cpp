@@ -300,6 +300,11 @@ namespace {
   MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
             cl::init(true));
+
+  cl::opt<bool>
+  ForkOnThreadScheduling("fork-on-thread-scheduling",
+            cl::desc("Fork the states whenever the thread scheduling is not trivial"),
+            cl::init(false));
 }
 
 
@@ -3949,8 +3954,8 @@ void Executor::exitThread(ExecutionState &state) {
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
-  bool success = state.scheduleNextThread();
-  if (!success) {
+  std::vector<Thread::ThreadId> runnable = state.calculateRunnableThreads();
+  if (runnable.empty()) {
     bool allExited = true;
 
     for (auto& threadIt : state.threads) {
@@ -3971,13 +3976,35 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
       terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
     }
-  } else {
-    std::string TmpStr;
-    llvm::raw_string_ostream os(TmpStr);
-    os << "Scheduling now thread: " << state.getCurrentThreadReference()->getThreadId() << "\n";
-    state.dumpSchedulingInfo(os);
-    os << "\n";
-    klee_warning("%s", os.str().c_str());
+
+    // Make sure that we do not change the current state
+    return;
+  } else if (runnable.size() == 1 || !ForkOnThreadScheduling) {
+    // The easiest possible schedule
+    state.setCurrentScheduledThread(runnable.front());
+    return;
+  }
+
+  // Now we have to branch for each possible thread scheduling
+  // this basically means we have to add (runnable.size() - 1) more states
+  for (size_t i = 0; i < runnable.size(); ++i) {
+    ExecutionState* es = nullptr;
+    if (i == 0) {
+      es = &state;
+    } else {
+      es = state.branch();
+
+      if (state.ptreeNode) {
+        state.ptreeNode->data = nullptr;
+        auto res = processTree->split(state.ptreeNode, es, &state);
+        es->ptreeNode = res.first;
+        state.ptreeNode = res.second;
+      }
+
+      addedStates.push_back(es);
+    }
+
+    es->setCurrentScheduledThread(runnable[i]);
   }
 }
 

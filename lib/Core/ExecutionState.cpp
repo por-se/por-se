@@ -96,10 +96,6 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
-// These are now handled by the individual threads
-//    pc(state.pc),
-//    prevPC(state.prevPC),
-//    stack(state.stack),
     threads(state.threads),
     currentSynchronizationPoint(state.currentSynchronizationPoint),
 
@@ -203,19 +199,11 @@ bool ExecutionState::moveToNewSyncPhase() {
     thread->synchronizationPoint = currentSynchronizationPoint;
   }
 
-  // It is save to use minimal recursion here, because now at least one should be
-  // runnable or we can error out
-  if (oneRunnable) {
-    return scheduleNextThread();
-  } else {
-    return false;
-  }
+  return oneRunnable;
 }
 
-
-bool ExecutionState::scheduleNextThread() {
-  // TODO: check if all are sleeping -> error!
-  std::vector<Thread*> runnableThreads;
+std::vector<Thread::ThreadId> ExecutionState::calculateRunnableThreads() {
+  std::vector<Thread::ThreadId > runnableThreads;
 
   // First determine all that are runnable
   for (auto& threadIt : threads) {
@@ -223,19 +211,27 @@ bool ExecutionState::scheduleNextThread() {
 
     if (thread->synchronizationPoint == currentSynchronizationPoint
         && thread->state == Thread::ThreadState::RUNNABLE) {
-      runnableThreads.push_back(thread);
+      runnableThreads.push_back(thread->getThreadId());
     }
   }
 
   if (runnableThreads.empty()) {
     // So all have reached the current sync point, move to the new one
-    return moveToNewSyncPhase();
+    bool oneNowRunnable = moveToNewSyncPhase();
+    if (!oneNowRunnable) {
+      return runnableThreads;
+    }
+
+    return calculateRunnableThreads();
   }
 
-  // We should potentially branch here
-  Thread* newScheduledThread = runnableThreads.front();
-  currentThreadIterator = threads.find(newScheduledThread->getThreadId());
-  return true;
+  return runnableThreads;
+}
+
+void ExecutionState::setCurrentScheduledThread(Thread::ThreadId tid) {
+  auto threadIt = threads.find(tid);
+  assert(threadIt != threads.end() && "Could not find thread");
+  currentThreadIterator = threadIt;
 }
 
 void ExecutionState::sleepCurrentThread() {
