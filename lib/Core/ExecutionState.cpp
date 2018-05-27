@@ -250,29 +250,11 @@ void ExecutionState::preemptCurrentThread() {
   thread->state = Thread::ThreadState::PREEMPTED;
 }
 
-void ExecutionState::wakeUpThreadInternal(Thread::ThreadId tid) {
+void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  thread->state = thread->PREEMPTED;
-  thread->synchronizationPoint++;
-}
-
-void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
-  wakeUpThreadInternal(tid);
-
-  Thread* thread = getCurrentThreadReference();
-  thread->state = thread->PREEMPTED;
-  thread->synchronizationPoint++;
-}
-
-void ExecutionState::wakeUpThreads(std::vector<Thread::ThreadId> tids) {
-  for (auto tid : tids) {
-    wakeUpThreadInternal(tid);
-  }
-
-  Thread* thread = getCurrentThreadReference();
   thread->state = thread->PREEMPTED;
   thread->synchronizationPoint++;
 }
@@ -497,7 +479,21 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
   out << "Thread scheduling:\n";
   for (const auto& threadId : threads) {
     const Thread* thread = &threadId.second;
-    out << "Tid: " << thread->tid << " in state: " << thread->state
+
+    std::string stateName;
+    if (thread->state == 0) {
+      stateName = "preempted";
+    } else if (thread->state == 1) {
+      stateName = "sleeping";
+    } else if (thread->state == 2) {
+      stateName = "runnable";
+    } else if (thread->state == 3) {
+      stateName = "exited";
+    } else {
+      stateName = "unknown";
+    }
+
+    out << "Tid: " << thread->tid << " in state: " << stateName
         << " at point: " << thread->synchronizationPoint << "\n";
   }
 }

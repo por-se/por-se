@@ -742,7 +742,6 @@ static const char *modelledExternals[] = {
   "klee_create_thread",
   "klee_sleep_thread",
   "klee_wake_up_thread",
-  "klee_wake_up_threads",
   "klee_get_thread_id",
   "klee_preempt_thread",
   "klee_exit_thread",

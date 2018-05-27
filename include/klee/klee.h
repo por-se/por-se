@@ -167,13 +167,11 @@ extern "C" {
 
   void klee_wake_up_thread(uint64_t tid);
 
-  void klee_wake_up_threads(uint64_t* ids, size_t size);
-
   uint64_t klee_get_thread_id(void);
 
   void klee_preempt_thread(void);
 
-  void klee_exit_thread(void);
+  void klee_exit_thread(void) __attribute__ ((__noreturn__));
 #ifdef __cplusplus
 }
 #endif

@@ -115,7 +115,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_create_thread", handleCreateThread, false),
   add("klee_sleep_thread", handleSleepThread, false),
   add("klee_wake_up_thread", handleWakeUpThread, false),
-  add("klee_wake_up_threads", handleWakeUpThreads, false),
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   addDNR("klee_exit_thread", handleExitThread),
@@ -902,30 +901,6 @@ void SpecialFunctionHandler::handleWakeUpThread(ExecutionState &state,
   }
 
   executor.wakeUpThread(state, cast<ConstantExpr>(tid)->getZExtValue());
-}
-
-void SpecialFunctionHandler::handleWakeUpThreads(ExecutionState &state,
-                                                 KInstruction *target,
-                                                 std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 2 && "invalid number of arguments to klee_wake_up_threads");
-
-  ref<Expr> tids = executor.toUnique(state, arguments[0]);
-  ref<Expr> size = executor.toUnique(state, arguments[1]);
-
-  if (!isa<ConstantExpr>(tids) || !isa<ConstantExpr>(size)) {
-    executor.terminateStateOnError(state, "klee_wake_up_thread", Executor::User);
-    return;
-  }
-
-  std::vector<Thread::ThreadId> tidVector;
-  auto actualTids = (uint64_t*) cast<ConstantExpr>(tids)->getZExtValue();
-  size_t actualSize = cast<ConstantExpr>(size)->getZExtValue();
-
-  for (size_t i = 0; i < actualSize; i++) {
-    tidVector.push_back(*(actualTids + i));
-  }
-
-  executor.wakeUpThreads(state, tidVector);
 }
 
 void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,

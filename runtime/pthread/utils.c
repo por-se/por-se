@@ -12,9 +12,12 @@ void __stack_create(__pthread_impl_stack* stack) {
 
 void __stack_push(__pthread_impl_stack* stack, void * data) {
   __pthread_impl_stack_node* newTop = malloc(sizeof(__pthread_impl_stack_node));
+  memset(newTop, 0, sizeof(struct __pthread_impl_stack_node));
+
   newTop->data = data;
   newTop->prev = stack->top;
   stack->top = newTop;
+  stack->size++;
 }
 
 void* __stack_pop(__pthread_impl_stack* stack) {
@@ -32,14 +35,13 @@ size_t __stack_size(__pthread_impl_stack* stack) {
 
 void __notify_threads(__pthread_impl_stack* stack) {
   size_t size = __stack_size(stack);
-  uint64_t* tids = malloc(sizeof(uint64_t) * size);
 
-  for (size_t i = 0; i < size; i++) {
+  for (size_t i = 0; i < size; ++i) {
     uint64_t data = (uint64_t) __stack_pop(stack);
-    tids[i] = data;
+    klee_wake_up_thread(data);
   }
 
-  klee_wake_up_threads(tids, size);
+  klee_preempt_thread();
 }
 
 //

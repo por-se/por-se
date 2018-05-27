@@ -550,9 +550,10 @@ public:
   void createThread(ExecutionState &state, Thread::ThreadId tid, ref<Expr> startRoutine, ref<Expr> arg);
   void sleepThread(ExecutionState &state);
   void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);
-  void wakeUpThreads(ExecutionState &state, std::vector<Thread::ThreadId> tids);
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
+
+  void scheduleThreads(ExecutionState &state);
 };
   
 } // End klee namespace

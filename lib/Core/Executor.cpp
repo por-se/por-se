@@ -1488,21 +1488,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (thread->stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
       state.exitThread(thread->getThreadId());
-      bool success = state.scheduleNextThread();
-      if (!success) {
-        bool oneBlocked = false;
-        for (auto& threadIt : state.threads) {
-           if (threadIt.second.state == Thread::ThreadState::SLEEPING) {
-              oneBlocked = true;
-           }
-        }
-
-        if (oneBlocked) {
-          terminateStateOnError(state, "all threads are sleeping", Deadlock);
-        } else {
-          terminateStateOnExit(state);
-        }
-      }
+      scheduleThreads(state);
     } else {
       state.popFrameOfCurrentThread();
 
@@ -3943,81 +3929,55 @@ void Executor::createThread(ExecutionState &state, Thread::ThreadId tid,
 }
 
 void Executor::sleepThread(ExecutionState &state) {
-  std::string TmpStr;
-  llvm::raw_string_ostream os(TmpStr);
-  os << "sleepThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
   state.sleepCurrentThread();
-  bool successful = state.scheduleNextThread();
-
-  state.dumpSchedulingInfo(os);
-  klee_warning("New %s", os.str().c_str());
-
-  if (!successful) {
-    terminateStateOnError(state, "all threads are sleeping", Deadlock);
-  }
+  scheduleThreads(state);
 }
 
 void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
-  std::string TmpStr;
-  llvm::raw_string_ostream os(TmpStr);
-  os << "wakeUpThread(" << tid << ") from " << state.getCurrentThreadReference()->getThreadId() << "\n";
   state.wakeUpThread(tid);
-  bool successful = state.scheduleNextThread();
-
-  state.dumpSchedulingInfo(os);
-  klee_warning("New %s", os.str().c_str());
-
-  if (!successful) {
-    terminateStateOnError(state, "all threads are sleeping", Deadlock);
-  }
-}
-
-void Executor::wakeUpThreads(ExecutionState &state, std::vector<Thread::ThreadId> tids) {
-  std::string TmpStr;
-  llvm::raw_string_ostream os(TmpStr);
-  std::string str(tids.begin(), tids.end());
-
-  os << "wakeUpThreads(" << str << ") from " << state.getCurrentThreadReference()->getThreadId() << "\n";
-  state.wakeUpThreads(tids);
-  bool successful = state.scheduleNextThread();
-
-  state.dumpSchedulingInfo(os);
-  klee_warning("New %s", os.str().c_str());
-
-  if (!successful) {
-    terminateStateOnError(state, "all threads are sleeping", Deadlock);
-  }
+  scheduleThreads(state);
 }
 
 void Executor::preemptThread(ExecutionState &state) {
-  std::string TmpStr;
-  llvm::raw_string_ostream os(TmpStr);
-  os << "preemptThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
-
   state.preemptCurrentThread();
-  bool successful = state.scheduleNextThread();
-
-  state.dumpSchedulingInfo(os);
-  klee_warning("New %s", os.str().c_str());
-
-  if (!successful) {
-    terminateStateOnError(state, "all threads are sleeping", Deadlock);
-  }
+  scheduleThreads(state);
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  std::string TmpStr;
-  llvm::raw_string_ostream os(TmpStr);
-  os << "exitThread() from " << state.getCurrentThreadReference()->getThreadId() << "\n";
-
   state.exitThread(state.getCurrentThreadReference()->getThreadId());
-  bool successful = state.scheduleNextThread();
+  scheduleThreads(state);
+}
 
-  state.dumpSchedulingInfo(os);
-  klee_warning("%s", os.str().c_str());
+void Executor::scheduleThreads(ExecutionState &state) {
+  bool success = state.scheduleNextThread();
+  if (!success) {
+    bool allExited = true;
 
-  if (!successful) {
-    terminateStateOnError(state, "all threads are sleeping", Deadlock);
+    for (auto& threadIt : state.threads) {
+      if (threadIt.second.state != Thread::ThreadState::EXITED) {
+        allExited = false;
+      }
+    }
+
+    if (allExited) {
+      terminateStateOnExit(state);
+    } else {
+      std::string TmpStr;
+      llvm::raw_string_ostream os(TmpStr);
+      os << "Deadlock in scheduling with ";
+      state.dumpSchedulingInfo(os);
+      os << "\n";
+      klee_warning("%s", os.str().c_str());
+
+      terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
+    }
+  } else {
+    std::string TmpStr;
+    llvm::raw_string_ostream os(TmpStr);
+    os << "Scheduling now thread: " << state.getCurrentThreadReference()->getThreadId() << "\n";
+    state.dumpSchedulingInfo(os);
+    os << "\n";
+    klee_warning("%s", os.str().c_str());
   }
 }
 
