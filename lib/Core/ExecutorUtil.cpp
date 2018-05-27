@@ -122,13 +122,13 @@ namespace klee {
       } else if (const BlockAddress * ba = dyn_cast<BlockAddress>(c)) {
         // return the address of the specified basic block in the specified function
         const auto arg_bb = (BasicBlock *) ba->getOperand(1);
-        const auto res = Expr::createPointer((uint64_t) (unsigned long) (void *) arg_bb);
+        const auto res = Expr::createPointer(reinterpret_cast<std::uint64_t>(arg_bb));
         return cast<ConstantExpr>(res);
       } else {
         std::string msg("Cannot handle constant ");
         llvm::raw_string_ostream os(msg);
         os << "'" << *c << "' at location "
-           << (ki ? ki->printFileLine().c_str() : "[unknown]");
+           << (ki ? ki->getSourceLocation() : "[unknown]");
         klee_error("%s", os.str().c_str());
       }
     }
@@ -154,7 +154,7 @@ namespace klee {
       if (op2->getLimitedValue() == 0) {
         std::string msg("Division/modulo by zero during constant folding at location ");
         llvm::raw_string_ostream os(msg);
-        os << (ki ? ki->printFileLine().c_str() : "[unknown]");
+        os << (ki ? ki->getSourceLocation() : "[unknown]");
         klee_error("%s", os.str().c_str());
       }
       break;
@@ -164,7 +164,7 @@ namespace klee {
       if (op2->getLimitedValue() >= op1->getWidth()) {
         std::string msg("Overshift during constant folding at location ");
         llvm::raw_string_ostream os(msg);
-        os << (ki ? ki->printFileLine().c_str() : "[unknown]");
+        os << (ki ? ki->getSourceLocation() : "[unknown]");
         klee_error("%s", os.str().c_str());
       }
     }
@@ -175,7 +175,7 @@ namespace klee {
     switch (ce->getOpcode()) {
     default :
       os << "'" << *ce << "' at location "
-         << (ki ? ki->printFileLine().c_str() : "[unknown]");
+         << (ki ? ki->getSourceLocation() : "[unknown]");
       klee_error("%s", os.str().c_str());
 
     case Instruction::Trunc: 

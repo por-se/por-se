@@ -110,6 +110,10 @@ bool StatsTracker::useStatistics() {
   return OutputStats || OutputIStats;
 }
 
+bool StatsTracker::useIStats() {
+  return OutputIStats;
+}
+
 namespace klee {
   class WriteIStatsTimer : public Executor::Timer {
     StatsTracker *statsTracker;
@@ -413,7 +417,7 @@ void StatsTracker::writeStatsHeader() {
              << "'ResolveTime',"
              << "'QueryCexCacheMisses',"
              << "'QueryCexCacheHits',"
-#ifdef DEBUG
+#ifdef KLEE_ARRAY_DEBUG
 	     << "'ArrayHashTime',"
 #endif
              << ")\n";
@@ -445,7 +449,7 @@ void StatsTracker::writeStatsLine() {
              << "," << stats::resolveTime / 1000000.
              << "," << stats::queryCexCacheMisses
              << "," << stats::queryCexCacheHits
-#ifdef DEBUG
+#ifdef KLEE_ARRAY_DEBUG
              << "," << stats::arrayHashTime / 1000000.
 #endif
              << ")\n";
