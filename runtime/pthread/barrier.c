@@ -48,8 +48,11 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
   } else if (barrier->currentCount == barrier->count) {
     barrier->currentCount = 0;
     __notify_threads(&barrier->waitingThreads);
+    klee_preempt_thread();
     return PTHREAD_BARRIER_SERIAL_THREAD;
   }
+
+  return EINVAL;
 }
 
 //int pthread_barrierattr_destroy(pthread_barrierattr_t *);

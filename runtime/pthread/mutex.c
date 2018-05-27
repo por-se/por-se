@@ -46,7 +46,7 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
   return 0;
 }
 
-int pthread_mutex_unlock(pthread_mutex_t *m) {
+int __pthread_mutex_unlock_internal(pthread_mutex_t *m) {
   __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
   uint64_t tid = klee_get_thread_id();
 
@@ -57,8 +57,17 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
   klee_warning("Lock unlocking - waking up threads");
   mutex->acquired = 0;
 
-  __notify_threads(&mutex->waitingThreads);
   return 0;
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *m) {
+  int result = __pthread_mutex_unlock_internal(m);
+
+  if (result == 0) {
+    klee_preempt_thread();
+  }
+
+  return result;
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *m) {

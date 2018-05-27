@@ -40,8 +40,6 @@ void __notify_threads(__pthread_impl_stack* stack) {
     uint64_t data = (uint64_t) __stack_pop(stack);
     klee_wake_up_thread(data);
   }
-
-  klee_preempt_thread();
 }
 
 //

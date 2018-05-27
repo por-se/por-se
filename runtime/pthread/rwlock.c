@@ -2,11 +2,12 @@
 #include "pthread_impl.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 
 static __pthread_impl_rwlock* __obtain_pthread_rwlock(pthread_rwlock_t *lock) {
-  return ((__pthread_impl_rwlock*) lock);
+  return *((__pthread_impl_rwlock**) lock);
 }
 
 int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
@@ -22,11 +23,13 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   __stack_create(&lock->waitingReaders);
   __stack_create(&lock->waitingWriters);
 
-  klee_warning("Lock init not acquired");
   return 0;
 }
 
-//int pthread_rwlock_destroy(pthread_rwlock_t *);
+int pthread_rwlock_destroy(pthread_rwlock_t *l) {
+  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  return 0;
+}
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
   int result = pthread_rwlock_tryrdlock(l);
@@ -125,6 +128,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
 
   if (__stack_size(&lock->waitingReaders) > 0) {
     __notify_threads(&lock->waitingReaders);
+    klee_preempt_thread();
     return 0;
   }
 

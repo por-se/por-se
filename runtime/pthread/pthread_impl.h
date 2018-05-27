@@ -42,6 +42,12 @@ typedef struct {
 } __pthread_impl_rwlock;
 
 typedef struct {
+  uint8_t mode;
+
+  __pthread_impl_stack waitingList;
+} __pthread_impl_cond;
+
+typedef struct {
   uint64_t tid;
   uint8_t state;
   uint8_t mode;
@@ -55,6 +61,7 @@ typedef struct {
   __pthread_impl_stack waitingForJoinThreads;
 } __pthread_impl_pthread;
 
+int __pthread_mutex_unlock_internal(pthread_mutex_t *m);
 void __notify_threads(__pthread_impl_stack* stack);
 
 #endif //KLEE_PTHREAD_IMPL_H

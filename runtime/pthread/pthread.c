@@ -58,9 +58,9 @@ void pthread_exit(void* arg) __attribute__ ((__noreturn__)) {
   if (tid != 0) { // 0 is the main thread and nobody can join it
     __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
     thread->returnValue = arg;
-    __notify_threads(&thread->waitingForJoinThreads);
-
     thread->state = 1;
+
+    __notify_threads(&thread->waitingForJoinThreads);
   }
 
   klee_exit_thread();
@@ -88,13 +88,17 @@ int pthread_join(pthread_t pthread, void **ret) {
   if (thread->state != 1) {
     __stack_push(&thread->waitingForJoinThreads, (void*) ownThread);
     klee_sleep_thread();
+  } else {
+    klee_preempt_thread();
   }
 
-  if (thread->cancelSignalReceived == 1) {
-    *ret = PTHREAD_CANCELED;
-  } else {
-    // If we have returned, then we should be able to return the data
-    *ret = thread->returnValue;
+  if (ret != NULL) {
+    if (thread->cancelSignalReceived == 1) {
+      *ret = PTHREAD_CANCELED;
+    } else {
+      // If we have returned, then we should be able to return the data
+      *ret = thread->returnValue;
+    }
   }
 
   return 0;
