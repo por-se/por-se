@@ -19,7 +19,6 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   mutex->holdingThread = 0;
   __stack_create(&mutex->waitingThreads);
 
-  klee_warning("Lock init not acquired");
   return 0;
 }
 
@@ -31,15 +30,10 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
     mutex->acquired = 1;
     mutex->holdingThread = tid;
 
-    klee_warning("Got a lock - preempting");
-
     // We have acquired a lock, so make sure that we sync threads
     klee_preempt_thread();
     return 0;
   }
-
-  klee_stack_trace();
-  klee_warning("Lock already locked - sleeping");
 
   __stack_push(&mutex->waitingThreads, (void*) tid);
   klee_sleep_thread();
@@ -54,8 +48,8 @@ int __pthread_mutex_unlock_internal(pthread_mutex_t *m) {
     return -1;
   }
 
-  klee_warning("Lock unlocking - waking up threads");
   mutex->acquired = 0;
+  __notify_threads(&mutex->waitingThreads);
 
   return 0;
 }
