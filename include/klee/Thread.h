@@ -64,6 +64,9 @@ namespace klee {
         EXITED = 3,
       };
 
+      static const uint8_t READ_ACCESS = 1;
+      static const uint8_t WRITE_ACCESS = 2;
+
     private:
       /// @brief Pointer to instruction to be executed after the current
       /// instruction
@@ -88,9 +91,14 @@ namespace klee {
       /// @brief the state this thread is in
       ThreadState state;
 
+      /// @brief memory accesses this thread has done during the current phase
+      std::map<const MemoryObject*, uint8_t> syncPhaseAccesses;
+
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
+      Thread(const Thread &s);
       ThreadId getThreadId();
+
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);

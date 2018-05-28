@@ -117,6 +117,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_wake_up_thread", handleWakeUpThread, false),
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
+  add("klee_mark_thread_shareable", handleMarkThreadShareable, false),
   addDNR("klee_exit_thread", handleExitThread),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -924,4 +925,18 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
                                               std::vector<klee::ref<klee::Expr>> &arguments) {
   assert(arguments.empty() && "invalid number of arguments to klee_exit_thread");
   executor.exitThread(state);
+}
+
+void SpecialFunctionHandler::handleMarkThreadShareable(klee::ExecutionState &state,
+                                                         klee::KInstruction *target,
+                                                         std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_mark_thread_shareable");
+
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, arguments[0], rl, "mark_thread_shareable");
+
+  for (auto it = rl.begin(); it != rl.end(); ++it) {
+    const MemoryObject *mo = it->first.first;
+    mo->isThreadShareable = true;
+  }
 }

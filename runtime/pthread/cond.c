@@ -14,6 +14,8 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
   __pthread_impl_cond* lock = malloc(sizeof(__pthread_impl_cond));
   memset(lock, 0, sizeof(__pthread_impl_cond));
 
+  klee_mark_thread_shareable(lock);
+
   *((__pthread_impl_cond**)l) = lock;
 
   lock->mode = 0;

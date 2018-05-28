@@ -13,6 +13,8 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   __pthread_impl_mutex* mutex = malloc(sizeof(__pthread_impl_mutex));
   memset(mutex, 0, sizeof(__pthread_impl_mutex));
 
+  klee_mark_thread_shareable(mutex);
+
   *((__pthread_impl_mutex**)m) = mutex;
 
   mutex->acquired = 0;

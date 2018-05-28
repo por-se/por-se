@@ -745,6 +745,7 @@ static const char *modelledExternals[] = {
   "klee_get_thread_id",
   "klee_preempt_thread",
   "klee_exit_thread",
+  "klee_mark_thread_shareable",
   "llvm.dbg.declare",
   "llvm.dbg.value",
   "llvm.va_start",

@@ -14,6 +14,8 @@ void __stack_push(__pthread_impl_stack* stack, void * data) {
   __pthread_impl_stack_node* newTop = malloc(sizeof(__pthread_impl_stack_node));
   memset(newTop, 0, sizeof(struct __pthread_impl_stack_node));
 
+  klee_mark_thread_shareable(newTop);
+
   newTop->data = data;
   newTop->prev = stack->top;
   stack->top = newTop;

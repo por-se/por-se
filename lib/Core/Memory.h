@@ -34,6 +34,7 @@ class MemoryObject {
   friend class STPBuilder;
   friend class ObjectState;
   friend class ExecutionState;
+  friend class Thread;
 
 private:
   static int counter;
@@ -52,6 +53,8 @@ public:
   bool isFixed;
 
   bool isUserSpecified;
+
+  mutable bool isThreadShareable;
 
   MemoryManager *parent;
 
@@ -79,6 +82,7 @@ public:
       address(_address),
       size(0),
       isFixed(true),
+      isThreadShareable(false),
       parent(NULL),
       allocSite(0) {
   }
@@ -96,6 +100,7 @@ public:
       isGlobal(_isGlobal),
       isFixed(_isFixed),
       isUserSpecified(false),
+      isThreadShareable(false),
       parent(_parent), 
       allocSite(_allocSite) {
   }

@@ -172,6 +172,8 @@ extern "C" {
   void klee_preempt_thread(void);
 
   void klee_exit_thread(void) __attribute__ ((__noreturn__));
+
+  void klee_mark_thread_shareable(const void *address);
 #ifdef __cplusplus
 }
 #endif

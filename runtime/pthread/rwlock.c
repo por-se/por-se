@@ -14,6 +14,8 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   __pthread_impl_rwlock* lock = malloc(sizeof(__pthread_impl_rwlock));
   memset(lock, 0, sizeof(__pthread_impl_rwlock));
 
+  klee_mark_thread_shareable(lock);
+
   *((__pthread_impl_rwlock**)l) = lock;
 
   lock->acquiredWriter = 0;

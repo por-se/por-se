@@ -19,6 +19,8 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   __pthread_impl_pthread* thread = malloc(sizeof(__pthread_impl_pthread));
   memset(thread, 0, sizeof(__pthread_impl_mutex));
 
+  klee_mark_thread_shareable(thread);
+
   *((__pthread_impl_pthread**)pthread) = thread;
 
   uint64_t tid = (uint64_t) thread;

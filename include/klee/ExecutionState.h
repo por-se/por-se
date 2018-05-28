@@ -127,7 +127,7 @@ private:
 
   void popFrameOfThread(Thread* thread);
 
-  bool moveToNewSyncPhase();
+  void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 public:
   ExecutionState(KFunction *kf);
 
@@ -169,6 +169,10 @@ public:
   /// @brief update the current scheduled thread
   void setCurrentScheduledThread(Thread::ThreadId tid);
 
+  bool moveToNewSyncPhase();
+
+  void trackMemoryAccess(const MemoryObject* mo, uint8_t type);
+
   void popFrameOfCurrentThread();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
@@ -177,6 +181,7 @@ public:
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
+  void dumpAllThreadStacks(llvm::raw_ostream &out) const;
 };
 }
 

@@ -3374,6 +3374,9 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> address,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
+
+  // TODO: we need to instrument all writes and reads per thread per sync phase
+
   Thread* thread = state.getCurrentThreadReference();
   Expr::Width type = (isWrite ? value->getWidth() : 
                      getWidthForLLVMType(target->inst->getType()));
@@ -3426,9 +3429,11 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
           wos->write(offset, value);
+          state.trackMemoryAccess(mo, Thread::WRITE_ACCESS);
         }          
       } else {
         ref<Expr> result = os->read(offset, type);
+        state.trackMemoryAccess(mo, Thread::READ_ACCESS);
         
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
@@ -3469,10 +3474,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         } else {
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
           wos->write(mo->getOffsetExpr(address), value);
+          state.trackMemoryAccess(mo, Thread::WRITE_ACCESS);
         }
       } else {
         ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
         bindLocal(target, *bound, result);
+        state.trackMemoryAccess(mo, Thread::READ_ACCESS);
       }
     }
 
@@ -3916,14 +3923,6 @@ void Executor::createThread(ExecutionState &state, Thread::ThreadId tid,
   KFunction *kf = obtainFunctionFromExpression(startRoutine);
   assert(kf && "could not obtain the start routine");
 
-  Thread::ThreadId parentThreadId = state.getCurrentThreadReference()->getThreadId();
-
-  std::string Str;
-  llvm::raw_string_ostream msg(Str);
-  msg << "Creating thread: " << tid  << " Function: "
-    << kf->function->getName().str() << " Parent: " << parentThreadId;
-  klee_message("New %s", msg.str().c_str());
-
   Thread* thread = state.createThread(tid, kf);
   StackFrame* threadStartFrame = &thread->stack.back();
 
@@ -3955,6 +3954,81 @@ void Executor::exitThread(ExecutionState &state) {
 
 void Executor::scheduleThreads(ExecutionState &state) {
   std::vector<Thread::ThreadId> runnable = state.calculateRunnableThreads();
+
+  if (runnable.empty()) {
+    // Before we now determine the next thread to schedule, we want to
+    // check the memory accesses of the threads
+    std::map<const MemoryObject*, std::vector<std::pair<Thread::ThreadId , uint8_t>>> accesses;
+    for (auto& threadsIt : state.threads) {
+      Thread* thread = &threadsIt.second;
+
+      for (auto& access : thread->syncPhaseAccesses) {
+        const MemoryObject* target = access.first;
+        if (target->isThreadShareable) {
+          // We do not care at all about this object
+          continue;
+        }
+
+        auto it = accesses.find(target);
+        std::pair<Thread::ThreadId, uint8_t> entry = std::make_pair(thread->getThreadId(), access.second);
+
+        if (it == accesses.end()) {
+          std::pair<const MemoryObject*, std::vector<std::pair<Thread::ThreadId , uint8_t>>> p =
+                  std::make_pair(target, std::vector<std::pair<Thread::ThreadId , uint8_t>>());
+          auto insert = accesses.insert(p);
+          assert(insert.second && "Should be successful");
+          it = insert.first;
+        }
+
+        it->second.push_back(entry);
+      }
+    }
+
+    for (auto& accessIt : accesses) {
+      const MemoryObject* target = accessIt.first;
+
+      std::vector<Thread::ThreadId> writingThreads;
+      std::vector<Thread::ThreadId> readingThreads;
+
+      for (auto& threadIt : accessIt.second) {
+        Thread::ThreadId tid = threadIt.first;
+        uint8_t type = threadIt.second;
+
+        if ((type & Thread::WRITE_ACCESS) != 0) {
+          writingThreads.push_back(tid);
+        } else if ((type & Thread::READ_ACCESS) != 0) {
+          readingThreads.push_back(tid);
+        }
+      }
+
+      if ((!readingThreads.empty() && !writingThreads.empty()) || writingThreads.size() > 1) {
+        std::string TmpStr;
+        llvm::raw_string_ostream os(TmpStr);
+        os << "Unsafe access to memory from multiple threads\nMemory Info:\n";
+
+        std::string memInfo;
+        target->getAllocInfo(memInfo);
+        os << memInfo << "\n";
+
+        for (auto& tid : writingThreads) {
+          os << "Writing thread: " << tid << "\n";
+        }
+
+        for (auto& tid : readingThreads) {
+          os << "Reading thread: " << tid << "\n";
+        }
+
+        klee_warning_once("%s", os.str().c_str());
+      }
+    }
+
+    // So all have reached the current sync point, move to the new one
+    bool oneNowRunnable = state.moveToNewSyncPhase();
+    if (oneNowRunnable) {
+      runnable = state.calculateRunnableThreads();
+    }
+  }
+
   if (runnable.empty()) {
     bool allExited = true;
 
@@ -3971,8 +4045,9 @@ void Executor::scheduleThreads(ExecutionState &state) {
       llvm::raw_string_ostream os(TmpStr);
       os << "Deadlock in scheduling with ";
       state.dumpSchedulingInfo(os);
-      os << "\n";
-      klee_warning("%s", os.str().c_str());
+      os << "\nTraces:\n";
+      state.dumpAllThreadStacks(os);
+      klee_warning_once("%s", os.str().c_str());
 
       terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
     }

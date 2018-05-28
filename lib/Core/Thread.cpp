@@ -1,4 +1,5 @@
 #include "klee/Thread.h"
+#include "Memory.h"
 
 using namespace llvm;
 using namespace klee;
@@ -43,6 +44,21 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   // Short circuit the program counters
   this->prevPc = threadStartRoutine->instructions;
   this->pc = this->prevPc;
+}
+
+Thread::Thread(const klee::Thread &t)
+        : pc(t.pc),
+          prevPc(t.prevPc),
+          stack(t.stack),
+          tid(t.tid),
+          incomingBBIndex(t.incomingBBIndex),
+          synchronizationPoint(t.synchronizationPoint),
+          state(t.state),
+          syncPhaseAccesses(t.syncPhaseAccesses) {
+
+  for (auto& access : syncPhaseAccesses) {
+    access.first->refCount++;
+  }
 }
 
 Thread::ThreadId Thread::getThreadId() {

@@ -40,9 +40,6 @@ namespace {
 /***/
 
 ExecutionState::ExecutionState(KFunction *kf) :
-    // pc(kf->instructions),
-    // prevPC(pc),
-
     currentSynchronizationPoint(0),
 
     queryCost(0.), 
@@ -67,8 +64,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0),
-      currentSynchronizationPoint(0) {}
+    : constraints(assumptions), queryCost(0.), ptreeNode(0) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -96,8 +92,8 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
-    threads(state.threads),
     currentSynchronizationPoint(state.currentSynchronizationPoint),
+    threads(state.threads),
 
     addressSpace(state.addressSpace),
     constraints(state.constraints),
@@ -197,6 +193,17 @@ bool ExecutionState::moveToNewSyncPhase() {
     }
 
     thread->synchronizationPoint = currentSynchronizationPoint;
+
+    for (auto access : thread->syncPhaseAccesses) {
+      const MemoryObject* mo = access.first;
+      assert(mo->refCount > 0);
+      mo->refCount--;
+      if (mo->refCount == 0) {
+        delete mo;
+      }
+    }
+
+    thread->syncPhaseAccesses.clear();
   }
 
   return oneRunnable;
@@ -213,16 +220,6 @@ std::vector<Thread::ThreadId> ExecutionState::calculateRunnableThreads() {
         && thread->state == Thread::ThreadState::RUNNABLE) {
       runnableThreads.push_back(thread->getThreadId());
     }
-  }
-
-  if (runnableThreads.empty()) {
-    // So all have reached the current sync point, move to the new one
-    bool oneNowRunnable = moveToNewSyncPhase();
-    if (!oneNowRunnable) {
-      return runnableThreads;
-    }
-
-    return calculateRunnableThreads();
   }
 
   return runnableThreads;
@@ -267,6 +264,25 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   // while (!thread->stack.empty()) {
   //  popFrameOfThread(thread);
   //}
+}
+
+void ExecutionState::trackMemoryAccess(const MemoryObject* mo, uint8_t type) {
+  Thread* thread = getCurrentThreadReference();
+
+  if (mo->isThreadShareable) {
+    // we do not track memory accesses that are shareable by threads
+    return;
+  }
+
+  auto it = thread->syncPhaseAccesses.find(mo);
+
+  if (it == thread->syncPhaseAccesses.end()) {
+    thread->syncPhaseAccesses.insert(std::make_pair(mo, type));
+    mo->refCount++;
+  } else {
+    uint8_t newType = it->second | type;
+    it->second = newType;
+  }
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
@@ -494,11 +510,8 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
   }
 }
 
-void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
+void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const {
   unsigned idx = 0;
-  // TODO: if we dump the stack, then we should probably also write
-  //       of what thread this stack is
-  Thread* thread = getCurrentThreadReference();
 
   const KInstruction *target = thread->prevPc;
   for (ExecutionState::stack_ty::const_reverse_iterator
@@ -529,5 +542,18 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
       out << " at " << ii.file << ":" << ii.line;
     out << "\n";
     target = sf.caller;
+  }
+}
+
+void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
+  const Thread* thread = getCurrentThreadReference();
+  dumpStackOfThread(out, thread);
+}
+
+void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {
+  for (auto& threadIt : threads) {
+    const Thread* thread = &threadIt.second;
+    out << "Stacktrace of thread tid = " << thread->tid << ":\n";
+    dumpStackOfThread(out, thread);
   }
 }
