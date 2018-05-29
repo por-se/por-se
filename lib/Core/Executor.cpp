@@ -4062,6 +4062,9 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   // Now we have to branch for each possible thread scheduling
   // this basically means we have to add (runnable.size() - 1) more states
+  // TODO: maybe we can also compare the stacks of the threads and can form
+  //       groups of 'equivalent' threads. Based on them we then could only
+  //       add one thread per group
   for (size_t i = 0; i < runnable.size(); ++i) {
     ExecutionState* es = nullptr;
     if (i == 0) {

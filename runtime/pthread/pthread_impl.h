@@ -5,6 +5,14 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+#ifdef __APPLE__
+typedef void* pthread_barrierattr_t;
+typedef void* pthread_barrier_t;
+#define PTHREAD_BARRIER_SERIAL_THREAD (-1)
+
+typedef void* pthread_spinlock_t;
+#endif /* __APPLE_ */
+
 typedef struct __pthread_impl_stack_node {
   struct __pthread_impl_stack_node* prev;
   void* data;

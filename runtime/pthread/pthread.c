@@ -33,6 +33,9 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
   __stack_create(&thread->waitingForJoinThreads);
 
+  // Since the thread pointer will be on the stack we want to mark it as thread
+  // shareable so deduping of threads can actually work
+  klee_mark_thread_shareable(&thread);
   klee_create_thread(tid, __pthread_impl_wrapper, thread);
 
   return 0;
@@ -107,7 +110,7 @@ int pthread_join(pthread_t pthread, void **ret) {
 }
 
 pthread_t pthread_self(void) {
-  return klee_get_thread_id();
+  return (pthread_t) klee_get_thread_id();
 }
 
 int pthread_equal(pthread_t t1, pthread_t t2) {
