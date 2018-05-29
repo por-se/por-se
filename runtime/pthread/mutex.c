@@ -13,7 +13,7 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   __pthread_impl_mutex* mutex = malloc(sizeof(__pthread_impl_mutex));
   memset(mutex, 0, sizeof(__pthread_impl_mutex));
 
-  klee_mark_thread_shareable(mutex);
+  klee_toggle_thread_scheduling(0);
 
   *((__pthread_impl_mutex**)m) = mutex;
 
@@ -21,10 +21,14 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   mutex->holdingThread = 0;
   __stack_create(&mutex->waitingThreads);
 
+  klee_toggle_thread_scheduling(1);
+
   return 0;
 }
 
 int pthread_mutex_lock(pthread_mutex_t *m) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
   uint64_t tid = klee_get_thread_id();
 
@@ -33,12 +37,15 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
     mutex->holdingThread = tid;
 
     // We have acquired a lock, so make sure that we sync threads
+    klee_toggle_thread_scheduling(1);
     klee_preempt_thread();
     return 0;
   }
 
   __stack_push(&mutex->waitingThreads, (void*) tid);
+  klee_toggle_thread_scheduling(1);
   klee_sleep_thread();
+
   return 0;
 }
 
@@ -57,7 +64,9 @@ int __pthread_mutex_unlock_internal(pthread_mutex_t *m) {
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *m) {
+  klee_toggle_thread_scheduling(0);
   int result = __pthread_mutex_unlock_internal(m);
+  klee_toggle_thread_scheduling(1);
 
   if (result == 0) {
     klee_preempt_thread();
@@ -67,25 +76,33 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *m) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
   if (mutex->acquired == 0) {
+    klee_toggle_thread_scheduling(1);
     return pthread_mutex_lock(m);
   }
 
+  klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
+
   return EBUSY;
 }
 
 //int pthread_mutex_timedlock(pthread_mutex_t *__restrict, const struct timespec *__restrict);
 
 int pthread_mutex_destroy(pthread_mutex_t *m) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
   if (mutex->acquired == 1) {
+    klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
   // Some real support for mutex destroy
-
+  klee_toggle_thread_scheduling(1);
   return 0;
 }
 

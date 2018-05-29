@@ -146,7 +146,7 @@ namespace klee {
     HANDLER(handleGetThreadId);
     HANDLER(handlePreemptThread);
     HANDLER(handleExitThread);
-    HANDLER(handleMarkThreadShareable);
+    HANDLER(handleToggleThreadScheduling);
 #undef HANDLER
   };
 } // End klee namespace

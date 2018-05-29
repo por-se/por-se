@@ -54,8 +54,6 @@ public:
 
   bool isUserSpecified;
 
-  mutable bool isThreadShareable;
-
   MemoryManager *parent;
 
   /// "Location" for which this memory object was allocated. This
@@ -82,7 +80,6 @@ public:
       address(_address),
       size(0),
       isFixed(true),
-      isThreadShareable(false),
       parent(NULL),
       allocSite(0) {
   }
@@ -100,7 +97,6 @@ public:
       isGlobal(_isGlobal),
       isFixed(_isFixed),
       isUserSpecified(false),
-      isThreadShareable(false),
       parent(_parent), 
       allocSite(_allocSite) {
   }

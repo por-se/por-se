@@ -41,6 +41,7 @@ namespace {
 
 ExecutionState::ExecutionState(KFunction *kf) :
     currentSynchronizationPoint(0),
+    threadSchedulingEnabled(1),
 
     queryCost(0.), 
     weight(1),
@@ -94,6 +95,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
     currentSynchronizationPoint(state.currentSynchronizationPoint),
     threads(state.threads),
+    threadSchedulingEnabled(state.threadSchedulingEnabled),
 
     addressSpace(state.addressSpace),
     constraints(state.constraints),
@@ -267,13 +269,13 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 }
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, uint8_t type) {
-  Thread* thread = getCurrentThreadReference();
-
-  if (mo->isThreadShareable) {
-    // we do not track memory accesses that are shareable by threads
+  if (!threadSchedulingEnabled) {
+    // We do not have any interference at the moment
+    // so we do not need to record the current memory accesses
     return;
   }
 
+  Thread* thread = getCurrentThreadReference();
   auto it = thread->syncPhaseAccesses.find(mo);
 
   if (it == thread->syncPhaseAccesses.end()) {

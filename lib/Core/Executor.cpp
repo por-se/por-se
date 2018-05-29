@@ -3952,7 +3952,47 @@ void Executor::exitThread(ExecutionState &state) {
   scheduleThreads(state);
 }
 
+void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
+  state.threadSchedulingEnabled = enabled;
+}
+
+void Executor::exitWithDeadlock(ExecutionState &state) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "Deadlock in scheduling with ";
+  state.dumpSchedulingInfo(os);
+  os << "\nTraces:\n";
+  state.dumpAllThreadStacks(os);
+  klee_warning_once("%s", os.str().c_str());
+
+  terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
+}
+
 void Executor::scheduleThreads(ExecutionState &state) {
+  // The first thing we have to test is, if we can actually try
+  // to schedule a thread now; (test if scheduling enabled)
+  if (!state.threadSchedulingEnabled) {
+    // So now we have to check if the current thread may be scheduled
+    // or if we have a deadlock
+
+    Thread* curThread = state.getCurrentThreadReference();
+    if (curThread->state == Thread::ThreadState::SLEEPING) {
+      exitWithDeadlock(state);
+      return;
+    }
+
+    if (curThread->state != Thread::ThreadState::EXITED) {
+      // So we can actually reschedule the current thread
+      // but make sure that the thread is marked as RUNNABLE
+      curThread->state = Thread::ThreadState::RUNNABLE;
+      state.setCurrentScheduledThread(curThread->getThreadId());
+      return;
+    }
+
+    // So how do we proceed here? For now just let everything continue normally
+    // this will schedule another thread
+  }
+
   std::vector<Thread::ThreadId> runnable = state.calculateRunnableThreads();
 
   if (runnable.empty()) {
@@ -3964,10 +4004,6 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
       for (auto& access : thread->syncPhaseAccesses) {
         const MemoryObject* target = access.first;
-        if (target->isThreadShareable) {
-          // We do not care at all about this object
-          continue;
-        }
 
         auto it = accesses.find(target);
         std::pair<Thread::ThreadId, uint8_t> entry = std::make_pair(thread->getThreadId(), access.second);
@@ -4041,15 +4077,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (allExited) {
       terminateStateOnExit(state);
     } else {
-      std::string TmpStr;
-      llvm::raw_string_ostream os(TmpStr);
-      os << "Deadlock in scheduling with ";
-      state.dumpSchedulingInfo(os);
-      os << "\nTraces:\n";
-      state.dumpAllThreadStacks(os);
-      klee_warning_once("%s", os.str().c_str());
-
-      terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
+      exitWithDeadlock(state);
     }
 
     // Make sure that we do not change the current state

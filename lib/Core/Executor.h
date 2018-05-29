@@ -470,6 +470,8 @@ private:
 
   KFunction* obtainFunctionFromExpression(ref<Expr> address);
 
+  void exitWithDeadlock(ExecutionState &state);
+
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
       InterpreterHandler *ie);
@@ -552,6 +554,7 @@ public:
   void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
+  void toggleThreadScheduling(ExecutionState &state, bool enabled);
 
   void scheduleThreads(ExecutionState &state);
 };

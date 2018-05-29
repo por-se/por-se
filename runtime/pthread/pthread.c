@@ -16,10 +16,10 @@ static void* __pthread_impl_wrapper(void* arg) {
 }
 
 int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*startRoutine)(void *), void *arg) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_pthread* thread = malloc(sizeof(__pthread_impl_pthread));
   memset(thread, 0, sizeof(__pthread_impl_mutex));
-
-  klee_mark_thread_shareable(thread);
 
   *((__pthread_impl_pthread**)pthread) = thread;
 
@@ -33,9 +33,8 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
   __stack_create(&thread->waitingForJoinThreads);
 
-  // Since the thread pointer will be on the stack we want to mark it as thread
-  // shareable so deduping of threads can actually work
-  klee_mark_thread_shareable(&thread);
+  klee_toggle_thread_scheduling(1);
+
   klee_create_thread(tid, __pthread_impl_wrapper, thread);
 
   return 0;
@@ -46,18 +45,24 @@ int pthread_detach(pthread_t pthread) {
     return 0;
   }
 
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_pthread* thread = __obtain_pthread_data(pthread);
   if (thread->mode == 1) {
+    klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
   thread->mode = 1;
+
+  klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
 
   return 0;
 }
 
 void pthread_exit(void* arg) __attribute__ ((__noreturn__)) {
+  klee_toggle_thread_scheduling(0);
   uint64_t tid = klee_get_thread_id();
 
   if (tid != 0) { // 0 is the main thread and nobody can join it
@@ -68,33 +73,41 @@ void pthread_exit(void* arg) __attribute__ ((__noreturn__)) {
     __notify_threads(&thread->waitingForJoinThreads);
   }
 
+  klee_toggle_thread_scheduling(1);
+
   klee_exit_thread();
 }
 
 int pthread_join(pthread_t pthread, void **ret) {
+  klee_toggle_thread_scheduling(0);
   __pthread_impl_pthread* thread = __obtain_pthread_data(pthread);
 
   if (thread->mode == 1) { // detached state
+    klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
   if (__stack_size(&thread->waitingForJoinThreads) == 1) {
+    klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
   uint64_t ownThread = klee_get_thread_id();
   if (ownThread == pthread) { // We refer to our onw thread
+    klee_toggle_thread_scheduling(1);
     return EDEADLK;
   }
 
   // Could also be that this thread is already finished, but there must be
   // at least one call to join to free the resources
 
-  if (thread->state != 1) {
+  int needToSleep = thread->state != 1 ? 1 : 0;
+
+  if (needToSleep == 1) {
     __stack_push(&thread->waitingForJoinThreads, (void*) ownThread);
+    klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
-  } else {
-    klee_preempt_thread();
+    klee_toggle_thread_scheduling(0);
   }
 
   if (ret != NULL) {
@@ -104,6 +117,11 @@ int pthread_join(pthread_t pthread, void **ret) {
       // If we have returned, then we should be able to return the data
       *ret = thread->returnValue;
     }
+  }
+
+  klee_toggle_thread_scheduling(1);
+  if (needToSleep == 0) {
+    klee_preempt_thread();
   }
 
   return 0;
@@ -128,12 +146,16 @@ int pthread_setcancelstate(int state, int *oldState) {
     return EINVAL;
   }
 
+  klee_toggle_thread_scheduling(0);
+
   uint64_t tid = klee_get_thread_id();
   if (tid != 0) {
     __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
     *oldState = thread->cancelState;
     thread->cancelState = state;
   }
+
+  klee_toggle_thread_scheduling(1);
 
   return 0;
 }
@@ -146,19 +168,27 @@ void pthread_testcancel() {
     return;
   }
 
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
   if (thread->cancelState == PTHREAD_CANCEL_DISABLE) {
+    klee_toggle_thread_scheduling(1);
     return;
   }
 
   if (thread->cancelSignalReceived == 1) {
+    klee_toggle_thread_scheduling(1);
     pthread_exit(PTHREAD_CANCELED);
   }
+
+  klee_toggle_thread_scheduling(1);
 }
 
 int pthread_cancel(pthread_t tid) {
+  klee_toggle_thread_scheduling(0);
   __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
   thread->cancelSignalReceived = 1;
+  klee_toggle_thread_scheduling(1);
 
   return 0;
 }

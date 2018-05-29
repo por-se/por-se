@@ -11,6 +11,8 @@ static __pthread_impl_rwlock* __obtain_pthread_rwlock(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_rwlock* lock = malloc(sizeof(__pthread_impl_rwlock));
   memset(lock, 0, sizeof(__pthread_impl_rwlock));
 
@@ -25,6 +27,8 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   __stack_create(&lock->waitingReaders);
   __stack_create(&lock->waitingWriters);
 
+  klee_toggle_thread_scheduling(1);
+
   return 0;
 }
 
@@ -34,8 +38,11 @@ int pthread_rwlock_destroy(pthread_rwlock_t *l) {
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
+
   int result = pthread_rwlock_tryrdlock(l);
   if (result != EBUSY) {
+    klee_toggle_thread_scheduling(1);
     return result;
   }
 
@@ -49,26 +56,35 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
   lock->mode = 1; // Reader mode
   lock->acquiredReaderCount++;
 
+  klee_toggle_thread_scheduling(1);
+
   return 0;
 }
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode == 0 || lock->mode == 1) {
     lock->mode = 1; // Reader mode
     lock->acquiredReaderCount++;
+    klee_toggle_thread_scheduling(1);
     return 0;
   }
 
+  klee_toggle_thread_scheduling(1);
   return EBUSY;
 }
 
 //int pthread_rwlock_timedrdlock(pthread_rwlock_t *__restrict, const struct timespec *__restrict);
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
+
   int result = pthread_rwlock_trywrlock(l);
   if (result != EBUSY) {
+    klee_toggle_thread_scheduling(1);
     return result;
   }
 
@@ -77,23 +93,32 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
   // Otherwise the lock is currently locked by another writer or reader
   uint64_t tid = klee_get_thread_id();
   __stack_push(&lock->waitingWriters, (void*) tid);
+  klee_toggle_thread_scheduling(1);
+
   klee_sleep_thread();
 
+  klee_toggle_thread_scheduling(0);
   lock->mode = 2;
   lock->acquiredWriter = klee_get_thread_id();
+  klee_toggle_thread_scheduling(1);
 
   return 0;
 }
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
+
   __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode != 0) {
+    klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
   lock->mode = 2;
   lock->acquiredWriter = klee_get_thread_id();
+  klee_toggle_thread_scheduling(1);
+
   klee_preempt_thread();
 
   return 0;
@@ -102,9 +127,11 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
 //int pthread_rwlock_timedwrlock(pthread_rwlock_t *__restrict, const struct timespec *__restrict);
 
 int pthread_rwlock_unlock(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
   __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode == 0 || (lock->mode == 2 && lock->acquiredWriter != klee_get_thread_id())) {
+    klee_toggle_thread_scheduling(1);
     return EPERM;
   }
   // TODO: we currently do not check the readers
@@ -115,6 +142,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
     lock->acquiredReaderCount--;
 
     if (lock->acquiredReaderCount > 0) {
+      klee_toggle_thread_scheduling(1);
       return 0;
     }
   }
@@ -125,15 +153,18 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
     // make a symbolic value to determine the next writer
     uint64_t tid = (uint64_t) __stack_pop(&lock->waitingWriters);
     klee_wake_up_thread(tid);
+    klee_toggle_thread_scheduling(1);
     return 0;
   }
 
   if (__stack_size(&lock->waitingReaders) > 0) {
     __notify_threads(&lock->waitingReaders);
+    klee_toggle_thread_scheduling(1);
     klee_preempt_thread();
     return 0;
   }
 
+  klee_toggle_thread_scheduling(1);
   return 0;
 }
 

@@ -173,7 +173,7 @@ extern "C" {
 
   void klee_exit_thread(void) __attribute__ ((__noreturn__));
 
-  void klee_mark_thread_shareable(const void *address);
+  void klee_toggle_thread_scheduling(int enabled);
 #ifdef __cplusplus
 }
 #endif
