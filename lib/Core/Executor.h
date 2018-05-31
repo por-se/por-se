@@ -215,6 +215,8 @@ private:
   /// (e.g. for a single STP query)
   double coreSolverTimeout;
 
+  bool hasScheduledThreads;
+
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 

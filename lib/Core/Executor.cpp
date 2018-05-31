@@ -305,6 +305,11 @@ namespace {
   ForkOnThreadScheduling("fork-on-thread-scheduling",
             cl::desc("Fork the states whenever the thread scheduling is not trivial"),
             cl::init(false));
+
+  cl::opt<bool>
+  ForkOnStatement("fork-on-statement",
+            cl::desc("Fork the current state whenever a possible thread scheduling can take place"),
+            cl::init(false));
 }
 
 
@@ -2772,6 +2777,8 @@ void Executor::run(ExecutionState &initialState) {
   searcher->update(0, newStates, std::vector<ExecutionState *>());
 
   while (!states.empty() && !haltExecution) {
+    hasScheduledThreads = false;
+
     ExecutionState &state = searcher->selectState();
     Thread* thread = state.getCurrentThreadReference();
     KInstruction *ki = thread->pc;
@@ -2782,7 +2789,18 @@ void Executor::run(ExecutionState &initialState) {
 
     checkMemoryUsage();
 
+    bool shouldForkAfterStatement = false;
+    if (ForkOnStatement) {
+      auto itInRemoved = std::find(removedStates.begin(), removedStates.end(), &state);
+      shouldForkAfterStatement = itInRemoved == removedStates.end();
+    }
+
     updateStates(&state);
+
+    // We only want to fork if we do not have forked already
+    if (shouldForkAfterStatement && !hasScheduledThreads) {
+      scheduleThreads(state);
+    }
   }
 
   delete searcher;
@@ -4082,7 +4100,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     // Make sure that we do not change the current state
     return;
-  } else if (runnable.size() == 1 || !ForkOnThreadScheduling) {
+  } else if (runnable.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement)) {
     // The easiest possible schedule
     state.setCurrentScheduledThread(runnable.front());
     return;
@@ -4112,6 +4130,8 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     es->setCurrentScheduledThread(runnable[i]);
   }
+
+  hasScheduledThreads = true;
 }
 
 /// Returns the errno location in memory
