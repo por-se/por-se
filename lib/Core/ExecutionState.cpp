@@ -184,6 +184,7 @@ bool ExecutionState::moveToNewSyncPhase() {
 
   for (auto& threadIt : threads) {
     Thread* thread = &threadIt.second;
+    bool resetMemAccesses = true;
 
     if (thread->state == Thread::ThreadState::RUNNABLE) {
       oneRunnable = true;
@@ -192,20 +193,26 @@ bool ExecutionState::moveToNewSyncPhase() {
     if (thread->state == Thread::ThreadState::PREEMPTED) {
       thread->state = Thread::ThreadState::RUNNABLE;
       oneRunnable = true;
+
+      // A preemption is not a reason to reset the mem accesses
+      // because the thread *may* preempt, but does not have to
+      resetMemAccesses = false;
     }
 
     thread->synchronizationPoint = currentSynchronizationPoint;
 
-    for (auto access : thread->syncPhaseAccesses) {
-      const MemoryObject* mo = access.first;
-      assert(mo->refCount > 0);
-      mo->refCount--;
-      if (mo->refCount == 0) {
-        delete mo;
+    if (resetMemAccesses) {
+      for (auto &access : thread->syncPhaseAccesses) {
+        const MemoryObject *mo = access.first;
+        assert(mo->refCount > 0);
+        mo->refCount--;
+        if (mo->refCount == 0) {
+          delete mo;
+        }
       }
-    }
 
-    thread->syncPhaseAccesses.clear();
+      thread->syncPhaseAccesses.clear();
+    }
   }
 
   return oneRunnable;
@@ -268,7 +275,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   //}
 }
 
-void ExecutionState::trackMemoryAccess(const MemoryObject* mo, uint8_t type) {
+void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
   if (!threadSchedulingEnabled) {
     // We do not have any interference at the moment
     // so we do not need to record the current memory accesses
@@ -276,14 +283,9 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, uint8_t type) {
   }
 
   Thread* thread = getCurrentThreadReference();
-  auto it = thread->syncPhaseAccesses.find(mo);
-
-  if (it == thread->syncPhaseAccesses.end()) {
-    thread->syncPhaseAccesses.insert(std::make_pair(mo, type));
+  bool trackedNewMo = thread->trackMemoryAccess(mo, offset, type);
+  if (trackedNewMo) {
     mo->refCount++;
-  } else {
-    uint8_t newType = it->second | type;
-    it->second = newType;
   }
 }
 

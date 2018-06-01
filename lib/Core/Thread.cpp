@@ -32,6 +32,12 @@ StackFrame::~StackFrame() {
 
 /***/
 
+Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset)
+        : type(type), offset(offset) {}
+
+Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a)
+        : type(a.type), offset(a.offset) {}
+
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
 
@@ -71,4 +77,32 @@ void Thread::popStackFrame() {
 
 void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
   stack.push_back(StackFrame(caller, kf));
+}
+
+bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uint8_t type) {
+  auto it = syncPhaseAccesses.find(target);
+  bool trackedNewObject = false;
+
+  if (it == syncPhaseAccesses.end()) {
+    auto insert = syncPhaseAccesses.insert(std::make_pair(target, std::vector<MemoryAccess>()));
+    assert(insert.second && "Failed to insert element");
+    it = insert.first;
+    trackedNewObject = true;
+  }
+
+  // So there is already an entry. So go ahead and deduplicate as much as possible
+  for (auto& accessIt : it->second) {
+    if (accessIt.type != type) {
+      // We cannot extend a memory access that is different from the one we currently process
+      continue;
+    }
+
+    if (accessIt.offset == offset) {
+      // It is already tracked so just bail out
+      return trackedNewObject;
+    }
+  }
+
+  it->second.emplace_back(MemoryAccess(type, offset));
+  return trackedNewObject;
 }

@@ -57,6 +57,16 @@ namespace klee {
       /// @brief Type for all thread ids
       typedef uint64_t ThreadId;
 
+    private:
+      struct MemoryAccess {
+        uint8_t type;
+        ref<Expr> offset;
+
+        MemoryAccess(uint8_t type, ref<Expr> offset);
+        MemoryAccess(const MemoryAccess &a);
+      };
+
+    public:
       enum ThreadState {
         PREEMPTED = 0,
         SLEEPING = 1,
@@ -92,7 +102,7 @@ namespace klee {
       ThreadState state;
 
       /// @brief memory accesses this thread has done during the current phase
-      std::map<const MemoryObject*, uint8_t> syncPhaseAccesses;
+      std::map<const MemoryObject*, std::vector<MemoryAccess>> syncPhaseAccesses;
 
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
@@ -102,6 +112,8 @@ namespace klee {
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
+
+      bool trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uint8_t type);
   };
 }
 

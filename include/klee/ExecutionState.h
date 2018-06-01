@@ -174,7 +174,7 @@ public:
 
   bool moveToNewSyncPhase();
 
-  void trackMemoryAccess(const MemoryObject* mo, uint8_t type);
+  void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 
   void popFrameOfCurrentThread();
 

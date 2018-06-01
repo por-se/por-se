@@ -113,6 +113,7 @@ public:
     ReportError,
     User,
     Deadlock,
+    UnsafeMemoryAccess,
     Unhandled
   };
 
@@ -473,6 +474,12 @@ private:
   KFunction* obtainFunctionFromExpression(ref<Expr> address);
 
   void exitWithDeadlock(ExecutionState &state);
+
+  void exitWithUnsafeMemAccess(ExecutionState &state,
+                               const MemoryObject* mo);
+
+  bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
+                           ref<Expr> offset, uint8_t type);
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,

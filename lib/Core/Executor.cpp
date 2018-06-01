@@ -331,6 +331,7 @@ const char *Executor::TerminateReasonNames[] = {
   [ ReportError ] = "reporterror",
   [ User ] = "user",
   [ Deadlock ] = "deadlock",
+  [ UnsafeMemoryAccess ] = "unsafememoryaccess",
   [ Unhandled ] = "xxx",
 };
 
@@ -1049,6 +1050,11 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     unsigned index = vnumber;
     Thread* thread = state.getCurrentThreadReference();
     StackFrame &sf = thread->stack.back();
+
+    if (sf.locals[index].value.get() == nullptr) {
+      klee_warning("Null pointer");
+    }
+
     return sf.locals[index];
   }
 }
@@ -3014,7 +3020,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
     state.dumpStack(msg);
 
     std::string info_str = info.str();
-    if (info_str != "")
+    if (!info_str.empty())
       msg << "Info: \n" << info_str;
 
     std::string suffix_buf;
@@ -3393,8 +3399,6 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
 
-  // TODO: we need to instrument all writes and reads per thread per sync phase
-
   Thread* thread = state.getCurrentThreadReference();
   Expr::Width type = (isWrite ? value->getWidth() : 
                      getWidthForLLVMType(target->inst->getType()));
@@ -3447,15 +3451,17 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
           wos->write(offset, value);
-          state.trackMemoryAccess(mo, Thread::WRITE_ACCESS);
+
+          processMemoryAccess(state, mo, offset, Thread::WRITE_ACCESS);
         }          
       } else {
         ref<Expr> result = os->read(offset, type);
-        state.trackMemoryAccess(mo, Thread::READ_ACCESS);
+
+        processMemoryAccess(state, mo, offset, Thread::READ_ACCESS);
         
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
-        
+
         bindLocal(target, state, result);
       }
 
@@ -3491,13 +3497,17 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 ReadOnly);
         } else {
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
-          wos->write(mo->getOffsetExpr(address), value);
-          state.trackMemoryAccess(mo, Thread::WRITE_ACCESS);
+          ref<Expr> offset = mo->getOffsetExpr(address);
+          wos->write(offset, value);
+
+          processMemoryAccess(state, mo, offset, Thread::WRITE_ACCESS);
         }
       } else {
-        ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
+        ref<Expr> offset = mo->getOffsetExpr(address);
+        ref<Expr> result = os->read(offset, type);
         bindLocal(target, *bound, result);
-        state.trackMemoryAccess(mo, Thread::READ_ACCESS);
+
+        processMemoryAccess(state, mo, offset, Thread::READ_ACCESS);
       }
     }
 
@@ -3948,6 +3958,8 @@ void Executor::createThread(ExecutionState &state, Thread::ThreadId tid,
 
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), 0);
+
+  scheduleThreads(state);
 }
 
 void Executor::sleepThread(ExecutionState &state) {
@@ -3974,6 +3986,127 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
   state.threadSchedulingEnabled = enabled;
 }
 
+bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
+  Thread* curThread = state.getCurrentThreadReference();
+  Thread::ThreadId curThreadId = curThread->getThreadId();
+
+  bool isRead = (type & Thread::Thread::READ_ACCESS);
+
+  bool isThreadSafeMemAccess = true;
+  std::vector<Thread::MemoryAccess> possibleCandidates;
+
+  // Phase 1: Try to find a unsafe interference based on a constant
+  //          offset first. This is cheaper. But record possible
+  //          candidates on the go as well
+  for (auto& threadsIt : state.threads) {
+    Thread* thread = &threadsIt.second;
+
+    if (thread->getThreadId() == curThreadId) {
+      // Memory accesses of the current thread are safe by definition
+      continue;
+    }
+
+    auto accesses = thread->syncPhaseAccesses.find(mo);
+    if (accesses == thread->syncPhaseAccesses.end()) {
+      // No access to that memory region from this thread
+      continue;
+    }
+
+    for (auto& access : accesses->second) {
+      // There is one safe memory access pattern:
+      // read + read -> so we can skip these
+      bool recIsRead = (access.type & Thread::READ_ACCESS);
+      if (isRead && recIsRead) {
+        continue;
+      }
+
+      if (access.offset == offset) {
+        isThreadSafeMemAccess = false;
+        continue;
+      }
+
+      // So the offset Expr are not the same but we maybe can get
+      // a result that is the same
+      // But: filter out Const + Const pairs
+      if (isa<ConstantExpr>(offset) && isa<ConstantExpr>(access.offset)) {
+        continue;
+      }
+
+      // So add it to the ones we want to test
+      possibleCandidates.push_back(access);
+    }
+
+    // If we already found a unsafe access then safe computation time
+    // and return right away
+    if (!isThreadSafeMemAccess) {
+      break;
+    }
+  }
+
+  // Phase 2: If we did not find a const unsafe offset, then
+  //          test all possible offset candidates
+  if (isThreadSafeMemAccess && !possibleCandidates.empty()) {
+    // Now test every one of them with the solver if they can point to the same
+    // offset
+
+    for (auto& candidateIt : possibleCandidates) {
+      ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
+
+      solver->setTimeout(coreSolverTimeout);
+      bool alwaysDifferent = true;
+      bool solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
+      solver->setTimeout(0);
+
+      if (!solverSuccessful) {
+        klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
+        continue;
+      }
+
+      if (!alwaysDifferent) {
+        // Now we know that both can be equal!
+
+        // TODO: We should probably fork the state here:
+        // -> we generate a error case
+        // -> test what happens without an error case (force offsets to be unequal)
+
+        // the error is that both offsets point to the same memory region so go
+        // ahead and add the constraint that they are equal
+        addConstraint(state, EqExpr::create(offset, candidateIt.offset));
+
+        isThreadSafeMemAccess = false;
+        break;
+      } else {
+        // We were not successful, so go ahead and add the constraint
+        // that they are always unequal
+        addConstraint(state, condition);
+      }
+    }
+  }
+
+  if (!isThreadSafeMemAccess) {
+    exitWithUnsafeMemAccess(state, mo);
+  } else {
+    // This is a safe memory access, we can go ahead and
+    // track it for the next states
+    state.trackMemoryAccess(mo, offset, type);
+  }
+
+  return isThreadSafeMemAccess;
+}
+
+void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject* mo) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "Unsafe access to memory from multiple threads\nAffected memory: ";
+
+  std::string memInfo;
+  mo->getAllocInfo(memInfo);
+  os << memInfo << "\n";
+
+  terminateStateOnError(state, "thread unsafe memory access",
+                        UnsafeMemoryAccess, nullptr, os.str());
+}
+
 void Executor::exitWithDeadlock(ExecutionState &state) {
   std::string TmpStr;
   llvm::raw_string_ostream os(TmpStr);
@@ -3981,9 +4114,9 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
   state.dumpSchedulingInfo(os);
   os << "\nTraces:\n";
   state.dumpAllThreadStacks(os);
-  klee_warning_once("%s", os.str().c_str());
 
-  terminateStateOnError(state, "all non-exited threads are sleeping", Deadlock);
+  terminateStateOnError(state, "all non-exited threads are sleeping",
+                        Deadlock, nullptr, os.str());
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
@@ -4014,68 +4147,6 @@ void Executor::scheduleThreads(ExecutionState &state) {
   std::vector<Thread::ThreadId> runnable = state.calculateRunnableThreads();
 
   if (runnable.empty()) {
-    // Before we now determine the next thread to schedule, we want to
-    // check the memory accesses of the threads
-    std::map<const MemoryObject*, std::vector<std::pair<Thread::ThreadId , uint8_t>>> accesses;
-    for (auto& threadsIt : state.threads) {
-      Thread* thread = &threadsIt.second;
-
-      for (auto& access : thread->syncPhaseAccesses) {
-        const MemoryObject* target = access.first;
-
-        auto it = accesses.find(target);
-        std::pair<Thread::ThreadId, uint8_t> entry = std::make_pair(thread->getThreadId(), access.second);
-
-        if (it == accesses.end()) {
-          std::pair<const MemoryObject*, std::vector<std::pair<Thread::ThreadId , uint8_t>>> p =
-                  std::make_pair(target, std::vector<std::pair<Thread::ThreadId , uint8_t>>());
-          auto insert = accesses.insert(p);
-          assert(insert.second && "Should be successful");
-          it = insert.first;
-        }
-
-        it->second.push_back(entry);
-      }
-    }
-
-    for (auto& accessIt : accesses) {
-      const MemoryObject* target = accessIt.first;
-
-      std::vector<Thread::ThreadId> writingThreads;
-      std::vector<Thread::ThreadId> readingThreads;
-
-      for (auto& threadIt : accessIt.second) {
-        Thread::ThreadId tid = threadIt.first;
-        uint8_t type = threadIt.second;
-
-        if ((type & Thread::WRITE_ACCESS) != 0) {
-          writingThreads.push_back(tid);
-        } else if ((type & Thread::READ_ACCESS) != 0) {
-          readingThreads.push_back(tid);
-        }
-      }
-
-      if ((!readingThreads.empty() && !writingThreads.empty()) || writingThreads.size() > 1) {
-        std::string TmpStr;
-        llvm::raw_string_ostream os(TmpStr);
-        os << "Unsafe access to memory from multiple threads\nMemory Info:\n";
-
-        std::string memInfo;
-        target->getAllocInfo(memInfo);
-        os << memInfo << "\n";
-
-        for (auto& tid : writingThreads) {
-          os << "Writing thread: " << tid << "\n";
-        }
-
-        for (auto& tid : readingThreads) {
-          os << "Reading thread: " << tid << "\n";
-        }
-
-        klee_warning_once("%s", os.str().c_str());
-      }
-    }
-
     // So all have reached the current sync point, move to the new one
     bool oneNowRunnable = state.moveToNewSyncPhase();
     if (oneNowRunnable) {
@@ -4100,7 +4171,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     // Make sure that we do not change the current state
     return;
-  } else if (runnable.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement)) {
+  } else if (runnable.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement) || state.forkDisabled) {
     // The easiest possible schedule
     state.setCurrentScheduledThread(runnable.front());
     return;

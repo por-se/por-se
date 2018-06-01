@@ -10,8 +10,12 @@ static __pthread_impl_pthread* __obtain_pthread_data(pthread_t pthread) {
 }
 
 static void* __pthread_impl_wrapper(void* arg) {
+  klee_toggle_thread_scheduling(0);
   __pthread_impl_pthread* thread = arg;
-  void* ret = thread->startRoutine(thread->startArg);
+  void* startArg = thread->startArg;
+  klee_toggle_thread_scheduling(1);
+
+  void* ret = thread->startRoutine(startArg);
   pthread_exit(ret);
 }
 
