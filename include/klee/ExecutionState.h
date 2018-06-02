@@ -60,6 +60,9 @@ public:
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
 
+  /// @brief the history of scheduling up until now
+  std::vector<Thread::ThreadId> schedulingHistory;
+
   /// @brief if thread scheduling is enabled at the current time
   bool threadSchedulingEnabled;
 

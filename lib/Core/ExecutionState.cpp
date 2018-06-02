@@ -95,6 +95,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
     currentSynchronizationPoint(state.currentSynchronizationPoint),
     threads(state.threads),
+    schedulingHistory(state.schedulingHistory),
     threadSchedulingEnabled(state.threadSchedulingEnabled),
 
     addressSpace(state.addressSpace),
@@ -238,6 +239,8 @@ void ExecutionState::setCurrentScheduledThread(Thread::ThreadId tid) {
   auto threadIt = threads.find(tid);
   assert(threadIt != threads.end() && "Could not find thread");
   currentThreadIterator = threadIt;
+
+  schedulingHistory.push_back(tid);
 }
 
 void ExecutionState::sleepCurrentThread() {

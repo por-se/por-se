@@ -2801,12 +2801,12 @@ void Executor::run(ExecutionState &initialState) {
       shouldForkAfterStatement = itInRemoved == removedStates.end();
     }
 
-    updateStates(&state);
-
     // We only want to fork if we do not have forked already
     if (shouldForkAfterStatement && !hasScheduledThreads) {
       scheduleThreads(state);
     }
+
+    updateStates(&state);
   }
 
   delete searcher;
@@ -4182,25 +4182,30 @@ void Executor::scheduleThreads(ExecutionState &state) {
   // TODO: maybe we can also compare the stacks of the threads and can form
   //       groups of 'equivalent' threads. Based on them we then could only
   //       add one thread per group
-  for (size_t i = 0; i < runnable.size(); ++i) {
-    ExecutionState* es = nullptr;
-    if (i == 0) {
-      es = &state;
-    } else {
-      es = state.branch();
 
-      if (state.ptreeNode) {
-        state.ptreeNode->data = nullptr;
-        auto res = processTree->split(state.ptreeNode, es, &state);
-        es->ptreeNode = res.first;
-        state.ptreeNode = res.second;
-      }
+  stats::forks += runnable.size() - 1;
 
-      addedStates.push_back(es);
+  for (size_t i = 1; i < runnable.size(); ++i) {
+    ExecutionState* ns = state.branch();
+    addedStates.push_back(ns);
+    ns->setCurrentScheduledThread(runnable[i]);
+
+    state.ptreeNode->data = nullptr;
+    auto res = processTree->split(state.ptreeNode, ns, &state);
+    ns->ptreeNode = res.first;
+    state.ptreeNode = res.second;
+
+    if (pathWriter) {
+      ns->pathOS = pathWriter->open(state.pathOS);
     }
 
-    es->setCurrentScheduledThread(runnable[i]);
+    if (symPathWriter) {
+      ns->symPathOS = symPathWriter->open(state.symPathOS);
+    }
   }
+
+  // We need to push it to the back
+  state.setCurrentScheduledThread(runnable.front());
 
   hasScheduledThreads = true;
 }

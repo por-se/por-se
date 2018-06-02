@@ -445,6 +445,12 @@ void KleeHandler::processTestCase(const ExecutionState &state,
       delete f;
     }
 
+    llvm::raw_fd_ostream *fSchedules = openTestFile("tschedules", id);
+    for (auto& tidIt : state.schedulingHistory) {
+      *fSchedules << tidIt << "\n";
+    }
+    delete(fSchedules);
+
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
       m_pathWriter->readStream(m_interpreter->getPathStreamID(state),
