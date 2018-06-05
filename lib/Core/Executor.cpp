@@ -310,6 +310,11 @@ namespace {
   ForkOnStatement("fork-on-statement",
             cl::desc("Fork the current state whenever a possible thread scheduling can take place"),
             cl::init(false));
+
+  cl::opt<bool>
+  MergeThreadForkAtSameStack("merge-thread-fork-at-same-stack",
+            cl::desc("Whenever the scheduling of threads occurs, merge similar stacks"),
+            cl::init(false));
 }
 
 
@@ -4119,6 +4124,59 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
+std::vector<Thread*> Executor::filterSameStack(std::vector<Thread*> threads) {
+  if (!MergeThreadForkAtSameStack || threads.size() < 2) {
+    return threads;
+  }
+
+  // So we want to filter the threads that are basically at the
+  // same stack trace
+
+  std::vector<Thread*> result;
+
+  for (auto& threadIt : threads) {
+    bool isUnique = true;
+
+    for (auto& resultIt : result) {
+      // Different sizes are obviously not the same
+      if (resultIt->stack.size() != threadIt->stack.size()) {
+        continue;
+      }
+
+      auto rStack = resultIt->stack.begin();
+      auto tStack = resultIt->stack.begin();
+
+      // Now compare only the location and the function we are in
+      bool sameStack = true;
+      for (; rStack != resultIt->stack.end(); ++rStack, ++tStack) {
+        if (rStack->kf != tStack->kf) {
+          sameStack = false;
+          break;
+        }
+
+        if (rStack->caller != tStack->caller) {
+          sameStack = false;
+          break;
+        }
+      }
+
+      // Not the same stack -> test the next
+      if (!sameStack) {
+        continue;
+      }
+
+      // There was not reason to skip this one -> they are 'similar'
+      isUnique = false;
+    }
+
+    if (isUnique) {
+      result.push_back(threadIt);
+    }
+  }
+
+  return result;
+}
+
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
@@ -4144,7 +4202,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // this will schedule another thread
   }
 
-  std::vector<Thread::ThreadId> runnable = state.calculateRunnableThreads();
+  std::vector<Thread*> runnable = state.calculateRunnableThreads();
 
   if (runnable.empty()) {
     // So all have reached the current sync point, move to the new one
@@ -4153,6 +4211,9 @@ void Executor::scheduleThreads(ExecutionState &state) {
       runnable = state.calculateRunnableThreads();
     }
   }
+
+  // Do out merging
+  runnable = filterSameStack(runnable);
 
   if (runnable.empty()) {
     bool allExited = true;
@@ -4173,7 +4234,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     return;
   } else if (runnable.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement) || state.forkDisabled) {
     // The easiest possible schedule
-    state.setCurrentScheduledThread(runnable.front());
+    state.setCurrentScheduledThread(runnable.front()->getThreadId());
     return;
   }
 
@@ -4188,7 +4249,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   for (size_t i = 1; i < runnable.size(); ++i) {
     ExecutionState* ns = state.branch();
     addedStates.push_back(ns);
-    ns->setCurrentScheduledThread(runnable[i]);
+    ns->setCurrentScheduledThread(runnable[i]->getThreadId());
 
     state.ptreeNode->data = nullptr;
     auto res = processTree->split(state.ptreeNode, ns, &state);
@@ -4205,7 +4266,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   // We need to push it to the back
-  state.setCurrentScheduledThread(runnable.front());
+  state.setCurrentScheduledThread(runnable.front()->getThreadId());
 
   hasScheduledThreads = true;
 }

@@ -481,6 +481,10 @@ private:
   bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
                            ref<Expr> offset, uint8_t type);
 
+  void scheduleThreads(ExecutionState &state);
+
+  std::vector<Thread*> filterSameStack(std::vector<Thread*> threads);
+
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
       InterpreterHandler *ie);
@@ -564,8 +568,6 @@ public:
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);
-
-  void scheduleThreads(ExecutionState &state);
 };
   
 } // End klee namespace

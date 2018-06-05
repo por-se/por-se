@@ -170,7 +170,7 @@ public:
   void exitThread(Thread::ThreadId tid);
 
   /// @brief returns all runnable threads
-  std::vector<Thread::ThreadId> calculateRunnableThreads();
+  std::vector<Thread*> calculateRunnableThreads();
 
   /// @brief update the current scheduled thread
   void setCurrentScheduledThread(Thread::ThreadId tid);

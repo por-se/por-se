@@ -219,8 +219,8 @@ bool ExecutionState::moveToNewSyncPhase() {
   return oneRunnable;
 }
 
-std::vector<Thread::ThreadId> ExecutionState::calculateRunnableThreads() {
-  std::vector<Thread::ThreadId > runnableThreads;
+std::vector<Thread*> ExecutionState::calculateRunnableThreads() {
+  std::vector<Thread*> runnableThreads;
 
   // First determine all that are runnable
   for (auto& threadIt : threads) {
@@ -228,7 +228,7 @@ std::vector<Thread::ThreadId> ExecutionState::calculateRunnableThreads() {
 
     if (thread->synchronizationPoint == currentSynchronizationPoint
         && thread->state == Thread::ThreadState::RUNNABLE) {
-      runnableThreads.push_back(thread->getThreadId());
+      runnableThreads.push_back(thread);
     }
   }
 
