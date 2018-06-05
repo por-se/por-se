@@ -4240,13 +4240,16 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   // Now we have to branch for each possible thread scheduling
   // this basically means we have to add (runnable.size() - 1) more states
-  // TODO: maybe we can also compare the stacks of the threads and can form
-  //       groups of 'equivalent' threads. Based on them we then could only
-  //       add one thread per group
 
-  stats::forks += runnable.size() - 1;
+  // Before we actually fork the states, make sure we honor MaxForks
+  uint64_t newForkCount = runnable.size() - 1;
+  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
+    newForkCount = MaxForks - stats::forks;
+  }
 
-  for (size_t i = 1; i < runnable.size(); ++i) {
+  stats::forks += newForkCount;
+
+  for (size_t i = 0; i < newForkCount; ++i) {
     ExecutionState* ns = state.branch();
     addedStates.push_back(ns);
     ns->setCurrentScheduledThread(runnable[i]->getThreadId());
@@ -4266,7 +4269,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   // We need to push it to the back
-  state.setCurrentScheduledThread(runnable.front()->getThreadId());
+  state.setCurrentScheduledThread(runnable.back()->getThreadId());
 
   hasScheduledThreads = true;
 }
