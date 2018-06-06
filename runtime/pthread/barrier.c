@@ -17,9 +17,12 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
   klee_toggle_thread_scheduling(0);
 
   __pthread_impl_barrier* barrier = malloc(sizeof(__pthread_impl_barrier));
-  memset(barrier, 0, sizeof(__pthread_impl_barrier));
+  if (barrier == NULL) {
+    klee_toggle_thread_scheduling(1);
+    return EAGAIN;
+  }
 
-  klee_mark_thread_shareable(barrier);
+  memset(barrier, 0, sizeof(__pthread_impl_barrier));
 
   *((__pthread_impl_barrier**)b) = barrier;
 
