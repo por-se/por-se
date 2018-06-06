@@ -74,6 +74,10 @@ typedef struct {
   __pthread_impl_stack waiting;
 } __pthread_impl_semaphore;
 
+typedef struct {
+  uint8_t called;
+} __pthread_impl_once;
+
 int __pthread_mutex_unlock_internal(pthread_mutex_t *m);
 void __notify_threads(__pthread_impl_stack* stack);
 

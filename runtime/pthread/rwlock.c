@@ -31,7 +31,17 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
 }
 
 int pthread_rwlock_destroy(pthread_rwlock_t *l) {
+  klee_toggle_thread_scheduling(0);
   __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+
+  if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != 0) {
+    klee_toggle_thread_scheduling(1);
+    return EBUSY;
+  }
+
+  free(lock);
+
+  klee_toggle_thread_scheduling(1);
   return 0;
 }
 

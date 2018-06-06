@@ -197,7 +197,8 @@ bool ExecutionState::moveToNewSyncPhase() {
 
       // A preemption is not a reason to reset the mem accesses
       // because the thread *may* preempt, but does not have to
-      resetMemAccesses = false;
+      // TODO: Disabled for now to test how effective this is
+      // resetMemAccesses = false;
     }
 
     thread->synchronizationPoint = currentSynchronizationPoint;

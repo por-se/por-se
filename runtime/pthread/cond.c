@@ -26,7 +26,18 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 }
 
 int pthread_cond_destroy(pthread_cond_t *l) {
-  // __pthread_impl_cond* lock = __obtain_pthread_cond(l);
+  klee_toggle_thread_scheduling(0);
+
+  __pthread_impl_cond* lock = __obtain_pthread_cond(l);
+
+  if (lock->mode != 0 || __stack_size(&lock->waitingList) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return EBUSY;
+  }
+
+  free(lock);
+
+  klee_toggle_thread_scheduling(1);
   return 0;
 }
 

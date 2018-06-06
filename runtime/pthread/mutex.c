@@ -101,6 +101,8 @@ int pthread_mutex_destroy(pthread_mutex_t *m) {
     return EBUSY;
   }
 
+  free(mutex);
+
   // Some real support for mutex destroy
   klee_toggle_thread_scheduling(1);
   return 0;

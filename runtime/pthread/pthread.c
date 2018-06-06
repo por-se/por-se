@@ -23,6 +23,10 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   klee_toggle_thread_scheduling(0);
 
   __pthread_impl_pthread* thread = malloc(sizeof(__pthread_impl_pthread));
+  if (thread == NULL) {
+    klee_toggle_thread_scheduling(1);
+    return EAGAIN;
+  }
   memset(thread, 0, sizeof(__pthread_impl_mutex));
 
   *((__pthread_impl_pthread**)pthread) = thread;
@@ -197,6 +201,35 @@ int pthread_cancel(pthread_t tid) {
   return 0;
 }
 
+int pthread_once(pthread_once_t *o, void (*func)(void)) {
+  klee_toggle_thread_scheduling(0);
+
+  __pthread_impl_once* once = NULL;
+  if (*o == 0) {
+    once = malloc(sizeof(__pthread_impl_once));
+    if (once == NULL) {
+      klee_toggle_thread_scheduling(1);
+      return EINVAL;
+    }
+
+    memset(once, 0, sizeof(__pthread_impl_once));
+  } else {
+    once = (__pthread_impl_once*)o;
+  }
+
+  if (once->called != 0) {
+    klee_toggle_thread_scheduling(1);
+    return 0;
+  }
+
+  once->called = 1;
+  klee_toggle_thread_scheduling(1);
+
+  func();
+
+  return 0;
+}
+
 //int pthread_key_create(pthread_key_t *, void (*)(void *));
 //int pthread_key_delete(pthread_key_t);
 //void *pthread_getspecific(pthread_key_t);
@@ -224,7 +257,12 @@ int pthread_cancel(pthread_t tid) {
 
 //int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
 
-//int pthread_getconcurrency(void);
-//int pthread_setconcurrency(int);
+int pthread_getconcurrency(void) {
+  return 0;
+}
+
+int pthread_setconcurrency(int n) {
+  return 0;
+}
 
 //int pthread_getcpuclockid(pthread_t, clockid_t *);

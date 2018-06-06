@@ -47,8 +47,6 @@ void __notify_threads(__pthread_impl_stack* stack) {
 //int pthread_setschedparam(pthread_t, int, const struct sched_param *);
 //int pthread_setschedprio(pthread_t, int);
 //
-//int pthread_once(pthread_once_t *, void (*)(void));
-//
 //int pthread_cond_init(pthread_cond_t *__restrict, const pthread_condattr_t *__restrict);
 //int pthread_cond_destroy(pthread_cond_t *);
 //int pthread_cond_wait(pthread_cond_t *__restrict, pthread_mutex_t *__restrict);

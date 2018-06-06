@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "klee/klee.h"
 #include "pthread_impl.h"
@@ -31,7 +32,17 @@ int sem_init (sem_t *__sem, int __pshared, unsigned int __value) {
 
 /* Free resources associated with semaphore object SEM.  */
 int sem_destroy (sem_t *__sem) {
-  // TODO
+  klee_toggle_thread_scheduling(0);
+
+  __pthread_impl_semaphore* sem = __obtain_semaphore(__sem);
+  if (__stack_size(&sem->waiting) != 0) {
+    klee_toggle_thread_scheduling(1);
+
+    return -1;
+  }
+
+  free(sem);
+
   return 0;
 }
 

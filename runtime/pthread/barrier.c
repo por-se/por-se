@@ -45,6 +45,8 @@ int pthread_barrier_destroy(pthread_barrier_t *b) {
     return EBUSY;
   }
 
+  free(barrier);
+
   klee_toggle_thread_scheduling(1);
   return 0;
 }
