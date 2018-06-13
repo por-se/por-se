@@ -28,8 +28,6 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
   barrier->currentCount = 0;
   __stack_create(&barrier->waitingThreads);
 
-  printf("New barrier with start %u of %u\n", barrier->currentCount, barrier->count);
-
   *((__pthread_impl_barrier**)b) = barrier;
 
   klee_toggle_thread_scheduling(1);
@@ -58,8 +56,6 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
 
   __pthread_impl_barrier* barrier = __obtain_pthread_barrier(b);
   barrier->currentCount++;
-
-  printf("Barrier has now the count of %u of %u\n", barrier->currentCount, barrier->count);
 
   if (barrier->currentCount < barrier->count) {
     uint64_t tid = klee_get_thread_id();
