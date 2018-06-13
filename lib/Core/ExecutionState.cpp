@@ -261,8 +261,12 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  thread->state = thread->PREEMPTED;
-  thread->synchronizationPoint++;
+
+  // We should only wake up threads that are actually sleeping
+  if (thread->state == Thread::ThreadState::SLEEPING) {
+    thread->state = Thread::ThreadState::PREEMPTED;
+    thread->synchronizationPoint++;
+  }
 }
 
 void ExecutionState::exitThread(Thread::ThreadId tid) {

@@ -8,7 +8,7 @@
 #include "pthread_impl.h"
 
 static __pthread_impl_semaphore* __obtain_semaphore(sem_t *sem) {
-  return ((__pthread_impl_semaphore*)sem);
+  return *((__pthread_impl_semaphore**)sem);
 }
 
 int sem_init (sem_t *__sem, int __pshared, unsigned int __value) {
