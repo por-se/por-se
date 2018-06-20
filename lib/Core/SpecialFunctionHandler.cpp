@@ -384,6 +384,8 @@ void SpecialFunctionHandler::handleCloseMerge(ExecutionState &state,
     warning << &state << " ran into a close at " << i << " without a preceding open";
     klee_warning("%s", warning.str().c_str());
   } else {
+    assert(executor.inCloseMerge.find(&state) == executor.inCloseMerge.end() &&
+           "State cannot run into close_merge while being closed");
     executor.inCloseMerge.insert(&state);
     state.openMergeStack.back()->addClosedState(&state, i);
     state.openMergeStack.pop_back();
@@ -773,7 +775,7 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
       klee_warning("klee_make_symbolic: deprecated number of arguments (2 instead of 3)");
       break;
     case 3:
-      name = readStringAtAddress(state, arguments[2]);
+      name = arguments[2]->isZero() ? "" : readStringAtAddress(state, arguments[2]);
       break;
     default:
       executor.terminateStateOnError(state, "illegal number of arguments to klee_make_symbolic(void*, size_t, char*)", Executor::User);
