@@ -167,6 +167,7 @@ public:
   /// @brief will preempt the current thread for the current sync phase
   void preemptCurrentThread();
 
+  /// @brief will exit the referenced thread
   void exitThread(Thread::ThreadId tid);
 
   /// @brief returns all runnable threads

@@ -69,7 +69,7 @@ int pthread_detach(pthread_t pthread) {
   return 0;
 }
 
-void pthread_exit(void* arg) __attribute__ ((__noreturn__)) {
+void pthread_exit(void* arg) {
   klee_toggle_thread_scheduling(0);
   uint64_t tid = klee_get_thread_id();
 
@@ -203,9 +203,10 @@ int pthread_cancel(pthread_t tid) {
 
 int pthread_once(pthread_once_t *o, void (*func)(void)) {
   klee_toggle_thread_scheduling(0);
+  int* onceValue = (int*) o;
 
   __pthread_impl_once* once = NULL;
-  if (*o == 0) {
+  if (*onceValue == 0) {
     once = malloc(sizeof(__pthread_impl_once));
     if (once == NULL) {
       klee_toggle_thread_scheduling(1);
