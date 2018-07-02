@@ -61,8 +61,9 @@ namespace klee {
       struct MemoryAccess {
         uint8_t type;
         ref<Expr> offset;
+        uint64_t syncPhase;
 
-        MemoryAccess(uint8_t type, ref<Expr> offset);
+        MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t syncPhase);
         MemoryAccess(const MemoryAccess &a);
       };
 
@@ -103,6 +104,9 @@ namespace klee {
 
       /// @brief memory accesses this thread has done during the current phase
       std::map<const MemoryObject*, std::vector<MemoryAccess>> syncPhaseAccesses;
+
+      /// @brief map of syncs between threads
+      std::map<ThreadId, uint64_t> threadSyncs;
 
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);

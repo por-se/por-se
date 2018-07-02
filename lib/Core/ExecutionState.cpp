@@ -41,7 +41,7 @@ namespace {
 
 ExecutionState::ExecutionState(KFunction *kf) :
     currentSynchronizationPoint(0),
-    threadSchedulingEnabled(1),
+    threadSchedulingEnabled(true),
 
     queryCost(0.), 
     weight(1),
@@ -172,6 +172,18 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
   newThread->synchronizationPoint = currentSynchronizationPoint + 1;
   newThread->state = Thread::ThreadState::PREEMPTED;
 
+  // The newly spawned thread will be in sync will all the others
+  // that are currently running so safe this info
+  for (auto& threadIt : threads) {
+    Thread::ThreadId itTid = threadIt.second.getThreadId();
+    if (itTid == tid) {
+      continue;
+    }
+
+    newThread->threadSyncs[itTid] = currentSynchronizationPoint;
+    threadIt.second.threadSyncs[tid] = currentSynchronizationPoint;
+  }
+
   // TODO: determine if we want the current thread to wait
   //       if we branch, then we should consider to preempt
   //       the current thread to determine the next schedule
@@ -185,7 +197,6 @@ bool ExecutionState::moveToNewSyncPhase() {
 
   for (auto& threadIt : threads) {
     Thread* thread = &threadIt.second;
-    bool resetMemAccesses = true;
 
     if (thread->state == Thread::ThreadState::RUNNABLE) {
       oneRunnable = true;
@@ -194,27 +205,44 @@ bool ExecutionState::moveToNewSyncPhase() {
     if (thread->state == Thread::ThreadState::PREEMPTED) {
       thread->state = Thread::ThreadState::RUNNABLE;
       oneRunnable = true;
-
-      // A preemption is not a reason to reset the mem accesses
-      // because the thread *may* preempt, but does not have to
-      // TODO: Disabled for now to test how effective this is
-      // resetMemAccesses = false;
     }
 
     thread->synchronizationPoint = currentSynchronizationPoint;
 
-    if (resetMemAccesses) {
-      for (auto &access : thread->syncPhaseAccesses) {
+    // Now we want to determine if we can delete certain memory accesses
+    // based on the thread syncs
+
+    // first we need to determine which sync point is currently the minimum
+    uint64_t minSyncPoint = 0;
+    for (auto& threadSync : thread->threadSyncs) {
+      if (minSyncPoint == 0 || minSyncPoint > threadSync.second) {
+        minSyncPoint = threadSync.second;
+      }
+    }
+
+    // Now we can clear every access that happened before
+    for (auto &access : thread->syncPhaseAccesses) {
+      for (auto accessIt = access.second.begin(); accessIt != access.second.end(); accessIt++) {
+        if (accessIt->syncPhase < minSyncPoint) {
+          access.second.erase(accessIt);
+        }
+      }
+
+      // If the access list is now empty, then we can remove the current
+      // memory object reference
+      if (access.second.empty()) {
         const MemoryObject *mo = access.first;
         assert(mo->refCount > 0);
         mo->refCount--;
         if (mo->refCount == 0) {
           delete mo;
         }
-      }
 
-      thread->syncPhaseAccesses.clear();
+        thread->syncPhaseAccesses.erase(mo);
+      }
     }
+
+    thread->syncPhaseAccesses.clear();
   }
 
   return oneRunnable;
@@ -261,11 +289,16 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
+  Thread* currentThread = getCurrentThreadReference();
 
   // We should only wake up threads that are actually sleeping
   if (thread->state == Thread::ThreadState::SLEEPING) {
     thread->state = Thread::ThreadState::PREEMPTED;
     thread->synchronizationPoint++;
+
+    // One thread has woken up another one so make sure we safe both
+    thread->threadSyncs[currentThread->getThreadId()] = currentSynchronizationPoint;
+    currentThread->threadSyncs[thread->getThreadId()] = currentSynchronizationPoint;
   }
 }
 
@@ -276,6 +309,12 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   Thread* thread = &pair->second;
   thread->state = thread->EXITED;
   thread->synchronizationPoint++;
+
+  Thread* currentThread = getCurrentThreadReference();
+  if (currentThread->getThreadId() != thread->getThreadId()) {
+    thread->threadSyncs[currentThread->getThreadId()] = currentSynchronizationPoint;
+    currentThread->threadSyncs[thread->getThreadId()] = currentSynchronizationPoint;
+  }
 
   // Now remove all stack frames to cleanup
   // while (!thread->stack.empty()) {

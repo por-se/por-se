@@ -32,11 +32,11 @@ StackFrame::~StackFrame() {
 
 /***/
 
-Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset)
-        : type(type), offset(offset) {}
+Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t syncPhase)
+        : type(type), offset(offset), syncPhase(syncPhase) {}
 
 Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a)
-        : type(a.type), offset(a.offset) {}
+        : type(a.type), offset(a.offset), syncPhase(a.syncPhase) {}
 
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
@@ -97,12 +97,12 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uin
       continue;
     }
 
-    if (accessIt.offset == offset) {
+    if (accessIt.offset == offset && accessIt.syncPhase == synchronizationPoint) {
       // It is already tracked so just bail out
       return trackedNewObject;
     }
   }
 
-  it->second.emplace_back(MemoryAccess(type, offset));
+  it->second.emplace_back(MemoryAccess(type, offset, synchronizationPoint));
   return trackedNewObject;
 }
