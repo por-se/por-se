@@ -3361,6 +3361,10 @@ void Executor::executeFree(ExecutionState &state,
         terminateStateOnError(*it->second, "free of global", Free, NULL,
                               getAddressInfo(*it->second, address));
       } else {
+        // A free operation should be tracked as well and should be done
+        // before anything else
+        processMemoryAccess(*it->second, mo, nullptr, Thread::FREE_ACCESS);
+
         it->second->addressSpace.unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -3995,7 +3999,8 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   Thread* curThread = state.getCurrentThreadReference();
   Thread::ThreadId curThreadId = curThread->getThreadId();
 
-  bool isRead = (type & Thread::Thread::READ_ACCESS);
+  bool isRead = (type & Thread::READ_ACCESS);
+  bool isFree = (type & Thread::FREE_ACCESS);
 
   bool isThreadSafeMemAccess = true;
   std::vector<Thread::MemoryAccess> possibleCandidates;
@@ -4018,6 +4023,13 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     }
 
     for (auto& access : accesses->second) {
+      // One access pattern that is especially dangerous is an unprotected free
+      // every combination is unsafe (read + free, write + free, ...)
+      if (isFree || (access.type & Thread::FREE_ACCESS)) {
+        isThreadSafeMemAccess = false;
+        continue;
+      }
+
       // There is one safe memory access pattern:
       // read + read -> so we can skip these
       bool recIsRead = (access.type & Thread::READ_ACCESS);
