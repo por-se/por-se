@@ -4051,40 +4051,62 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   // Phase 2: If we did not find a const unsafe offset, then
   //          test all possible offset candidates
   if (isThreadSafeMemAccess && !possibleCandidates.empty()) {
-    // Now test every one of them with the solver if they can point to the same
-    // offset
+    // First build one big expression to test if one of them matches
+    ref<Expr> query = ConstantExpr::create(1, Expr::Bool);
 
     for (auto& candidateIt : possibleCandidates) {
       ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
+      query = AndExpr::create(query, condition);
+    }
 
-      solver->setTimeout(coreSolverTimeout);
-      bool alwaysDifferent = true;
-      bool solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
-      solver->setTimeout(0);
+    solver->setTimeout(coreSolverTimeout);
+    bool noViolation = true;
+    bool solverSuccessful = solver->mustBeTrue(state, query, noViolation);
+    solver->setTimeout(0);
 
-      if (!solverSuccessful) {
-        klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
-        continue;
+    if (!solverSuccessful) {
+      klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
+      return true;
+    }
+
+    if (!noViolation) {
+      // So we now know that at least one of the possible candidates match
+      // Now test every one of them with the solver to know the exact one
+      for (auto &candidateIt : possibleCandidates) {
+        ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
+
+        solver->setTimeout(coreSolverTimeout);
+        bool alwaysDifferent = true;
+        solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
+        solver->setTimeout(0);
+
+        if (!solverSuccessful) {
+          klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
+          continue;
+        }
+
+        if (!alwaysDifferent) {
+          // Now we know that both can be equal!
+
+          // TODO: We should probably fork the state here:
+          // -> we generate a error case
+          // -> test what happens without an error case (force offsets to be unequal)
+
+          // the error is that both offsets point to the same memory region so go
+          // ahead and add the constraint that they are equal
+          addConstraint(state, EqExpr::create(offset, candidateIt.offset));
+
+          // Extract all important info in order to generate a proper report we should
+          // probably be showing info about which thread was causing the race
+          isThreadSafeMemAccess = false;
+
+          break;
+        }
       }
-
-      if (!alwaysDifferent) {
-        // Now we know that both can be equal!
-
-        // TODO: We should probably fork the state here:
-        // -> we generate a error case
-        // -> test what happens without an error case (force offsets to be unequal)
-
-        // the error is that both offsets point to the same memory region so go
-        // ahead and add the constraint that they are equal
-        addConstraint(state, EqExpr::create(offset, candidateIt.offset));
-
-        isThreadSafeMemAccess = false;
-        break;
-      } else {
-        // We were not successful, so go ahead and add the constraint
-        // that they are always unequal
-        addConstraint(state, condition);
-      }
+    } else {
+      // We were not successful, so go ahead and add the constraint
+      // that they are always unequal
+      addConstraint(state, query);
     }
   }
 
