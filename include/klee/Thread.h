@@ -78,6 +78,7 @@ namespace klee {
       static const uint8_t READ_ACCESS = 1;
       static const uint8_t WRITE_ACCESS = 2;
       static const uint8_t FREE_ACCESS = 4;
+      static const uint8_t ALLOC_ACCESS = 8;
 
     private:
       /// @brief Pointer to instruction to be executed after the current

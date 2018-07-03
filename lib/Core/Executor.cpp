@@ -1365,6 +1365,8 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       if (mo) {
+        processMemoryAccess(state, mo, nullptr, Thread::ALLOC_ACCESS);
+
         if ((WordSize == Expr::Int64) && (mo->address & 15) &&
             requires16ByteAlignment) {
           // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
@@ -1511,7 +1513,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       state.exitThread(thread->getThreadId());
       scheduleThreads(state);
     } else {
-      state.popFrameOfCurrentThread();
+      // When we pop the stack frame, we free the memory regions
+      // this means that we need to check these memory acceses
+      std::vector<const MemoryObject*> freedAllocas = state.popFrameOfCurrentThread();
+      for (auto mo : freedAllocas) {
+        processMemoryAccess(state, mo, nullptr, Thread::FREE_ACCESS);
+      }
 
       if (statsTracker)
         statsTracker->framePopped(state);
@@ -3245,6 +3252,9 @@ void Executor::executeAlloc(ExecutionState &state,
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
+      // A free operation should be tracked as well
+      processMemoryAccess(state, mo, nullptr, Thread::ALLOC_ACCESS);
+
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
         os->initializeToZero();
@@ -3361,8 +3371,7 @@ void Executor::executeFree(ExecutionState &state,
         terminateStateOnError(*it->second, "free of global", Free, NULL,
                               getAddressInfo(*it->second, address));
       } else {
-        // A free operation should be tracked as well and should be done
-        // before anything else
+        // A free operation should be tracked as well
         processMemoryAccess(*it->second, mo, nullptr, Thread::FREE_ACCESS);
 
         it->second->addressSpace.unbindObject(mo);
@@ -4001,6 +4010,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
 
   bool isRead = (type & Thread::READ_ACCESS);
   bool isFree = (type & Thread::FREE_ACCESS);
+  bool isAlloc = (type & Thread::ALLOC_ACCESS);
 
   bool isThreadSafeMemAccess = true;
   std::vector<Thread::MemoryAccess> possibleCandidates;
@@ -4033,6 +4043,13 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       // One access pattern that is especially dangerous is an unprotected free
       // every combination is unsafe (read + free, write + free, ...)
       if (isFree || (access.type & Thread::FREE_ACCESS)) {
+        isThreadSafeMemAccess = false;
+        continue;
+      }
+
+      // Another unsafe memory access pattern: the operation is not explicitly
+      // ordered with the other thread and thus can happen in the reverse order
+      if (isAlloc || (access.type & Thread::ALLOC_ACCESS)) {
         isThreadSafeMemAccess = false;
         continue;
       }

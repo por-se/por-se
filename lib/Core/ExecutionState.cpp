@@ -146,21 +146,24 @@ Thread* ExecutionState::getCurrentThreadReference() const {
   return &(currentThreadIterator->second);
 }
 
-void ExecutionState::popFrameOfThread(Thread* thread) {
-  // TODO: we should probably do this in the tread?
+std::vector<const MemoryObject *> ExecutionState::popFrameOfThread(Thread* thread) {
   // We want to unbind all the objects from the current tread frame
   StackFrame &sf = thread->stack.back();
   for (auto &it : sf.allocas) {
     addressSpace.unbindObject(it);
   }
 
+  std::vector<const MemoryObject *> freedAllocas = sf.allocas;
+
   // Let the thread class handle the rest
   thread->popStackFrame();
+
+  return freedAllocas;
 }
 
-void ExecutionState::popFrameOfCurrentThread() {
+std::vector<const MemoryObject *> ExecutionState::popFrameOfCurrentThread() {
   Thread* thread = getCurrentThreadReference();
-  popFrameOfThread(thread);
+  return popFrameOfThread(thread);
 }
 
 Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {

@@ -131,7 +131,7 @@ public:
 private:
   ExecutionState() : ptreeNode(0) {}
 
-  void popFrameOfThread(Thread* thread);
+  std::vector<const MemoryObject *> popFrameOfThread(Thread* thread);
 
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 public:
@@ -180,7 +180,7 @@ public:
 
   void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 
-  void popFrameOfCurrentThread();
+  std::vector<const MemoryObject *> popFrameOfCurrentThread();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
