@@ -4010,7 +4010,6 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   //          candidates on the go as well
   for (auto& threadsIt : state.threads) {
     Thread* thread = &threadsIt.second;
-
     if (thread->getThreadId() == curThreadId) {
       // Memory accesses of the current thread are safe by definition
       continue;
@@ -4022,7 +4021,15 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       continue;
     }
 
+    uint64_t inSyncSince = thread->threadSyncs[curThreadId];
+
     for (auto& access : accesses->second) {
+      // If there is a potential data race, then it has to have happened before
+      // the current sync access
+      if (access.syncPhase <= inSyncSince) {
+        continue;
+      }
+
       // One access pattern that is especially dangerous is an unprotected free
       // every combination is unsafe (read + free, write + free, ...)
       if (isFree || (access.type & Thread::FREE_ACCESS)) {
