@@ -4149,9 +4149,14 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   if (!isThreadSafeMemAccess) {
     exitWithUnsafeMemAccess(state, mo);
   } else {
-    // This is a safe memory access, we can go ahead and
-    // track it for the next states
-    state.trackMemoryAccess(mo, offset, type);
+    // When only one thread is running, then we do not have to keep track of the memory
+    // accesses. The access is not relevant to the analysis since no other thread can
+    // race now - there is no available
+    if (state.liveThreadCount > 1 && state.threadSchedulingEnabled) {
+      // This is a safe memory access, we can go ahead and
+      // track it for the next states
+      state.trackMemoryAccess(mo, offset, type);
+    }
   }
 
   return isThreadSafeMemAccess;

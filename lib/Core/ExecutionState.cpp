@@ -42,6 +42,7 @@ namespace {
 ExecutionState::ExecutionState(KFunction *kf) :
     currentSynchronizationPoint(0),
     threadSchedulingEnabled(true),
+    liveThreadCount(0),
 
     queryCost(0.), 
     weight(1),
@@ -196,18 +197,18 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
 
 bool ExecutionState::moveToNewSyncPhase() {
   currentSynchronizationPoint++;
-  bool oneRunnable = false;
+  unsigned countOfLiveThreads = 0;
 
   for (auto& threadIt : threads) {
     Thread* thread = &threadIt.second;
 
     if (thread->state == Thread::ThreadState::RUNNABLE) {
-      oneRunnable = true;
+      countOfLiveThreads++;
     }
 
     if (thread->state == Thread::ThreadState::PREEMPTED) {
       thread->state = Thread::ThreadState::RUNNABLE;
-      oneRunnable = true;
+      countOfLiveThreads++;
     }
 
     thread->synchronizationPoint = currentSynchronizationPoint;
@@ -248,7 +249,9 @@ bool ExecutionState::moveToNewSyncPhase() {
     thread->syncPhaseAccesses.clear();
   }
 
-  return oneRunnable;
+  liveThreadCount = countOfLiveThreads;
+
+  return countOfLiveThreads > 0;
 }
 
 std::vector<Thread*> ExecutionState::calculateRunnableThreads() {

@@ -66,6 +66,9 @@ public:
   /// @brief if thread scheduling is enabled at the current time
   bool threadSchedulingEnabled;
 
+  /// @brief count of all threads that are not sleeping and are not dead
+  unsigned liveThreadCount;
+
   // Overall state of the state - Data specific
 
   /// @brief Address space used by this state (e.g. Global and Heap)
