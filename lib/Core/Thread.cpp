@@ -90,15 +90,32 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uin
     trackedNewObject = true;
   }
 
+  bool newIsWrite = type & READ_ACCESS;
+  bool newIsFree = type & FREE_ACCESS;
+  bool newIsAlloc = type & ALLOC_ACCESS;
+
   // So there is already an entry. So go ahead and deduplicate as much as possible
   for (auto& accessIt : it->second) {
-    if (accessIt.type != type) {
-      // We cannot extend a memory access that is different from the one we currently process
+    // We can merge or extend in certain cases
+    // Of course all merges can only be done if the accesses are in the same sync phase
+    if (accessIt.syncPhase != synchronizationPoint) {
       continue;
     }
 
-    if (accessIt.offset == offset && accessIt.syncPhase == synchronizationPoint) {
-      // It is already tracked so just bail out
+    // Every free or alloc call is stronger as any other access type and does not require
+    // offset checks, so this is one of the simpler merges
+    if (newIsAlloc || newIsFree) {
+      accessIt.type = type;
+      // alloc and free do not track the offset
+      accessIt.offset = nullptr;
+      return trackedNewObject;
+    }
+
+    // One special case where we can merge two entries: the previous one is a read
+    // and now a write is done to the same offset (write is stronger)
+    // Needs the same offsets to be correct
+    if (newIsWrite && (accessIt.type & Thread::READ_ACCESS) && offset == accessIt.offset){
+      accessIt.type = Thread::WRITE_ACCESS;
       return trackedNewObject;
     }
   }
