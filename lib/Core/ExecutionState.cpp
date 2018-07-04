@@ -302,9 +302,47 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
     thread->state = Thread::ThreadState::PREEMPTED;
     thread->synchronizationPoint++;
 
-    // One thread has woken up another one so make sure we safe both
-    thread->threadSyncs[currentThread->getThreadId()] = currentSynchronizationPoint;
-    currentThread->threadSyncs[thread->getThreadId()] = currentSynchronizationPoint;
+    Thread::ThreadId curThreadId = currentThread->getThreadId();
+
+    // One thread has woken up another one so make sure we remember that they
+    // are at sync in this moment
+    thread->threadSyncs[curThreadId] = currentSynchronizationPoint;
+    currentThread->threadSyncs[tid] = currentSynchronizationPoint;
+
+    // But since these threads are now in sync; we need to rebalance all other threads
+    // as well, consider: if one thread has synced  with a third at a later state than
+    // the other thread, then we know now for sure that the sync will be transitive:
+    // We indirectly sync with the thread through the other one
+
+    for (auto& threadSyncIt : thread->threadSyncs) {
+      Thread::ThreadId thirdPartyTid = threadSyncIt.first;
+
+      // We just synced them above so safely skip them
+      if (thirdPartyTid == curThreadId) {
+        continue;
+      }
+
+      uint64_t threadSyncedAt = threadSyncIt.second;
+      uint64_t curThreadSyncedAt = currentThread->threadSyncs[thirdPartyTid];
+
+      // Another safe skip as we are at the same state
+      if (threadSyncedAt == curThreadSyncedAt) {
+        continue;
+      }
+
+      auto thThreadPair = threads.find(thirdPartyTid);
+      assert(thThreadPair != threads.end() && "Could not find referenced thread");
+      Thread* thirdPartyThread = &(thThreadPair->second);
+
+      // Now find the one that is more recent than the other and update the values
+      if (threadSyncedAt < curThreadSyncedAt) {
+        thread->threadSyncs[thirdPartyTid] = curThreadSyncedAt;
+        thirdPartyThread->threadSyncs[tid] = curThreadSyncedAt;
+      } else if (threadSyncedAt < curThreadSyncedAt) {
+        currentThread->threadSyncs[thirdPartyTid] = threadSyncedAt;
+        thirdPartyThread->threadSyncs[curThreadId] = threadSyncedAt;
+      }
+    }
   }
 }
 
