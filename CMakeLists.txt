@@ -144,6 +144,9 @@ else()
 endif()
 
 
+# Reference specific library paths used during linking for install
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 ################################################################################
 # Add our CMake module directory to the list of module search directories
 ################################################################################
@@ -160,6 +163,7 @@ set(KLEE_COMPONENT_CXX_DEFINES "")
 set(KLEE_COMPONENT_CXX_FLAGS "")
 set(KLEE_SOLVER_LIBRARIES "")
 set(KLEE_COMPONENT_EXTRA_LIBRARIES "")
+
 
 ################################################################################
 # Assertions
@@ -386,6 +390,7 @@ if (ENABLE_TCMALLOC)
         "Found \"${TCMALLOC_HEADER}\" but could not find library")
     endif()
     list(APPEND KLEE_COMPONENT_EXTRA_LIBRARIES ${TCMALLOC_LIBRARIES})
+    list(APPEND KLEE_COMPONENT_EXTRA_INCLUDE_DIRS ${TCMALLOC_INCLUDE_DIR})
     if (("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU"))
       # TCMalloc's documentation says its safest to pass these flags when
       # building with gcc because gcc can optimize assuming its using its own
@@ -629,6 +634,7 @@ include_directories("${CMAKE_SOURCE_DIR}/include")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(KLEE_UTILS_DIR ${CMAKE_SOURCE_DIR}/utils)
 
 
 ################################################################################
@@ -638,6 +644,7 @@ message(STATUS "KLEE_COMPONENT_EXTRA_INCLUDE_DIRS: '${KLEE_COMPONENT_EXTRA_INCLU
 message(STATUS "KLEE_COMPONENT_CXX_DEFINES: '${KLEE_COMPONENT_CXX_DEFINES}'")
 message(STATUS "KLEE_COMPONENT_CXX_FLAGS: '${KLEE_COMPONENT_CXX_FLAGS}'")
 message(STATUS "KLEE_COMPONENT_EXTRA_LIBRARIES: '${KLEE_COMPONENT_EXTRA_LIBRARIES}'")
+message(STATUS "KLEE_SOLVER_LIBRARIES: '${KLEE_SOLVER_LIBRARIES}'")
 
 ################################################################################
 # KLEE components
