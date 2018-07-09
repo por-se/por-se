@@ -483,8 +483,6 @@ private:
 
   void scheduleThreads(ExecutionState &state);
 
-  std::vector<Thread*> filterSameStack(std::vector<Thread*> threads);
-
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
       InterpreterHandler *ie);

@@ -69,6 +69,9 @@ public:
   /// @brief count of all threads that are not sleeping and are not dead
   unsigned liveThreadCount;
 
+  /// @brief if at the last instruction we moved to a new sync phase
+  bool justMovedToNewSyncPhase;
+
   // Overall state of the state - Data specific
 
   /// @brief Address space used by this state (e.g. Global and Heap)
@@ -135,7 +138,7 @@ private:
   ExecutionState() : ptreeNode(0) {}
 
   std::vector<const MemoryObject *> popFrameOfThread(Thread* thread);
-
+  bool hasSameThreadState(const ExecutionState &b, Thread::ThreadId tid);
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 public:
   ExecutionState(KFunction *kf);
@@ -149,6 +152,10 @@ public:
   ~ExecutionState();
 
   ExecutionState *branch();
+
+  uint64_t getCurrentSyncPoint() const {
+    return currentSynchronizationPoint;
+  }
 
   /// @brief returns the reference to the current thread (only valid for one 'klee instruction')
   Thread* getCurrentThreadReference() const;

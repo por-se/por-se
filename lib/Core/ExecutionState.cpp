@@ -43,6 +43,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     currentSynchronizationPoint(0),
     threadSchedulingEnabled(true),
     liveThreadCount(0),
+    justMovedToNewSyncPhase(true),
 
     queryCost(0.), 
     weight(1),
@@ -416,35 +417,66 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   return os;
 }
 
+bool ExecutionState::hasSameThreadState(const ExecutionState &b, Thread::ThreadId tid) {
+  auto threadA = threads.find(tid);
+  auto threadB = b.threads.find(tid);
+
+  if ((threadA != threads.end()) ^ (threadB != b.threads.end())) {
+    // This means at least one of the states does not have it and the other had the thread
+    return false;
+  }
+
+  if (threadA == threads.end()) {
+    // No such thread exists. So probably right to return false?
+    return false;
+  }
+
+  Thread* curThreadA = &(threadA->second);
+  const Thread* curThreadB = &(threadB->second);
+
+  if (curThreadA->state != curThreadB->state) {
+    return false;
+  }
+
+  if (curThreadA->pc != curThreadB->pc) {
+    return false;
+  }
+
+  // TODO: should we compare at which sync point we are actually? And what about memory accesses
+
+  std::vector<StackFrame>::const_iterator itA = curThreadA->stack.begin();
+  std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
+  while (itA != curThreadA->stack.end() && itB != curThreadB->stack.end()) {
+    // XXX vaargs?
+    if (itA->caller != itB->caller || itA->kf != itB->kf)
+      return false;
+    ++itA;
+    ++itB;
+  }
+
+  return !(itA != curThreadA->stack.end() || itB != curThreadB->stack.end());
+}
+
 bool ExecutionState::merge(const ExecutionState &b) {
   if (DebugLogStateMerge)
     llvm::errs() << "-- attempting merge of A:" << this << " with B:" << &b
                  << "--\n";
-
-  Thread* curThread = getCurrentThreadReference();
-  Thread* curThreadB = b.getCurrentThreadReference();
-
-  if (curThread->pc != curThreadB->pc)
-    return false;
 
   // XXX is it even possible for these to differ? does it matter? probably
   // implies difference in object states?
   if (symbolics!=b.symbolics)
     return false;
 
-  {
-    std::vector<StackFrame>::const_iterator itA = curThread->stack.begin();
-    std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
-    while (itA != curThread->stack.end() && itB != curThreadB->stack.end()) {
-      // XXX vaargs?
-      if (itA->caller != itB->caller || itA->kf != itB->kf)
-        return false;
-      ++itA;
-      ++itB;
-    }
+  if (threads.size() != b.threads.size()) {
+    return false;
+  }
 
-    if (itA != curThread->stack.end() || itB != curThreadB->stack.end())
+  for (auto threadsIt : threads) {
+    Thread::ThreadId tid = threadsIt.first;
+
+    if (!hasSameThreadState(b, tid)) {
       return false;
+    }
   }
 
   std::set< ref<Expr> > aConstraints(constraints.begin(), constraints.end());
@@ -539,19 +571,29 @@ bool ExecutionState::merge(const ExecutionState &b) {
   // it seems like it can make a difference, even though logically
   // they must contradict each other and so inA => !inB
 
-  std::vector<StackFrame>::iterator itA = curThread->stack.begin();
-  std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
-  for (; itA != curThread->stack.end(); ++itA, ++itB) {
-    StackFrame &af = *itA;
-    const StackFrame &bf = *itB;
-    for (unsigned i=0; i<af.kf->numRegisters; i++) {
-      ref<Expr> &av = af.locals[i].value;
-      const ref<Expr> &bv = bf.locals[i].value;
-      if (av.isNull() || bv.isNull()) {
-        // if one is null then by implication (we are at same pc)
-        // we cannot reuse this local, so just ignore
-      } else {
-        av = SelectExpr::create(inA, av, bv);
+  for (auto& threadPair : threads) {
+    auto bThread = b.threads.find(threadPair.first);
+    if (bThread == b.threads.end()) {
+      return false;
+    }
+
+    Thread* threadOfA = &(threadPair.second);
+    const Thread* threadOfB = &(bThread->second);
+
+    auto itA = threadOfA->stack.begin();
+    auto itB = threadOfB->stack.begin();
+    for (; itA != threadOfA->stack.end(); ++itA, ++itB) {
+      StackFrame &af = *itA;
+      const StackFrame &bf = *itB;
+      for (unsigned i = 0; i < af.kf->numRegisters; i++) {
+        ref<Expr> &av = af.locals[i].value;
+        const ref<Expr> &bv = bf.locals[i].value;
+        if (av.isNull() || bv.isNull()) {
+          // if one is null then by implication (we are at same pc)
+          // we cannot reuse this local, so just ignore
+        } else {
+          av = SelectExpr::create(inA, av, bv);
+        }
       }
     }
   }

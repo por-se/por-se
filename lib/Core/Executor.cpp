@@ -313,8 +313,8 @@ namespace {
             cl::init(false));
 
   cl::opt<bool>
-  MergeThreadForkAtSameStack("merge-thread-fork-at-same-stack",
-            cl::desc("Whenever the scheduling of threads occurs, merge similar stacks"),
+  MergeSameThreadScheduling("merge-same-thread-scheduling",
+            cl::desc("Whenever the scheduling of threads occurs, merge with same resulting schedules"),
             cl::init(false));
 }
 
@@ -2833,6 +2833,9 @@ void Executor::run(ExecutionState &initialState) {
     ExecutionState &state = searcher->selectState();
     Thread* thread = state.getCurrentThreadReference();
     KInstruction *ki = thread->pc;
+
+    // we will execute a new instruction and therefore we have to reset the flag
+    state.justMovedToNewSyncPhase = false;
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -3986,8 +3989,6 @@ void Executor::prepareForEarlyExit() {
 
 
 KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
-
-
   for (std::unique_ptr<KFunction>& f : kmodule->functions) {
     KFunction* actualFunction = f.get();
 
@@ -4224,59 +4225,6 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
-std::vector<Thread*> Executor::filterSameStack(std::vector<Thread*> threads) {
-  if (!MergeThreadForkAtSameStack || threads.size() < 2) {
-    return threads;
-  }
-
-  // So we want to filter the threads that are basically at the
-  // same stack trace
-
-  std::vector<Thread*> result;
-
-  for (auto& threadIt : threads) {
-    bool isUnique = true;
-
-    for (auto& resultIt : result) {
-      // Different sizes are obviously not the same
-      if (resultIt->stack.size() != threadIt->stack.size()) {
-        continue;
-      }
-
-      auto rStack = resultIt->stack.begin();
-      auto tStack = resultIt->stack.begin();
-
-      // Now compare only the location and the function we are in
-      bool sameStack = true;
-      for (; rStack != resultIt->stack.end(); ++rStack, ++tStack) {
-        if (rStack->kf != tStack->kf) {
-          sameStack = false;
-          break;
-        }
-
-        if (rStack->caller != tStack->caller) {
-          sameStack = false;
-          break;
-        }
-      }
-
-      // Not the same stack -> test the next
-      if (!sameStack) {
-        continue;
-      }
-
-      // There was not reason to skip this one -> they are 'similar'
-      isUnique = false;
-    }
-
-    if (isUnique) {
-      result.push_back(threadIt);
-    }
-  }
-
-  return result;
-}
-
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
@@ -4306,15 +4254,33 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   if (runnable.empty()) {
     // So all have reached the current sync point, move to the new one
+    // but before make sure that we merge with states that are at the
+    // new states
     bool oneNowRunnable = state.moveToNewSyncPhase();
+    state.justMovedToNewSyncPhase = true;
+
+    if (MergeSameThreadScheduling) {
+      for (auto &es : states) {
+        // We do not want to merge with ourself
+        if (es == &state) {
+          continue;
+        }
+
+        if (!es->justMovedToNewSyncPhase) {
+          continue;
+        }
+
+        if (state.merge(*es)) {
+          // Merge was successful
+          terminateState(*es);
+        }
+      }
+    }
+
     if (oneNowRunnable) {
       runnable = state.calculateRunnableThreads();
     }
   }
-
-  // Do out merging
-  runnable = filterSameStack(runnable);
-
   if (runnable.empty()) {
     bool allExited = true;
 
