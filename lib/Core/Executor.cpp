@@ -86,6 +86,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <memory>
 
 #include <sys/mman.h>
 
@@ -3985,11 +3986,15 @@ void Executor::prepareForEarlyExit() {
 
 
 KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
-  for (auto f : kmodule->functions) {
-    ref<Expr> addr = Expr::createPointer((uint64_t) (void*) f->function);
+
+
+  for (std::unique_ptr<KFunction>& f : kmodule->functions) {
+    KFunction* actualFunction = f.get();
+
+    ref<Expr> addr = Expr::createPointer((uint64_t) (void*) actualFunction->function);
 
     if (addr == address) {
-      return f;
+      return actualFunction;
     }
   }
 
