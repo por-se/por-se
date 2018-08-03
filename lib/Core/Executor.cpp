@@ -2937,6 +2937,26 @@ void Executor::continueState(ExecutionState &state){
   }
 }
 
+void Executor::terminateStateSilently(ExecutionState &state) {
+  std::vector<ExecutionState *>::iterator it =
+          std::find(addedStates.begin(), addedStates.end(), &state);
+  if (it == addedStates.end()) {
+    Thread* thread = state.getCurrentThreadReference();
+    thread->pc = thread->prevPc;
+
+    removedStates.push_back(&state);
+  } else {
+    // never reached searcher, just delete immediately
+    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 =
+            seedMap.find(&state);
+    if (it3 != seedMap.end())
+      seedMap.erase(it3);
+    addedStates.erase(it);
+    processTree->remove(state.ptreeNode);
+    delete &state;
+  }
+}
+
 void Executor::terminateState(ExecutionState &state) {
   if (replayKTest && replayPosition!=replayKTest->numObjects) {
     klee_warning_once(replayKTest,
@@ -2945,23 +2965,7 @@ void Executor::terminateState(ExecutionState &state) {
 
   interpreterHandler->incPathsExplored();
 
-  std::vector<ExecutionState *>::iterator it =
-      std::find(addedStates.begin(), addedStates.end(), &state);
-  if (it == addedStates.end()) {
-    Thread* thread = state.getCurrentThreadReference();
-    thread->pc = thread->prevPc;
-
-    removedStates.push_back(&state);
-  } else {
-    // never reached searcher, just delete immediately
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 = 
-      seedMap.find(&state);
-    if (it3 != seedMap.end())
-      seedMap.erase(it3);
-    addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
-    delete &state;
-  }
+  terminateStateSilently(state);
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, 
@@ -4013,28 +4017,78 @@ void Executor::createThread(ExecutionState &state, Thread::ThreadId tid,
   threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
 
   if (statsTracker)
-    statsTracker->framePushed(&thread->stack.back(), 0);
+    statsTracker->framePushed(&thread->stack.back(), nullptr);
+}
 
-  scheduleThreads(state);
+static bool isInThreadIdList(std::vector<Thread::ThreadId> list, Thread::ThreadId tid) {
+  return std::find(list.begin(), list.end(), tid) != list.end();
+}
+
+
+bool Executor::checkIfRedundantScheduling(ExecutionState &state) {
+  if (state.schedulingHistory.size() <= 1) {
+    // With no pre epoch we cannot clear any schedules
+    return false;
+  }
+
+  auto curEpoch = state.getCurrentThreadingEpoch();
+
+  if (!curEpoch->scheduleableThreads.empty()) {
+    // We can still schedule different threads so go ahead
+    // and schedule them
+    return false;
+  }
+
+  if (curEpoch->scheduleHistory.size() > 1) {
+    // We did not schedule the current thread as the first one
+    // so this is okay
+    return false;
+  }
+
+  auto preEpoch = state.schedulingHistory.rbegin() + 1;
+
+  // So now we have to look if this thread was preempted before, so
+  // if that is the case then we can safely remove this state
+  // because in another fork we processed this
+
+  Thread::ThreadId tid = curEpoch->scheduleHistory[0];
+  if (isInThreadIdList(preEpoch->ignoredForScheduling, tid)) {
+    return true;
+  }
+
+  // Last possible one: the thread did not exits before we executed it
+  return !isInThreadIdList(preEpoch->scheduleHistory, tid)
+            && !isInThreadIdList(preEpoch->nonSchedulableThreads, tid);
 }
 
 void Executor::sleepThread(ExecutionState &state) {
   state.sleepCurrentThread();
+
+  if (checkIfRedundantScheduling(state)) {
+    terminateStateSilently(state);
+    return;
+  }
+
   scheduleThreads(state);
 }
 
 void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
   state.wakeUpThread(tid);
-  scheduleThreads(state);
 }
 
 void Executor::preemptThread(ExecutionState &state) {
-  state.preemptCurrentThread();
+  state.preemptThread(state.getCurrentThreadReference()->getThreadId());
   scheduleThreads(state);
 }
 
 void Executor::exitThread(ExecutionState &state) {
   state.exitThread(state.getCurrentThreadReference()->getThreadId());
+
+  if (checkIfRedundantScheduling(state)) {
+    terminateStateSilently(state);
+    return;
+  }
+
   scheduleThreads(state);
 }
 
@@ -4074,7 +4128,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     for (auto& access : accesses->second) {
       // If there is a potential data race, then it has to have happened before
       // the current sync access
-      if (access.syncPhase <= inSyncSince) {
+      if (access.epoch <= inSyncSince) {
         continue;
       }
 
@@ -4225,6 +4279,155 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
+ExecutionState* Executor::forkToNewState(ExecutionState &state) {
+  ExecutionState* ns = state.branch();
+  addedStates.push_back(ns);
+
+  state.ptreeNode->data = nullptr;
+  auto res = processTree->split(state.ptreeNode, ns, &state);
+  ns->ptreeNode = res.first;
+  state.ptreeNode = res.second;
+
+  if (pathWriter) {
+    ns->pathOS = pathWriter->open(state.pathOS);
+  }
+
+  if (symPathWriter) {
+    ns->symPathOS = symPathWriter->open(state.symPathOS);
+  }
+
+  return ns;
+}
+
+void Executor::forkForAllRunnableSubsets(ExecutionState &state) {
+  auto currentEpoch = state.getCurrentThreadingEpoch();
+  bool hasPreviousEpoch = state.schedulingHistory.size() > 1;
+
+  // It does not make sense to preempt the only runnable thread in the
+  // current set
+  if (currentEpoch->scheduleableThreads.size() <= 1) {
+    return;
+  }
+
+  // First step is to calculate all the threads that will get priority
+  // over the previously preempted ones
+  std::vector<Thread::ThreadId> prioritySchedulable;
+  if (hasPreviousEpoch) {
+    auto preEpoch = state.schedulingHistory.rbegin() + 1;
+
+    for (auto tid : currentEpoch->scheduleableThreads) {
+      // The basic idea is that all that were previously preempted will be ignored
+      if (!isInThreadIdList(preEpoch->ignoredForScheduling, tid)) {
+        prioritySchedulable.push_back(tid);
+      }
+    }
+  }
+
+  for (size_t i = 0; i < currentEpoch->scheduleableThreads.size(); i++) {
+    Thread::ThreadId candidate = currentEpoch->scheduleableThreads[i];
+
+    // First of all check if we even can preempt the current selection
+    // but the check depends on whether there is a previous epoch
+    if (hasPreviousEpoch && prioritySchedulable.size() == 1 && prioritySchedulable[0] == candidate) {
+      // If we preempt this thread, than we force one of the previously unscheduled threads
+      // as the first one in the current epoch. But this scheduling combination would already
+      // be scheduled in the previous epoch
+      continue;
+    }
+
+    ExecutionState* ns = forkToNewState(state);
+    auto forkEpoch = ns->getCurrentThreadingEpoch();
+
+    // First preempt our current selection, this reduces
+    // our set with each iteration of the recursive step
+    ns->preemptThread(candidate);
+    forkEpoch->ignoredForScheduling.push_back(candidate);
+
+    // But make also sure we have it no longer in our runnable ones
+    forkEpoch->scheduleableThreads.erase(forkEpoch->scheduleableThreads.begin() + i);
+
+    // the actual recursive step
+    forkForAllRunnableSubsets(*ns);
+
+    // and as the last step fork for all possible schedules
+    forkForSchedulingOrder(*ns);
+  }
+}
+
+void Executor::forkForSchedulingOrder(ExecutionState &state) {
+  auto currentEpoch = state.getCurrentThreadingEpoch();
+
+  // First step is to build a list with every schedulable thread
+  // there is one important aspect: the first scheduled thread
+  // in an epoch has one important constraint: it may not be one,
+  // that was preempted in the previous epoch
+  std::vector<Thread::ThreadId> runnable;
+  if (state.schedulingHistory.size() <= 1 || !currentEpoch->scheduleHistory.empty()) {
+    runnable = currentEpoch->scheduleableThreads;
+  } else {
+    auto preEpoch = *(state.schedulingHistory.rbegin() + 1);
+
+    for (auto tid : currentEpoch->scheduleableThreads) {
+      if (isInThreadIdList(preEpoch.ignoredForScheduling, tid)) {
+        // We had it previously ignored, so do not allow it as first
+        continue;
+      }
+
+      runnable.push_back(tid);
+    }
+
+    // It can happen in certain situations that we cannot schedule a priority thread
+    // as the next one, because of exited and sleeping threads, so the default
+    // backup strategy is to just use all schedulable threads
+    if (runnable.empty()) {
+      // One thing we can check here is that we can test if all prio threads
+      // has exited or are now sleeping. In that case we will can terminate the current state safely as
+      // this path will be found by another path earlier since we did not preempt all in another path
+
+      // Basically we have to test if all the threads that were scheduled in the previous epoch
+      // are now not schedulable
+      bool oneNowNotSleeping = false;
+      for (auto tid : preEpoch.scheduleHistory) {
+        if (!isInThreadIdList(currentEpoch->nonSchedulableThreads, tid)) {
+          oneNowNotSleeping = true;
+        }
+      }
+
+      if (!oneNowNotSleeping) {
+        terminateStateSilently(state);
+        return;
+      } else {
+        assert(false && "Should ideally not happen");
+        runnable = currentEpoch->scheduleableThreads;
+      }
+    }
+  }
+
+  // Before we actually fork the states, make sure we honor MaxForks
+  uint64_t newForkCount = runnable.size() - 1;
+  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
+    newForkCount = MaxForks - stats::forks;
+  }
+
+  stats::forks += newForkCount;
+
+  // Make sure that whenever we schedule a thread, that we remove
+  // it from the ones that we can schedule
+
+  for (size_t i = 0; i < newForkCount + 1; ++i) {
+    // we want to reuse the current state when that is possible
+    ExecutionState* st;
+    if (i == newForkCount) {
+      st = &state;
+    } else {
+      st = forkToNewState(state);
+    }
+
+    // In order to remove the thread out of the epoch list, we have to obtain its iterator beforehand
+    st->scheduleNextThread(runnable[i]);
+  }
+}
+
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
@@ -4242,7 +4445,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       // So we can actually reschedule the current thread
       // but make sure that the thread is marked as RUNNABLE
       curThread->state = Thread::ThreadState::RUNNABLE;
-      state.setCurrentScheduledThread(curThread->getThreadId());
+      state.scheduleNextThread(curThread->getThreadId());
       return;
     }
 
@@ -4250,38 +4453,22 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // this will schedule another thread
   }
 
-  std::vector<Thread*> runnable = state.calculateRunnableThreads();
+  ExecutionState::ThreadingEpoch* currentEpoch = state.getCurrentThreadingEpoch();
+  std::vector<Thread::ThreadId > stillScheduleThreads = currentEpoch->scheduleableThreads;
 
-  if (runnable.empty()) {
-    // So all have reached the current sync point, move to the new one
-    // but before make sure that we merge with states that are at the
-    // new states
-    bool oneNowRunnable = state.moveToNewSyncPhase();
-    state.justMovedToNewSyncPhase = true;
-
-    if (MergeSameThreadScheduling) {
-      for (auto &es : states) {
-        // We do not want to merge with ourself
-        if (es == &state) {
-          continue;
-        }
-
-        if (!es->justMovedToNewSyncPhase) {
-          continue;
-        }
-
-        if (state.merge(*es)) {
-          // Merge was successful
-          terminateState(*es);
-        }
-      }
-    }
-
-    if (oneNowRunnable) {
-      runnable = state.calculateRunnableThreads();
-    }
+  if (!stillScheduleThreads.empty()) {
+    // We can still schedule different threads, so go ahead and fork for all possible ones
+    forkForSchedulingOrder(state);
+    hasScheduledThreads = true;
+    return;
   }
-  if (runnable.empty()) {
+
+  // There is no thread schedulable in the current epoch so go ahead
+  // and move the new epoch since all threads are at a sync point
+  auto newEpoch = state.startNewEpoch();
+  state.justMovedToNewSyncPhase = true;
+
+  if (newEpoch->scheduleableThreads.empty()) {
     bool allExited = true;
 
     for (auto& threadIt : state.threads) {
@@ -4298,46 +4485,18 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     // Make sure that we do not change the current state
     return;
-  } else if (runnable.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement) || state.forkDisabled) {
+  }
+
+  // Small optimization for an easy case
+  if (newEpoch->scheduleableThreads.size() == 1 || (!ForkOnThreadScheduling && !ForkOnStatement) || state.forkDisabled) {
     // The easiest possible schedule
-    state.setCurrentScheduledThread(runnable.front()->getThreadId());
+    state.scheduleNextThread(newEpoch->scheduleableThreads.front());
     return;
   }
 
-  // Now we have to branch for each possible thread scheduling
-  // this basically means we have to add (runnable.size() - 1) more states
-
-  // Before we actually fork the states, make sure we honor MaxForks
-  uint64_t newForkCount = runnable.size() - 1;
-  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
-    newForkCount = MaxForks - stats::forks;
-  }
-
-  stats::forks += newForkCount;
-
-  for (size_t i = 0; i < newForkCount; ++i) {
-    ExecutionState* ns = state.branch();
-    addedStates.push_back(ns);
-    ns->setCurrentScheduledThread(runnable[i]->getThreadId());
-
-    state.ptreeNode->data = nullptr;
-    auto res = processTree->split(state.ptreeNode, ns, &state);
-    ns->ptreeNode = res.first;
-    state.ptreeNode = res.second;
-
-    if (pathWriter) {
-      ns->pathOS = pathWriter->open(state.pathOS);
-    }
-
-    if (symPathWriter) {
-      ns->symPathOS = symPathWriter->open(state.symPathOS);
-    }
-  }
-
-  // We need to push it to the back
-  state.setCurrentScheduledThread(runnable.back()->getThreadId());
-
-  hasScheduledThreads = true;
+  // Default for a new epoch: make sure we test every possible one
+  forkForAllRunnableSubsets(state);
+  forkForSchedulingOrder(state);
 }
 
 /// Returns the errno location in memory

@@ -44,6 +44,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   klee_toggle_thread_scheduling(1);
 
   klee_create_thread(tid, __pthread_impl_wrapper, thread);
+  klee_preempt_thread();
 
   return 0;
 }

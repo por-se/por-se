@@ -56,6 +56,7 @@
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <string>
 
 
 using namespace llvm;
@@ -444,8 +445,10 @@ void KleeHandler::processTestCase(const ExecutionState &state,
     }
 
     llvm::raw_fd_ostream *fSchedules = openTestFile("tschedules", id);
-    for (auto& tidIt : state.schedulingHistory) {
-      *fSchedules << tidIt << "\n";
+    for (auto& epoch : state.schedulingHistory) {
+      for (auto& tidIt : epoch.scheduleHistory) {
+        *fSchedules << tidIt << "\n";
+      }
     }
     delete(fSchedules);
 

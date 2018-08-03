@@ -419,6 +419,8 @@ private:
   void pauseState(ExecutionState& state);
   // add state to searcher only
   void continueState(ExecutionState& state);
+  // remove state from queue and delete it without registering anything
+  void terminateStateSilently(ExecutionState &state);
   // remove state from queue and delete
   void terminateState(ExecutionState &state);
   // call exit handler and terminate state
@@ -480,6 +482,14 @@ private:
 
   bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
                            ref<Expr> offset, uint8_t type);
+
+  ExecutionState* forkToNewState(ExecutionState &state);
+
+  bool checkIfRedundantScheduling(ExecutionState &state);
+
+  void forkForAllRunnableSubsets(ExecutionState &state);
+
+  void forkForSchedulingOrder(ExecutionState &state);
 
   void scheduleThreads(ExecutionState &state);
 

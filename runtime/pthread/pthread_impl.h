@@ -30,9 +30,14 @@ size_t __stack_size(__pthread_impl_stack* stack);
 
 typedef struct {
   int acquired;
+  int type;
   pthread_t holdingThread;
   __pthread_impl_stack waitingThreads;
 } __pthread_impl_mutex;
+
+typedef struct {
+  int type;
+} __pthread_impl_mutex_attr;
 
 typedef struct {
   unsigned count;

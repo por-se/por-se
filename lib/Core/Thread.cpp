@@ -32,11 +32,11 @@ StackFrame::~StackFrame() {
 
 /***/
 
-Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t syncPhase)
-        : type(type), offset(offset), syncPhase(syncPhase) {}
+Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch)
+        : type(type), offset(offset), epoch(epoch) {}
 
 Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a)
-        : type(a.type), offset(a.offset), syncPhase(a.syncPhase) {}
+        : type(a.type), offset(a.offset), epoch(a.epoch) {}
 
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
@@ -45,7 +45,7 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
 
   // First stack frame is basically always the start routine of the thread
   // for the main thread this should be probably the main function
-  this->stack.push_back(StackFrame(0, threadStartRoutine));
+  this->stack.push_back(StackFrame(nullptr, threadStartRoutine));
 
   // Short circuit the program counters
   this->prevPc = threadStartRoutine->instructions;
@@ -98,7 +98,7 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uin
   for (auto& accessIt : it->second) {
     // We can merge or extend in certain cases
     // Of course all merges can only be done if the accesses are in the same sync phase
-    if (accessIt.syncPhase != synchronizationPoint) {
+    if (accessIt.epoch != synchronizationPoint) {
       continue;
     }
 

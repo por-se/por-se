@@ -41,6 +41,22 @@ class ExecutionState {
 public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
+  struct ThreadingEpoch {
+    /// @brief the actual list of the scheduled threads
+    std::vector<Thread::ThreadId> scheduleHistory;
+
+    /// @brief list of all threads that were schedulable by the start of the epoch
+    std::vector<Thread::ThreadId> scheduleableThreads;
+
+    /// @brief all that were preempted for the whole epoch
+    std::vector<Thread::ThreadId> ignoredForScheduling;
+
+    /// @brief all that could not be scheduled (exited, sleeping)
+    std::vector<Thread::ThreadId> nonSchedulableThreads;
+
+    ThreadingEpoch() = default;
+    ThreadingEpoch(const ThreadingEpoch &e) = default;
+  };
 
 private:
   // unsupported, use copy constructor
@@ -61,7 +77,7 @@ public:
   threads_ty threads;
 
   /// @brief the history of scheduling up until now
-  std::vector<Thread::ThreadId> schedulingHistory;
+  std::vector<ThreadingEpoch> schedulingHistory;
 
   /// @brief if thread scheduling is enabled at the current time
   bool threadSchedulingEnabled;
@@ -171,22 +187,19 @@ public:
   /// @brief wakes a specific thread up
   void wakeUpThread(Thread::ThreadId tid);
 
-  /// @brief wakes up a number of threads at once
-  void wakeUpThreads(std::vector<Thread::ThreadId> tids);
-
   /// @brief will preempt the current thread for the current sync phase
-  void preemptCurrentThread();
+  void preemptThread(Thread::ThreadId tid);
 
   /// @brief will exit the referenced thread
   void exitThread(Thread::ThreadId tid);
 
-  /// @brief returns all runnable threads
-  std::vector<Thread*> calculateRunnableThreads();
+  /// @brief returns the current epoch that we are in
+  ThreadingEpoch* getCurrentThreadingEpoch();
 
   /// @brief update the current scheduled thread
-  void setCurrentScheduledThread(Thread::ThreadId tid);
+  void scheduleNextThread(Thread::ThreadId tid);
 
-  bool moveToNewSyncPhase();
+  ThreadingEpoch* startNewEpoch();
 
   void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 
