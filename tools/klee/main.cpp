@@ -23,16 +23,17 @@
 #include "klee/Interpreter.h"
 #include "klee/Statistics.h"
 
+#include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Type.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Type.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Errno.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Bitcode/ReaderWriter.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -295,7 +296,12 @@ KleeHandler::KleeHandler(int argc, char **argv)
     for (; i <= INT_MAX; ++i) {
       SmallString<128> d(directory);
       llvm::sys::path::append(d, "klee-out-");
-      raw_svector_ostream ds(d); ds << i; ds.flush();
+      raw_svector_ostream ds(d);
+      ds << i;
+// SmallString is always up-to-date, no need to flush. See Support/raw_ostream.h
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 8)
+      ds.flush();
+#endif
 
       // create directory and try to link klee-last
       if (mkdir(d.c_str(), 0775) == 0) {
@@ -1061,6 +1067,7 @@ createLibCWrapper(std::vector<std::unique_ptr<llvm::Module>> &modules,
                        GlobalVariable::ExternalLinkage, intendedFunction,
                        libcMainFn->getParent());
   BasicBlock *bb = BasicBlock::Create(ctx, "entry", stub);
+  llvm::IRBuilder<> Builder(bb);
 
   std::vector<llvm::Value*> args;
   args.push_back(
@@ -1071,9 +1078,8 @@ createLibCWrapper(std::vector<std::unique_ptr<llvm::Module>> &modules,
   args.push_back(Constant::getNullValue(ft->getParamType(4))); // app_fini
   args.push_back(Constant::getNullValue(ft->getParamType(5))); // rtld_fini
   args.push_back(Constant::getNullValue(ft->getParamType(6))); // stack_end
-  CallInst::Create(libcMainFn, args, "", bb);
-
-  new UnreachableInst(ctx, bb);
+  Builder.CreateCall(libcMainFn, args);
+  Builder.CreateUnreachable();
 }
 
 static void

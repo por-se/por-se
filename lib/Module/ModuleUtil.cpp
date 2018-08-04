@@ -159,7 +159,12 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
 static bool linkTwoModules(llvm::Module *Dest,
                            std::unique_ptr<llvm::Module> Src,
                            std::string &errorMsg) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
+  // Get the potential error message (Src is moved and won't be available later)
+  errorMsg = "Linking module " + Src->getModuleIdentifier() + " failed";
+  auto linkResult = Linker::linkModules(*Dest, std::move(Src));
+#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
   raw_string_ostream Stream(errorMsg);
   DiagnosticPrinterRawOStream DP(Stream);
   auto linkResult = Linker::LinkModules(
@@ -301,11 +306,13 @@ Function *klee::getDirectCallTarget(CallSite cs, bool moduleIsFullyLinked) {
 }
 
 static bool valueIsOnlyCalled(const Value *v) {
-  for (Value::const_use_iterator it = v->use_begin(), ie = v->use_end();
-       it != ie; ++it) {
-    if (const Instruction *instr = dyn_cast<Instruction>(*it)) {
-      if (instr->getOpcode()==0) continue; // XXX function numbering inst
-
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
+  for (auto it = v->use_begin(), ie = v->use_end(); it != ie; ++it) {
+    auto user = *it;
+#else
+  for (auto user : v->users()) {
+#endif
+    if (const auto *instr = dyn_cast<Instruction>(user)) {
       // Make sure the instruction is a call or invoke.
       CallSite cs(const_cast<Instruction *>(instr));
       if (!cs) return false;
@@ -314,16 +321,17 @@ static bool valueIsOnlyCalled(const Value *v) {
       // not an argument.
       if (cs.hasArgument(v))
         return false;
-    } else if (const llvm::ConstantExpr *ce =
-               dyn_cast<llvm::ConstantExpr>(*it)) {
-      if (ce->getOpcode()==Instruction::BitCast)
+    } else if (const auto *ce = dyn_cast<ConstantExpr>(user)) {
+      if (ce->getOpcode() == Instruction::BitCast)
         if (valueIsOnlyCalled(ce))
           continue;
       return false;
-    } else if (const GlobalAlias *ga = dyn_cast<GlobalAlias>(*it)) {
-      // XXX what about v is bitcast of aliasee?
-      if (v==ga->getAliasee() && !valueIsOnlyCalled(ga))
+    } else if (const auto *ga = dyn_cast<GlobalAlias>(user)) {
+      if (v == ga->getAliasee() && !valueIsOnlyCalled(ga))
         return false;
+    } else if (isa<BlockAddress>(user)) {
+      // only valid as operand to indirectbr or comparison against null
+      continue;
     } else {
       return false;
     }
@@ -419,8 +427,19 @@ bool klee::loadFile(const std::string &fileName, LLVMContext &context,
 
         StringRef memberName;
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-        ErrorOr<StringRef> memberNameErr = AI->getName();
-        std::error_code ec = memberNameErr.getError();
+        std::error_code ec;
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
+        ErrorOr<object::Archive::Child> childOrErr = *AI;
+        ec = childOrErr.getError();
+        if (ec) {
+                errorMsg = ec.message();
+                return false;
+        }
+#else
+	object::Archive::child_iterator childOrErr = AI;
+#endif
+        ErrorOr<StringRef> memberNameErr = childOrErr->getName();
+        ec = memberNameErr.getError();
         if (!ec) {
           memberName = memberNameErr.get();
 #else
@@ -438,7 +457,7 @@ bool klee::loadFile(const std::string &fileName, LLVMContext &context,
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
         ErrorOr<std::unique_ptr<llvm::object::Binary>> child =
-            AI->getAsBinary();
+            childOrErr->getAsBinary();
         ec = child.getError();
 #else
         OwningPtr<object::Binary> child;
@@ -447,7 +466,7 @@ bool klee::loadFile(const std::string &fileName, LLVMContext &context,
         if (ec) {
 // If we can't open as a binary object file its hopefully a bitcode file
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-          ErrorOr<MemoryBufferRef> buff = AI->getMemoryBufferRef();
+          ErrorOr<MemoryBufferRef> buff = childOrErr->getMemoryBufferRef();
           ec = buff.getError();
 #elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
           ErrorOr<std::unique_ptr<MemoryBuffer>> buffErr =
