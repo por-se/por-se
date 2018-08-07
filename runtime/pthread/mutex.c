@@ -22,8 +22,8 @@ static int __create_new_mutex(__pthread_impl_mutex **m) {
 }
 
 static __pthread_impl_mutex* __obtain_mutex_data(pthread_mutex_t *mutex) {
-  int* value = (int*) mutex;
-  if (*value == 0) {
+  __pthread_impl_mutex *value = *((__pthread_impl_mutex**) mutex);
+  if (value == NULL) {
     __pthread_impl_mutex* m = NULL;
     int ret = __create_new_mutex(&m);
 
@@ -34,19 +34,21 @@ static __pthread_impl_mutex* __obtain_mutex_data(pthread_mutex_t *mutex) {
     return m;
   }
 
-  return *((__pthread_impl_mutex**)mutex);
+  return value;
 }
 
 int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex *mutex = __obtain_mutex_data(m);
-  if (mutex == NULL) {
+  __pthread_impl_mutex *mutex;
+  int result = __create_new_mutex(&mutex);
+
+  if (result != 0) {
     klee_toggle_thread_scheduling(0);
     return -1; // TODO check
   }
 
-  if (attr == NULL) {
+  if (attr != NULL) {
     int type = 0;
     pthread_mutexattr_gettype(attr, &type);
     mutex->type = type;
@@ -63,6 +65,11 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
   __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
+  if (mutex == NULL) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
+
   uint64_t tid = klee_get_thread_id();
 
   if (mutex->acquired == 0) {
