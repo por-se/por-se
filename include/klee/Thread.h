@@ -61,7 +61,7 @@ namespace klee {
         uint8_t type;
         ref<Expr> offset;
         uint64_t epoch;
-        bool schedulingEnabled;
+        bool safeMemoryAccess;
 
         MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch);
         MemoryAccess(const MemoryAccess &a);

@@ -33,7 +33,7 @@ StackFrame::~StackFrame() {
 /***/
 
 Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch)
-        : type(type), offset(offset), epoch(epoch), schedulingEnabled(true) {}
+        : type(type), offset(offset), epoch(epoch), safeMemoryAccess(false) {}
 
 Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a) = default;
 
@@ -58,7 +58,8 @@ Thread::Thread(const klee::Thread &t)
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
-          syncPhaseAccesses(t.syncPhaseAccesses) {
+          syncPhaseAccesses(t.syncPhaseAccesses),
+          threadSyncs(t.threadSyncs) {
 
   for (auto& access : syncPhaseAccesses) {
     access.first->refCount++;
@@ -102,7 +103,7 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, MemoryAccess access) 
 
     // Another important difference we should always consider is when two different accesses
     // conflict with their scheduling configuration
-    if (accessIt.schedulingEnabled != access.schedulingEnabled) {
+    if (accessIt.safeMemoryAccess != access.safeMemoryAccess) {
       continue;
     }
 

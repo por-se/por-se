@@ -318,7 +318,7 @@ namespace {
           cl::init(false));
 
   cl::opt<bool>
-  MergeSameThreadScheduling("merge-same-thread-scheduling",
+  MergeSameScheduling("merge-same-scheduling",
             cl::desc("Whenever the scheduling of threads occurs, merge with same resulting schedules"),
             cl::init(false));
 }
@@ -2640,7 +2640,7 @@ void Executor::updateStates(ExecutionState *current) {
       seedMap.find(es);
     if (it3 != seedMap.end())
       seedMap.erase(it3);
-    // processTree->remove(es->ptreeNode);
+    processTree->remove(es->ptreeNode);
     delete es;
   }
   removedStates.clear();
@@ -2845,7 +2845,6 @@ void Executor::run(ExecutionState &initialState) {
     KInstruction *ki = thread->pc;
 
     // we will execute a new instruction and therefore we have to reset the flag
-    state.justMovedToNewSyncPhase = false;
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -2947,12 +2946,19 @@ void Executor::continueState(ExecutionState &state){
   }
 }
 
+template<class T>
+static bool isInVector(std::vector<T> list, T tid) {
+  return std::find(list.begin(), list.end(), tid) != list.end();
+}
+
 void Executor::terminateStateSilently(ExecutionState &state) {
   std::vector<ExecutionState *>::iterator it =
           std::find(addedStates.begin(), addedStates.end(), &state);
   if (it == addedStates.end()) {
     Thread* thread = state.getCurrentThreadReference();
     thread->pc = thread->prevPc;
+
+    assert(!isInVector(removedStates, &state) && "May not add a state double times");
 
     removedStates.push_back(&state);
   } else {
@@ -4081,33 +4087,38 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     }
 
     uint64_t inSyncSince = thread->threadSyncs[curThreadId];
+    assert(inSyncSince == curThread->threadSyncs[thread->getThreadId()] && "should always be the same");
 
     for (auto& access : accesses->second) {
-      // These access do not interest us at all, since by definition those cannot
-      // race with any other access
-      if (!access.schedulingEnabled) {
-        continue;
-      }
-
       // If there is a potential data race, then it has to have happened before
       // the current sync access; the threads were in sync at the end of
-      // 'inSyncSince' that means the access must have happend after that epoch
-      if (access.epoch <= inSyncSince + 1) {
+      // 'inSyncSince' that means the access must have happened after that epoch
+      if (access.epoch <= inSyncSince) {
         continue;
       }
 
       // One access pattern that is especially dangerous is an unprotected free
       // every combination is unsafe (read + free, write + free, ...)
       if (isFree || (access.type & Thread::FREE_ACCESS)) {
-        isThreadSafeMemAccess = false;
-        continue;
+        if (access.safeMemoryAccess) {
+          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          continue;
+        } else {
+          isThreadSafeMemAccess = false;
+          break;
+        }
       }
 
       // Another unsafe memory access pattern: the operation is not explicitly
       // ordered with the other thread and thus can happen in the reverse order
       if (isAlloc || (access.type & Thread::ALLOC_ACCESS)) {
-        isThreadSafeMemAccess = false;
-        continue;
+        if (access.safeMemoryAccess) {
+          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          continue;
+        } else {
+          isThreadSafeMemAccess = false;
+          break;
+        }
       }
 
       // There is one safe memory access pattern:
@@ -4118,8 +4129,13 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       }
 
       if (access.offset == offset) {
-        isThreadSafeMemAccess = false;
-        continue;
+        if (access.safeMemoryAccess) {
+          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          continue;
+        } else {
+          isThreadSafeMemAccess = false;
+          break;
+        }
       }
 
       // So the offset Expr are not the same but we maybe can get
@@ -4130,7 +4146,9 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       }
 
       // So add it to the ones we want to test
-      possibleCandidates.push_back(access);
+      if (!access.safeMemoryAccess) {
+        possibleCandidates.push_back(access);
+      }
     }
 
     // If we already found a unsafe access then safe computation time
@@ -4205,17 +4223,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   if (!isThreadSafeMemAccess) {
     exitWithUnsafeMemAccess(state, mo);
   } else {
-    // When only one thread is running, then we do not have to keep track of the memory
-    // accesses. The access is not relevant to the analysis since no other thread can
-    // race now - there is no available
-    // Note: we still want to track all mem accesses that happen during a period when
-    // thread scheduling was disabled, but more than one thread was in theory runnable.
-    // This data is needed for the thread order reduction
-    if (state.runnableThreads.size() > 1) {
-      // This is a safe memory access, we can go ahead and
-      // track it for the next states
-      state.trackMemoryAccess(mo, offset, type);
-    }
+    state.trackMemoryAccess(mo, offset, type);
   }
 
   return isThreadSafeMemAccess;
@@ -4267,7 +4275,150 @@ ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   return ns;
 }
 
+static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
+  os << "digraph G {\n";
+  os << "\tsize=\"10,7.5\";\n";
+  os << "\tratio=fill;\n";
+  os << "\tcenter = \"true\";\n";
+  os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
+  os << "\tedge [arrowsize=.5]\n";
+
+  std::map<Thread::ThreadId, uint64_t > lastExecuted;
+
+  uint64_t epoch = 0;
+  for (auto &tid : state.schedulingHistory) {
+    std::string name = "n" + std::to_string(tid) + "_" + std::to_string(epoch);
+
+    os << "\t" << name << " [label=\"" << tid << " @ " << epoch << "\"];\n";
+    auto lIt = lastExecuted.find(tid);
+    if (lIt != lastExecuted.end()) {
+      std::string lEName = "n" + std::to_string(tid) + "_" + std::to_string(lIt->second);
+      os << "\t" << lEName << " -> " << name << "[dir=\"back\",style=\"dashed\"];\n";
+    }
+
+    auto* deps = &state.scheduleDependences[epoch];
+    for (auto& dep : deps->list) {
+      std::string dName = "n" + std::to_string(dep.tid) + "_" + std::to_string(dep.epoch);
+
+      std::string reason;
+      if (dep.reason & ExecutionState::MEMORY_ACCESS) {
+        reason += "memory ";
+      } else if (dep.reason & ExecutionState::THREAD_CREATION) {
+        reason += "create ";
+      } else if (dep.reason & ExecutionState::THREAD_WAKEUP) {
+        reason += "wakeup ";
+      }
+
+      os << "\t" << dName << " -> " << name << " [dir=\"back\",label=\"" << reason <<"\"];\n";
+    }
+
+    lastExecuted[tid] = epoch;
+    epoch++;
+  }
+
+  os << "}\n";
+}
+
+// This function assumes that there is a common prefix up to `lowEpochBorder`
+bool Executor::areSchedulesEquivalent(ExecutionState &base, ExecutionState &target, uint64_t lowEpochBorder) {
+  Thread::ThreadId tid = base.getCurrentThreadReference()->getThreadId();
+  auto deps = base.scheduleDependences.rbegin();
+
+  std::set<Thread::ThreadId> infixElements(base.schedulingHistory.begin() + lowEpochBorder, base.schedulingHistory.end());
+
+  uint64_t commonScheduleLength = std::min(base.schedulingHistory.size(), target.schedulingHistory.size());
+  for (uint64_t i = lowEpochBorder; i < commonScheduleLength; i++) {
+    Thread::ThreadId targetTid = target.schedulingHistory[i];
+
+    if (infixElements.find(targetTid) == infixElements.end()) {
+      // the target state did schedule an completely different thread in between
+      // that means we cannot tell if they are different
+      return false;
+    }
+
+    if (targetTid == tid) {
+      for (auto d : deps->list) {
+        if (i <= d.epoch) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+}
+
+void Executor::pruneRedundantTraces(ExecutionState &state) {
+  // So we can use the thread schedule interferences to find
+  // redundant schedules -> basically means that we will check
+  // if there are threads that did run independently of the others
+
+  // So since we always check after every new scheduling phase
+  // we only have to consider for now the newly added dependencies.
+  // This means looking at the added ones in this epoch
+
+  ExecutionState::EpochScheduleDependences& deps = *state.scheduleDependences.rbegin();
+  if (deps.list.empty()) {
+    // so no added dependencies that means nothing to do
+    return;
+  }
+
+  // first find the common prefix and the infix
+  uint64_t lowestEpochReference = state.schedulingHistory.size();
+  for (auto& dep : deps.list) {
+    if (dep.epoch < lowestEpochReference) {
+      lowestEpochReference = dep.epoch;
+    }
+  }
+
+  // Now we have to move through the process tree and check all nodes if they
+  // match the criteria
+  // Without exploiting the process tree: just collect all states that derive
+  // from the same common prefix
+
+  PTreeNode* prefixRoot = state.ptreeNode;
+  while (prefixRoot != nullptr && prefixRoot->parent && prefixRoot->schedulingDecision.epochNumber > lowestEpochReference) {
+    prefixRoot = prefixRoot->parent;
+  }
+
+  assert(prefixRoot != nullptr && "There has to be a prefix root");
+
+  std::queue<PTreeNode*> curSet;
+  curSet.push(prefixRoot);
+
+  std::vector<PTreeNode*> alreadyChecked;
+
+  while (!curSet.empty()) {
+    PTreeNode* current = curSet.front();
+    curSet.pop();
+    alreadyChecked.push_back(current);
+
+    if (current->data && current->data != &state) {
+      if (areSchedulesEquivalent(state, *current->data, lowestEpochReference)) {
+        terminateStateSilently(*current->data);
+        continue;
+      }
+    } else if (current->data == &state) {
+      continue;
+    }
+
+    if (current->left) {
+      curSet.push(current->left);
+    }
+
+    if (current->right) {
+      curSet.push(current->right);
+    }
+  }
+}
+
 void Executor::scheduleThreads(ExecutionState &state) {
+  // Scheduling threads means we move to a new epoch anyway
+  // so make sure that we prune everything that we do no longer need
+  if (MergeSameScheduling) {
+    pruneRedundantTraces(state);
+  }
+
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
   if (!state.threadSchedulingEnabled) {
@@ -4313,6 +4464,13 @@ void Executor::scheduleThreads(ExecutionState &state) {
         llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
         if (os) {
           processTree->dump(*os);
+          delete os;
+        }
+
+        sprintf(name, "schedule%08d.dot", (int) stats::instructions);
+        os = interpreterHandler->openOutputFile(name);
+        if (os) {
+          printScheduleDag(*os, state);
           delete os;
         }
       }
