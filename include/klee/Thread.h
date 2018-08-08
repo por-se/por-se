@@ -51,7 +51,6 @@ namespace klee {
     friend class SpecialFunctionHandler;
 
     public:
-      // Copied from ExecutionState.h
       typedef std::vector<StackFrame> stack_ty;
 
       /// @brief Type for all thread ids
@@ -62,6 +61,7 @@ namespace klee {
         uint8_t type;
         ref<Expr> offset;
         uint64_t epoch;
+        bool schedulingEnabled;
 
         MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch);
         MemoryAccess(const MemoryAccess &a);
@@ -69,10 +69,9 @@ namespace klee {
 
     public:
       enum ThreadState {
-        PREEMPTED = 0,
-        SLEEPING = 1,
-        RUNNABLE = 2,
-        EXITED = 3,
+        SLEEPING = 0,
+        RUNNABLE = 1,
+        EXITED = 2,
       };
 
       static const uint8_t READ_ACCESS = 1;
@@ -98,9 +97,6 @@ namespace klee {
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;
 
-      /// @brief the current sync point this thread is at
-      uint64_t synchronizationPoint;
-
       /// @brief the state this thread is in
       ThreadState state;
 
@@ -113,13 +109,13 @@ namespace klee {
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       Thread(const Thread &s);
-      ThreadId getThreadId();
+      ThreadId getThreadId() const;
 
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
 
-      bool trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uint8_t type);
+      bool trackMemoryAccess(const MemoryObject* target, MemoryAccess access);
   };
 }
 

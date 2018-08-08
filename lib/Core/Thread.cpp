@@ -33,10 +33,9 @@ StackFrame::~StackFrame() {
 /***/
 
 Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch)
-        : type(type), offset(offset), epoch(epoch) {}
+        : type(type), offset(offset), epoch(epoch), schedulingEnabled(true) {}
 
-Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a)
-        : type(a.type), offset(a.offset), epoch(a.epoch) {}
+Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a) = default;
 
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
@@ -58,7 +57,6 @@ Thread::Thread(const klee::Thread &t)
           stack(t.stack),
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
-          synchronizationPoint(t.synchronizationPoint),
           state(t.state),
           syncPhaseAccesses(t.syncPhaseAccesses) {
 
@@ -67,7 +65,7 @@ Thread::Thread(const klee::Thread &t)
   }
 }
 
-Thread::ThreadId Thread::getThreadId() {
+Thread::ThreadId Thread::getThreadId() const {
   return this->tid;
 }
 
@@ -79,7 +77,7 @@ void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
   stack.push_back(StackFrame(caller, kf));
 }
 
-bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uint8_t type) {
+bool Thread::trackMemoryAccess(const MemoryObject* target, MemoryAccess access) {
   auto it = syncPhaseAccesses.find(target);
   bool trackedNewObject = false;
 
@@ -90,22 +88,28 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uin
     trackedNewObject = true;
   }
 
-  bool newIsWrite = type & READ_ACCESS;
-  bool newIsFree = type & FREE_ACCESS;
-  bool newIsAlloc = type & ALLOC_ACCESS;
+  bool newIsWrite = access.type & READ_ACCESS;
+  bool newIsFree = access.type & FREE_ACCESS;
+  bool newIsAlloc = access.type & ALLOC_ACCESS;
 
   // So there is already an entry. So go ahead and deduplicate as much as possible
   for (auto& accessIt : it->second) {
     // We can merge or extend in certain cases
     // Of course all merges can only be done if the accesses are in the same sync phase
-    if (accessIt.epoch != synchronizationPoint) {
+    if (accessIt.epoch != access.epoch) {
+      continue;
+    }
+
+    // Another important difference we should always consider is when two different accesses
+    // conflict with their scheduling configuration
+    if (accessIt.schedulingEnabled != access.schedulingEnabled) {
       continue;
     }
 
     // Every free or alloc call is stronger as any other access type and does not require
     // offset checks, so this is one of the simpler merges
     if (newIsAlloc || newIsFree) {
-      accessIt.type = type;
+      accessIt.type = access.type;
       // alloc and free do not track the offset
       accessIt.offset = nullptr;
       return trackedNewObject;
@@ -114,12 +118,15 @@ bool Thread::trackMemoryAccess(const MemoryObject* target, ref<Expr> offset, uin
     // One special case where we can merge two entries: the previous one is a read
     // and now a write is done to the same offset (write is stronger)
     // Needs the same offsets to be correct
-    if (newIsWrite && (accessIt.type & Thread::READ_ACCESS) && offset == accessIt.offset){
+    if (newIsWrite && (accessIt.type & Thread::READ_ACCESS) && access.offset == accessIt.offset){
       accessIt.type = Thread::WRITE_ACCESS;
       return trackedNewObject;
     }
   }
 
-  it->second.emplace_back(MemoryAccess(type, offset, synchronizationPoint));
+  MemoryAccess newAccess (access);
+  // Make sure that we always use the same epoch number
+  newAccess.epoch = access.epoch;
+  it->second.emplace_back(newAccess);
   return trackedNewObject;
 }

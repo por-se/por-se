@@ -41,22 +41,6 @@ class ExecutionState {
 public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
-  struct ThreadingEpoch {
-    /// @brief the actual list of the scheduled threads
-    std::vector<Thread::ThreadId> scheduleHistory;
-
-    /// @brief list of all threads that were schedulable by the start of the epoch
-    std::vector<Thread::ThreadId> scheduleableThreads;
-
-    /// @brief all that were preempted for the whole epoch
-    std::vector<Thread::ThreadId> ignoredForScheduling;
-
-    /// @brief all that could not be scheduled (exited, sleeping)
-    std::vector<Thread::ThreadId> nonSchedulableThreads;
-
-    ThreadingEpoch() = default;
-    ThreadingEpoch(const ThreadingEpoch &e) = default;
-  };
 
 private:
   // unsupported, use copy constructor
@@ -68,7 +52,7 @@ private:
   threads_ty::iterator currentThreadIterator;
 
   /// @brief The sync point where we wait for the threads
-  uint64_t currentSynchronizationPoint;
+  uint64_t currentEpochNumber;
 
 public:
   // Execution - Control Flow specific
@@ -77,7 +61,10 @@ public:
   threads_ty threads;
 
   /// @brief the history of scheduling up until now
-  std::vector<ThreadingEpoch> schedulingHistory;
+  std::vector<Thread::ThreadId> schedulingHistory;
+
+  /// @brief set of all threads that could in theory be executed
+  std::set<Thread::ThreadId> runnableThreads;
 
   /// @brief if thread scheduling is enabled at the current time
   bool threadSchedulingEnabled;
@@ -169,12 +156,15 @@ public:
 
   ExecutionState *branch();
 
-  uint64_t getCurrentSyncPoint() const {
-    return currentSynchronizationPoint;
+  uint64_t getCurrentEpochNumber() const {
+    return currentEpochNumber;
   }
 
   /// @brief returns the reference to the current thread (only valid for one 'klee instruction')
   Thread* getCurrentThreadReference() const;
+
+    /// @brief returns the reference to the thread with the given tid (only valid for one 'klee instruction')
+  Thread* getThreadReferenceById(Thread::ThreadId tid);
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState
@@ -193,13 +183,8 @@ public:
   /// @brief will exit the referenced thread
   void exitThread(Thread::ThreadId tid);
 
-  /// @brief returns the current epoch that we are in
-  ThreadingEpoch* getCurrentThreadingEpoch();
-
   /// @brief update the current scheduled thread
   void scheduleNextThread(Thread::ThreadId tid);
-
-  ThreadingEpoch* startNewEpoch();
 
   void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 

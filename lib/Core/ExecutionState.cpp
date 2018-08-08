@@ -41,7 +41,7 @@ namespace {
 /***/
 
 ExecutionState::ExecutionState(KFunction *kf) :
-    currentSynchronizationPoint(0),
+    currentEpochNumber(0),
     threadSchedulingEnabled(true),
     liveThreadCount(0),
     justMovedToNewSyncPhase(true),
@@ -64,12 +64,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
   Thread* curThread = getCurrentThreadReference();
   curThread->state = Thread::ThreadState::RUNNABLE;
-  curThread->synchronizationPoint = 0;
 
-  // Next step: set up the first epoch
-  ThreadingEpoch firstEpoch;
-  firstEpoch.scheduleHistory.push_back(0);
-  schedulingHistory.push_back(firstEpoch);
+  schedulingHistory.push_back(curThread->getThreadId());
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
@@ -101,9 +97,10 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     fnAliases(state.fnAliases),
-    currentSynchronizationPoint(state.currentSynchronizationPoint),
+    currentEpochNumber(state.currentEpochNumber),
     threads(state.threads),
     schedulingHistory(state.schedulingHistory),
+    runnableThreads(state.runnableThreads),
     threadSchedulingEnabled(state.threadSchedulingEnabled),
 
     addressSpace(state.addressSpace),
@@ -154,6 +151,15 @@ Thread* ExecutionState::getCurrentThreadReference() const {
   return &(currentThreadIterator->second);
 }
 
+Thread* ExecutionState::getThreadReferenceById(Thread::ThreadId tid) {
+  auto threadIt = threads.find(tid);
+  if (threadIt == threads.end()) {
+    return nullptr;
+  }
+
+  return &(threadIt->second);
+}
+
 std::vector<const MemoryObject *> ExecutionState::popFrameOfThread(Thread* thread) {
   // We want to unbind all the objects from the current tread frame
   StackFrame &sf = thread->stack.back();
@@ -180,8 +186,10 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
   assert(result.second);
 
   Thread* newThread = &result.first->second;
-  newThread->synchronizationPoint = currentSynchronizationPoint + 1;
-  newThread->state = Thread::ThreadState::PREEMPTED;
+
+  // New threads are by default directly runnable
+  runnableThreads.insert(newThread->getThreadId());
+  newThread->state = Thread::RUNNABLE;
 
   // The newly spawned thread will be in sync will all the others
   // that are currently running so safe this info
@@ -191,82 +199,11 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
       continue;
     }
 
-    newThread->threadSyncs[itTid] = currentSynchronizationPoint;
-    threadIt.second.threadSyncs[tid] = currentSynchronizationPoint;
+    newThread->threadSyncs[itTid] = currentEpochNumber;
+    threadIt.second.threadSyncs[tid] = currentEpochNumber;
   }
-
-  // TODO: determine if we want the current thread to wait
-  //       if we branch, then we should consider to preempt
-  //       the current thread to determine the next schedule
 
   return newThread;
-}
-
-ExecutionState::ThreadingEpoch * ExecutionState::startNewEpoch() {
-  currentSynchronizationPoint++;
-
-  // Now we have to setup the new epoch frame in the scheduling history
-  ThreadingEpoch newEpoch;
-
-  for (auto& threadIt : threads) {
-    Thread* thread = &threadIt.second;
-
-    if (thread->state == Thread::ThreadState::RUNNABLE) {
-      newEpoch.scheduleableThreads.push_back(thread->getThreadId());
-    } else if (thread->state == Thread::ThreadState::PREEMPTED) {
-      thread->state = Thread::ThreadState::RUNNABLE;
-      newEpoch.scheduleableThreads.push_back(thread->getThreadId());
-    } else {
-      // These below here are only exited and sleeping threads
-      newEpoch.nonSchedulableThreads.push_back(thread->getThreadId());
-    }
-
-    thread->synchronizationPoint = currentSynchronizationPoint;
-
-    // Now we want to determine if we can delete certain memory accesses
-    // based on the thread syncs
-
-    // first we need to determine which sync point is currently the minimum
-    uint64_t minSyncPoint = 0;
-    for (auto& threadSync : thread->threadSyncs) {
-      if (minSyncPoint == 0 || minSyncPoint > threadSync.second) {
-        minSyncPoint = threadSync.second;
-      }
-    }
-
-    // Now we can clear every access that happened before
-    for (auto &access : thread->syncPhaseAccesses) {
-      for (auto accessIt = access.second.begin(); accessIt != access.second.end(); accessIt++) {
-        if (accessIt->epoch < minSyncPoint) {
-          access.second.erase(accessIt);
-        }
-      }
-
-      // If the access list is now empty, then we can remove the current
-      // memory object reference
-      if (access.second.empty()) {
-        const MemoryObject *mo = access.first;
-        assert(mo->refCount > 0);
-        mo->refCount--;
-        if (mo->refCount == 0) {
-          delete mo;
-        }
-
-        thread->syncPhaseAccesses.erase(mo);
-      }
-    }
-
-    thread->syncPhaseAccesses.clear();
-  }
-
-  liveThreadCount = static_cast<unsigned int>(newEpoch.scheduleableThreads.size());
-  schedulingHistory.push_back(newEpoch);
-
-  return getCurrentThreadingEpoch();
-}
-
-ExecutionState::ThreadingEpoch* ExecutionState::getCurrentThreadingEpoch() {
-  return &(*schedulingHistory.rbegin());
 }
 
 void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
@@ -276,20 +213,15 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
   assert(threadIt->second.state == Thread::RUNNABLE && "Trying to schedule a non runnable thread");
 
-  ThreadingEpoch* current = getCurrentThreadingEpoch();
-  current->scheduleHistory.push_back(tid);
-
-  // Next step is to remove the thread id from the actual schedulable threads
-  auto sIt = std::find(current->scheduleableThreads.begin(), current->scheduleableThreads.end(), tid);
-  if (sIt != current->scheduleableThreads.end()) {
-    current->scheduleableThreads.erase(sIt);
-  }
+  schedulingHistory.push_back(tid);
+  currentEpochNumber++;
 }
 
 void ExecutionState::sleepCurrentThread() {
   Thread* thread = getCurrentThreadReference();
-  thread->synchronizationPoint++;
   thread->state = Thread::ThreadState::SLEEPING;
+
+  runnableThreads.erase(thread->getThreadId());
 }
 
 void ExecutionState::preemptThread(Thread::ThreadId tid) {
@@ -297,8 +229,9 @@ void ExecutionState::preemptThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  thread->synchronizationPoint++;
-  thread->state = Thread::ThreadState::PREEMPTED;
+  thread->state = Thread::RUNNABLE;
+
+  runnableThreads.insert(tid);
 }
 
 void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
@@ -308,17 +241,18 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   Thread* thread = &pair->second;
   Thread* currentThread = getCurrentThreadReference();
 
+  runnableThreads.insert(thread->getThreadId());
+
   // We should only wake up threads that are actually sleeping
   if (thread->state == Thread::ThreadState::SLEEPING) {
-    thread->state = Thread::ThreadState::PREEMPTED;
-    thread->synchronizationPoint++;
+    thread->state = Thread::RUNNABLE;
 
     Thread::ThreadId curThreadId = currentThread->getThreadId();
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
-    thread->threadSyncs[curThreadId] = currentSynchronizationPoint;
-    currentThread->threadSyncs[tid] = currentSynchronizationPoint;
+    thread->threadSyncs[curThreadId] = currentEpochNumber;
+    currentThread->threadSyncs[tid] = currentEpochNumber;
 
     // But since these threads are now in sync; we need to rebalance all other threads
     // as well, consider: if one thread has synced  with a third at a later state than
@@ -363,12 +297,12 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 
   Thread* thread = &pair->second;
   thread->state = thread->EXITED;
-  thread->synchronizationPoint++;
+  runnableThreads.erase(thread->getThreadId());
 
   Thread* currentThread = getCurrentThreadReference();
   if (currentThread->getThreadId() != thread->getThreadId()) {
-    thread->threadSyncs[currentThread->getThreadId()] = currentSynchronizationPoint;
-    currentThread->threadSyncs[thread->getThreadId()] = currentSynchronizationPoint;
+    thread->threadSyncs[currentThread->getThreadId()] = currentEpochNumber;
+    currentThread->threadSyncs[thread->getThreadId()] = currentEpochNumber;
   }
 
   // Now remove all stack frames to cleanup
@@ -378,14 +312,12 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 }
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  if (!threadSchedulingEnabled) {
-    // We do not have any interference at the moment
-    // so we do not need to record the current memory accesses
-    return;
-  }
-
   Thread* thread = getCurrentThreadReference();
-  bool trackedNewMo = thread->trackMemoryAccess(mo, offset, type);
+
+  Thread::MemoryAccess access(type, offset, currentEpochNumber);
+  access.schedulingEnabled = threadSchedulingEnabled;
+
+  bool trackedNewMo = thread->trackMemoryAccess(mo, access);
   if (trackedNewMo) {
     mo->refCount++;
   }
@@ -640,20 +572,17 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
     const Thread* thread = &threadId.second;
 
     std::string stateName;
-    if (thread->state == 0) {
-      stateName = "preempted";
-    } else if (thread->state == 1) {
+    if (thread->state == Thread::ThreadState::SLEEPING) {
       stateName = "sleeping";
-    } else if (thread->state == 2) {
+    } else if (thread->state == Thread::ThreadState::RUNNABLE) {
       stateName = "runnable";
-    } else if (thread->state == 3) {
+    } else if (thread->state == Thread::ThreadState::EXITED) {
       stateName = "exited";
     } else {
       stateName = "unknown";
     }
 
-    out << "Tid: " << thread->tid << " in state: " << stateName
-        << " at point: " << thread->synchronizationPoint << "\n";
+    out << "Tid: " << thread->tid << " in state: " << stateName << "\n";
   }
 }
 

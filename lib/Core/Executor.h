@@ -487,12 +487,6 @@ private:
 
   ExecutionState* forkToNewState(ExecutionState &state);
 
-  bool checkIfRedundantScheduling(ExecutionState &state);
-
-  void forkForAllRunnableSubsets(ExecutionState &state);
-
-  void forkForSchedulingOrder(ExecutionState &state);
-
   void scheduleThreads(ExecutionState &state);
 
 public:
