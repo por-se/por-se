@@ -48,7 +48,6 @@ public:
   static const ScheduleReason THREAD_WAKEUP = 4;
 
   struct ScheduleDependency {
-    uint64_t epoch;
     uint64_t threadExecution;
     Thread::ThreadId tid;
     ScheduleReason reason;
@@ -57,12 +56,12 @@ public:
     ScheduleDependency(const ScheduleDependency &d) = default;
   };
 
-  struct EpochScheduleDependences {
-    uint64_t epochNumber = 0;
-    std::vector<ScheduleDependency> list;
+  struct EpochDependencies {
+    uint64_t hash = 0;
+    std::vector<ScheduleDependency> dependencies;
 
-    explicit EpochScheduleDependences(uint64_t eNum) : epochNumber(eNum) {};
-    EpochScheduleDependences(const EpochScheduleDependences &d) = default;
+    EpochDependencies() = default;
+    EpochDependencies(const EpochDependencies &d) = default;
   };
 
 private:
@@ -75,7 +74,7 @@ private:
   threads_ty::iterator currentThreadIterator;
 
   /// @brief The sync point where we wait for the threads
-  uint64_t currentEpochNumber;
+  uint64_t currentSchedulingIndex;
 
   bool onlyOneThreadRunnableSinceEpochStart;
 
@@ -84,8 +83,12 @@ private:
 public:
   // Execution - Control Flow specific
 
+  uint64_t completedEpochCount;
+
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
+
+  std::vector<uint64_t> dependencyHashes;
 
   /// @brief the history of scheduling up until now
   std::vector<Thread::ThreadId> schedulingHistory;
@@ -98,7 +101,7 @@ public:
 
   // Thread scheduling specific state data
 
-  std::vector<EpochScheduleDependences> scheduleDependences;
+  std::map<Thread::ThreadId, std::vector<EpochDependencies>> scheduleDependencies;
 
   // Overall state of the state - Data specific
 
@@ -171,7 +174,7 @@ private:
 
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 
-  EpochScheduleDependences* getCurrentEpochDependencies();
+  void assembleDependencyIndicator();
 
 public:
   ExecutionState(KFunction *kf);
@@ -192,7 +195,13 @@ public:
     /// @brief returns the reference to the thread with the given tid (only valid for one 'klee instruction')
   Thread* getThreadReferenceById(Thread::ThreadId tid);
 
-  void trackScheduleDependency(uint64_t epoch, Thread::ThreadId dependedOnThread, ScheduleReason reason);
+  EpochDependencies* getCurrentEpochDependencies();
+
+  void endCurrentEpoch();
+
+  void trackScheduleDependency(ScheduleDependency dep);
+
+  void trackScheduleDependency(uint64_t epoch, Thread::ThreadId tid, ScheduleReason r);
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState

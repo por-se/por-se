@@ -39,6 +39,7 @@ Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a) = defaul
 
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
+  this->epochRunCount = 0;
 
   assert(threadStartRoutine && "A thread has to start somewhere");
 
@@ -59,7 +60,8 @@ Thread::Thread(const klee::Thread &t)
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
           syncPhaseAccesses(t.syncPhaseAccesses),
-          threadSyncs(t.threadSyncs) {
+          threadSyncs(t.threadSyncs),
+          epochRunCount(t.epochRunCount) {
 
   for (auto& access : syncPhaseAccesses) {
     access.first->refCount++;

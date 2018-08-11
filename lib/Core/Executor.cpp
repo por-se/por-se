@@ -4075,7 +4075,9 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   //          candidates on the go as well
   for (auto& threadsIt : state.threads) {
     Thread* thread = &threadsIt.second;
-    if (thread->getThreadId() == curThreadId) {
+    Thread::ThreadId threadId = thread->getThreadId();
+
+    if (threadId == curThreadId) {
       // Memory accesses of the current thread are safe by definition
       continue;
     }
@@ -4087,7 +4089,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     }
 
     uint64_t inSyncSince = thread->threadSyncs[curThreadId];
-    assert(inSyncSince == curThread->threadSyncs[thread->getThreadId()] && "should always be the same");
+    assert(inSyncSince == curThread->threadSyncs[threadId] && "should always be the same");
 
     for (auto& access : accesses->second) {
       // If there is a potential data race, then it has to have happened before
@@ -4101,7 +4103,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       // every combination is unsafe (read + free, write + free, ...)
       if (isFree || (access.type & Thread::FREE_ACCESS)) {
         if (access.safeMemoryAccess) {
-          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          state.trackScheduleDependency(access.epoch, threadId, ExecutionState::MEMORY_ACCESS);
           continue;
         } else {
           isThreadSafeMemAccess = false;
@@ -4113,7 +4115,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       // ordered with the other thread and thus can happen in the reverse order
       if (isAlloc || (access.type & Thread::ALLOC_ACCESS)) {
         if (access.safeMemoryAccess) {
-          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          state.trackScheduleDependency(access.epoch, threadId, ExecutionState::MEMORY_ACCESS);
           continue;
         } else {
           isThreadSafeMemAccess = false;
@@ -4130,7 +4132,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
 
       if (access.offset == offset) {
         if (access.safeMemoryAccess) {
-          state.trackScheduleDependency(access.epoch, thread->getThreadId(), ExecutionState::MEMORY_ACCESS);
+          state.trackScheduleDependency(access.epoch, threadId, ExecutionState::MEMORY_ACCESS);
           continue;
         } else {
           isThreadSafeMemAccess = false;
@@ -4283,108 +4285,86 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
   os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
   os << "\tedge [arrowsize=.5]\n";
 
-  std::map<Thread::ThreadId, uint64_t > lastExecuted;
-
+  std::map<Thread::ThreadId, uint64_t> lastExecuted{};
   uint64_t epoch = 0;
-  for (auto &tid : state.schedulingHistory) {
-    std::string name = "n" + std::to_string(tid) + "_" + std::to_string(epoch);
 
-    os << "\t" << name << " [label=\"" << tid << " @ " << epoch << "\"];\n";
-    auto lIt = lastExecuted.find(tid);
-    if (lIt != lastExecuted.end()) {
-      std::string lEName = "n" + std::to_string(tid) + "_" + std::to_string(lIt->second);
+  for (auto &tid : state.schedulingHistory) {
+    uint64_t currentExecution = lastExecuted[tid] + 1;
+
+    std::string name = "n" + std::to_string(tid) + "_" + std::to_string(currentExecution);
+
+    auto* deps = &state.scheduleDependencies[tid][currentExecution - 1];
+
+    os << "\t" << name << " [label=\"" << tid << " @ " << currentExecution << " (" << epoch
+        << ")\\n" << (deps->hash & 0xFFFF) << "\"];\n";
+
+    if (currentExecution > 1) {
+      std::string lEName = "n" + std::to_string(tid) + "_" + std::to_string(currentExecution - 1);
       os << "\t" << lEName << " -> " << name << "[dir=\"back\",style=\"dashed\"];\n";
     }
 
-    auto* deps = &state.scheduleDependences[epoch];
-    for (auto& dep : deps->list) {
-      std::string dName = "n" + std::to_string(dep.tid) + "_" + std::to_string(dep.epoch);
+    for (auto dep : deps->dependencies) {
+      std::string dName = "n" + std::to_string(dep.tid) + "_" + std::to_string(dep.threadExecution);
 
       std::string reason;
       if (dep.reason & ExecutionState::MEMORY_ACCESS) {
         reason += "memory ";
-      } else if (dep.reason & ExecutionState::THREAD_CREATION) {
+      }
+      if (dep.reason & ExecutionState::THREAD_CREATION) {
         reason += "create ";
-      } else if (dep.reason & ExecutionState::THREAD_WAKEUP) {
+      }
+      if (dep.reason & ExecutionState::THREAD_WAKEUP) {
         reason += "wakeup ";
       }
 
       os << "\t" << dName << " -> " << name << " [dir=\"back\",label=\"" << reason <<"\"];\n";
     }
 
-    lastExecuted[tid] = epoch;
+    lastExecuted[tid]++;
     epoch++;
   }
 
   os << "}\n";
 }
 
-// This function assumes that there is a common prefix up to `lowEpochBorder`
-bool Executor::areSchedulesEquivalent(ExecutionState &base, ExecutionState &target, uint64_t lowEpochBorder) {
-  Thread::ThreadId tid = base.getCurrentThreadReference()->getThreadId();
-  auto deps = base.scheduleDependences.rbegin();
 
-  std::set<Thread::ThreadId> infixElements(base.schedulingHistory.begin() + lowEpochBorder, base.schedulingHistory.end());
+bool Executor::areSchedulesEquivalent(ExecutionState &base, ExecutionState &target) {
+  uint64_t commonScheduleLength = std::min(base.completedEpochCount, target.completedEpochCount);
+  if (commonScheduleLength <= 1) {
+    return false;
+  }
 
-  uint64_t commonScheduleLength = std::min(base.schedulingHistory.size(), target.schedulingHistory.size());
-  for (uint64_t i = lowEpochBorder; i < commonScheduleLength; i++) {
-    Thread::ThreadId targetTid = target.schedulingHistory[i];
-
-    if (infixElements.find(targetTid) == infixElements.end()) {
-      // the target state did schedule an completely different thread in between
-      // that means we cannot tell if they are different
-      return false;
-    }
-
-    if (targetTid == tid) {
-      for (auto d : deps->list) {
-        if (i <= d.epoch) {
-          return false;
-        }
-      }
+  //  Now test if we compare the exact same prefix for pruning, this is a no go
+  bool oneDifferent = false;
+  for (size_t i = 0; i < commonScheduleLength; i++) {
+    if (base.schedulingHistory[i] != target.schedulingHistory[i]) {
+      break;
     }
   }
 
-  return true;
+  // We abort here since we want to find states that are permutations, this is not one
+  if (!oneDifferent) {
+    return false;
+  }
+
+  std::vector<uint64_t > depBase(base.dependencyHashes.begin(), base.dependencyHashes.begin() + commonScheduleLength);
+  std::vector<uint64_t > depTarget(target.dependencyHashes.begin(), target.dependencyHashes.begin() + commonScheduleLength);
+
+  std::sort(depBase.begin(), depBase.end());
+  std::sort(depTarget.begin(), depTarget.end());
+
+  return depBase == depTarget;
 }
 
-void Executor::pruneRedundantTraces(ExecutionState &state) {
+bool Executor::pruneRedundantTraces(ExecutionState &state) {
   // So we can use the thread schedule interferences to find
   // redundant schedules -> basically means that we will check
   // if there are threads that did run independently of the others
 
-  // So since we always check after every new scheduling phase
-  // we only have to consider for now the newly added dependencies.
-  // This means looking at the added ones in this epoch
-
-  ExecutionState::EpochScheduleDependences& deps = *state.scheduleDependences.rbegin();
-  if (deps.list.empty()) {
-    // so no added dependencies that means nothing to do
-    return;
-  }
-
-  // first find the common prefix and the infix
-  uint64_t lowestEpochReference = state.schedulingHistory.size();
-  for (auto& dep : deps.list) {
-    if (dep.epoch < lowestEpochReference) {
-      lowestEpochReference = dep.epoch;
-    }
-  }
-
-  // Now we have to move through the process tree and check all nodes if they
-  // match the criteria
-  // Without exploiting the process tree: just collect all states that derive
-  // from the same common prefix
-
-  PTreeNode* prefixRoot = state.ptreeNode;
-  while (prefixRoot != nullptr && prefixRoot->parent && prefixRoot->schedulingDecision.epochNumber > lowestEpochReference) {
-    prefixRoot = prefixRoot->parent;
-  }
-
-  assert(prefixRoot != nullptr && "There has to be a prefix root");
-
+  // For now traverse through the tree and try to find states
+  // that equal ours
   std::queue<PTreeNode*> curSet;
-  curSet.push(prefixRoot);
+  curSet.push(processTree->root);
 
   std::vector<PTreeNode*> alreadyChecked;
 
@@ -4394,9 +4374,15 @@ void Executor::pruneRedundantTraces(ExecutionState &state) {
     alreadyChecked.push_back(current);
 
     if (current->data && current->data != &state) {
-      if (areSchedulesEquivalent(state, *current->data, lowestEpochReference)) {
-        terminateStateSilently(*current->data);
-        continue;
+      if (areSchedulesEquivalent(state, *current->data)) {
+        // Always kill the shorter history state
+        if (state.schedulingHistory.size() > current->data->schedulingHistory.size()) {
+          terminateStateSilently(*current->data);
+          continue;
+        } else {
+          terminateStateSilently(state);
+          return true;
+        }
       }
     } else if (current->data == &state) {
       continue;
@@ -4410,13 +4396,18 @@ void Executor::pruneRedundantTraces(ExecutionState &state) {
       curSet.push(current->right);
     }
   }
+
+  return false;
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
+  // By default this means the current epoch will end
+  state.endCurrentEpoch();
+
   // Scheduling threads means we move to a new epoch anyway
   // so make sure that we prune everything that we do no longer need
-  if (MergeSameScheduling) {
-    pruneRedundantTraces(state);
+  if (MergeSameScheduling && pruneRedundantTraces(state)) {
+    return;
   }
 
   // The first thing we have to test is, if we can actually try

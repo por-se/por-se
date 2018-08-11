@@ -106,6 +106,9 @@ namespace klee {
       /// @brief map of syncs between threads
       std::map<ThreadId, uint64_t> threadSyncs;
 
+      /// @brief the count of epochs this thread has run
+      uint64_t epochRunCount;
+
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       Thread(const Thread &s);

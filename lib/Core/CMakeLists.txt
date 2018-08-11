@@ -44,6 +44,7 @@ else()
   list(APPEND LLVM_COMPONENTS jit engine)
 endif()
 
+target_link_libraries(kleeCore PRIVATE ${CRYPTOPP_LIBRARIES})
 
 klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
 target_link_libraries(kleeCore PUBLIC ${LLVM_LIBS})

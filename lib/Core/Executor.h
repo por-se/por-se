@@ -487,9 +487,9 @@ private:
 
   ExecutionState* forkToNewState(ExecutionState &state);
 
-  bool areSchedulesEquivalent(ExecutionState &base, ExecutionState &target, uint64_t lowEpochBorder);
+  bool areSchedulesEquivalent(ExecutionState &base, ExecutionState &target);
 
-  void pruneRedundantTraces(ExecutionState &state);
+  bool pruneRedundantTraces(ExecutionState &state);
 
   void scheduleThreads(ExecutionState &state);
 
