@@ -71,7 +71,8 @@ typedef struct {
   void* (*startRoutine) (void* arg);
 
   void* returnValue;
-  __pthread_impl_stack waitingForJoinThreads;
+  uint8_t joinState;
+  uint64_t joinedThread;
 } __pthread_impl_pthread;
 
 typedef struct {

@@ -38,8 +38,8 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->returnValue = NULL;
   thread->state = 0;
   thread->mode = 0;
+  thread->joinState = 0;
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
-  __stack_create(&thread->waitingForJoinThreads);
 
   klee_toggle_thread_scheduling(1);
 
@@ -74,16 +74,22 @@ void pthread_exit(void* arg) {
   klee_toggle_thread_scheduling(0);
   uint64_t tid = klee_get_thread_id();
 
-  if (tid != 0) { // 0 is the main thread and nobody can join it
+  if (tid != 0) {
     __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
     thread->returnValue = arg;
     thread->state = 1;
 
-    __notify_threads(&thread->waitingForJoinThreads);
+    if (thread->joinState == 0) {
+      klee_toggle_thread_scheduling(1);
+      klee_sleep_thread();
+      thread->joinState = 1;
+      klee_toggle_thread_scheduling(0);
+    } else {
+      klee_wake_up_thread(thread->joinedThread);
+    }
   }
 
   klee_toggle_thread_scheduling(1);
-
   klee_exit_thread();
 }
 
@@ -96,27 +102,30 @@ int pthread_join(pthread_t pthread, void **ret) {
     return EINVAL;
   }
 
-  if (__stack_size(&thread->waitingForJoinThreads) == 1) {
-    klee_toggle_thread_scheduling(1);
-    return EINVAL;
-  }
-
   uint64_t ownThread = klee_get_thread_id();
   if (ownThread == pthread) { // We refer to our onw thread
     klee_toggle_thread_scheduling(1);
     return EDEADLK;
   }
 
+  if (thread->joinState == 1) {
+    klee_toggle_thread_scheduling(1);
+    return EINVAL;
+  }
+
   // Could also be that this thread is already finished, but there must be
   // at least one call to join to free the resources
+  thread->joinState = 1;
 
   int needToSleep = thread->state != 1 ? 1 : 0;
 
   if (needToSleep == 1) {
-    __stack_push(&thread->waitingForJoinThreads, (void*) ownThread);
+    thread->joinedThread = ownThread;
     klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
     klee_toggle_thread_scheduling(0);
+  } else {
+    klee_wake_up_thread((uint64_t) thread);
   }
 
   if (ret != NULL) {
