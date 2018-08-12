@@ -2954,6 +2954,13 @@ static bool isInVector(std::vector<T> list, T tid) {
 void Executor::terminateStateSilently(ExecutionState &state) {
   std::vector<ExecutionState *>::iterator it =
           std::find(addedStates.begin(), addedStates.end(), &state);
+
+  auto node = scheduleTree->getNodeOfExecutionState(&state);
+  if (node) {
+    node->state = nullptr;
+    scheduleTree->activeNodes.erase(&state);
+  }
+
   if (it == addedStates.end()) {
     Thread* thread = state.getCurrentThreadReference();
     thread->pc = thread->prevPc;
@@ -3776,6 +3783,10 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
+  scheduleTree = new ScheduleTree();
+  scheduleTree->root->state = state;
+  scheduleTree->activeNodes[state] = scheduleTree->root;
+
   run(*state);
   delete processTree;
   processTree = 0;
@@ -4357,57 +4368,36 @@ bool Executor::areSchedulesEquivalent(ExecutionState &base, ExecutionState &targ
 }
 
 bool Executor::pruneRedundantTraces(ExecutionState &state) {
-  // So we can use the thread schedule interferences to find
-  // redundant schedules -> basically means that we will check
-  // if there are threads that did run independently of the others
-
-  // For now traverse through the tree and try to find states
-  // that equal ours
-  std::queue<PTreeNode*> curSet;
-  curSet.push(processTree->root);
-
-  std::vector<PTreeNode*> alreadyChecked;
-
-  while (!curSet.empty()) {
-    PTreeNode* current = curSet.front();
-    curSet.pop();
-    alreadyChecked.push_back(current);
-
-    if (current->data && current->data != &state) {
-      if (areSchedulesEquivalent(state, *current->data)) {
-        // Always kill the shorter history state
-        if (state.schedulingHistory.size() > current->data->schedulingHistory.size()) {
-          terminateStateSilently(*current->data);
-          continue;
-        } else {
-          terminateStateSilently(state);
-          return true;
-        }
-      }
-    } else if (current->data == &state) {
-      continue;
-    }
-
-    if (current->left) {
-      curSet.push(current->left);
-    }
-
-    if (current->right) {
-      curSet.push(current->right);
-    }
+  auto result = scheduleTree->findPermutations(&state);
+  if (!result) {
+    return false;
   }
 
-  return false;
+  terminateStateSilently(state);
+  return true;
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
   // By default this means the current epoch will end
   state.endCurrentEpoch();
 
+  // After updating the hash, we should also update the hash in the
+  // schedule tree
+  ScheduleTree::Node* scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
+  if (scheduleTreeNode) {
+    scheduleTreeNode->dependencyHash = state.dependencyHashes.back();
+    state.getCurrentThreadReference()->getThreadId();
+  }
+
   // Scheduling threads means we move to a new epoch anyway
   // so make sure that we prune everything that we do no longer need
   if (MergeSameScheduling && pruneRedundantTraces(state)) {
     return;
+  }
+
+  if (scheduleTreeNode) {
+    scheduleTreeNode->state = nullptr;
+    scheduleTree->activeNodes.erase(&state);
   }
 
   // The first thing we have to test is, if we can actually try
@@ -4427,6 +4417,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       // but make sure that the thread is marked as RUNNABLE
       curThread->state = Thread::ThreadState::RUNNABLE;
       state.scheduleNextThread(curThread->getThreadId());
+      // TODO: add this to the schedule tree
       return;
     }
 
@@ -4491,6 +4482,14 @@ void Executor::scheduleThreads(ExecutionState &state) {
       st = &state;
     } else {
       st = forkToNewState(state);
+    }
+
+    if (scheduleTreeNode) {
+      auto newNode = new ScheduleTree::Node();
+      newNode->state = st;
+      newNode->parent = scheduleTreeNode;
+      scheduleTreeNode->children[*rIt] = newNode;
+      scheduleTree->activeNodes[st] = newNode;
     }
 
     st->scheduleNextThread(*rIt);

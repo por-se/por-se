@@ -21,6 +21,7 @@ klee_add_component(kleeCore
   Memory.cpp
   MemoryManager.cpp
   PTree.cpp
+  ScheduleTree.cpp
   Searcher.cpp
   SeedInfo.cpp
   SpecialFunctionHandler.cpp

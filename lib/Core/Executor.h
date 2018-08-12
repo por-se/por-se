@@ -21,6 +21,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
+#include "ScheduleTree.h"
+
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
@@ -135,6 +137,7 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   std::vector<TimerInfo*> timers;
   PTree *processTree;
+  ScheduleTree *scheduleTree;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
