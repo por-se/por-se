@@ -4469,6 +4469,10 @@ void Executor::scheduleThreads(ExecutionState &state) {
     newForkCount = MaxForks - stats::forks;
   }
 
+  if (!ForkOnThreadScheduling) {
+    newForkCount = 0;
+  }
+
   stats::forks += newForkCount;
 
   // Make sure that whenever we schedule a thread, that we remove
