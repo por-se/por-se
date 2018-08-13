@@ -2955,11 +2955,7 @@ void Executor::terminateStateSilently(ExecutionState &state) {
   std::vector<ExecutionState *>::iterator it =
           std::find(addedStates.begin(), addedStates.end(), &state);
 
-  auto node = scheduleTree->getNodeOfExecutionState(&state);
-  if (node) {
-    node->state = nullptr;
-    scheduleTree->activeNodes.erase(&state);
-  }
+  scheduleTree->unregisterState(&state);
 
   if (it == addedStates.end()) {
     Thread* thread = state.getCurrentThreadReference();
@@ -3783,13 +3779,24 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
-  scheduleTree = new ScheduleTree();
-  scheduleTree->root->state = state;
-  scheduleTree->activeNodes[state] = scheduleTree->root;
+  scheduleTree = new ScheduleTree(state);
 
   run(*state);
   delete processTree;
   processTree = 0;
+
+  if (DumpTreeOnEnd) {
+    char name[32];
+    sprintf(name, "scheduleTree.dot");
+    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+    if (os) {
+      scheduleTree->dump(*os);
+      delete os;
+    }
+  }
+
+  delete scheduleTree;
+  scheduleTree = nullptr;
 
   // hack to clear memory objects
   delete memory;
@@ -4338,45 +4345,6 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
   os << "}\n";
 }
 
-
-bool Executor::areSchedulesEquivalent(ExecutionState &base, ExecutionState &target) {
-  uint64_t commonScheduleLength = std::min(base.completedEpochCount, target.completedEpochCount);
-  if (commonScheduleLength <= 1) {
-    return false;
-  }
-
-  //  Now test if we compare the exact same prefix for pruning, this is a no go
-  bool oneDifferent = false;
-  for (size_t i = 0; i < commonScheduleLength; i++) {
-    if (base.schedulingHistory[i] != target.schedulingHistory[i]) {
-      break;
-    }
-  }
-
-  // We abort here since we want to find states that are permutations, this is not one
-  if (!oneDifferent) {
-    return false;
-  }
-
-  std::vector<uint64_t > depBase(base.dependencyHashes.begin(), base.dependencyHashes.begin() + commonScheduleLength);
-  std::vector<uint64_t > depTarget(target.dependencyHashes.begin(), target.dependencyHashes.begin() + commonScheduleLength);
-
-  std::sort(depBase.begin(), depBase.end());
-  std::sort(depTarget.begin(), depTarget.end());
-
-  return depBase == depTarget;
-}
-
-bool Executor::pruneRedundantTraces(ExecutionState &state) {
-  auto result = scheduleTree->findPermutations(&state);
-  if (!result) {
-    return false;
-  }
-
-  terminateStateSilently(state);
-  return true;
-}
-
 void Executor::scheduleThreads(ExecutionState &state) {
   // By default this means the current epoch will end
   state.endCurrentEpoch();
@@ -4384,20 +4352,13 @@ void Executor::scheduleThreads(ExecutionState &state) {
   // After updating the hash, we should also update the hash in the
   // schedule tree
   ScheduleTree::Node* scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
-  if (scheduleTreeNode) {
-    scheduleTreeNode->dependencyHash = state.dependencyHashes.back();
-    state.getCurrentThreadReference()->getThreadId();
-  }
+  if (scheduleTreeNode != nullptr) {
+    scheduleTree->registerSchedulingResult(&state);
 
-  // Scheduling threads means we move to a new epoch anyway
-  // so make sure that we prune everything that we do no longer need
-  if (MergeSameScheduling && pruneRedundantTraces(state)) {
-    return;
-  }
-
-  if (scheduleTreeNode) {
-    scheduleTreeNode->state = nullptr;
-    scheduleTree->activeNodes.erase(&state);
+    if (MergeSameScheduling && scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
+      terminateStateSilently(state);
+      return;
+    }
   }
 
   // The first thing we have to test is, if we can actually try
@@ -4410,14 +4371,17 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (curThread->state == Thread::ThreadState::SLEEPING) {
       exitWithDeadlock(state);
       return;
-    }
-
-    if (curThread->state != Thread::ThreadState::EXITED) {
+    } else if (curThread->state != Thread::ThreadState::EXITED) {
       // So we can actually reschedule the current thread
       // but make sure that the thread is marked as RUNNABLE
       curThread->state = Thread::ThreadState::RUNNABLE;
-      state.scheduleNextThread(curThread->getThreadId());
-      // TODO: add this to the schedule tree
+      Thread::ThreadId tid = curThread->getThreadId();
+      state.scheduleNextThread(tid);
+
+      if (scheduleTreeNode != nullptr) {
+        scheduleTree->registerNewChild(scheduleTreeNode, &state);
+      }
+
       return;
     }
 
@@ -4488,12 +4452,8 @@ void Executor::scheduleThreads(ExecutionState &state) {
       st = forkToNewState(state);
     }
 
-    if (scheduleTreeNode) {
-      auto newNode = new ScheduleTree::Node();
-      newNode->state = st;
-      newNode->parent = scheduleTreeNode;
-      scheduleTreeNode->children[*rIt] = newNode;
-      scheduleTree->activeNodes[st] = newNode;
+    if (scheduleTreeNode != nullptr) {
+      scheduleTree->registerNewChild(scheduleTreeNode, st);
     }
 
     st->scheduleNextThread(*rIt);

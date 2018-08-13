@@ -490,10 +490,6 @@ private:
 
   ExecutionState* forkToNewState(ExecutionState &state);
 
-  bool areSchedulesEquivalent(ExecutionState &base, ExecutionState &target);
-
-  bool pruneRedundantTraces(ExecutionState &state);
-
   void scheduleThreads(ExecutionState &state);
 
 public:

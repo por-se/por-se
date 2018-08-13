@@ -3,39 +3,60 @@
 
 #include "klee/ExecutionState.h"
 
-#include <vector>
-#include <map>
 #include <set>
 
 namespace klee {
-  class Executor;
-
+  /// @brief tree to record all already processed schedules and to search for equivalent ones
   class ScheduleTree {
-    friend class Executor;
-
     public:
+      /// @brief a node represents a schedule decision that happend after the parent nodes decisions
       struct Node {
-        Node* parent;
-        ExecutionState* state;
+        friend class ScheduleTree;
 
-        uint64_t dependencyHash;
+        private:
+          /// @brief used to step through the tree
+          Node* parent = nullptr;
 
-        std::map<Thread::ThreadId, Node*> children;
+          /// @brief the hash for this scheduled step
+          uint64_t dependencyHash = 0;
+
+          /// @brief all nodes that are nested
+          std::set<Node*> children;
+
+          Node() = default;
+          ~Node();
       };
 
     private:
+      /// @brief the root of the tree
       Node* root;
+
+      /// @brief nodes that are marked as currently processed
       std::map<ExecutionState*, Node*> activeNodes;
 
-      bool hasMatchingPermutations(Node *base, std::set<uint64_t> hashes, Node *ignore, uint64_t stillNeeded);
+      bool hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded);
 
     public:
-      ScheduleTree();
+      explicit ScheduleTree(ExecutionState* state);
+      ~ScheduleTree();
 
+      /// @brief will return the corresponding node for the state
       Node* getNodeOfExecutionState(ExecutionState* state);
 
-      /// @brief tries to find permutations in the tree based on the given state
-      bool findPermutations(ExecutionState *state);
+      /// @brief removes the state out of the schedule tree without adding any results
+      void unregisterState(ExecutionState* state);
+
+      /// @brief register the processed data into the schedule tree and removes the state
+      void registerSchedulingResult(ExecutionState* state);
+
+      /// @brief will add a new state to the schedule tree
+      void registerNewChild(Node *base, ExecutionState *newState);
+
+      /// @brief tests if there is an equivalent schedule in the tree
+      bool hasEquivalentSchedule(Node* node);
+
+      /// @brief dumps a graph of the tree
+      void dump(llvm::raw_ostream &os);
   };
 
 } // End klee namespace
