@@ -92,9 +92,15 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
     }
   }
 
-  __stack_push(&mutex->waitingThreads, (void*) tid);
-  klee_toggle_thread_scheduling(1);
-  klee_sleep_thread();
+  do {
+    __stack_push(&mutex->waitingThreads, (void*) tid);
+    klee_toggle_thread_scheduling(1);
+    klee_sleep_thread();
+    klee_toggle_thread_scheduling(0);
+  } while (mutex->acquired != 0);
+
+  mutex->acquired = 1;
+  mutex->holdingThread = tid;
 
   return 0;
 }
