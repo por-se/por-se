@@ -40,6 +40,7 @@ Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a) = defaul
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
   this->epochRunCount = 0;
+  this->threadNumber = 0;
 
   assert(threadStartRoutine && "A thread has to start somewhere");
 
@@ -52,11 +53,12 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->pc = this->prevPc;
 }
 
-Thread::Thread(const klee::Thread &t)
+Thread::Thread(const Thread &t)
         : pc(t.pc),
           prevPc(t.prevPc),
           stack(t.stack),
           tid(t.tid),
+          threadNumber(t.threadNumber),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
           syncPhaseAccesses(t.syncPhaseAccesses),

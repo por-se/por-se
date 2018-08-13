@@ -73,6 +73,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
   Thread* curThread = getCurrentThreadReference();
   curThread->state = Thread::ThreadState::RUNNABLE;
+  curThread->threadNumber = 0;
   runnableThreads.insert(curThread->getThreadId());
 
   scheduleNextThread(curThread->getThreadId());
@@ -205,6 +206,7 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
   assert(result.second);
 
   Thread* newThread = &result.first->second;
+  newThread->threadNumber = threads.size() - 1;
 
   // New threads are by default directly runnable
   runnableThreads.insert(newThread->getThreadId());
@@ -233,7 +235,7 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
 
 void ExecutionState::assembleDependencyIndicator() {
   Thread* curThread = getCurrentThreadReference();
-  Thread::ThreadId tid = curThread->getThreadId();
+  uint64_t threadNumber = curThread->threadNumber;
 
   // First of all make pairs of all dependencies we have collected so far
   EpochDependencies* deps = getCurrentEpochDependencies();
@@ -243,7 +245,7 @@ void ExecutionState::assembleDependencyIndicator() {
   // If we have executed a thread for more than once, then we
   // have an implied dependency that is to the previous invocation
   if (curThread->epochRunCount > 1) {
-    inOrder.emplace_back(tid, curThread->epochRunCount - 1);
+    inOrder.emplace_back(curThread->getThreadId(), curThread->epochRunCount - 1);
   }
 
   for (auto& dep : deps->dependencies) {
@@ -269,8 +271,8 @@ void ExecutionState::assembleDependencyIndicator() {
   // Now add our own identifier as the final part
   unsigned char identifier[sizeof(Thread::ThreadId) + sizeof(uint64_t)];
   uint64_t curCount = curThread->epochRunCount;
-  std::memcpy(identifier, &tid, sizeof(tid));
-  std::memcpy(&identifier[sizeof(tid)], &curCount, sizeof(curCount));
+  std::memcpy(identifier, &threadNumber, sizeof(threadNumber));
+  std::memcpy(&identifier[sizeof(threadNumber)], &curCount, sizeof(curCount));
 
   finalHash.Update(identifier, sizeof(identifier));
 

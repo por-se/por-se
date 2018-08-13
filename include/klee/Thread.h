@@ -93,6 +93,9 @@ namespace klee {
       /// @brief thread id that should be unique for the program
       ThreadId tid;
 
+      /// @brief the number of this thread during the execution
+      uint64_t threadNumber;
+
       /// @brief Remember from which Basic Block control flow arrived
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;

@@ -55,7 +55,10 @@ bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &has
 
       return true;
     } else {
-      return hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1);
+      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1);
+      if (found) {
+        return true;
+      }
     }
   }
 
@@ -144,7 +147,7 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     Node* n = stack.front();
     stack.erase(stack.begin());
 
-    os << "\tn" << n << "[label=\"" << n->dependencyHash << "\"];\n";
+    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << "\"];\n";
     if (n->parent != nullptr) {
       os << "\tn" << n->parent << " -> n" << n << ";\n";
     }
