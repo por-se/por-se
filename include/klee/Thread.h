@@ -115,7 +115,9 @@ namespace klee {
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       Thread(const Thread &s);
+
       ThreadId getThreadId() const;
+      uint64_t getThreadNumber() const;
 
     private:
       void popStackFrame();

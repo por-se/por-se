@@ -35,9 +35,23 @@ ScheduleTree::Node* ScheduleTree::getNodeOfExecutionState(ExecutionState *state)
   return search->second;
 }
 
-bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded) {
+bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
+                                             std::set<uint64_t>& sThreads) {
   for (auto n : base->children) {
     if (n == ignore) {
+      continue;
+    }
+
+    bool scheduledThread = sThreads.find(n->scheduledThreadNumber) != sThreads.end();
+    if (!scheduledThread) {
+      // Even if there was a thread scheduled that we did not have in the current
+      // list, we can merge them still if they had no interference
+      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded, sThreads);
+      if (found) {
+        return true;
+      }
+
+      // If there is nothing in the subtree then we do not want to let the other checks run as well
       continue;
     }
 
@@ -55,7 +69,7 @@ bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &has
 
       return true;
     } else {
-      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1);
+      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1, sThreads);
       if (found) {
         return true;
       }
@@ -73,6 +87,24 @@ void ScheduleTree::registerSchedulingResult(ExecutionState* state) {
 
   // If we have a result, then the state is no longer active
   activeNodes.erase(state);
+}
+
+void ScheduleTree::pruneState(Node *pruneNode) {
+  pruneNode->parent->children.erase(pruneNode);
+
+  // We want to clear all parent nodes that have only one child.
+  // This reduces the tree in general and makes it more slim
+  Node* n = pruneNode->parent;
+  while (n != nullptr && n->parent != nullptr) {
+    Node* newN = n->parent;
+
+    if (n->children.empty()) {
+      n->parent->children.erase(n);
+      delete n;
+    }
+
+    n = newN;
+  }
 }
 
 void ScheduleTree::unregisterState(ExecutionState* state) {
@@ -95,6 +127,7 @@ void ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
 
   Node* newNode = new Node();
   newNode->parent = base;
+  newNode->scheduledThreadNumber = newState->getCurrentThreadReference()->getThreadNumber();
 
   base->children.insert(newNode);
   activeNodes[newState] = newNode;
@@ -114,17 +147,24 @@ bool ScheduleTree::hasEquivalentSchedule(Node* node) {
   uint64_t stillNeeded = 2;
 
   std::set<uint64_t> availableHashes;
+  std::set<uint64_t> scheduleThreads;
+
   availableHashes.insert(node->dependencyHash);
   availableHashes.insert(childToIgnore->dependencyHash);
 
+  scheduleThreads.insert(node->scheduledThreadNumber);
+  scheduleThreads.insert(childToIgnore->scheduledThreadNumber);
+
   while (searchBase != nullptr) {
-    bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded);
+    bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, scheduleThreads);
     if (found) {
       return true;
     }
 
     stillNeeded++;
     availableHashes.insert(searchBase->dependencyHash);
+    scheduleThreads.insert(searchBase->scheduledThreadNumber);
+
     childToIgnore = searchBase;
     searchBase = searchBase->parent;
   }
@@ -147,7 +187,7 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     Node* n = stack.front();
     stack.erase(stack.begin());
 
-    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << "\"];\n";
+    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->scheduledThreadNumber << "]\"];\n";
     if (n->parent != nullptr) {
       os << "\tn" << n->parent << " -> n" << n << ";\n";
     }

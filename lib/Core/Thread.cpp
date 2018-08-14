@@ -71,7 +71,11 @@ Thread::Thread(const Thread &t)
 }
 
 Thread::ThreadId Thread::getThreadId() const {
-  return this->tid;
+  return tid;
+}
+
+uint64_t Thread::getThreadNumber() const {
+  return threadNumber;
 }
 
 void Thread::popStackFrame() {

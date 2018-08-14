@@ -9,7 +9,7 @@ namespace klee {
   /// @brief tree to record all already processed schedules and to search for equivalent ones
   class ScheduleTree {
     public:
-      /// @brief a node represents a schedule decision that happend after the parent nodes decisions
+      /// @brief a node represents a schedule decision that happened after the parent nodes decisions
       struct Node {
         friend class ScheduleTree;
 
@@ -19,6 +19,9 @@ namespace klee {
 
           /// @brief the hash for this scheduled step
           uint64_t dependencyHash = 0;
+
+          /// @brief the thread that was scheduled as a
+          uint64_t scheduledThreadNumber = 0;
 
           /// @brief all nodes that are nested
           std::set<Node*> children;
@@ -34,7 +37,8 @@ namespace klee {
       /// @brief nodes that are marked as currently processed
       std::map<ExecutionState*, Node*> activeNodes;
 
-      bool hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded);
+      bool hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
+                                           std::set<uint64_t> &sThreads);
 
     public:
       explicit ScheduleTree(ExecutionState* state);
@@ -45,6 +49,9 @@ namespace klee {
 
       /// @brief removes the state out of the schedule tree without adding any results
       void unregisterState(ExecutionState* state);
+
+      /// @brief will remove the node out of the scheduling tree and mark the schedule as pruned
+      void pruneState(Node *pruneNode);
 
       /// @brief register the processed data into the schedule tree and removes the state
       void registerSchedulingResult(ExecutionState* state);

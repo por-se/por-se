@@ -434,7 +434,12 @@ void ExecutionState::trackScheduleDependency(uint64_t epoch, Thread::ThreadId ti
   // but now how often the referenced thread did execute
 
   uint64_t epochExecutions = 0;
-  for (uint64_t i = 0; i < std::min(epoch + 1, schedulingHistory.size()); i++) {
+  uint64_t maxSize = schedulingHistory.size();
+  if (epoch + 1 < maxSize) {
+    maxSize = epoch + 1;
+  }
+
+  for (uint64_t i = 0; i < maxSize; i++) {
     if (schedulingHistory[i] == tid) {
       epochExecutions++;
     }

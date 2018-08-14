@@ -4356,6 +4356,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     scheduleTree->registerSchedulingResult(&state);
 
     if (MergeSameScheduling && scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
+      scheduleTree->pruneState(scheduleTreeNode);
       terminateStateSilently(state);
       return;
     }
