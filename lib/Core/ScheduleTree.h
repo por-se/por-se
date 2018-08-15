@@ -4,6 +4,7 @@
 #include "klee/ExecutionState.h"
 
 #include <set>
+#include <vector>
 
 namespace klee {
   /// @brief tree to record all already processed schedules and to search for equivalent ones
@@ -21,10 +22,10 @@ namespace klee {
           uint64_t dependencyHash = 0;
 
           /// @brief the thread that was scheduled as a
-          uint64_t scheduledThreadNumber = 0;
+          uint64_t tid = 0;
 
           /// @brief all nodes that are nested
-          std::set<Node*> children;
+          std::vector<Node*> children;
 
           Node() = default;
           ~Node();

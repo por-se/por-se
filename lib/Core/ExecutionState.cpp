@@ -22,6 +22,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "MemoryAccessTracker.h"
+
 // stub for typeid to use CryptoPP without RTTI
 template<typename T> const std::type_info& FakeTypeID(void) {
   assert(0 && "CryptoPP tries to use typeid()");
@@ -52,7 +54,7 @@ namespace {
 ExecutionState::ExecutionState(KFunction *kf) :
     currentSchedulingIndex(0),
     onlyOneThreadRunnableSinceEpochStart(true),
-    completedEpochCount(0),
+    completedScheduleCount(0),
     threadSchedulingEnabled(true),
 
     queryCost(0.), 
@@ -65,6 +67,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
     ptreeNode(0),
     steppedInstructions(0) {
 
+  memAccessTracker = new MemoryAccessTracker();
+
   // Thread 0 is always the main function thread
   Thread thread = Thread(0, kf);
   auto result = threads.insert(std::make_pair(thread.getThreadId(), thread));
@@ -73,7 +77,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
   Thread* curThread = getCurrentThreadReference();
   curThread->state = Thread::ThreadState::RUNNABLE;
-  curThread->threadNumber = 0;
+  curThread->tid = 0;
   runnableThreads.insert(curThread->getThreadId());
 
   scheduleNextThread(curThread->getThreadId());
@@ -96,6 +100,10 @@ ExecutionState::~ExecutionState() {
     cur_mergehandler->removeOpenState(this);
   }
 
+  // Since we are the owner of the memory access tracker we can safely delete it
+  delete memAccessTracker;
+  memAccessTracker = nullptr;
+
   // We have to clean up all stack frames of all threads
   for (auto& it : threads) {
     Thread thread = it.second;
@@ -111,9 +119,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     currentSchedulingIndex(state.currentSchedulingIndex),
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     forwardDeclaredDependencies(state.forwardDeclaredDependencies),
-    completedEpochCount(state.completedEpochCount),
+    completedScheduleCount(state.completedScheduleCount),
     threads(state.threads),
-    dependencyHashes(state.dependencyHashes),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
     threadSchedulingEnabled(state.threadSchedulingEnabled),
@@ -139,6 +146,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions)
 {
+  // So make sure that we also make a correct copy of the mem access tracker
+  memAccessTracker = new MemoryAccessTracker(*state.memAccessTracker);
+
   // Since we copied the threads, we can use the thread id to look it up
   Thread* curStateThread = state.getCurrentThreadReference();
   currentThreadIterator = threads.find(curStateThread->getThreadId());
@@ -200,13 +210,14 @@ std::vector<const MemoryObject *> ExecutionState::popFrameOfCurrentThread() {
   return popFrameOfThread(thread);
 }
 
-Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
+Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
+  Thread::ThreadId tid = threads.size();
   Thread thread = Thread(tid, kf);
   auto result = threads.insert(std::make_pair(tid, thread));
   assert(result.second);
 
   Thread* newThread = &result.first->second;
-  newThread->threadNumber = threads.size() - 1;
+  newThread->startArg = arg;
 
   // New threads are by default directly runnable
   runnableThreads.insert(newThread->getThreadId());
@@ -220,12 +231,11 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
       continue;
     }
 
-    newThread->threadSyncs[itTid] = currentSchedulingIndex;
-    threadIt.second.threadSyncs[tid] = currentSchedulingIndex;
+    memAccessTracker->registerThreadSync(itTid, tid, currentSchedulingIndex);
   }
 
   ScheduleDependency dep{};
-  dep.threadExecution = getCurrentThreadReference()->epochRunCount;
+  dep.scheduleIndex = currentSchedulingIndex;
   dep.tid = getCurrentThreadReference()->getThreadId();
   dep.reason = THREAD_CREATION;
   forwardDeclaredDependencies.insert(std::make_pair(newThread->getThreadId(), dep));
@@ -235,44 +245,41 @@ Thread* ExecutionState::createThread(Thread::ThreadId tid, KFunction *kf) {
 
 void ExecutionState::assembleDependencyIndicator() {
   Thread* curThread = getCurrentThreadReference();
-  uint64_t threadNumber = curThread->threadNumber;
+  uint64_t threadId = curThread->getThreadId();
+
+  std::set<uint64_t> dependencySet;
 
   // First of all make pairs of all dependencies we have collected so far
   EpochDependencies* deps = getCurrentEpochDependencies();
-  std::vector<std::pair<Thread::ThreadId, uint64_t>> inOrder;
-  inOrder.reserve(deps->dependencies.size() + 1);
-
-  // If we have executed a thread for more than once, then we
-  // have an implied dependency that is to the previous invocation
-  if (curThread->epochRunCount > 1) {
-    inOrder.emplace_back(curThread->getThreadId(), curThread->epochRunCount - 1);
-  }
 
   for (auto& dep : deps->dependencies) {
-    inOrder.emplace_back(dep.tid, dep.threadExecution);
+    dependencySet.insert(schedulingHistory[dep.scheduleIndex].dependencyHash);
   }
 
-  // Now we want to make sure that our hash will be deterministic
-  // that means -> order them and then remove duplicates
-  sort(inOrder.begin(), inOrder.end());
-  inOrder.erase(unique(inOrder.begin(), inOrder.end()), inOrder.end());
+  // Also add the reference to the last execution of our own thread
+  if (curThread->epochRunCount > 1) {
+    for (auto i = schedulingHistory.rbegin() + 1; i != schedulingHistory.rend(); ++i) {
+      if (i->tid == curThread->tid) {
+        dependencySet.insert(i->dependencyHash);
+        break;
+      }
+    }
+  }
 
   CryptoPP::SHA256 finalHash;
 
   // First part of the hash: the hashes of all dependencies
-  for (auto& p : inOrder) {
-    uint64_t hash = scheduleDependencies[p.first][p.second - 1].hash;
+  for (uint64_t hash : dependencySet) {
     unsigned char input[sizeof(hash)];
     std::memcpy(input, &hash, sizeof(hash));
-
     finalHash.Update(input, sizeof(hash));
   }
 
   // Now add our own identifier as the final part
-  unsigned char identifier[sizeof(Thread::ThreadId) + sizeof(uint64_t)];
+  unsigned char identifier[sizeof(uint64_t) + sizeof(uint64_t)];
   uint64_t curCount = curThread->epochRunCount;
-  std::memcpy(identifier, &threadNumber, sizeof(threadNumber));
-  std::memcpy(&identifier[sizeof(threadNumber)], &curCount, sizeof(curCount));
+  std::memcpy(identifier, &threadId, sizeof(threadId));
+  std::memcpy(&identifier[sizeof(threadId)], &curCount, sizeof(curCount));
 
   finalHash.Update(identifier, sizeof(identifier));
 
@@ -284,12 +291,12 @@ void ExecutionState::assembleDependencyIndicator() {
   std::memcpy(&ourHash, digest, sizeof(ourHash));
 
   deps->hash = ourHash;
-  dependencyHashes.push_back(ourHash);
+  schedulingHistory.back().dependencyHash = ourHash;
 }
 
 void ExecutionState::endCurrentEpoch() {
   assembleDependencyIndicator();
-  completedEpochCount = schedulingHistory.size();
+  completedScheduleCount = schedulingHistory.size();
 }
 
 void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
@@ -299,7 +306,12 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
   assert(threadIt->second.state == Thread::RUNNABLE && "Trying to schedule a non runnable thread");
 
-  schedulingHistory.push_back(tid);
+  ScheduleEpoch ep {};
+  ep.tid = tid;
+  schedulingHistory.push_back(ep);
+
+  memAccessTracker->scheduledNewThread(tid);
+
   currentSchedulingIndex = schedulingHistory.size() - 1;
   scheduleDependencies[tid].push_back(EpochDependencies());
   threadIt->second.epochRunCount++;
@@ -351,49 +363,13 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
-    thread->threadSyncs[curThreadId] = currentSchedulingIndex;
-    currentThread->threadSyncs[tid] = currentSchedulingIndex;
+    memAccessTracker->registerThreadSync(curThreadId, tid, currentSchedulingIndex);
 
     ScheduleDependency dep{};
-    dep.threadExecution = currentThread->epochRunCount;
+    dep.scheduleIndex = currentSchedulingIndex;
     dep.tid = curThreadId;
     dep.reason = THREAD_WAKEUP;
     forwardDeclaredDependencies.insert(std::make_pair(tid, dep));
-
-    // But since these threads are now in sync; we need to rebalance all other threads
-    // as well, consider: if one thread has synced  with a third at a later state than
-    // the other thread, then we know now for sure that the sync will be transitive:
-    // We indirectly sync with the thread through the other one
-
-    for (auto& threadSyncIt : thread->threadSyncs) {
-      Thread::ThreadId thirdPartyTid = threadSyncIt.first;
-
-      // We just synced them above so safely skip them
-      if (thirdPartyTid == curThreadId) {
-        continue;
-      }
-
-      uint64_t threadSyncedAt = threadSyncIt.second;
-      uint64_t curThreadSyncedAt = currentThread->threadSyncs[thirdPartyTid];
-
-      // Another safe skip as we are at the same state
-      if (threadSyncedAt == curThreadSyncedAt) {
-        continue;
-      }
-
-      auto thThreadPair = threads.find(thirdPartyTid);
-      assert(thThreadPair != threads.end() && "Could not find referenced thread");
-      Thread* thirdPartyThread = &(thThreadPair->second);
-
-      // Now find the one that is more recent than the other and update the values
-      if (threadSyncedAt < curThreadSyncedAt) {
-        thread->threadSyncs[thirdPartyTid] = curThreadSyncedAt;
-        thirdPartyThread->threadSyncs[tid] = curThreadSyncedAt;
-      } else if (threadSyncedAt < curThreadSyncedAt) {
-        currentThread->threadSyncs[thirdPartyTid] = threadSyncedAt;
-        thirdPartyThread->threadSyncs[curThreadId] = threadSyncedAt;
-      }
-    }
   }
 }
 
@@ -407,8 +383,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 
   Thread* currentThread = getCurrentThreadReference();
   if (currentThread->getThreadId() != thread->getThreadId()) {
-    thread->threadSyncs[currentThread->getThreadId()] = currentSchedulingIndex;
-    currentThread->threadSyncs[thread->getThreadId()] = currentSchedulingIndex;
+    memAccessTracker->registerThreadSync(currentThread->tid, tid, currentSchedulingIndex);
   }
 
   // Now remove all stack frames to cleanup
@@ -418,35 +393,20 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 }
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  Thread* thread = getCurrentThreadReference();
-
-  Thread::MemoryAccess access(type, offset, currentSchedulingIndex);
+  MemoryAccess access;
+  access.type = type;
+  access.offset = offset;
   access.safeMemoryAccess = !threadSchedulingEnabled || !onlyOneThreadRunnableSinceEpochStart;
 
-  bool trackedNewMo = thread->trackMemoryAccess(mo, access);
-  if (trackedNewMo) {
-    mo->refCount++;
-  }
+  memAccessTracker->trackMemoryAccess(mo->getId(), access);
 }
 
-void ExecutionState::trackScheduleDependency(uint64_t epoch, Thread::ThreadId tid, ScheduleReason r) {
+void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, ScheduleReason r) {
   // so we only have the information about when something has happened
   // but now how often the referenced thread did execute
 
-  uint64_t epochExecutions = 0;
-  uint64_t maxSize = schedulingHistory.size();
-  if (epoch + 1 < maxSize) {
-    maxSize = epoch + 1;
-  }
-
-  for (uint64_t i = 0; i < maxSize; i++) {
-    if (schedulingHistory[i] == tid) {
-      epochExecutions++;
-    }
-  }
-
   ScheduleDependency d{};
-  d.threadExecution = epochExecutions;
+  d.scheduleIndex = scheduleIndex;
   d.tid = tid;
   d.reason = r;
 
@@ -458,14 +418,14 @@ void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
 
   for (auto e : dep->dependencies) {
     // Make sure that we actually have not already added this info
-    if (e.threadExecution == d.threadExecution && e.tid == d.tid) {
+    if (e.scheduleIndex == d.scheduleIndex && e.tid == d.tid) {
       e.reason |= d.reason;
       return;
     }
 
     // And check if the now given info is more recent than one that we already saved
-    if (e.threadExecution < d.threadExecution && e.tid == d.tid) {
-      e.threadExecution = d.threadExecution;
+    if (e.scheduleIndex < d.scheduleIndex && e.tid == d.tid) {
+      e.scheduleIndex = d.scheduleIndex;
       e.reason |= d.reason;
       return;
     }

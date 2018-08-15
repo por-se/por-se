@@ -118,6 +118,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
+  add("klee_get_thread_start_argument", handleGetThreadStartArgument, true),
   addDNR("klee_exit_thread", handleExitThread),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
@@ -867,16 +868,9 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
 void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
                                                 KInstruction *target,
                                                 std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 3 && "invalid number of arguments to klee_create_thread");
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_create_thread");
 
-  ref<Expr> tid = executor.toUnique(state, arguments[0]);
-
-  if (!isa<ConstantExpr>(tid)) {
-    executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
-    return;
-  }
-
-  executor.createThread(state, cast<ConstantExpr>(tid)->getZExtValue(), arguments[1], arguments[2]);
+  executor.createThread(state, arguments[0], arguments[1]);
 }
 
 void SpecialFunctionHandler::handleSleepThread(ExecutionState &state,
@@ -935,4 +929,13 @@ void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &
   }
 
   executor.toggleThreadScheduling(state, cast<ConstantExpr>(tid)->getZExtValue() != 0);
+}
+
+void SpecialFunctionHandler::handleGetThreadStartArgument(klee::ExecutionState &state,
+                                                          klee::KInstruction *target,
+                                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_start_argument");
+
+  ref<Expr> arg = state.getCurrentThreadReference()->getStartArgument();
+  executor.bindLocal(target, state, arg);
 }

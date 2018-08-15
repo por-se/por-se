@@ -150,6 +150,7 @@ namespace klee {
     HANDLER(handlePreemptThread);
     HANDLER(handleExitThread);
     HANDLER(handleToggleThreadScheduling);
+    HANDLER(handleGetThreadStartArgument);
 #undef HANDLER
   };
 } // End klee namespace

@@ -37,12 +37,14 @@ ScheduleTree::Node* ScheduleTree::getNodeOfExecutionState(ExecutionState *state)
 
 bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
                                              std::set<uint64_t>& sThreads) {
+  assert(stillNeeded != 0 && "We always have to find at least one");
+
   for (auto n : base->children) {
     if (n == ignore) {
       continue;
     }
 
-    bool scheduledThread = sThreads.find(n->scheduledThreadNumber) != sThreads.end();
+    bool scheduledThread = sThreads.find(n->tid) != sThreads.end();
     if (!scheduledThread) {
       // Even if there was a thread scheduled that we did not have in the current
       // list, we can merge them still if they had no interference
@@ -83,28 +85,23 @@ void ScheduleTree::registerSchedulingResult(ExecutionState* state) {
   Node* n = getNodeOfExecutionState(state);
   assert(n != nullptr && "There should be an active node in the tree matching the state");
 
-  n->dependencyHash = state->dependencyHashes.back();
+  n->dependencyHash = state->schedulingHistory.back().dependencyHash;
 
   // If we have a result, then the state is no longer active
   activeNodes.erase(state);
 }
 
 void ScheduleTree::pruneState(Node *pruneNode) {
-  pruneNode->parent->children.erase(pruneNode);
-
-  // We want to clear all parent nodes that have only one child.
-  // This reduces the tree in general and makes it more slim
-  Node* n = pruneNode->parent;
-  while (n != nullptr && n->parent != nullptr) {
-    Node* newN = n->parent;
-
-    if (n->children.empty()) {
-      n->parent->children.erase(n);
-      delete n;
-    }
-
-    n = newN;
+  while (pruneNode->parent != nullptr && pruneNode->parent->children.size() == 1) {
+    pruneNode = pruneNode->parent;
   }
+
+  if (pruneNode->parent != nullptr) {
+    Node* p = pruneNode->parent;
+    p->children.erase(std::remove(p->children.begin(), p->children.end(), pruneNode), p->children.end());
+  }
+
+  delete pruneNode;
 }
 
 void ScheduleTree::unregisterState(ExecutionState* state) {
@@ -114,12 +111,6 @@ void ScheduleTree::unregisterState(ExecutionState* state) {
   }
 
   activeNodes.erase(state);
-
-  // if this node does not provide any important info then just clear it
-  if (n->dependencyHash == 0 && n->parent != nullptr) {
-    n->parent->children.erase(n);
-    delete n;
-  }
 }
 
 void ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
@@ -127,9 +118,9 @@ void ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
 
   Node* newNode = new Node();
   newNode->parent = base;
-  newNode->scheduledThreadNumber = newState->getCurrentThreadReference()->getThreadNumber();
+  newNode->tid = newState->getCurrentThreadReference()->getThreadId();
 
-  base->children.insert(newNode);
+  base->children.push_back(newNode);
   activeNodes[newState] = newNode;
 }
 
@@ -152,8 +143,8 @@ bool ScheduleTree::hasEquivalentSchedule(Node* node) {
   availableHashes.insert(node->dependencyHash);
   availableHashes.insert(childToIgnore->dependencyHash);
 
-  scheduleThreads.insert(node->scheduledThreadNumber);
-  scheduleThreads.insert(childToIgnore->scheduledThreadNumber);
+  scheduleThreads.insert(node->tid);
+  scheduleThreads.insert(childToIgnore->tid);
 
   while (searchBase != nullptr) {
     bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, scheduleThreads);
@@ -163,7 +154,7 @@ bool ScheduleTree::hasEquivalentSchedule(Node* node) {
 
     stillNeeded++;
     availableHashes.insert(searchBase->dependencyHash);
-    scheduleThreads.insert(searchBase->scheduledThreadNumber);
+    scheduleThreads.insert(searchBase->tid);
 
     childToIgnore = searchBase;
     searchBase = searchBase->parent;
@@ -187,7 +178,7 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     Node* n = stack.front();
     stack.erase(stack.begin());
 
-    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->scheduledThreadNumber << "]\"];\n";
+    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->tid << "]\"];\n";
     if (n->parent != nullptr) {
       os << "\tn" << n->parent << " -> n" << n << ";\n";
     }

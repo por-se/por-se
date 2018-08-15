@@ -56,28 +56,12 @@ namespace klee {
       /// @brief Type for all thread ids
       typedef uint64_t ThreadId;
 
-    private:
-      struct MemoryAccess {
-        uint8_t type;
-        ref<Expr> offset;
-        uint64_t epoch;
-        bool safeMemoryAccess;
-
-        MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch);
-        MemoryAccess(const MemoryAccess &a);
-      };
-
     public:
       enum ThreadState {
         SLEEPING = 0,
         RUNNABLE = 1,
         EXITED = 2,
       };
-
-      static const uint8_t READ_ACCESS = 1;
-      static const uint8_t WRITE_ACCESS = 2;
-      static const uint8_t FREE_ACCESS = 4;
-      static const uint8_t ALLOC_ACCESS = 8;
 
     private:
       /// @brief Pointer to instruction to be executed after the current
@@ -93,9 +77,6 @@ namespace klee {
       /// @brief thread id that should be unique for the program
       ThreadId tid;
 
-      /// @brief the number of this thread during the execution
-      uint64_t threadNumber;
-
       /// @brief Remember from which Basic Block control flow arrived
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;
@@ -103,27 +84,22 @@ namespace klee {
       /// @brief the state this thread is in
       ThreadState state;
 
-      /// @brief memory accesses this thread has done during the current phase
-      std::map<const MemoryObject*, std::vector<MemoryAccess>> syncPhaseAccesses;
-
-      /// @brief map of syncs between threads
-      std::map<ThreadId, uint64_t> threadSyncs;
-
       /// @brief the count of epochs this thread has run
       uint64_t epochRunCount;
+
+      /// @brief the argument with which the thread was started
+      ref<Expr> startArg;
 
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       Thread(const Thread &s);
 
       ThreadId getThreadId() const;
-      uint64_t getThreadNumber() const;
+      ref<Expr> getStartArgument() const;
 
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
-
-      bool trackMemoryAccess(const MemoryObject* target, MemoryAccess access);
   };
 }
 

@@ -9,9 +9,10 @@ static __pthread_impl_pthread* __obtain_pthread_data(pthread_t pthread) {
   return ((__pthread_impl_pthread*)pthread);
 }
 
-static void* __pthread_impl_wrapper(void* arg) {
+static void* __pthread_impl_wrapper(void* arg, uint64_t tid) {
   klee_toggle_thread_scheduling(0);
   __pthread_impl_pthread* thread = arg;
+  thread->tid = tid;
   void* startArg = thread->startArg;
   klee_toggle_thread_scheduling(1);
 
@@ -31,8 +32,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
 
   *((__pthread_impl_pthread**)pthread) = thread;
 
-  uint64_t tid = (uint64_t) thread;
-  thread->tid = tid;
+  thread->tid = 0;
   thread->startRoutine = startRoutine;
   thread->startArg = arg;
   thread->returnValue = NULL;
@@ -43,7 +43,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
 
   klee_toggle_thread_scheduling(1);
 
-  klee_create_thread(tid, __pthread_impl_wrapper, thread);
+  klee_create_thread(__pthread_impl_wrapper, thread);
   klee_preempt_thread();
 
   return 0;
@@ -75,7 +75,7 @@ void pthread_exit(void* arg) {
   uint64_t tid = klee_get_thread_id();
 
   if (tid != 0) {
-    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
+    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument();
     thread->returnValue = arg;
     thread->state = 1;
 
@@ -125,7 +125,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_sleep_thread();
     klee_toggle_thread_scheduling(0);
   } else {
-    klee_wake_up_thread((uint64_t) thread);
+    klee_wake_up_thread(thread->tid);
   }
 
   if (ret != NULL) {
@@ -146,7 +146,7 @@ int pthread_join(pthread_t pthread, void **ret) {
 }
 
 pthread_t pthread_self(void) {
-  return (pthread_t) klee_get_thread_id();
+  return (pthread_t) klee_get_thread_start_argument();
 }
 
 int pthread_equal(pthread_t t1, pthread_t t2) {
@@ -168,7 +168,7 @@ int pthread_setcancelstate(int state, int *oldState) {
 
   uint64_t tid = klee_get_thread_id();
   if (tid != 0) {
-    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
+    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument;
     *oldState = thread->cancelState;
     thread->cancelState = state;
   }
@@ -188,7 +188,7 @@ void pthread_testcancel() {
 
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
+  __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument;
   if (thread->cancelState == PTHREAD_CANCEL_DISABLE) {
     klee_toggle_thread_scheduling(1);
     return;

@@ -33,11 +33,15 @@ struct KInstruction;
 class MemoryObject;
 class PTreeNode;
 struct InstructionInfo;
+class MemoryAccessTracker;
+class Executor;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
 /// @brief ExecutionState representing a path under exploration
 class ExecutionState {
+  friend class Executor;
+
 public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
@@ -48,7 +52,7 @@ public:
   static const ScheduleReason THREAD_WAKEUP = 4;
 
   struct ScheduleDependency {
-    uint64_t threadExecution;
+    uint64_t scheduleIndex;
     Thread::ThreadId tid;
     ScheduleReason reason;
 
@@ -62,6 +66,11 @@ public:
 
     EpochDependencies() = default;
     EpochDependencies(const EpochDependencies &d) = default;
+  };
+
+  struct ScheduleEpoch {
+    Thread::ThreadId tid;
+    uint64_t dependencyHash;
   };
 
 private:
@@ -80,18 +89,21 @@ private:
 
   std::map<Thread::ThreadId, ScheduleDependency> forwardDeclaredDependencies;
 
+  /// @brief the tracker that will keep all memory access
+  // This is a little bit of a hack: we do not want to expose the tracker to the 'public' api so
+  // we use a pointer here even if the tracker is 'owned' by this state
+  MemoryAccessTracker* memAccessTracker;
+
 public:
   // Execution - Control Flow specific
 
-  uint64_t completedEpochCount;
+  uint64_t completedScheduleCount;
 
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
 
-  std::vector<uint64_t> dependencyHashes;
-
-  /// @brief the history of scheduling up until now
-  std::vector<Thread::ThreadId> schedulingHistory;
+    /// @brief the history of scheduling up until now
+  std::vector<ScheduleEpoch> schedulingHistory;
 
   /// @brief set of all threads that could in theory be executed
   std::set<Thread::ThreadId> runnableThreads;
@@ -201,12 +213,12 @@ public:
 
   void trackScheduleDependency(ScheduleDependency dep);
 
-  void trackScheduleDependency(uint64_t epoch, Thread::ThreadId tid, ScheduleReason r);
+  void trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, ScheduleReason r);
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState
   /// @brief will create a new thread with the given thread id
-  Thread* createThread(Thread::ThreadId tid, KFunction *kf);
+  Thread* createThread(KFunction *kf, ref<Expr> arg);
 
   //// @brief will put the current thread into sleep mode
   void sleepCurrentThread();

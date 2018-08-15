@@ -37,11 +37,11 @@ class MemoryObject {
   friend class Thread;
 
 private:
-  static int counter;
+  static uint64_t counter;
   mutable unsigned refCount;
 
 public:
-  unsigned id;
+  uint64_t id;
   uint64_t address;
 
   /// size in bytes
@@ -108,6 +108,10 @@ public:
 
   void setName(std::string name) const {
     this->name = name;
+  }
+
+  uint64_t getId() const {
+    return id;
   }
 
   ref<ConstantExpr> getBaseExpr() const { 

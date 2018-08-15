@@ -451,8 +451,8 @@ void KleeHandler::processTestCase(const ExecutionState &state,
     }
 
     llvm::raw_fd_ostream *fSchedules = openTestFile("tschedules", id);
-    for (auto& tidIt : state.schedulingHistory) {
-      *fSchedules << tidIt << "\n";
+    for (auto& sd : state.schedulingHistory) {
+      *fSchedules << sd.tid << "\n";
     }
     delete(fSchedules);
 
@@ -753,6 +753,7 @@ static const char *modelledExternals[] = {
   "klee_preempt_thread",
   "klee_exit_thread",
   "klee_toggle_thread_scheduling",
+  "klee_get_thread_start_argument",
   "llvm.dbg.declare",
   "llvm.dbg.value",
   "llvm.va_start",

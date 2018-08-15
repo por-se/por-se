@@ -32,15 +32,9 @@ StackFrame::~StackFrame() {
 
 /***/
 
-Thread::MemoryAccess::MemoryAccess(uint8_t type, ref<Expr> offset, uint64_t epoch)
-        : type(type), offset(offset), epoch(epoch), safeMemoryAccess(false) {}
-
-Thread::MemoryAccess::MemoryAccess(const klee::Thread::MemoryAccess &a) = default;
-
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
   this->epochRunCount = 0;
-  this->threadNumber = 0;
 
   assert(threadStartRoutine && "A thread has to start somewhere");
 
@@ -58,24 +52,18 @@ Thread::Thread(const Thread &t)
           prevPc(t.prevPc),
           stack(t.stack),
           tid(t.tid),
-          threadNumber(t.threadNumber),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
-          syncPhaseAccesses(t.syncPhaseAccesses),
-          threadSyncs(t.threadSyncs),
-          epochRunCount(t.epochRunCount) {
-
-  for (auto& access : syncPhaseAccesses) {
-    access.first->refCount++;
-  }
+          epochRunCount(t.epochRunCount),
+          startArg(t.startArg) {
 }
 
 Thread::ThreadId Thread::getThreadId() const {
   return tid;
 }
 
-uint64_t Thread::getThreadNumber() const {
-  return threadNumber;
+ref<Expr> Thread::getStartArgument() const {
+  return startArg;
 }
 
 void Thread::popStackFrame() {
@@ -84,58 +72,4 @@ void Thread::popStackFrame() {
 
 void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
   stack.push_back(StackFrame(caller, kf));
-}
-
-bool Thread::trackMemoryAccess(const MemoryObject* target, MemoryAccess access) {
-  auto it = syncPhaseAccesses.find(target);
-  bool trackedNewObject = false;
-
-  if (it == syncPhaseAccesses.end()) {
-    auto insert = syncPhaseAccesses.insert(std::make_pair(target, std::vector<MemoryAccess>()));
-    assert(insert.second && "Failed to insert element");
-    it = insert.first;
-    trackedNewObject = true;
-  }
-
-  bool newIsWrite = access.type & READ_ACCESS;
-  bool newIsFree = access.type & FREE_ACCESS;
-  bool newIsAlloc = access.type & ALLOC_ACCESS;
-
-  // So there is already an entry. So go ahead and deduplicate as much as possible
-  for (auto& accessIt : it->second) {
-    // We can merge or extend in certain cases
-    // Of course all merges can only be done if the accesses are in the same sync phase
-    if (accessIt.epoch != access.epoch) {
-      continue;
-    }
-
-    // Another important difference we should always consider is when two different accesses
-    // conflict with their scheduling configuration
-    if (accessIt.safeMemoryAccess != access.safeMemoryAccess) {
-      continue;
-    }
-
-    // Every free or alloc call is stronger as any other access type and does not require
-    // offset checks, so this is one of the simpler merges
-    if (newIsAlloc || newIsFree) {
-      accessIt.type = access.type;
-      // alloc and free do not track the offset
-      accessIt.offset = nullptr;
-      return trackedNewObject;
-    }
-
-    // One special case where we can merge two entries: the previous one is a read
-    // and now a write is done to the same offset (write is stronger)
-    // Needs the same offsets to be correct
-    if (newIsWrite && (accessIt.type & Thread::READ_ACCESS) && access.offset == accessIt.offset){
-      accessIt.type = Thread::WRITE_ACCESS;
-      return trackedNewObject;
-    }
-  }
-
-  MemoryAccess newAccess (access);
-  // Make sure that we always use the same epoch number
-  newAccess.epoch = access.epoch;
-  it->second.emplace_back(newAccess);
-  return trackedNewObject;
 }
