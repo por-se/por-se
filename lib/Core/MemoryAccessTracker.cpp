@@ -3,6 +3,19 @@
 
 using namespace klee;
 
+static const uint64_t NOT_EXECUTED = ~((uint64_t) 0);
+
+MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses() = default;
+
+MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryAccesses& ac) {
+
+  owner = ac.owner;
+  tid = ac.tid;
+  accesses = ac.accesses;
+  preThreadAccesses = ac.preThreadAccesses;
+  scheduleIndex = ac.scheduleIndex;
+}
+
 MemoryAccessTracker::MemoryAccessTracker() = default;
 MemoryAccessTracker::MemoryAccessTracker(const MemoryAccessTracker &list) = default;
 
@@ -16,10 +29,9 @@ void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
     return;
   }
 
-  std::shared_ptr<EpochMemoryAccesses> ema = std::make_shared<EpochMemoryAccesses>();
+  std::shared_ptr<EpochMemoryAccesses> ema = std::make_shared<EpochMemoryAccesses>(*last);
   ema->owner = this;
-  ema->tid = last->tid;
-  ema->accesses = last->accesses;
+
   accessLists[accessLists.size() - 1] = ema;
 }
 
@@ -36,9 +48,19 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   std::shared_ptr<EpochMemoryAccesses> ema = std::make_shared<EpochMemoryAccesses>();
   ema->owner = this;
   ema->tid = tid;
-  accessLists.emplace_back(ema);
+  ema->scheduleIndex = accessLists.size();
 
-  knownThreads.insert(tid);
+  if (tid + 1 > lastExecutions.size()) {
+    lastExecutions.resize(tid + 1, NOT_EXECUTED);
+  }
+
+  uint64_t exec = lastExecutions[tid];
+  if (exec != NOT_EXECUTED) {
+    ema->preThreadAccesses = accessLists[exec];
+  }
+
+  lastExecutions[tid] = ema->scheduleIndex;
+  accessLists.emplace_back(ema);
 }
 
 void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
@@ -46,10 +68,10 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
 
   forkCurrentEpochWhenNeeded();
 
-  std::shared_ptr<EpochMemoryAccesses> ema = accessLists.back();
+  std::shared_ptr<EpochMemoryAccesses>& ema = accessLists.back();
   std::vector<MemoryAccess>& accesses = ema->accesses[id];
 
-  bool newIsWrite = access.type & READ_ACCESS;
+  bool newIsWrite = access.type & WRITE_ACCESS;
   bool newIsFree = access.type & FREE_ACCESS;
   bool newIsAlloc = access.type & ALLOC_ACCESS;
 
@@ -128,64 +150,43 @@ void MemoryAccessTracker::registerThreadSync(Thread::ThreadId tid1, Thread::Thre
 uint64_t* MemoryAccessTracker::getThreadsSyncValue(Thread::ThreadId tid1, Thread::ThreadId tid2) {
   assert(tid1 != tid2 && "ThreadIds have to be unequal");
 
-  std::pair<Thread::ThreadId, Thread::ThreadId> pair;
+  uint64_t min = std::min(tid1, tid2);
+  uint64_t max = std::max(tid1, tid2);
 
-  if (tid1 < tid2) {
-    pair.first = tid1;
-    pair.second = tid2;
-  } else {
-    pair.first = tid2;
-    pair.second = tid1;
+  if (max > threadSyncs.size()) {
+    threadSyncs.resize(max);
+    for (uint64_t i = 0; i < threadSyncs.size(); i++) {
+      threadSyncs[i].resize(max - i, 0);
+    }
   }
 
-  return &threadSyncs[pair];
+  return &threadSyncs[min][max - min - 1];
 }
 
-MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id, MemoryAccess &access) {
-  assert(!accessLists.empty() && "There should be at least one scheduling phase");
+void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
+                                                        uint64_t id, MemoryAccess &access) {
+  uint64_t exec = lastExecutions[tid];
+  if (exec == NOT_EXECUTED) {
+    return;
+  }
 
-  MemAccessSafetyResult result;
-  result.wasSafe = true;
+  Thread::ThreadId curTid = accessLists.back()->tid;
 
   bool isRead = (access.type & READ_ACCESS);
   bool isFree = (access.type & FREE_ACCESS);
   bool isAlloc = (access.type & ALLOC_ACCESS);
 
-  uint64_t scheduleIndex = accessLists.size() - 1;
-  auto epochIterator = accessLists.rbegin();
-  Thread::ThreadId curTid = (*epochIterator)->tid;
+  uint64_t sync = *getThreadsSyncValue(tid, curTid);
+  auto ema = accessLists[exec];
 
-  std::set<Thread::ThreadId> threadsAlreadyInSync;
-  epochIterator++;
-  scheduleIndex--;
-
-  std::vector<MemoryAccess> possibleCandidates;
-
-  for (; epochIterator != accessLists.rend(); epochIterator++, scheduleIndex--) {
-    auto& ema = *epochIterator;
-
-    if (ema->tid == curTid) {
-      continue;
-    }
-
-    if (threadsAlreadyInSync.find(ema->tid) != threadsAlreadyInSync.end()) {
-      // We are already beyond the last sync, so no checks to up there
-      continue;
-    }
-
-    uint64_t inSyncSince = *getThreadsSyncValue(ema->tid, curTid);
-    if (inSyncSince > scheduleIndex) {
-      threadsAlreadyInSync.insert(ema->tid);
-
-      if (threadsAlreadyInSync.size() == knownThreads.size()) {
-        break;
-      }
-      continue;
-    }
+  while (ema != nullptr && sync < ema->scheduleIndex) {
+    assert(ema->tid == tid);
+    uint64_t scheduleIndex = ema->scheduleIndex;
 
     auto objAccesses = ema->accesses.find(id);
     if (objAccesses == ema->accesses.end()) {
       // There was no access to that object in this schedule phase
+      ema = ema->preThreadAccesses;
       continue;
     }
 
@@ -196,12 +197,12 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id,
       if (isFree || (a.type & FREE_ACCESS)) {
         if (!a.safeMemoryAccess) {
           result.wasSafe = false;
-          return result;
+          return;
         }
 
-        uint64_t cur = result.dataDependencies[ema->tid];
+        uint64_t cur = result.dataDependencies[tid];
         if (cur < scheduleIndex) {
-          result.dataDependencies[ema->tid] = scheduleIndex;
+          result.dataDependencies[tid] = scheduleIndex;
         }
         continue;
       }
@@ -211,12 +212,12 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id,
       if (isAlloc || (a.type & ALLOC_ACCESS)) {
         if (!a.safeMemoryAccess) {
           result.wasSafe = false;
-          return result;
+          return;
         }
 
-        uint64_t cur = result.dataDependencies[ema->tid];
+        uint64_t cur = result.dataDependencies[tid];
         if (cur < scheduleIndex) {
-          result.dataDependencies[ema->tid] = scheduleIndex;
+          result.dataDependencies[tid] = scheduleIndex;
         }
         continue;
       }
@@ -231,12 +232,12 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id,
       if (a.offset == access.offset) {
         if (!a.safeMemoryAccess) {
           result.wasSafe = false;
-          return result;
+          return;
         }
 
-        uint64_t cur = result.dataDependencies[ema->tid];
+        uint64_t cur = result.dataDependencies[tid];
         if (cur < scheduleIndex) {
-          result.dataDependencies[ema->tid] = scheduleIndex;
+          result.dataDependencies[tid] = scheduleIndex;
         }
         continue;
       }
@@ -250,16 +251,35 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id,
 
       // So add it to the ones we want to test
       if (!a.safeMemoryAccess) {
-        possibleCandidates.push_back(a);
+        result.possibleCandidates.push_back(a);
       }
+    }
+
+    ema = ema->preThreadAccesses;
+  }
+}
+
+MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id, MemoryAccess &access) {
+  assert(!accessLists.empty() && "There should be at least one scheduling phase");
+
+  MemAccessSafetyResult result;
+  result.wasSafe = true;
+
+  auto epochIterator = accessLists.rbegin();
+  Thread::ThreadId curTid = (*epochIterator)->tid;
+
+  for (auto& tid : knownThreads) {
+    if (tid == curTid) {
+      continue;
+    }
+
+    testIfUnsafeMemAccessByThread(result, tid, id, access);
+
+    if (!result.wasSafe) {
+      result.possibleCandidates.clear();
+      return result;
     }
   }
 
-  if (possibleCandidates.empty()) {
-    // So we cannot do any more analysis for now
-    return result;
-  }
-
-  result.possibleCandidates.swap(possibleCandidates);
   return result;
 }

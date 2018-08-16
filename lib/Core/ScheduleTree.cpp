@@ -147,9 +147,12 @@ bool ScheduleTree::hasEquivalentSchedule(Node* node) {
   scheduleThreads.insert(childToIgnore->tid);
 
   while (searchBase != nullptr) {
-    bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, scheduleThreads);
-    if (found) {
-      return true;
+    // If there is only one child, then there is only
+    if (searchBase->children.size() > 1) {
+      bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, scheduleThreads);
+      if (found) {
+        return true;
+      }
     }
 
     stillNeeded++;

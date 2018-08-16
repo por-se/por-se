@@ -38,16 +38,28 @@ namespace klee {
       struct EpochMemoryAccesses {
         void* owner;
         Thread::ThreadId tid;
+        uint64_t scheduleIndex;
+
+        std::shared_ptr<EpochMemoryAccesses> preThreadAccesses;
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
+
+        EpochMemoryAccesses();
+        EpochMemoryAccesses(const EpochMemoryAccesses& ac);
       };
 
       std::vector<std::shared_ptr<EpochMemoryAccesses>> accessLists;
-      std::map<std::pair<Thread::ThreadId, Thread::ThreadId>, uint64_t> threadSyncs;
+
+      std::vector<std::vector<uint64_t>> threadSyncs;
+
       std::set<Thread::ThreadId> knownThreads;
+      std::vector<uint64_t> lastExecutions;
 
       void forkCurrentEpochWhenNeeded();
 
       uint64_t* getThreadsSyncValue(Thread::ThreadId tid1, Thread::ThreadId tid2);
+
+      void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
+                                         uint64_t id, MemoryAccess &access);
 
     public:
       MemoryAccessTracker();
