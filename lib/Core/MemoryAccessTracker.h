@@ -21,10 +21,13 @@ namespace klee {
   };
 
   struct MemAccessSafetyResult {
-    bool wasSafe;
+    bool wasSafe = false;
 
     std::vector<MemoryAccess> possibleCandidates;
     std::map<Thread::ThreadId, uint64_t> dataDependencies;
+
+    MemAccessSafetyResult() = default;
+    MemAccessSafetyResult(const MemAccessSafetyResult& sr) = default;
   };
 
   class MemoryAccessTracker {

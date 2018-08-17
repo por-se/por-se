@@ -61,6 +61,8 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
 
   lastExecutions[tid] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
+
+  knownThreads.insert(tid);
 }
 
 void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
