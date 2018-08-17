@@ -4317,7 +4317,9 @@ void Executor::scheduleThreads(ExecutionState &state) {
       state.scheduleNextThread(tid);
 
       if (scheduleTreeNode != nullptr) {
-        scheduleTree->registerNewChild(scheduleTreeNode, &state);
+        std::vector<ExecutionState*> states;
+        states.push_back(&state);
+        scheduleTree->registerScheduleDecision(scheduleTreeNode, states);
       }
 
       return;
@@ -4379,6 +4381,8 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
 
   auto rIt = runnable.begin();
+  std::vector<ExecutionState*> newStates;
+  newStates.reserve(newForkCount + 1);
 
   for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
     // we want to reuse the current state when that is possible
@@ -4388,15 +4392,16 @@ void Executor::scheduleThreads(ExecutionState &state) {
     } else {
       st = forkToNewState(state);
     }
+    newStates.push_back(st);
 
     st->scheduleNextThread(*rIt);
     // st->ptreeNode->schedulingDecision.runnableThreads = runnable;
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
     st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
+  }
 
-    if (scheduleTreeNode != nullptr) {
-      scheduleTree->registerNewChild(scheduleTreeNode, st);
-    }
+  if (scheduleTreeNode != nullptr) {
+    scheduleTree->registerScheduleDecision(scheduleTreeNode, newStates);
   }
 }
 

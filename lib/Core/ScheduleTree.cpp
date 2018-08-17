@@ -130,15 +130,31 @@ void ScheduleTree::unregisterState(ExecutionState* state) {
   activeNodes.erase(state);
 }
 
-void ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
+ScheduleTree::Node* ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
   assert(base != nullptr && "Base node must be available");
+
+  Thread* curThread = newState->getCurrentThreadReference();
 
   Node* newNode = new Node();
   newNode->parent = base;
-  newNode->tid = newState->getCurrentThreadReference()->getThreadId();
+  newNode->tid = curThread->getThreadId();
+
+  newNode->scheduleIndex = base->scheduleIndex + 1;
 
   base->children.push_back(newNode);
   activeNodes[newState] = newNode;
+
+  return newNode;
+}
+
+void ScheduleTree::registerScheduleDecision(Node *base, std::vector<ExecutionState *>& newStates) {
+  assert(!newStates.empty() && "There has to be a new state otherwise this does not make sense");
+
+  base->children.reserve(newStates.size());
+
+  for (auto state : newStates) {
+    registerNewChild(base, state);
+  }
 }
 
 bool ScheduleTree::hasEquivalentSchedule(Node* node) {
@@ -188,7 +204,7 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
   os << "\tsize=\"10,7.5\";\n";
   os << "\tratio=fill;\n";
   os << "\tcenter = \"true\";\n";
-  os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
+  os << "\tnode [width=.1,height=.1,fontname=\"Terminus\"]\n";
   os << "\tedge [arrowsize=.5]\n";
 
   std::vector<Node*> stack;
@@ -200,7 +216,7 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
 
     os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->tid << "]\"];\n";
     if (n->parent != nullptr) {
-      os << "\tn" << n->parent << " -> n" << n << ";\n";
+      os << "\tn" << n->parent << " -> n" << n << " [penwidth=2];\n";
     }
 
     for (auto& dep : n->dependencies) {

@@ -32,10 +32,12 @@ namespace klee {
           uint64_t dependencyHash = 0;
 
           /// @brief the thread that was scheduled as a
-          uint64_t tid = 0;
+          Thread::ThreadId tid = 0;
 
           /// @brief all nodes that are nested
           std::vector<Node*> children;
+
+          uint64_t scheduleIndex = 0;
 
           /// @brief the dependencies that were found so far
           std::vector<ScheduleDependency> dependencies;
@@ -54,6 +56,9 @@ namespace klee {
       bool hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
                                            std::set<uint64_t> &sThreads);
 
+      /// @brief will add a new state to the schedule tree
+      Node* registerNewChild(Node *base, ExecutionState *newState);
+
     public:
       explicit ScheduleTree(ExecutionState* state);
       ~ScheduleTree();
@@ -70,8 +75,7 @@ namespace klee {
       /// @brief register the processed data into the schedule tree and removes the state
       void registerSchedulingResult(ExecutionState* state);
 
-      /// @brief will add a new state to the schedule tree
-      void registerNewChild(Node *base, ExecutionState *newState);
+      void registerScheduleDecision(Node *base, std::vector<ExecutionState *>& newStates);
 
       /// @brief tests if there is an equivalent schedule in the tree
       bool hasEquivalentSchedule(Node* node);
