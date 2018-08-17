@@ -86,6 +86,23 @@ void ScheduleTree::registerSchedulingResult(ExecutionState* state) {
   assert(n != nullptr && "There should be an active node in the tree matching the state");
 
   n->dependencyHash = state->schedulingHistory.back().dependencyHash;
+  auto& deps = state->getCurrentEpochDependencies()->dependencies;
+  n->dependencies.reserve(deps.size());
+
+  uint64_t cur = state->schedulingHistory.size() - 1;
+
+  for (auto& dep : deps) {
+    ScheduleDependency d{};
+    d.reason = dep.reason;
+    d.scheduleIndex = dep.scheduleIndex;
+
+    d.referencedNode = n;
+    for (uint64_t i = 0; i < (cur - d.scheduleIndex); i++) {
+      d.referencedNode = d.referencedNode->parent;
+    }
+
+    n->dependencies.push_back(d);
+  }
 
   // If we have a result, then the state is no longer active
   activeNodes.erase(state);
@@ -184,6 +201,10 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->tid << "]\"];\n";
     if (n->parent != nullptr) {
       os << "\tn" << n->parent << " -> n" << n << ";\n";
+    }
+
+    for (auto& dep : n->dependencies) {
+      os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
     }
 
     stack.insert(stack.end(), n->children.begin(), n->children.end());

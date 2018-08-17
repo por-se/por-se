@@ -10,6 +10,16 @@ namespace klee {
   /// @brief tree to record all already processed schedules and to search for equivalent ones
   class ScheduleTree {
     public:
+      struct Node;
+
+    private:
+      struct ScheduleDependency {
+        Node* referencedNode;
+        uint64_t scheduleIndex;
+        uint8_t reason;
+      };
+
+    public:
       /// @brief a node represents a schedule decision that happened after the parent nodes decisions
       struct Node {
         friend class ScheduleTree;
@@ -26,6 +36,9 @@ namespace klee {
 
           /// @brief all nodes that are nested
           std::vector<Node*> children;
+
+          /// @brief the dependencies that were found so far
+          std::vector<ScheduleDependency> dependencies;
 
           Node() = default;
           ~Node();
