@@ -1553,10 +1553,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
-      std::vector<const MemoryObject*> freedAllocas = state.popFrameOfCurrentThread();
+      std::vector<const MemoryObject*> freedAllocas = thread->stack.back().allocas;
       for (auto mo : freedAllocas) {
         processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
       }
+
+      state.popFrameOfCurrentThread();
 
       if (statsTracker)
         statsTracker->framePopped(state);
@@ -4124,10 +4126,6 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
         if (!alwaysDifferent) {
           // Now we know that both can be equal!
 
-          // TODO: We should probably fork the state here:
-          // -> we generate a error case
-          // -> test what happens without an error case (force offsets to be unequal)
-
           // the error is that both offsets point to the same memory region so go
           // ahead and add the constraint that they are equal
           addConstraint(state, EqExpr::create(offset, candidateIt.offset));
@@ -4138,6 +4136,30 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
 
           break;
         }
+      }
+
+      // Final step test if it is possible that this will not trigger an unsafe memory
+      // access. If there is a possibility that this is safe, then we want to follow these
+      // states as well
+
+      ref<Expr> unsafeQuery = ConstantExpr::create(1, Expr::Bool);
+
+      for (auto& candidateIt : result.possibleCandidates) {
+        ref<Expr> condition = EqExpr::create(offset, candidateIt.offset);
+        unsafeQuery = AndExpr::create(unsafeQuery, condition);
+      }
+
+      solver->setTimeout(coreSolverTimeout);
+      bool canBeSafe = true;
+      solverSuccessful = solver->mayBeFalse(state, unsafeQuery, canBeSafe);
+      solver->setTimeout(0);
+
+      if (!solverSuccessful) {
+        klee_warning("Solver could not complete query for offset; Skipping possible safe mem access path");
+        return true;
+      } else if (canBeSafe) {
+        ExecutionState* newState = forkToNewState(state);
+        addConstraint(*newState, unsafeQuery);
       }
     } else {
       // We were not successful, so go ahead and add the constraint

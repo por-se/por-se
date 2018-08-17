@@ -256,16 +256,6 @@ void ExecutionState::assembleDependencyIndicator() {
     dependencySet.insert(schedulingHistory[dep.scheduleIndex].dependencyHash);
   }
 
-  // Also add the reference to the last execution of our own thread
-  if (curThread->epochRunCount > 1) {
-    for (auto i = schedulingHistory.rbegin() + 1; i != schedulingHistory.rend(); ++i) {
-      if (i->tid == curThread->tid) {
-        dependencySet.insert(i->dependencyHash);
-        break;
-      }
-    }
-  }
-
   CryptoPP::SHA256 finalHash;
 
   // First part of the hash: the hashes of all dependencies
@@ -314,6 +304,23 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
   currentSchedulingIndex = schedulingHistory.size() - 1;
   scheduleDependencies[tid].push_back(EpochDependencies());
+
+  // Also add the reference to the last execution of our own thread
+  if (threadIt->second.epochRunCount > 0) {
+    uint64_t j = currentSchedulingIndex - 1;
+    for (auto i = schedulingHistory.rbegin() + 1; i != schedulingHistory.rend(); ++i, --j) {
+      if (i->tid == tid) {
+        ScheduleDependency dep {};
+        dep.reason = PREDECESSOR;
+        dep.tid = tid;
+        dep.scheduleIndex = j;
+
+        trackScheduleDependency(dep);
+        break;
+      }
+    }
+  }
+
   threadIt->second.epochRunCount++;
 
   onlyOneThreadRunnableSinceEpochStart = runnableThreads.size() == 1;
@@ -386,19 +393,22 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
     memAccessTracker->registerThreadSync(currentThread->tid, tid, currentSchedulingIndex);
   }
 
-  // Now remove all stack frames to cleanup
-  // while (!thread->stack.empty()) {
-  //  popFrameOfThread(thread);
-  //}
+   // Now remove all stack frames to cleanup
+   while (!thread->stack.empty()) {
+    popFrameOfThread(thread);
+  }
 }
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  MemoryAccess access;
-  access.type = type;
-  access.offset = offset;
-  access.safeMemoryAccess = !threadSchedulingEnabled || !onlyOneThreadRunnableSinceEpochStart;
+  // We do not need to track the memory access for now
+  if (!onlyOneThreadRunnableSinceEpochStart) {
+    MemoryAccess access;
+    access.type = type;
+    access.offset = offset;
+    access.safeMemoryAccess = !threadSchedulingEnabled;
 
-  memAccessTracker->trackMemoryAccess(mo->getId(), access);
+    memAccessTracker->trackMemoryAccess(mo->getId(), access);
+  }
 }
 
 void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, ScheduleReason r) {

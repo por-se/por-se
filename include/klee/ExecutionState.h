@@ -50,6 +50,7 @@ public:
   static const ScheduleReason MEMORY_ACCESS = 1;
   static const ScheduleReason THREAD_CREATION = 2;
   static const ScheduleReason THREAD_WAKEUP = 4;
+  static const ScheduleReason PREDECESSOR = 8;
 
   struct ScheduleDependency {
     uint64_t scheduleIndex;
