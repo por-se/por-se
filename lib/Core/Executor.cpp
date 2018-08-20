@@ -317,10 +317,20 @@ namespace {
           cl::desc("Dump the process tree whenever a new thread scheduling has occured"),
           cl::init(false));
 
-  cl::opt<bool>
-  MergeSameScheduling("merge-same-scheduling",
-            cl::desc("Whenever the scheduling of threads occurs, merge with same resulting schedules"),
-            cl::init(false));
+  enum SameScheduleAnalysisEnum {
+    NONE,
+    PERMUTATION_COMPARISON,
+    PARTIAL_ORDER
+  };
+
+  cl::opt<SameScheduleAnalysisEnum>SameScheduleAnalysis("same-schedule-analysis",
+            cl::desc("The analysis do use in order to avoid exploring duplicate schedules"),
+            cl::values(
+                clEnumValN(NONE, "none", "none (default)"),
+                clEnumValN(PERMUTATION_COMPARISON, "perm-comparison", "Compare permutation of schedules afterwards"),
+                clEnumValN(PARTIAL_ORDER, "partial-order", "Use a partial order to limit schedule duplicates")
+                KLEE_LLVM_CL_VAL_END),
+            cl::init(NONE));
 }
 
 
@@ -2957,7 +2967,9 @@ void Executor::terminateStateSilently(ExecutionState &state) {
   std::vector<ExecutionState *>::iterator it =
           std::find(addedStates.begin(), addedStates.end(), &state);
 
-  scheduleTree->unregisterState(&state);
+  if (scheduleTree != nullptr) {
+    scheduleTree->unregisterState(&state);
+  }
 
   if (it == addedStates.end()) {
     Thread* thread = state.getCurrentThreadReference();
@@ -3781,24 +3793,44 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
-  scheduleTree = new ScheduleTree(state);
+
+  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
+    scheduleTree = new ScheduleTree(state);
+  } else if (SameScheduleAnalysis == PARTIAL_ORDER) {
+    std::function<ExecutionState* (ExecutionState*)> function = [=](ExecutionState* st) -> ExecutionState* {
+      return forkToNewState(*st);
+    };
+
+    poGraph = new PartialOrderGraph(state, function);
+  }
 
   run(*state);
   delete processTree;
   processTree = 0;
 
-  if (DumpTreeOnEnd) {
-    char name[32];
-    sprintf(name, "scheduleTree.dot");
-    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-    if (os) {
+  char name[32];
+  sprintf(name, "scheduleTree.dot");
+  llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+
+  if (scheduleTree != nullptr) {
+    if (DumpTreeOnEnd && os) {
       scheduleTree->dump(*os);
       delete os;
     }
+
+    delete scheduleTree;
+    scheduleTree = nullptr;
   }
 
-  delete scheduleTree;
-  scheduleTree = nullptr;
+  if (scheduleTree != nullptr) {
+    if (DumpTreeOnEnd && os) {
+      poGraph->dump(*os);
+      delete os;
+    }
+
+    delete poGraph;
+    poGraph = nullptr;
+  }
 
   // hack to clear memory objects
   delete memory;
@@ -4208,7 +4240,7 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
 
 ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   ExecutionState* ns = state.branch();
-  addedStates.push_back(ns);
+  // addedStates.push_back(ns);
 
   state.ptreeNode->data = nullptr;
   auto res = processTree->split(state.ptreeNode, ns, &state);
@@ -4280,23 +4312,62 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
   os << "}\n";
 }
 
-void Executor::scheduleThreads(ExecutionState &state) {
-  // By default this means the current epoch will end
-  state.endCurrentEpoch();
+void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
+  PartialOrderGraph::ScheduleResult result = poGraph->processEpochResult(&state);
 
+  if (result.finishedState != nullptr) {
+    // Last sanity check if we actually ended because all threads did exit
+    bool allExited = true;
+
+    for (auto &threadIt : state.threads) {
+      if (threadIt.second.state != Thread::ThreadState::EXITED) {
+        allExited = false;
+      }
+    }
+
+    if (!allExited) {
+      exitWithDeadlock(state);
+    } else {
+      terminateStateOnExit(*result.finishedState);
+    }
+  }
+
+  for (auto st : result.stoppedStates) {
+    terminateStateSilently(*st);
+  }
+
+  for (auto st : result.reactivatedStates) {
+    addedStates.push_back(st);
+  }
+
+  // We actually do not really need to add these to the paused states since they
+  // were never seen inside the searcher
+  for (auto st : result.newInactiveStates) {
+    // pausedStates.push_back(st);
+  }
+
+  for (auto st : result.newStates) {
+    addedStates.push_back(st);
+  }
+}
+
+void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
   // After updating the hash, we should also update the hash in the
   // schedule tree
-  ScheduleTree::Node* scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
-  if (scheduleTreeNode != nullptr) {
-    scheduleTree->registerSchedulingResult(&state);
+  ScheduleTree::Node* scheduleTreeNode = nullptr;
 
-    if (MergeSameScheduling && scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
-      scheduleTree->pruneState(scheduleTreeNode);
-      terminateStateSilently(state);
-      return;
+  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
+    scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
+
+    if (scheduleTreeNode != nullptr) {
+      scheduleTree->registerSchedulingResult(&state);
+
+      if (scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
+        scheduleTree->pruneState(scheduleTreeNode);
+        terminateStateSilently(state);
+        return;
+      }
     }
-  } else {
-    assert(0);
   }
 
   // The first thing we have to test is, if we can actually try
@@ -4344,17 +4415,11 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     if (allExited) {
       terminateStateOnExit(state);
+
       if (DumpTreeOnEnd) {
         char name[32];
-        sprintf(name, "ptree%08d.dot", (int) stats::instructions);
-        llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-        if (os) {
-          processTree->dump(*os);
-          delete os;
-        }
-
         sprintf(name, "schedule%08d.dot", (int) stats::instructions);
-        os = interpreterHandler->openOutputFile(name);
+        llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
         if (os) {
           printScheduleDag(*os, state);
           delete os;
@@ -4391,17 +4456,28 @@ void Executor::scheduleThreads(ExecutionState &state) {
       st = &state;
     } else {
       st = forkToNewState(state);
+      addedStates.push_back(st);
     }
     newStates.push_back(st);
 
     st->scheduleNextThread(*rIt);
-    // st->ptreeNode->schedulingDecision.runnableThreads = runnable;
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
     st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
   }
 
   if (scheduleTreeNode != nullptr) {
     scheduleTree->registerScheduleDecision(scheduleTreeNode, newStates);
+  }
+}
+
+void Executor::scheduleThreads(ExecutionState &state) {
+  // By default this means the current epoch will end
+  state.endCurrentEpoch();
+
+  if (SameScheduleAnalysis == PARTIAL_ORDER) {
+    scheduleThreadsWithPartialOrder(state);
+  } else {
+    scheduleThreadsWithScheduleTree(state);
   }
 }
 

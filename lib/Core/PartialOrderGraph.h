@@ -8,6 +8,8 @@
 namespace klee {
   class PartialOrderGraph {
     public:
+      typedef std::function <ExecutionState* (ExecutionState*)> StateForkProvider;
+
       struct Node;
 
       struct ScheduleResult {
@@ -88,6 +90,8 @@ namespace klee {
           /// @brief if unable to null, then this is the tree that we are a fork from
           Tree* parentTree = nullptr;
 
+          PartialOrderGraph* graph = nullptr;
+
           /* And the reasoning why we forked */
 
           /// @brief the node in the parent tree that caused this fork
@@ -116,6 +120,10 @@ namespace klee {
           std::vector<std::pair<Tree*, ExecutionState*>> checkForNecessaryForks(ScheduleResult& result);
       };
 
+    protected:
+      /// @brief a function that will be used in order to fork the states
+      StateForkProvider forkProvider;
+
     private:
       /// @brief the root tree that started everything
       Tree* rootTree = nullptr;
@@ -126,6 +134,7 @@ namespace klee {
     public:
       /// @brief starts an po graph with this state as the basis
       explicit PartialOrderGraph(ExecutionState* state);
+      PartialOrderGraph(ExecutionState *state, StateForkProvider &provider);
       ~PartialOrderGraph();
 
       /// @brief adds all data from the state and will return all resulting schedule changes

@@ -462,8 +462,10 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
     Thread* thread = state.getCurrentThreadReference();
     const InstructionInfo &ii = *thread->pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
-    if (UseCallPaths)
+    if (UseCallPaths) {
+      assert(!thread->stack.empty() && "Stack should be available in order to write the stats");
       thread->stack.back().callPathNode->statistics.incrementValue(stats::states, addend);
+    }
   }
 }
 

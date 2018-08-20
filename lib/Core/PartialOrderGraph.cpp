@@ -1,8 +1,14 @@
+#include <utility>
+
 #include "PartialOrderGraph.h"
 
 using namespace klee;
 
 static const Thread::ThreadId NO_RESULT = ~((uint64_t) 0);
+
+static ExecutionState* DEFAULT_PROVIDER(ExecutionState* st) {
+  return st->branch();
+}
 
 PartialOrderGraph::Node::~Node() {
   for (auto ft : foreignTrees) {
@@ -19,6 +25,8 @@ PartialOrderGraph::Tree::Tree(Node* n, Tree* parent) {
   // This is the forking constructor
   parentTree = parent;
   root = new Node();
+
+  graph = parentTree->graph;
 
   // The root node will in this case be the first other scheduled thread
   root->parent = n;
@@ -181,7 +189,7 @@ std::pair<PartialOrderGraph::Tree*, ExecutionState*> PartialOrderGraph::Tree::ac
     forkAt->resultingState = nullptr;
     result.reactivatedStates.push_back(state);
   } else {
-    state = forkAt->resultingState->branch();
+    state = graph->forkProvider(forkAt->resultingState);
     result.newStates.push_back(state);
   }
 
@@ -248,7 +256,14 @@ PartialOrderGraph::PartialOrderGraph(ExecutionState *state) {
   rootTree->root->tid = state->getCurrentThreadReference()->getThreadId();
   rootTree->scheduleHistory.push_back(rootTree->root);
 
+  rootTree->graph = this;
+
   responsibleTrees[state] = rootTree;
+  forkProvider = DEFAULT_PROVIDER;
+}
+
+PartialOrderGraph::PartialOrderGraph(ExecutionState *state, StateForkProvider &provider) : PartialOrderGraph(state) {
+  forkProvider = provider;
 }
 
 PartialOrderGraph::~PartialOrderGraph() {
@@ -277,7 +292,7 @@ PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(Executio
   // So we recorded everything we needed, now save the resulting state if we can use this node
   // as a fork node ->  so basically only if we can fork for another thread
   if (state->runnableThreads.size() >= 2) {
-    readyNode->resultingState = state->branch();
+    readyNode->resultingState = forkProvider(state);
     result.newInactiveStates.push_back(readyNode->resultingState);
   }
 

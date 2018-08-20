@@ -21,6 +21,8 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
+
+#include "PartialOrderGraph.h"
 #include "ScheduleTree.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -137,7 +139,9 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   std::vector<TimerInfo*> timers;
   PTree *processTree;
-  ScheduleTree *scheduleTree;
+
+  ScheduleTree *scheduleTree = nullptr;
+  PartialOrderGraph *poGraph = nullptr;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -489,6 +493,10 @@ private:
                            ref<Expr> offset, uint8_t type);
 
   ExecutionState* forkToNewState(ExecutionState &state);
+
+  void scheduleThreadsWithPartialOrder(ExecutionState &state);
+
+  void scheduleThreadsWithScheduleTree(ExecutionState &state);
 
   void scheduleThreads(ExecutionState &state);
 

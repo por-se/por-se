@@ -110,12 +110,38 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
 
 void MemoryAccessTracker::registerThreadSync(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch) {
   uint64_t* v = getThreadsSyncValue(tid1, tid2);
-  *v = epoch;
+
+  if (*v < epoch) {
+    *v = epoch;
+  } else {
+    return;
+  }
 
   // But since these threads are now in sync; we need to rebalance all other threads
   // as well, consider: if one thread has synced  with a third at a later state than
   // the other thread, then we know now for sure that the sync will be transitive:
   // We indirectly sync with the thread through the other one
+
+  for (Thread::ThreadId tid : knownThreads) {
+    if (tid == tid1 || tid2 == tid) {
+      continue;
+    }
+
+    uint64_t* with1 = getThreadsSyncValue(tid, tid1);
+    uint64_t* with2 = getThreadsSyncValue(tid, tid2);
+
+    if (*with1 == *with2) {
+      continue;
+    }
+
+    // Now find the one that is more recent than the other and update the values
+    if (*with2 < *with1) {
+      *with2 = *with1;
+    } else if (*with2 > *with1) {
+      *with1 = *with2;
+    }
+  }
+
 //  for (auto& threadSyncIt : thread->threadSyncs) {
 //    Thread::ThreadId thirdPartyTid = threadSyncIt.first;
 //

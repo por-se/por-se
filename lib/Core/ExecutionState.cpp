@@ -286,6 +286,17 @@ void ExecutionState::assembleDependencyIndicator() {
 
 void ExecutionState::endCurrentEpoch() {
   assembleDependencyIndicator();
+
+  Thread::ThreadId tid = getCurrentThreadReference()->tid;
+  EpochDependencies* deps = getCurrentEpochDependencies();
+  for (auto& dep : deps->dependencies) {
+    if (dep.tid == tid) {
+      continue;
+    }
+
+    memAccessTracker->registerThreadSync(dep.tid, tid, dep.scheduleIndex);
+  }
+
   completedScheduleCount = schedulingHistory.size();
 }
 
@@ -393,8 +404,8 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
     memAccessTracker->registerThreadSync(currentThread->tid, tid, currentSchedulingIndex);
   }
 
-   // Now remove all stack frames to cleanup
-   while (!thread->stack.empty()) {
+   // Now remove all stack frames except the last one, because otherwise the stats tracker may fail
+   while (thread->stack.size() > 1) {
     popFrameOfThread(thread);
   }
 }
