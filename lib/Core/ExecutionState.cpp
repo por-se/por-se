@@ -426,16 +426,9 @@ void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::Thr
 void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
   EpochDependencies* dep = getCurrentEpochDependencies();
 
-  for (auto e : dep->dependencies) {
+  for (auto& e : dep->dependencies) {
     // Make sure that we actually have not already added this info
     if (e.scheduleIndex == d.scheduleIndex && e.tid == d.tid) {
-      e.reason |= d.reason;
-      return;
-    }
-
-    // And check if the now given info is more recent than one that we already saved
-    if (e.scheduleIndex < d.scheduleIndex && e.tid == d.tid) {
-      e.scheduleIndex = d.scheduleIndex;
       e.reason |= d.reason;
       return;
     }

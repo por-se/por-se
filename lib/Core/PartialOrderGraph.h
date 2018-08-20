@@ -11,10 +11,19 @@ namespace klee {
       struct Node;
 
       struct ScheduleResult {
+        /// @brief the state that is now completely discovered
         ExecutionState* finishedState = nullptr;
+
+        /// @brief states that are added in this step, but are not active for now
         std::vector<ExecutionState*> newInactiveStates;
+
+        /// @brief states that we activated again after being inactive
         std::vector<ExecutionState*> reactivatedStates;
+
+        /// @brief states that were added
         std::vector<ExecutionState*> newStates;
+
+        /// @brief states that we do no longer need
         std::vector<ExecutionState*> stoppedStates;
       };
 
@@ -55,12 +64,12 @@ namespace klee {
 
           std::set<Thread::ThreadId> possibleOtherSchedules;
 
-          ExecutionState* pausedState = nullptr;
+          ExecutionState* resultingState = nullptr;
 
           std::vector<Tree*> foreignTrees;
 
           Node() = default;
-          // ~Node();
+          ~Node();
       };
 
     private:
@@ -71,36 +80,56 @@ namespace klee {
           /// @brief this is the trees own root
           Node* root = nullptr;
 
+          /// @brief our history in this fork
           std::vector<Node*> scheduleHistory;
 
           /* Below is everything we need for being a forked tree */
 
-          bool isFork = false;
-
+          /// @brief if unable to null, then this is the tree that we are a fork from
           Tree* parentTree = nullptr;
-
-          Node* forkedAtNode = nullptr;
 
           /* And the reasoning why we forked */
 
+          /// @brief the node in the parent tree that caused this fork
           Node* forkTriggerNode = nullptr;
+
+          /// @brief the node in the parent tree that the other depended on
+          Node* forkReasonNode = nullptr;
+
+          /// @brief the current index in the parent tree that we have to mimic in this fork
+          Node* shadowScheduleNode = nullptr;
 
           Tree() = default;
           Tree(Node* forkAtNode, Tree* parent);
+          ~Tree();
 
+          /// @brief will add all results that are important to the scheduling and reactive forks
           void registerEpochResult(ScheduleResult& result, ExecutionState* state);
+
+          /// @brief will determine the next thread that should be executed by this tree
+          void scheduleNextThread(ScheduleResult& result, ExecutionState* state);
+
+          /// @brief will activate the fork that this dependency hints at
+          std::pair<Tree*, ExecutionState*> activateScheduleFork(ScheduleResult &result, ScheduleDependency *dep);
+
+          /// @brief will use the data of the latest node in order to find necessary forks
+          std::vector<std::pair<Tree*, ExecutionState*>> checkForNecessaryForks(ScheduleResult& result);
       };
 
     private:
+      /// @brief the root tree that started everything
       Tree* rootTree = nullptr;
 
+      /// @brief a map of all active trees and their corresponding states
       std::map<ExecutionState*, Tree*> responsibleTrees;
 
     public:
+      /// @brief starts an po graph with this state as the basis
       explicit PartialOrderGraph(ExecutionState* state);
       ~PartialOrderGraph();
 
-      ScheduleResult registerEpochResult(ExecutionState* state);
+      /// @brief adds all data from the state and will return all resulting schedule changes
+      ScheduleResult processEpochResult(ExecutionState *state);
 
       /// @brief dumps a graph of the tree
       void dump(llvm::raw_ostream &os);
