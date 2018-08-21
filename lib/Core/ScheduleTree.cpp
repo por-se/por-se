@@ -45,7 +45,7 @@ bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &has
     }
 
     bool scheduledThread = sThreads.find(n->tid) != sThreads.end();
-    if (!scheduledThread) {
+    if (!scheduledThread && false) {
       // Even if there was a thread scheduled that we did not have in the current
       // list, we can merge them still if they had no interference
       bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded, sThreads);

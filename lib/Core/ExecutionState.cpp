@@ -286,17 +286,6 @@ void ExecutionState::assembleDependencyIndicator() {
 
 void ExecutionState::endCurrentEpoch() {
   assembleDependencyIndicator();
-
-  Thread::ThreadId tid = getCurrentThreadReference()->tid;
-  EpochDependencies* deps = getCurrentEpochDependencies();
-  for (auto& dep : deps->dependencies) {
-    if (dep.tid == tid) {
-      continue;
-    }
-
-    memAccessTracker->registerThreadSync(dep.tid, tid, dep.scheduleIndex);
-  }
-
   completedScheduleCount = schedulingHistory.size();
 }
 
@@ -443,6 +432,11 @@ void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
       e.reason |= d.reason;
       return;
     }
+  }
+
+  Thread::ThreadId tid = getCurrentThreadReference()->getThreadId();
+  if (d.tid != tid) {
+    memAccessTracker->registerThreadSync(d.tid, tid, d.scheduleIndex);
   }
 
   dep->dependencies.push_back(d);

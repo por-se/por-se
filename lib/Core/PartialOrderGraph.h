@@ -42,9 +42,10 @@ namespace klee {
       /// @brief a node represents a schedule decision that happened after the parent nodes decisions
       struct Node {
           friend class PartialOrderGraph;
-          friend class Tree;
 
         private:
+          friend class Tree;
+
           /// @brief used to step through the schedule serialization
           Node* parent = nullptr;
 
@@ -100,8 +101,11 @@ namespace klee {
           /// @brief the node in the parent tree that the other depended on
           Node* forkReasonNode = nullptr;
 
-          /// @brief the current index in the parent tree that we have to mimic in this fork
-          Node* shadowScheduleNode = nullptr;
+          /// @brief a schedule we should follow for as long as possible
+          std::vector<Node*> shadowSchedule;
+
+          /// @brief the current index in the shadow schedule that we have to mimic in this fork
+          uint64_t shadowScheduleIterator = 0;
 
           Tree() = default;
           Tree(Node* forkAtNode, Tree* parent);
@@ -114,7 +118,8 @@ namespace klee {
           void scheduleNextThread(ScheduleResult& result, ExecutionState* state);
 
           /// @brief will activate the fork that this dependency hints at
-          std::pair<Tree*, ExecutionState*> activateScheduleFork(ScheduleResult &result, ScheduleDependency *dep);
+          std::pair<PartialOrderGraph::Tree*, ExecutionState*>
+          activateScheduleFork(Tree* base, Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result);
 
           /// @brief will use the data of the latest node in order to find necessary forks
           std::vector<std::pair<Tree*, ExecutionState*>> checkForNecessaryForks(ScheduleResult& result);

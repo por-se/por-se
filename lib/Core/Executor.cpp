@@ -3822,7 +3822,7 @@ void Executor::runFunctionAsMain(Function *f,
     scheduleTree = nullptr;
   }
 
-  if (scheduleTree != nullptr) {
+  if (poGraph != nullptr) {
     if (DumpTreeOnEnd && os) {
       poGraph->dump(*os);
       delete os;
@@ -4201,6 +4201,12 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   }
 
   if (!access.safeMemoryAccess) {
+    // So before we actually exit the state, we have to register all results up to now in the tree
+    if (SameScheduleAnalysis == PARTIAL_ORDER) {
+      state.endCurrentEpoch();
+      scheduleThreadsWithPartialOrder(state);
+    }
+
     exitWithUnsafeMemAccess(state, mo);
   } else {
     for (auto dep : result.dataDependencies) {
@@ -4325,6 +4331,16 @@ void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
       }
     }
 
+    if (DumpTreeOnEnd) {
+      char name[32];
+      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        printScheduleDag(*os, state);
+        delete os;
+      }
+    }
+
     if (!allExited) {
       exitWithDeadlock(state);
     } else {
@@ -4413,18 +4429,18 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
       }
     }
 
+    if (DumpTreeOnEnd) {
+      char name[32];
+      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        printScheduleDag(*os, state);
+        delete os;
+      }
+    }
+
     if (allExited) {
       terminateStateOnExit(state);
-
-      if (DumpTreeOnEnd) {
-        char name[32];
-        sprintf(name, "schedule%08d.dot", (int) stats::instructions);
-        llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-        if (os) {
-          printScheduleDag(*os, state);
-          delete os;
-        }
-      }
     } else {
       exitWithDeadlock(state);
     }

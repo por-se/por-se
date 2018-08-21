@@ -82,29 +82,29 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
   Thread::ThreadId tid = NO_RESULT;
   bool addAlternatives = true;
 
-  if (shadowScheduleNode != nullptr) {
+  if (!shadowSchedule.empty()) {
     // So if we follow a shadow schedule then we want to rework this schedule as best as possible
     // up to the destination node (forkTriggerNode);
 
-    while (shadowScheduleNode != nullptr) {
-      if (shadowScheduleNode == forkReasonNode) {
+    while (shadowScheduleIterator < shadowSchedule.size()) {
+      Node* shadowNode = shadowSchedule[shadowScheduleIterator];
+
+      if (shadowNode == forkReasonNode || shadowNode->tid == forkReasonNode->tid) {
         // we should definitely just skip this node, we want to execute the node
         // after the actual fork trigger node
-        shadowScheduleNode = shadowScheduleNode->directChild;
+        shadowScheduleIterator++;
         continue;
       }
 
-      Thread::ThreadId t = shadowScheduleNode->tid;
-      if (shadowScheduleNode == forkTriggerNode) {
+      Thread::ThreadId t = shadowNode->tid;
+      if (shadowNode == forkTriggerNode) {
         // Do not continue any further since we now try to schedule the thread that was previously dependent
-        shadowScheduleNode = nullptr;
+        shadowSchedule.clear();
       }
 
       if (state->runnableThreads.find(t) == state->runnableThreads.end()) {
         // So this thread is not executable, skip it
-        if (shadowScheduleNode != nullptr) {
-          shadowScheduleNode = shadowScheduleNode->directChild;
-        }
+        shadowScheduleIterator++;
         continue;
       }
 
@@ -123,7 +123,7 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
 
     if (state->runnableThreads.find(t) != state->runnableThreads.end()) {
       tid = t;
-      addAlternatives = false;
+      // addAlternatives = false;
     }
   }
 
@@ -151,10 +151,12 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
   }
 }
 
-std::pair<PartialOrderGraph::Tree*, ExecutionState*> PartialOrderGraph::Tree::activateScheduleFork(ScheduleResult &result, ScheduleDependency *dep) {
-  Node* triggerNode = scheduleHistory.back();
-  Node* forkReasonNode = dep->referencedNode;
-  Node* forkAt = forkReasonNode->parent;
+std::pair<PartialOrderGraph::Tree*, ExecutionState*>
+PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result) {
+  // So the basic semantic is: we want to fork from this thread and want to use
+  // the shadow schedule of the `base` tree
+
+  Node* forkAt = dep->referencedNode->parent;
 
   assert(forkAt != nullptr && "We have to have a base in order to fork the tree");
 
@@ -163,10 +165,18 @@ std::pair<PartialOrderGraph::Tree*, ExecutionState*> PartialOrderGraph::Tree::ac
     return std::make_pair(nullptr, nullptr);
   }
 
-  Tree* fork = new Tree(forkAt, this);
+  Tree* fork = new Tree(forkAt, base);
+  fork->shadowSchedule.resize(triggerNode->scheduleIndex - forkAt->scheduleIndex, nullptr);
+
+  // Now add the shadow schedule
+  Node* n = triggerNode;
+  while (n != forkAt) {
+    fork->shadowSchedule[(n->scheduleIndex - forkAt->scheduleIndex) - 1] = n;
+    n = n->parent;
+  }
+
   fork->forkTriggerNode = triggerNode;
-  fork->shadowScheduleNode = forkAt->directChild;
-  fork->forkReasonNode = forkReasonNode;
+  fork->forkReasonNode = dep->referencedNode;
 
   // Now start the actual fork or more like try it
   fork->scheduleNextThread(result, forkAt->resultingState);
@@ -198,7 +208,8 @@ std::pair<PartialOrderGraph::Tree*, ExecutionState*> PartialOrderGraph::Tree::ac
   return std::make_pair(fork, state);
 }
 
-std::vector<std::pair<PartialOrderGraph::Tree*, ExecutionState*>> PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
+std::vector<std::pair<PartialOrderGraph::Tree*, ExecutionState*>>
+PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
   Node* node = scheduleHistory.back();
 
   if (node->dependencies.empty()) {
@@ -234,14 +245,23 @@ std::vector<std::pair<PartialOrderGraph::Tree*, ExecutionState*>> PartialOrderGr
       continue;
     }
 
-    // So we want to disallow forks beyond our own tree. (These would often create duplicates)
-    // so make sure that the resulting fork node is in our own tree
+    // So in general we want to disallow forks beyond our own tree.
+    // (These would often create duplicates) so make sure that the resulting fork node is in our own tree
+    // or that the referenced node is our base fork it
+    if (parentTree != nullptr && dep->scheduleIndex == root->scheduleIndex) {
+      auto fork = parentTree->activateScheduleFork(this, scheduleHistory.back(), dep, result);
+      if (fork.first != nullptr) {
+        newForks.push_back(fork);
+        continue;
+      }
+    }
+
     if (dep->scheduleIndex + 1 < root->scheduleIndex) {
       continue;
     }
 
     // Now try to trigger an alternative schedule
-    auto f = activateScheduleFork(result, dep);
+    auto f = activateScheduleFork(this, scheduleHistory.back(), dep, result);
     if (f.first != nullptr) {
       newForks.push_back(f);
     }
@@ -284,11 +304,6 @@ PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(Executio
   // Step one is to register all results during the current schedule phase
   tree->registerEpochResult(result, state);
 
-  if (state->runnableThreads.empty()) {
-    result.finishedState = state;
-    return result;
-  }
-
   // So we recorded everything we needed, now save the resulting state if we can use this node
   // as a fork node ->  so basically only if we can fork for another thread
   if (state->runnableThreads.size() >= 2) {
@@ -299,6 +314,11 @@ PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(Executio
   std::vector<std::pair<Tree*, ExecutionState*>> newForks = tree->checkForNecessaryForks(result);
   for (auto f : newForks) {
     responsibleTrees[f.second] = f.first;
+  }
+
+  if (state->runnableThreads.empty()) {
+    result.finishedState = state;
+    return result;
   }
 
   // Now schedule the new thread, if we are not yet finished
@@ -349,9 +369,11 @@ void PartialOrderGraph::dump(llvm::raw_ostream &os) {
       bool isMemory = (dep.reason & 1) == 1;
       bool isOther = (dep.reason & (2 | 4 | 8)) != 0;
 
-      if (isMemory && !isOther) {
+      if (isMemory) {
         os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\", color=gray];\n";
-      } else {
+      }
+
+      if (isOther) {
         os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
       }
     }
