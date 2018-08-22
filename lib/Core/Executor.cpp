@@ -3975,9 +3975,10 @@ void Executor::runFunctionAsMain(Function *f,
 
   char name[32];
   sprintf(name, "scheduleTree.dot");
-  llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
 
   if (scheduleTree != nullptr) {
+    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+
     if (DumpTreeOnEnd && os) {
       scheduleTree->dump(*os);
       delete os;
@@ -3988,6 +3989,8 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   if (poGraph != nullptr) {
+    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+
     if (DumpTreeOnEnd && os) {
       poGraph->dump(*os);
       delete os;

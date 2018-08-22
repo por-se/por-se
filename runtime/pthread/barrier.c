@@ -19,7 +19,7 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
   __pthread_impl_barrier* barrier = malloc(sizeof(__pthread_impl_barrier));
   if (barrier == NULL) {
     klee_toggle_thread_scheduling(1);
-    return EAGAIN;
+    return ENOMEM;
   }
 
   memset(barrier, 0, sizeof(__pthread_impl_barrier));
