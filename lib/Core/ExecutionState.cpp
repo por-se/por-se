@@ -56,6 +56,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     onlyOneThreadRunnableSinceEpochStart(true),
     completedScheduleCount(0),
     threadSchedulingEnabled(true),
+    atomicPhase(false),
 
     queryCost(0.), 
     weight(1),
@@ -124,6 +125,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
     threadSchedulingEnabled(state.threadSchedulingEnabled),
+    atomicPhase(state.atomicPhase),
     scheduleDependencies(state.scheduleDependencies),
 
     addressSpace(state.addressSpace),
@@ -223,20 +225,14 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
   runnableThreads.insert(newThread->getThreadId());
   newThread->state = Thread::RUNNABLE;
 
-  // The newly spawned thread will be in sync will all the others
-  // that are currently running so safe this info
-  for (auto& threadIt : threads) {
-    Thread::ThreadId itTid = threadIt.second.getThreadId();
-    if (itTid == tid) {
-      continue;
-    }
-
-    memAccessTracker->registerThreadSync(itTid, tid, currentSchedulingIndex);
-  }
+  // We cannot sync the current thread with the others as the others since we can not
+  // infer any knowledge from them
+  Thread::ThreadId curTid = getCurrentThreadReference()->getThreadId();
+  memAccessTracker->registerThreadDependency(tid, curTid, currentSchedulingIndex);
 
   ScheduleDependency dep{};
   dep.scheduleIndex = currentSchedulingIndex;
-  dep.tid = getCurrentThreadReference()->getThreadId();
+  dep.tid = curTid;
   dep.reason = THREAD_CREATION;
   forwardDeclaredDependencies.insert(std::make_pair(newThread->getThreadId(), dep));
 
@@ -370,7 +366,7 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
-    memAccessTracker->registerThreadSync(curThreadId, tid, currentSchedulingIndex);
+    memAccessTracker->registerThreadDependency(tid, curThreadId, currentSchedulingIndex);
 
     ScheduleDependency dep{};
     dep.scheduleIndex = currentSchedulingIndex;
@@ -390,7 +386,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 
   Thread* currentThread = getCurrentThreadReference();
   if (currentThread->getThreadId() != thread->getThreadId()) {
-    memAccessTracker->registerThreadSync(currentThread->tid, tid, currentSchedulingIndex);
+    memAccessTracker->registerThreadDependency(tid, currentThread->tid, currentSchedulingIndex);
   }
 
    // Now remove all stack frames except the last one, because otherwise the stats tracker may fail
@@ -405,13 +401,14 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
     MemoryAccess access;
     access.type = type;
     access.offset = offset;
-    access.safeMemoryAccess = !threadSchedulingEnabled;
+    access.atomicMemoryAccess = atomicPhase;
+    access.safeMemoryAccess = !threadSchedulingEnabled || atomicPhase;
 
     memAccessTracker->trackMemoryAccess(mo->getId(), access);
   }
 }
 
-void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, ScheduleReason r) {
+void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, DependencyReason r) {
   // so we only have the information about when something has happened
   // but now how often the referenced thread did execute
 
@@ -424,6 +421,9 @@ void ExecutionState::trackScheduleDependency(uint64_t scheduleIndex, Thread::Thr
 }
 
 void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
+  assert(d.reason != 0 && "There has to be a reason");
+  assert(d.scheduleIndex < currentSchedulingIndex && "The references have to point to the past");
+
   EpochDependencies* dep = getCurrentEpochDependencies();
 
   for (auto& e : dep->dependencies) {
@@ -435,8 +435,8 @@ void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
   }
 
   Thread::ThreadId tid = getCurrentThreadReference()->getThreadId();
-  if (d.tid != tid) {
-    memAccessTracker->registerThreadSync(d.tid, tid, d.scheduleIndex);
+  if (d.tid != tid && (d.reason & ~ATOMIC_MEMORY_ACCESS) != 0) {
+    memAccessTracker->registerThreadDependency(tid, d.tid, d.scheduleIndex);
   }
 
   dep->dependencies.push_back(d);

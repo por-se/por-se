@@ -46,16 +46,17 @@ public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
-  typedef uint8_t ScheduleReason;
-  static const ScheduleReason MEMORY_ACCESS = 1;
-  static const ScheduleReason THREAD_CREATION = 2;
-  static const ScheduleReason THREAD_WAKEUP = 4;
-  static const ScheduleReason PREDECESSOR = 8;
+  typedef uint8_t DependencyReason;
+  static const DependencyReason SAFE_MEMORY_ACCESS = 1;
+  static const DependencyReason ATOMIC_MEMORY_ACCESS = 2;
+  static const DependencyReason THREAD_CREATION = 4;
+  static const DependencyReason THREAD_WAKEUP = 8;
+  static const DependencyReason PREDECESSOR = 16;
 
   struct ScheduleDependency {
     uint64_t scheduleIndex;
     Thread::ThreadId tid;
-    ScheduleReason reason;
+    DependencyReason reason;
 
     ScheduleDependency() = default;
     ScheduleDependency(const ScheduleDependency &d) = default;
@@ -111,6 +112,9 @@ public:
 
   /// @brief if thread scheduling is enabled at the current time
   bool threadSchedulingEnabled;
+
+  /// @brief if the current state is in an temporary atomic phase
+  bool atomicPhase;
 
   // Thread scheduling specific state data
 
@@ -214,7 +218,7 @@ public:
 
   void trackScheduleDependency(ScheduleDependency dep);
 
-  void trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, ScheduleReason r);
+  void trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, DependencyReason r);
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState

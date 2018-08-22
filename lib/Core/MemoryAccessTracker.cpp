@@ -108,87 +108,31 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
   accesses.emplace_back(newAccess);
 }
 
-void MemoryAccessTracker::registerThreadSync(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch) {
-  uint64_t* v = getThreadsSyncValue(tid1, tid2);
+void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch) {
+  uint64_t* v = getThreadSyncValueTo(tid1, tid2);
 
-  if (*v < epoch) {
-    *v = epoch;
-  } else {
+  if (*v >= epoch) {
     return;
   }
 
-  // But since these threads are now in sync; we need to rebalance all other threads
-  // as well, consider: if one thread has synced  with a third at a later state than
-  // the other thread, then we know now for sure that the sync will be transitive:
-  // We indirectly sync with the thread through the other one
-
-  for (Thread::ThreadId tid : knownThreads) {
-    if (tid == tid1 || tid2 == tid) {
-      continue;
-    }
-
-    uint64_t* with1 = getThreadsSyncValue(tid, tid1);
-    uint64_t* with2 = getThreadsSyncValue(tid, tid2);
-
-    if (*with1 == *with2) {
-      continue;
-    }
-
-    // Now find the one that is more recent than the other and update the values
-    if (*with2 < *with1) {
-      *with2 = *with1;
-    } else if (*with2 > *with1) {
-      *with1 = *with2;
-    }
-  }
-
-//  for (auto& threadSyncIt : thread->threadSyncs) {
-//    Thread::ThreadId thirdPartyTid = threadSyncIt.first;
-//
-//    // We just synced them above so safely skip them
-//    if (thirdPartyTid == curThreadId) {
-//      continue;
-//    }
-//
-//    uint64_t threadSyncedAt = threadSyncIt.second;
-//    uint64_t curThreadSyncedAt = currentThread->threadSyncs[thirdPartyTid];
-//
-//    // Another safe skip as we are at the same state
-//    if (threadSyncedAt == curThreadSyncedAt) {
-//      continue;
-//    }
-//
-//    auto thThreadPair = threads.find(thirdPartyTid);
-//    assert(thThreadPair != threads.end() && "Could not find referenced thread");
-//    Thread* thirdPartyThread = &(thThreadPair->second);
-//
-//    // Now find the one that is more recent than the other and update the values
-//    if (threadSyncedAt < curThreadSyncedAt) {
-//      thread->threadSyncs[thirdPartyTid] = curThreadSyncedAt;
-//      thirdPartyThread->threadSyncs[tid] = curThreadSyncedAt;
-//    } else if (threadSyncedAt < curThreadSyncedAt) {
-//      currentThread->threadSyncs[thirdPartyTid] = threadSyncedAt;
-//      thirdPartyThread->threadSyncs[curThreadId] = threadSyncedAt;
-//    }
-//  }
+  *v = epoch;
 
   // TODO: try to use this info in order to prune old memory accesses, that we no longer need to keep
 }
 
-uint64_t* MemoryAccessTracker::getThreadsSyncValue(Thread::ThreadId tid1, Thread::ThreadId tid2) {
-  assert(tid1 != tid2 && "ThreadIds have to be unequal");
+uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
+  assert(tid != reference && "ThreadIds have to be unequal");
+  uint64_t max = std::max(tid, reference);
 
-  uint64_t min = std::min(tid1, tid2);
-  uint64_t max = std::max(tid1, tid2);
+  if (max + 1 > threadSyncs.size()) {
+    threadSyncs.resize(max + 1);
 
-  if (max > threadSyncs.size()) {
-    threadSyncs.resize(max);
-    for (uint64_t i = 0; i < threadSyncs.size(); i++) {
-      threadSyncs[i].resize(max - i, 0);
+    for (auto &threadSync : threadSyncs) {
+      threadSync.resize(max + 1, 0);
     }
   }
 
-  return &threadSyncs[min][max - min - 1];
+  return &threadSyncs[tid][reference];
 }
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
@@ -204,7 +148,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
   bool isFree = (access.type & FREE_ACCESS);
   bool isAlloc = (access.type & ALLOC_ACCESS);
 
-  uint64_t sync = *getThreadsSyncValue(tid, curTid);
+  uint64_t sync = *getThreadSyncValueTo(curTid, tid);
   auto ema = accessLists[exec];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
@@ -223,7 +167,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       // One access pattern that is especially dangerous is an unprotected free
       // every combination is unsafe (read + free, write + free, ...)
       if (isFree || (a.type & FREE_ACCESS)) {
-        if (!a.safeMemoryAccess) {
+        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
           return;
         }
@@ -238,7 +182,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       // Another unsafe memory access pattern: the operation is not explicitly
       // ordered with the other thread and thus can happen in the reverse order
       if (isAlloc || (a.type & ALLOC_ACCESS)) {
-        if (!a.safeMemoryAccess) {
+        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
           return;
         }
@@ -258,7 +202,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       }
 
       if (a.offset == access.offset) {
-        if (!a.safeMemoryAccess) {
+        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
           return;
         }
@@ -278,7 +222,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       }
 
       // So add it to the ones we want to test
-      if (!a.safeMemoryAccess) {
+      if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
         result.possibleCandidates.push_back(a);
       }
     }

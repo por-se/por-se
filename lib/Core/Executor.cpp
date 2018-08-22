@@ -2626,6 +2626,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::AtomicRMW: {
     // An atomic instruction gets a pointer and a value. It reads the value at the pointer, perfoms its operation, stores the result and returns the value that was originally at the pointer.
     AtomicRMWInst *ai = cast<AtomicRMWInst>(i);
+
+    bool wasAtomicPhase = state.atomicPhase;
+    state.atomicPhase = true;
+
     switch (ai->getOperation()) {
     case AtomicRMWInst::Xchg: {
       ref<Expr> pointer = eval(ki, 0, state).value;
@@ -2758,10 +2762,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
     case AtomicRMWInst::BAD_BINOP: terminateStateOnExecError(state, "Bad atomicrmw operation"); break;
     }
+
+    state.atomicPhase = wasAtomicPhase;
+
     break;
   }
 
   case Instruction::AtomicCmpXchg: {
+    bool wasAtomicPhase = state.atomicPhase;
+    state.atomicPhase = true;
+
     ref<Expr> pointer = eval(ki, 0, state).value;
     ref<Expr> compare = eval(ki, 1, state).value;
     ref<Expr> newValue = eval(ki, 2, state).value;
@@ -2772,6 +2782,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> write = SelectExpr::create(EqExpr::create(oldValue, compare), newValue, oldValue);
 
     executeMemoryOperation(state, true, pointer, write, 0);
+
+    state.atomicPhase = wasAtomicPhase;
     break;
   }
 
@@ -4269,6 +4281,8 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   access.offset = offset;
   access.type = type;
   access.safeMemoryAccess = false;
+  access.atomicMemoryAccess = state.atomicPhase;
+
   MemAccessSafetyResult result = state.memAccessTracker->testIfUnsafeMemoryAccess(mo->getId(), access);
 
   if (result.possibleCandidates.empty()) {
@@ -4362,9 +4376,18 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
 
     exitWithUnsafeMemAccess(state, mo);
   } else {
-    for (auto dep : result.dataDependencies) {
-      state.trackScheduleDependency(dep.second, dep.first, ExecutionState::MEMORY_ACCESS);
+    ExecutionState::DependencyReason reason = 0;
+
+    if (access.atomicMemoryAccess) {
+      reason |= ExecutionState::ATOMIC_MEMORY_ACCESS;
+    } else {
+      reason |= ExecutionState::SAFE_MEMORY_ACCESS;
     }
+
+    for (auto dep : result.dataDependencies) {
+      state.trackScheduleDependency(dep.second, dep.first, reason);
+    }
+
     state.trackMemoryAccess(mo, offset, type);
   }
 
@@ -4450,8 +4473,11 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
       std::string dName = "n" + std::to_string(state.schedulingHistory[dep.scheduleIndex].dependencyHash);
 
       std::string reason;
-      if (dep.reason & ExecutionState::MEMORY_ACCESS) {
+      if (dep.reason & ExecutionState::SAFE_MEMORY_ACCESS) {
         reason += "memory ";
+      }
+      if (dep.reason & ExecutionState::ATOMIC_MEMORY_ACCESS) {
+        reason += "atomic ";
       }
       if (dep.reason & ExecutionState::THREAD_CREATION) {
         reason += "create ";

@@ -14,6 +14,8 @@ namespace klee {
   struct MemoryAccess {
     uint8_t type = 0;
     ref<Expr> offset;
+
+    bool atomicMemoryAccess = false;
     bool safeMemoryAccess = false;
 
     MemoryAccess() = default;
@@ -59,7 +61,7 @@ namespace klee {
 
       void forkCurrentEpochWhenNeeded();
 
-      uint64_t* getThreadsSyncValue(Thread::ThreadId tid1, Thread::ThreadId tid2);
+      uint64_t* getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference);
 
       void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
                                          uint64_t id, MemoryAccess &access);
@@ -72,7 +74,7 @@ namespace klee {
 
       void trackMemoryAccess(uint64_t id, MemoryAccess access);
 
-      void registerThreadSync(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch);
+      void registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch);
 
       MemAccessSafetyResult testIfUnsafeMemoryAccess(uint64_t id, MemoryAccess &access);
   };
