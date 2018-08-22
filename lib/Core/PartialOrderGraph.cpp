@@ -1,10 +1,11 @@
-#include <utility>
+#include <list>
 
 #include "PartialOrderGraph.h"
 
 using namespace klee;
 
 static const Thread::ThreadId NO_RESULT = ~((uint64_t) 0);
+static const ExecutionState::DependencyReason WEAK_DEPENDENCIES = ExecutionState::ATOMIC_MEMORY_ACCESS | ExecutionState::SAFE_MEMORY_ACCESS;
 
 static ExecutionState* DEFAULT_PROVIDER(ExecutionState* st) {
   return st->branch();
@@ -36,6 +37,8 @@ PartialOrderGraph::Tree::Tree(Node* n, Tree* parent) {
 
 PartialOrderGraph::Tree::~Tree() {
   delete(root);
+  delete(forkReason);
+
   scheduleHistory.clear();
 }
 
@@ -80,16 +83,17 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
 
   // There are different possible heuristics/rules on which thread to schedule
   Thread::ThreadId tid = NO_RESULT;
-  bool addAlternatives = true;
 
   if (!shadowSchedule.empty()) {
     // So if we follow a shadow schedule then we want to rework this schedule as best as possible
     // up to the destination node (forkTriggerNode);
+    Node* forkReasonNode = forkReason->dependency;
+    Node* forkTriggerNode = forkReason->dependent;
 
     while (shadowScheduleIterator < shadowSchedule.size()) {
       Node* shadowNode = shadowSchedule[shadowScheduleIterator];
 
-      if (shadowNode == forkReasonNode || shadowNode->tid == forkReasonNode->tid) {
+      if (shadowNode->tid == forkReasonNode->tid && shadowNode->scheduleIndex >= forkReasonNode->scheduleIndex) {
         // we should definitely just skip this node, we want to execute the node
         // after the actual fork trigger node
         shadowScheduleIterator++;
@@ -98,6 +102,10 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
 
       Thread::ThreadId t = shadowNode->tid;
       if (shadowNode == forkTriggerNode) {
+        assert(state->runnableThreads.find(t) != state->runnableThreads.end());
+
+        changedNode = node;
+
         // Do not continue any further since we now try to schedule the thread that was previously dependent
         shadowSchedule.clear();
       }
@@ -110,20 +118,9 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
 
       // When we are in a fork, then we do not want to track the alternatives for as long as we recreate the
       // initial schedule
-      addAlternatives = false;
       tid = t;
+      shadowScheduleIterator++;
       break;
-    }
-  }
-
-  if (tid == NO_RESULT && forkReasonNode != nullptr) {
-    // So we have to schedule the node that we previously had to depend on
-    Thread::ThreadId t = forkReasonNode->tid;
-    forkReasonNode = nullptr;
-
-    if (state->runnableThreads.find(t) != state->runnableThreads.end()) {
-      tid = t;
-      // addAlternatives = false;
     }
   }
 
@@ -139,7 +136,7 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
 
   // So we found a thread id. Setup everything
   node->tid = tid;
-  if (!addAlternatives) {
+  if (lastNode->scheduleIndex < root->scheduleIndex) {
     return;
   }
 
@@ -175,8 +172,9 @@ PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, Sch
     n = n->parent;
   }
 
-  fork->forkTriggerNode = triggerNode;
-  fork->forkReasonNode = dep->referencedNode;
+  fork->forkReason = new PartialOrdering();
+  fork->forkReason->dependency = dep->referencedNode;
+  fork->forkReason->dependent = triggerNode;
 
   // Now start the actual fork or more like try it
   fork->scheduleNextThread(result, forkAt->resultingState);
@@ -208,6 +206,51 @@ PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, Sch
   return std::make_pair(fork, state);
 }
 
+bool PartialOrderGraph::Tree::checkIfPermutable(Node *dependency, Node *dependent) {
+  // So first of all we should check if we can actually change the order
+  std::list<Node*> stillToCheck = { dependent };
+
+  // So our checks should not go out of the current tree and should not
+  // go beyond the `dependency`
+  while (!stillToCheck.empty()) {
+    Node* n = stillToCheck.front();
+    stillToCheck.pop_front();
+
+    // So if this node that we depend on is actually to either our 'weak' dependency (or a later execution
+    // of the same thread), then we cannot change the scheduling
+    if (n->tid == dependency->tid && n->scheduleIndex >= dependency->scheduleIndex) {
+      return false;
+    }
+
+    for (auto& dep : n->dependencies) {
+      uint8_t filteredReasons = dep.reason & ~WEAK_DEPENDENCIES;
+
+      // So first of all filter out all references that are week ones to the dependency from the dependent
+      if (n == dependent && dep.referencedNode == dependency && filteredReasons == 0) {
+        continue;
+      }
+
+      // So this dependency is before our current analysis window; abort
+      if (dep.referencedNode->scheduleIndex < dependency->scheduleIndex) {
+        continue;
+      }
+
+      stillToCheck.push_back(dep.referencedNode);
+    }
+  }
+
+  // So we actually can put it before the `dependency` node. So make sure that we do not duplicate efforts
+  // that we did in another fork
+  if (parentTree == nullptr) {
+    // We are actually no fork so we cannot revert and changes in the fork
+    return true;
+  }
+
+  // If we change the already changed node again based on the previously executed change then
+  // we would just recreate the previous situation
+  return !(changedNode != nullptr && changedNode == dependency && dependent->tid == forkReason->dependency->tid);
+}
+
 std::vector<std::pair<PartialOrderGraph::Tree*, ExecutionState*>>
 PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
   Node* node = scheduleHistory.back();
@@ -217,18 +260,9 @@ PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
     return std::vector<std::pair<Tree*, ExecutionState*>> {};
   }
 
-  // So we want to assemble an vector of all weak dependencies that we can fork
-  // -> so basically all that are not beyond hard ones
-  uint64_t latestHardDependency = 0;
-
   std::vector<ScheduleDependency*> forkCandidates;
   for (auto& dep : node->dependencies) {
-    bool isMemory = (dep.reason & 1) != 0;
-    bool isOther = (dep.reason & (8 | 4 | 2)) != 0;
-
-    if (isOther && latestHardDependency < dep.scheduleIndex) {
-      latestHardDependency = dep.scheduleIndex;
-    }
+    bool isMemory = (dep.reason & (1 | 2)) != 0;
 
     if (isMemory) {
       forkCandidates.push_back(&dep);
@@ -241,21 +275,12 @@ PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
   for (auto dep : forkCandidates) {
     // If we depend on another hard dependency that is fresher than our memory dependency,
     // then this memory dependency does not really influence this schedule
-    if (dep->scheduleIndex <= latestHardDependency) {
+    if (!checkIfPermutable(dep->referencedNode, node)) {
       continue;
     }
 
     // So in general we want to disallow forks beyond our own tree.
     // (These would often create duplicates) so make sure that the resulting fork node is in our own tree
-    // or that the referenced node is our base fork it
-    if (parentTree != nullptr && dep->scheduleIndex == root->scheduleIndex) {
-      auto fork = parentTree->activateScheduleFork(this, scheduleHistory.back(), dep, result);
-      if (fork.first != nullptr) {
-        newForks.push_back(fork);
-        continue;
-      }
-    }
-
     if (dep->scheduleIndex + 1 < root->scheduleIndex) {
       continue;
     }
@@ -318,6 +343,8 @@ PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(Executio
 
   if (state->runnableThreads.empty()) {
     result.finishedState = state;
+    // TODO: cleanup shadow copies of all threads that are no longer needed
+
     return result;
   }
 
@@ -366,8 +393,8 @@ void PartialOrderGraph::dump(llvm::raw_ostream &os) {
     }
 
     for (auto& dep : n->dependencies) {
-      bool isMemory = (dep.reason & 1) == 1;
-      bool isOther = (dep.reason & (2 | 4 | 8)) != 0;
+      bool isMemory = (dep.reason & (1 | 2)) != 0;
+      bool isOther = (dep.reason & (4 | 8 | 16)) != 0;
 
       if (isMemory) {
         os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\", color=gray];\n";
@@ -384,7 +411,7 @@ void PartialOrderGraph::dump(llvm::raw_ostream &os) {
 
     for (auto t : n->foreignTrees) {
       os << "\tn" << n << " -> n" << t->root << "[penwidth=2,color=green];\n";
-      os << "\tn" << t->root << " -> n" << t->forkTriggerNode << "[style=dashed, color=green,constraint=false];\n";
+      os << "\tn" << t->root << " -> n" << t->forkReason->dependent << "[style=dashed, color=green,constraint=false];\n";
       stack.push_back(t->root);
     }
   }

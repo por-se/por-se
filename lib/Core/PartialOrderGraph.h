@@ -36,6 +36,11 @@ namespace klee {
         uint8_t reason;
       };
 
+      struct PartialOrdering {
+        Node* dependent;
+        Node* dependency;
+      };
+
       class Tree;
 
     public:
@@ -58,17 +63,21 @@ namespace klee {
           /// @brief a reference to the child in this tree
           Node* directChild = nullptr;
 
+          /// @brief the index of this node in the schedule history
           uint64_t scheduleIndex = 0;
 
           /// @brief the dependencies that were found so far
           std::vector<ScheduleDependency> dependencies;
 
-          // This is used for the subgraphing
+          // This is used in order to support forks of this tree
 
+          /// @brief all threads that are possible to execute as an alternative to the chosen tid in the next node
           std::set<Thread::ThreadId> possibleOtherSchedules;
 
+          /// @brief this is the state that was the result of the execution that was represented by this node
           ExecutionState* resultingState = nullptr;
 
+          /// @brief all other schedules that were started from this node
           std::vector<Tree*> foreignTrees;
 
           Node() = default;
@@ -91,15 +100,16 @@ namespace klee {
           /// @brief if unable to null, then this is the tree that we are a fork from
           Tree* parentTree = nullptr;
 
+          /// @brief a reference to the actual graph that this tree is part of
           PartialOrderGraph* graph = nullptr;
 
           /* And the reasoning why we forked */
 
-          /// @brief the node in the parent tree that caused this fork
-          Node* forkTriggerNode = nullptr;
+          /// @brief this is a link to the two nodes in the parent tree that caused this fork
+          PartialOrdering* forkReason = nullptr;
 
-          /// @brief the node in the parent tree that the other depended on
-          Node* forkReasonNode = nullptr;
+          /// @brief a reference to the node that should now have another dependency set
+          Node* changedNode = nullptr;
 
           /// @brief a schedule we should follow for as long as possible
           std::vector<Node*> shadowSchedule;
@@ -108,8 +118,13 @@ namespace klee {
           uint64_t shadowScheduleIterator = 0;
 
           Tree() = default;
+
+          /// @brief will use the node as the parent of this trees root and will register the tree as parent
           Tree(Node* forkAtNode, Tree* parent);
           ~Tree();
+
+          /// @brief checks if it is possible (based on schedule dependencies) to change the schedule order
+          bool checkIfPermutable(Node *dependency, Node *dependent);
 
           /// @brief will add all results that are important to the scheduling and reactive forks
           void registerEpochResult(ScheduleResult& result, ExecutionState* state);
