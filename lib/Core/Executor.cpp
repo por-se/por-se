@@ -3963,7 +3963,11 @@ void Executor::runFunctionAsMain(Function *f,
     scheduleTree = new ScheduleTree(state);
   } else if (SameScheduleAnalysis == PARTIAL_ORDER) {
     std::function<ExecutionState* (ExecutionState*)> function = [=](ExecutionState* st) -> ExecutionState* {
-      return forkToNewState(*st);
+      // So this would be the correct way to do, but this will add the state to the process tree and then
+      // searchers might activate it, even if it is not in the states set
+      // return forkToNewState(*st);
+
+      return st->branch();
     };
 
     poGraph = new PartialOrderGraph(state, function);
@@ -4425,22 +4429,26 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
-ExecutionState* Executor::forkToNewState(ExecutionState &state) {
-  ExecutionState* ns = state.branch();
-  // addedStates.push_back(ns);
-
+void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
   state.ptreeNode->data = nullptr;
-  auto res = processTree->split(state.ptreeNode, ns, &state);
-  ns->ptreeNode = res.first;
+
+  auto res = processTree->split(state.ptreeNode, fork, &state);
+  fork->ptreeNode = res.first;
   state.ptreeNode = res.second;
 
   if (pathWriter) {
-    ns->pathOS = pathWriter->open(state.pathOS);
+    fork->pathOS = pathWriter->open(state.pathOS);
   }
 
   if (symPathWriter) {
-    ns->symPathOS = symPathWriter->open(state.symPathOS);
+    fork->symPathOS = symPathWriter->open(state.symPathOS);
   }
+}
+
+ExecutionState* Executor::forkToNewState(ExecutionState &state) {
+  ExecutionState* ns = state.branch();
+
+  registerFork(state, ns);
 
   return ns;
 }
@@ -4505,6 +4513,29 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
 void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
   PartialOrderGraph::ScheduleResult result = poGraph->processEpochResult(&state);
 
+  for (auto st : result.stoppedStates) {
+    terminateStateSilently(*st);
+  }
+
+  // NOTE: We add the forks into the process tree only now, this is not how this is
+  // actually meant in klee. See the poGraph creation for more info on this
+
+  for (auto st : result.reactivatedStates) {
+    addedStates.push_back(st);
+    registerFork(state, st);
+  }
+
+  // We actually do not really need to add these to the paused states since they
+  // were never seen inside the searcher
+  // for (auto st : result.newInactiveStates) {
+  //   pausedStates.push_back(st);
+  // }
+
+  for (auto st : result.newStates) {
+    addedStates.push_back(st);
+    registerFork(state, st);
+  }
+
   if (result.finishedState != nullptr) {
     // Last sanity check if we actually ended because all threads did exit
     bool allExited = true;
@@ -4530,24 +4561,6 @@ void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
     } else {
       terminateStateOnExit(*result.finishedState);
     }
-  }
-
-  for (auto st : result.stoppedStates) {
-    terminateStateSilently(*st);
-  }
-
-  for (auto st : result.reactivatedStates) {
-    addedStates.push_back(st);
-  }
-
-  // We actually do not really need to add these to the paused states since they
-  // were never seen inside the searcher
-  for (auto st : result.newInactiveStates) {
-    // pausedStates.push_back(st);
-  }
-
-  for (auto st : result.newStates) {
-    addedStates.push_back(st);
   }
 }
 

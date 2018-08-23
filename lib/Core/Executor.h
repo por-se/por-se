@@ -492,6 +492,7 @@ private:
   bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
                            ref<Expr> offset, uint8_t type);
 
+  void registerFork(ExecutionState &state, ExecutionState* fork);
   ExecutionState* forkToNewState(ExecutionState &state);
 
   void scheduleThreadsWithPartialOrder(ExecutionState &state);
