@@ -167,7 +167,14 @@ namespace klee {
           /// @brief the current index in the shadow schedule that we have to mimic in this fork
           uint64_t shadowScheduleIterator = 0;
 
+          /// @brief the ordering restrictions that we have assembled so far
           std::vector<OrderingRelation*> restrictions;
+
+          /// @brief how many active leafs can be reached based off this tree
+          uint64_t activeLeafs = 0;
+
+          /// @brief if the whole tree is now ready and everything is not cleaned
+          bool finished = false;
 
           Tree() = default;
 
@@ -175,8 +182,10 @@ namespace klee {
           Tree(Node* forkAtNode, Tree* parent);
           ~Tree();
 
+          /// @brief tries to find the predecessor of this thread execution of the same thread
           Node* findPredecessor(Node* base);
 
+          /// @brief tries to find the last finished thread execution
           Node* getLastThreadExecution(Thread::ThreadId tid);
 
           /// @brief checks if it is possible (based on schedule dependencies) to change the schedule order
@@ -206,6 +215,9 @@ namespace klee {
 
       /// @brief a map of all active trees and their corresponding states
       std::map<ExecutionState*, Tree*> responsibleTrees;
+
+      /// @brief will clean up all trees that are starting based of this tree
+      void cleanUpTree(Tree* base, ScheduleResult& result);
 
     public:
       /// @brief starts an po graph with this state as the basis

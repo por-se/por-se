@@ -263,6 +263,14 @@ PartialOrderGraph::Tree::activateScheduleFork(Node *triggerNode, ScheduleDepende
 
   state->scheduleNextThread(fork->root->tid);
 
+  Tree* base = this;
+  while (base->parentTree != nullptr) {
+    base->parentTree->activeLeafs++;
+    base = base->parentTree;
+  }
+
+  activeLeafs++;
+
   return std::make_pair(fork, state);
 }
 
@@ -381,6 +389,7 @@ PartialOrderGraph::PartialOrderGraph(ExecutionState *state) {
   rootTree->scheduleHistory.push_back(rootTree->root);
 
   rootTree->graph = this;
+  rootTree->activeLeafs++;
 
   responsibleTrees[state] = rootTree;
   forkProvider = DEFAULT_PROVIDER;
@@ -393,6 +402,30 @@ PartialOrderGraph::PartialOrderGraph(ExecutionState *state, StateForkProvider &p
 PartialOrderGraph::~PartialOrderGraph() {
   delete(rootTree);
   responsibleTrees.clear();
+}
+
+void PartialOrderGraph::cleanUpTree(Tree* base, ScheduleResult& result) {
+  std::list<Node*> cleanup = { base->root };
+
+  while (!cleanup.empty()) {
+    Node* n = cleanup.front();
+    cleanup.pop_front();
+
+    if (n->resultingState != nullptr) {
+      result.stoppedStates.push_back(n->resultingState);
+      n->resultingState = nullptr;
+    }
+
+    if (n->directChild != nullptr) {
+      cleanup.push_back(n->directChild);
+    }
+
+    for (auto ft : n->foreignTrees) {
+      if (!ft->finished) {
+        cleanup.push_back(ft->root);
+      }
+    }
+  }
 }
 
 PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(ExecutionState *state) {
@@ -422,7 +455,43 @@ PartialOrderGraph::ScheduleResult PartialOrderGraph::processEpochResult(Executio
 
   if (state->runnableThreads.empty()) {
     result.finishedState = state;
-    // TODO: cleanup shadow copies of all threads that are no longer needed
+    // TODO: cleanup shadow copies of all threads that are no longer needed (by using the furthest back dependency)
+
+    // This is what we can always cleanup
+    Node* n = readyNode;
+    while (n->foreignTrees.empty()) {
+      // Only clean up states that are actually there
+      if (n->resultingState != nullptr) {
+        result.stoppedStates.push_back(n->resultingState);
+        n->resultingState = nullptr;
+      }
+
+      n = n->parent;
+    }
+
+    // Now register at all parent trees that we are now ready
+    Tree* cleanUp = nullptr;
+    Tree* current = tree;
+    while (current != nullptr) {
+      // So we found a tree that we forked from so set this up
+      current->activeLeafs--;
+
+      // So when we found a tree where no one is any longer active then we can use it as
+      // a base for the cleanup
+      if (current->activeLeafs == 0) {
+        assert((cleanUp == nullptr || cleanUp->parentTree == current) && "We have to be going up without skipping one");
+        cleanUp = current;
+      }
+
+      current = current->parentTree;
+    }
+
+    if (cleanUp != nullptr) {
+      cleanUpTree(cleanUp, result);
+
+      // We cleaned up this tree so it is finished by definition
+      cleanUp->finished = true;
+    }
 
     return result;
   }

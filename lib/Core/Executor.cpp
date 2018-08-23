@@ -4514,7 +4514,9 @@ void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
   PartialOrderGraph::ScheduleResult result = poGraph->processEpochResult(&state);
 
   for (auto st : result.stoppedStates) {
-    terminateStateSilently(*st);
+    // Since we do not add these states to anywhere else for now, we can just delete them
+    delete st;
+    // terminateStateSilently(*st);
   }
 
   // NOTE: We add the forks into the process tree only now, this is not how this is
