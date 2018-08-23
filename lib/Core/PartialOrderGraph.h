@@ -32,13 +32,66 @@ namespace klee {
     private:
       struct ScheduleDependency {
         Node* referencedNode;
-        uint64_t scheduleIndex;
         uint8_t reason;
       };
 
       struct PartialOrdering {
         Node* dependent;
         Node* dependency;
+      };
+
+      /// @brief this struct represents a ordering in a partial order
+      struct OrderingRelation {
+        /// @brief thread id of the thread that should be executed first
+        Thread::ThreadId lowerTid;
+
+        /// @brief thread id of the thread that should be executed after the `lowerTid`
+        Thread::ThreadId higherTid;
+
+        // Note: we use the predecessors to specify which thread we want to execute in which order
+        // The reason is that if we change the order than the actual targeted threads (and their dependencies)
+        // will change and then we can no longer reliable tell them apart
+
+        /// @brief the predecessor of the node that we want to execute first
+        Node* lowerPredNode;
+
+        /// @brief the predecessor of the node that we want to execute after the other
+        Node* higherPredNode;
+
+        OrderingRelation* reverse() {
+          auto o = new OrderingRelation();
+          o->lowerPredNode = higherPredNode;
+          o->lowerTid = higherTid;
+
+          o->higherPredNode = lowerPredNode;
+          o->higherTid = lowerTid;
+
+          return o;
+        }
+
+        bool matchesHigher(Node* pre) {
+          if (pre == nullptr && higherPredNode == nullptr) {
+            return true;
+          }
+
+          if (pre == nullptr || higherPredNode == nullptr) {
+            return false;
+          }
+
+          return pre->dependencyHash == higherPredNode->dependencyHash;
+        }
+
+        bool matchesLower(Node* pre) {
+          if (pre == nullptr && lowerPredNode == nullptr) {
+            return true;
+          }
+
+          if (pre == nullptr || lowerPredNode == nullptr) {
+            return false;
+          }
+
+          return pre->dependencyHash == lowerPredNode->dependencyHash;
+        }
       };
 
       class Tree;
@@ -108,20 +161,23 @@ namespace klee {
           /// @brief this is a link to the two nodes in the parent tree that caused this fork
           PartialOrdering* forkReason = nullptr;
 
-          /// @brief a reference to the node that should now have another dependency set
-          Node* changedNode = nullptr;
-
           /// @brief a schedule we should follow for as long as possible
           std::vector<Node*> shadowSchedule;
 
           /// @brief the current index in the shadow schedule that we have to mimic in this fork
           uint64_t shadowScheduleIterator = 0;
 
+          std::vector<OrderingRelation*> restrictions;
+
           Tree() = default;
 
           /// @brief will use the node as the parent of this trees root and will register the tree as parent
           Tree(Node* forkAtNode, Tree* parent);
           ~Tree();
+
+          Node* findPredecessor(Node* base);
+
+          Node* getLastThreadExecution(Thread::ThreadId tid);
 
           /// @brief checks if it is possible (based on schedule dependencies) to change the schedule order
           bool checkIfPermutable(Node *dependency, Node *dependent);
@@ -133,8 +189,8 @@ namespace klee {
           void scheduleNextThread(ScheduleResult& result, ExecutionState* state);
 
           /// @brief will activate the fork that this dependency hints at
-          std::pair<PartialOrderGraph::Tree*, ExecutionState*>
-          activateScheduleFork(Tree* base, Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result);
+          std::pair<PartialOrderGraph::Tree *, ExecutionState *>
+          activateScheduleFork(Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result);
 
           /// @brief will use the data of the latest node in order to find necessary forks
           std::vector<std::pair<Tree*, ExecutionState*>> checkForNecessaryForks(ScheduleResult& result);

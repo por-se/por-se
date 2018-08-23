@@ -42,6 +42,27 @@ PartialOrderGraph::Tree::~Tree() {
   scheduleHistory.clear();
 }
 
+PartialOrderGraph::Node* PartialOrderGraph::Tree::findPredecessor(Node* base) {
+  // Since we want the predecessor and this info is encoded in the dependencies: use this
+  for (auto& dep : base->dependencies) {
+    if (dep.referencedNode->tid == base->tid && (dep.reason & ExecutionState::PREDECESSOR) != 0) {
+      return dep.referencedNode;
+    }
+  }
+
+  return nullptr;
+}
+
+PartialOrderGraph::Node* PartialOrderGraph::Tree::getLastThreadExecution(Thread::ThreadId tid) {
+  Node* current = scheduleHistory.back();
+
+  while (current != nullptr && (current->dependencyHash == 0 || current->tid != tid)) {
+    current = current->parent;
+  }
+
+  return current;
+}
+
 void PartialOrderGraph::Tree::registerEpochResult(ScheduleResult &result, ExecutionState *state) {
   // so the result is for our current node
   Node *current = scheduleHistory.back();
@@ -57,22 +78,19 @@ void PartialOrderGraph::Tree::registerEpochResult(ScheduleResult &result, Execut
     }
 
     ScheduleDependency d{};
-    d.scheduleIndex = dep.scheduleIndex;
     d.reason = dep.reason;
 
-    // Use the scheduling history for as long as possible
-    Node *trampoline;
-    if (d.scheduleIndex >= root->scheduleIndex) {
-      trampoline = scheduleHistory[d.scheduleIndex - root->scheduleIndex];
-    } else {
-      trampoline = root;
+    // The scheduling history provides us with all the info that we need in order to find the node
+    // efficiently
+    Tree* curBase = this;
+    while (curBase->root->scheduleIndex > dep.scheduleIndex) {
+      curBase = curBase->parentTree;
     }
 
-    while (trampoline->scheduleIndex != d.scheduleIndex) {
-      trampoline = trampoline->parent;
-    }
+    Node *reference = curBase->scheduleHistory[dep.scheduleIndex - curBase->root->scheduleIndex];
+    assert(reference->scheduleIndex == dep.scheduleIndex && "Has to match");
 
-    d.referencedNode = trampoline;
+    d.referencedNode = reference;
     current->dependencies.push_back(d);
   }
 }
@@ -104,8 +122,6 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
       if (shadowNode == forkTriggerNode) {
         assert(state->runnableThreads.find(t) != state->runnableThreads.end());
 
-        changedNode = node;
-
         // Do not continue any further since we now try to schedule the thread that was previously dependent
         shadowSchedule.clear();
       }
@@ -134,6 +150,32 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
     }
   }
 
+  // So as a final step make sure that we satisfy our restrictions
+  for (auto res : restrictions) {
+    if (res->higherTid != tid) {
+      continue;
+    }
+
+    // So we have found an execution of a thread in our restrictions
+    Node* pred = getLastThreadExecution(tid);
+    if (!res->matchesHigher(pred)) {
+      // Not the execution that we targeted
+      continue;
+    }
+
+    // Now check if we satisfy the condition
+    Node* lowerExecution = getLastThreadExecution(res->lowerTid);
+    assert(lowerExecution != nullptr && "We have to check the predecessor so this cannot be null if this schedule is valid");
+
+    // So one small part that we should actually really consider here: it can happen and is perfectly allowed
+    // that we have executed the lower one more often before executing the current schedule so account for that as well
+    Node* predLower = findPredecessor(lowerExecution);
+    while (!res->matchesLower(predLower)) {
+      assert(predLower != nullptr && "If we have null as predecessor then it should have matched");
+      predLower = findPredecessor(predLower);
+    }
+  }
+
   // So we found a thread id. Setup everything
   node->tid = tid;
   if (lastNode->scheduleIndex < root->scheduleIndex) {
@@ -148,8 +190,8 @@ void PartialOrderGraph::Tree::scheduleNextThread(ScheduleResult &result, Executi
   }
 }
 
-std::pair<PartialOrderGraph::Tree*, ExecutionState*>
-PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result) {
+std::pair<PartialOrderGraph::Tree *, ExecutionState *>
+PartialOrderGraph::Tree::activateScheduleFork(Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result) {
   // So the basic semantic is: we want to fork from this thread and want to use
   // the shadow schedule of the `base` tree
 
@@ -162,7 +204,7 @@ PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, Sch
     return std::make_pair(nullptr, nullptr);
   }
 
-  Tree* fork = new Tree(forkAt, base);
+  Tree* fork = new Tree(forkAt, this);
   fork->shadowSchedule.resize(triggerNode->scheduleIndex - forkAt->scheduleIndex, nullptr);
 
   // Now add the shadow schedule
@@ -175,6 +217,24 @@ PartialOrderGraph::Tree::activateScheduleFork(Tree* base, Node *triggerNode, Sch
   fork->forkReason = new PartialOrdering();
   fork->forkReason->dependency = dep->referencedNode;
   fork->forkReason->dependent = triggerNode;
+
+  // TODO: this memory we allocate here is never freed and as such leaked
+  auto ordering = new OrderingRelation();
+  ordering->lowerTid = triggerNode->tid;
+  ordering->lowerPredNode = findPredecessor(triggerNode);
+  ordering->higherTid = dep->referencedNode->tid;
+  ordering->higherPredNode = findPredecessor(dep->referencedNode);
+
+  // Since we fork from here on, we want to register the reverse restriction to this tree
+  // Note: this does not really change the scheduling, because we still have to check everything
+  fork->restrictions.push_back(ordering);
+
+  // And copy the restrictions that we have from our parent, since we do not want to revert these
+  fork->restrictions.insert(fork->restrictions.end(), restrictions.begin(), restrictions.end());
+
+  // TODO: if this restriction is independent from earlier restrictions, then
+  //       we do not want to add these to this base fork combo, but rather to an earlier one
+  restrictions.push_back(ordering->reverse());
 
   // Now start the actual fork or more like try it
   fork->scheduleNextThread(result, forkAt->resultingState);
@@ -239,16 +299,35 @@ bool PartialOrderGraph::Tree::checkIfPermutable(Node *dependency, Node *dependen
     }
   }
 
-  // So we actually can put it before the `dependency` node. So make sure that we do not duplicate efforts
-  // that we did in another fork
-  if (parentTree == nullptr) {
-    // We are actually no fork so we cannot revert and changes in the fork
-    return true;
+  // Test if this will change any restrictions
+  Node* preDependency = findPredecessor(dependency);
+  Node* preDependent = findPredecessor(dependent);
+
+  for (auto res : restrictions) {
+    // What we may not do is reverse what we now already have done before
+    if (dependency->tid != res->lowerTid) {
+      continue;
+    }
+
+    if (dependent->tid != res->higherTid) {
+      continue;
+    }
+
+    // Now we have to test if it matches the predecessors
+    if (!res->matchesHigher(preDependent)) {
+      continue;
+    }
+
+    if (!res->matchesLower(preDependency)) {
+      continue;
+    }
+
+    // So we want to reverse something that we did before; abort
+    return false;
   }
 
-  // If we change the already changed node again based on the previously executed change then
-  // we would just recreate the previous situation
-  return !(changedNode != nullptr && changedNode == dependency && dependent->tid == forkReason->dependency->tid);
+
+  return true;
 }
 
 std::vector<std::pair<PartialOrderGraph::Tree*, ExecutionState*>>
@@ -260,7 +339,7 @@ PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
     return std::vector<std::pair<Tree*, ExecutionState*>> {};
   }
 
-  std::vector<ScheduleDependency*> forkCandidates;
+  std::vector<ScheduleDependency*> forkCandidates {};
   for (auto& dep : node->dependencies) {
     bool isMemory = (dep.reason & (1 | 2)) != 0;
 
@@ -269,7 +348,7 @@ PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
     }
   }
 
-  std::vector<std::pair<Tree*, ExecutionState*>> newForks;
+  std::vector<std::pair<Tree*, ExecutionState*>> newForks {};
 
   // So we want to fork for all of them if that is possible
   for (auto dep : forkCandidates) {
@@ -281,12 +360,12 @@ PartialOrderGraph::Tree::checkForNecessaryForks(ScheduleResult& result) {
 
     // So in general we want to disallow forks beyond our own tree.
     // (These would often create duplicates) so make sure that the resulting fork node is in our own tree
-    if (dep->scheduleIndex + 1 < root->scheduleIndex) {
+    if (dep->referencedNode->scheduleIndex + 1 < root->scheduleIndex) {
       continue;
     }
 
     // Now try to trigger an alternative schedule
-    auto f = activateScheduleFork(this, scheduleHistory.back(), dep, result);
+    auto f = activateScheduleFork(scheduleHistory.back(), dep, result);
     if (f.first != nullptr) {
       newForks.push_back(f);
     }

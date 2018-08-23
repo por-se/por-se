@@ -3977,11 +3977,12 @@ void Executor::runFunctionAsMain(Function *f,
   sprintf(name, "scheduleTree.dot");
 
   if (scheduleTree != nullptr) {
-    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-
-    if (DumpTreeOnEnd && os) {
-      scheduleTree->dump(*os);
-      delete os;
+    if (DumpTreeOnEnd) {
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        scheduleTree->dump(*os);
+        delete os;
+      }
     }
 
     delete scheduleTree;
@@ -3989,11 +3990,12 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   if (poGraph != nullptr) {
-    llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-
-    if (DumpTreeOnEnd && os) {
-      poGraph->dump(*os);
-      delete os;
+    if (DumpTreeOnEnd) {
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        poGraph->dump(*os);
+        delete os;
+      }
     }
 
     delete poGraph;
