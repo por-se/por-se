@@ -220,7 +220,16 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     }
 
     for (auto& dep : n->dependencies) {
-      os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
+      bool isMemory = (dep.reason & (1 | 2)) != 0;
+      bool isOther = (dep.reason & (4 | 8 | 16)) != 0;
+
+      if (isMemory) {
+        os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\", color=gray];\n";
+      }
+
+      if (isOther) {
+        os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
+      }
     }
 
     stack.insert(stack.end(), n->children.begin(), n->children.end());

@@ -3970,7 +3970,7 @@ void Executor::runFunctionAsMain(Function *f,
       return st->branch();
     };
 
-    poGraph = new PartialOrderGraph(state, function);
+    poExplorer = new PartialOrderExplorer(state, function);
   }
 
   run(*state);
@@ -3993,17 +3993,17 @@ void Executor::runFunctionAsMain(Function *f,
     scheduleTree = nullptr;
   }
 
-  if (poGraph != nullptr) {
+  if (poExplorer != nullptr) {
     if (DumpTreeOnEnd) {
       llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
       if (os) {
-        poGraph->dump(*os);
+        poExplorer->dump(*os);
         delete os;
       }
     }
 
-    delete poGraph;
-    poGraph = nullptr;
+    delete poExplorer;
+    poExplorer = nullptr;
   }
 
   // hack to clear memory objects
@@ -4511,7 +4511,7 @@ static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
 }
 
 void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
-  PartialOrderGraph::ScheduleResult result = poGraph->processEpochResult(&state);
+  PartialOrderExplorer::ScheduleResult result = poExplorer->processEpochResult(&state);
 
   for (auto st : result.stoppedStates) {
     // Since we do not add these states to anywhere else for now, we can just delete them

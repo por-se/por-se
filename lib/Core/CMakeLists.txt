@@ -23,6 +23,7 @@ klee_add_component(kleeCore
   PTree.cpp
   ScheduleTree.cpp
   PartialOrderGraph.cpp
+  PartialOrderExplorer.cpp
   MemoryAccessTracker.cpp
   Searcher.cpp
   SeedInfo.cpp

@@ -1,12 +1,12 @@
-#ifndef KLEE_PARTIALORDERGRAPH_H
-#define KLEE_PARTIALORDERGRAPH_H
+#ifndef KLEE_PARTIALORDER_EXPLORER_H
+#define KLEE_PARTIALORDER_EXPLORER_H
 
 #include "klee/ExecutionState.h"
 
 #include <vector>
 
 namespace klee {
-  class PartialOrderGraph {
+  class PartialOrderExplorer {
     public:
       typedef std::function <ExecutionState* (ExecutionState*)> StateForkProvider;
 
@@ -88,6 +88,13 @@ namespace klee {
           return pre->dependencyHash == lowerPredNode->dependencyHash;
         }
 
+        bool isReverse(OrderingRelation *rel) {
+          return rel->lowerTid == higherTid &&
+                 rel->higherTid == lowerTid &&
+                 matchesLower(rel->higherPredNode) &&
+                 matchesHigher(rel->lowerPredNode);
+        }
+
         friend bool operator==(const OrderingRelation &lhs, const OrderingRelation &rhs) {
           return lhs.lowerTid == rhs.lowerTid &&
                  lhs.higherTid == rhs.higherTid &&
@@ -100,15 +107,17 @@ namespace klee {
         }
       };
 
-      class Tree;
+      class Path;
+      class MultiPath;
 
     public:
       /// @brief a node represents a schedule decision that happened after the parent nodes decisions
       struct Node {
-          friend class PartialOrderGraph;
+          friend class PartialOrderExplorer;
 
         private:
-          friend class Tree;
+          friend class MultiPath;
+          friend class Path;
 
           /// @brief used to step through the schedule serialization
           Node* parent = nullptr;
@@ -119,16 +128,13 @@ namespace klee {
           /// @brief the thread that was scheduled
           Thread::ThreadId tid = 0;
 
-          /// @brief a reference to the child in this tree
-          Node* directChild = nullptr;
-
           /// @brief the index of this node in the schedule history
           uint64_t scheduleIndex = 0;
 
           /// @brief the dependencies that were found so far
           std::vector<ScheduleDependency> dependencies;
 
-          Tree* tree = nullptr;
+          Path* path = nullptr;
 
           // This is used in order to support forks of this tree
 
@@ -138,60 +144,50 @@ namespace klee {
           /// @brief this is the state that was the result of the execution that was represented by this node
           ExecutionState* resultingState = nullptr;
 
-          /// @brief all other schedules that were started from this node
-          std::vector<Tree*> foreignTrees;
-
           /// @brief all restrictions that are based on this node (aka lower)
           std::vector<OrderingRelation*> anchoredRestrictions;
 
           Node() = default;
           ~Node();
+
+          void registerAnchoredRestriction(OrderingRelation* rel);
       };
 
     private:
-      class Tree {
-          friend class PartialOrderGraph;
+      class Path {
+          friend class PartialOrderExplorer;
+          friend class MultiPath;
 
         private:
-          /// @brief this is the trees own root
           Node* root = nullptr;
 
           /// @brief our history in this fork
           std::vector<Node*> scheduleHistory;
 
-          /* Below is everything we need for being a forked tree */
+          MultiPath* parentMultiPath = nullptr;
 
-          /// @brief if unable to null, then this is the tree that we are a fork from
-          Tree* parentTree = nullptr;
+          MultiPath* resultingMultiPath = nullptr;
 
-          /// @brief a reference to the actual graph that this tree is part of
-          PartialOrderGraph* graph = nullptr;
+          PartialOrderExplorer* graph = nullptr;
 
-          /* And the reasoning why we forked */
+          Node* forkReason = nullptr;
 
-          /// @brief the node that triggered the fork
-          Node* forkTriggerNode;
-
-          /// @brief the ordering restrictions that we have gotten from the previous tree
-          std::vector<OrderingRelation*> restrictions;
-
-          std::vector<OrderingRelation*> forwardRestrictions;
-
-          /// @brief how many active leafs can be reached based off this tree
-          uint64_t activeLeafs = 0;
+          uint64_t counter = 0;
 
           /// @brief if the whole tree is now ready and everything is not cleaned
           bool finished = false;
 
-          uint64_t counter = 0;
+          /// @brief the ordering restrictions that we have gotten from the previous tree
+          std::vector<OrderingRelation*> restrictions;
 
-          bool independent = false;
+          std::vector<OrderingRelation*> allRestrictions;
 
-          Tree() = default;
+          Path() = default;
 
-          /// @brief will use the node as the parent of this trees root and will register the tree as parent
-          Tree(Node* forkAtNode, Tree* parent);
-          ~Tree();
+          void registerRestriction(OrderingRelation* rel, bool newOne);
+          
+          /// @brief will split this path at the node of the specified schedule index
+          Path* splitPathAt(uint64_t scheduleIndex);
 
           /// @brief tries to find the predecessor of this thread execution of the same thread
           Node* findPredecessor(Node* base);
@@ -199,8 +195,7 @@ namespace klee {
           /// @brief tries to find the last finished thread execution
           Node* getLastThreadExecution(Thread::ThreadId tid);
 
-          /// @brief checks if it is possible (based on schedule dependencies) to change the schedule order
-          bool checkIfPermutable(Node *dependency, Node *dependent);
+          Node* createNewNode();
 
           /// @brief will add all results that are important to the scheduling and reactive forks
           void registerEpochResult(ScheduleResult& result, ExecutionState* state);
@@ -209,14 +204,28 @@ namespace klee {
           bool checkIfScheduleable(Thread::ThreadId tid, ExecutionState* state);
 
           /// @brief will determine the next thread that should be executed by this tree
-          void scheduleNextThread(ScheduleResult& result, ExecutionState* state, std::set<Thread::ThreadId> tid);
+          void scheduleNextThread(ExecutionState* state, std::set<Thread::ThreadId> tid);
 
-          /// @brief will activate the fork that this dependency hints at
-          std::pair<PartialOrderGraph::Tree *, ExecutionState *>
-          activateScheduleFork(Node *triggerNode, ScheduleDependency *dep, ScheduleResult &result);
+          /// @brief checks if it is possible (based on schedule dependencies) to change the schedule order
+          bool checkIfPermutable(Node *dependency, Node *dependent);
+      };
 
-          /// @brief will use the data of the latest node in order to find necessary forks
-          std::vector<std::pair<Tree*, ExecutionState*>> checkForNecessaryForks(ScheduleResult& result);
+      class MultiPath {
+          friend class PartialOrderExplorer;
+
+        private:
+          Path* parentPath = nullptr;
+
+          std::vector<Path*> children;
+
+          /// @brief how many active leafs can be reached based off this multi path
+          uint64_t activeLeafs = 0;
+
+          MultiPath() = default;
+
+          MultiPath(Path* parent, uint64_t splitAt);
+
+          Path* createNewPath();
       };
 
     protected:
@@ -225,19 +234,29 @@ namespace klee {
 
     private:
       /// @brief the root tree that started everything
-      Tree* rootTree = nullptr;
+      Path* rootPath = nullptr;
 
       /// @brief a map of all active trees and their corresponding states
-      std::map<ExecutionState*, Tree*> responsibleTrees;
+      std::map<ExecutionState*, Path*> responsiblePaths;
+      std::map<Path*, ExecutionState*> responsiblePathsReverse;
+
+      bool mergeWithFork(ScheduleResult &result, Path *base, OrderingRelation *rel);
+
+      bool checkIfIndependentFork(ScheduleResult& result, Node* triggerNode, ScheduleDependency* dep);
+
+      void setupFork(ScheduleResult& result, Node* triggerNode, ScheduleDependency* dep);
+
+      void checkForNecessaryForksV2(ScheduleResult& result, Path* path);
+
+      void checkForNecessaryForks(ScheduleResult& result, Path* path);
 
       /// @brief will clean up all trees that are starting based of this tree
-      void cleanUpTree(Tree* base, ScheduleResult& result);
+      // void cleanUpPath(Path *base, ScheduleResult &result);
 
     public:
       /// @brief starts an po graph with this state as the basis
-      explicit PartialOrderGraph(ExecutionState* state);
-      PartialOrderGraph(ExecutionState *state, StateForkProvider &provider);
-      ~PartialOrderGraph();
+      PartialOrderExplorer(ExecutionState *state, StateForkProvider &provider);
+      // ~PartialOrderExplorer();
 
       /// @brief adds all data from the state and will return all resulting schedule changes
       ScheduleResult processEpochResult(ExecutionState *state);
@@ -249,4 +268,4 @@ namespace klee {
 } // End klee namespace
 
 
-#endif //KLEE_PARTIALORDERGRAPH_H
+#endif //KLEE_PARTIALORDER_EXPLORER_H

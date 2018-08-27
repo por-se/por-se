@@ -22,7 +22,7 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
 
-#include "PartialOrderGraph.h"
+#include "PartialOrderExplorer.h"
 #include "ScheduleTree.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -141,7 +141,7 @@ private:
   PTree *processTree;
 
   ScheduleTree *scheduleTree = nullptr;
-  PartialOrderGraph *poGraph = nullptr;
+  PartialOrderExplorer *poExplorer = nullptr;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
