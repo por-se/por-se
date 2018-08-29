@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #ifdef __APPLE__
 typedef void* pthread_barrierattr_t;
@@ -81,15 +82,14 @@ typedef struct {
 } __pthread_impl_semaphore;
 
 typedef struct {
-  uint8_t called;
-} __pthread_impl_once;
-
-typedef struct {
   void (*destructor)(void*);
   void* value;
 } __pthread_impl_key;
 
 int __pthread_mutex_unlock_internal(pthread_mutex_t *m);
 void __notify_threads(__pthread_impl_stack* stack);
+
+bool __checkIfSameSize(char* target, char* reference);
+bool __checkIfSame(char* target, char* reference);
 
 #endif //KLEE_PTHREAD_IMPL_H

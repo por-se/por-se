@@ -26,6 +26,8 @@ int sem_init (sem_t *__sem, int __pshared, unsigned int __value) {
   __stack_create(&sem->waiting);
   sem->value = __value;
 
+  *((__pthread_impl_semaphore**)__sem) = sem;
+
   klee_toggle_thread_scheduling(1);
   return 0;
 }
@@ -84,7 +86,7 @@ int sem_wait (sem_t *__sem) {
     result = __pthread_impl_sem_trywait(sem);
 
     if (result == EAGAIN) {
-      __stack_push(&sem->waiting, (void*) pthread_self());
+      __stack_push(&sem->waiting, (void*) klee_get_thread_id());
       klee_toggle_thread_scheduling(1);
       klee_sleep_thread();
       klee_toggle_thread_scheduling(0);

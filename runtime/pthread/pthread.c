@@ -41,6 +41,15 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->joinState = 0;
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
 
+  if (attr != NULL) {
+    int ds = 0;
+    pthread_attr_getdetachstate(attr, &ds);
+
+    if (ds == PTHREAD_CREATE_DETACHED) {
+      thread->mode = 1;
+    }
+  }
+
   klee_toggle_thread_scheduling(1);
 
   klee_create_thread(__pthread_impl_wrapper, thread);
@@ -76,6 +85,12 @@ void pthread_exit(void* arg) {
 
   if (tid != 0) {
     __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument();
+
+    if (thread->mode == 1) {
+      klee_toggle_thread_scheduling(1);
+      klee_exit_thread();
+    }
+
     thread->returnValue = arg;
     thread->state = 1;
 
@@ -211,29 +226,24 @@ int pthread_cancel(pthread_t tid) {
   return 0;
 }
 
+static pthread_once_t __ONCE_STATIC_INIT = PTHREAD_ONCE_INIT;
+
 int pthread_once(pthread_once_t *o, void (*func)(void)) {
   klee_toggle_thread_scheduling(0);
-  int* onceValue = (int*) o;
 
-  __pthread_impl_once* once = NULL;
-  if (*onceValue == 0) {
-    once = malloc(sizeof(__pthread_impl_once));
-    if (once == NULL) {
-      klee_toggle_thread_scheduling(1);
-      return EINVAL;
-    }
+  int* onceAsValue = (int*) o;
 
-    memset(once, 0, sizeof(__pthread_impl_once));
-  } else {
-    once = (__pthread_impl_once*)o;
+  if (!__checkIfSameSize((char*) o, (char*) &__ONCE_STATIC_INIT)) {
+    klee_toggle_thread_scheduling(1);
+    return EINVAL;
   }
 
-  if (once->called != 0) {
+  if (*onceAsValue != 0) {
     klee_toggle_thread_scheduling(1);
     return 0;
   }
 
-  once->called = 1;
+  *onceAsValue = 1;
   klee_toggle_thread_scheduling(1);
 
   func();

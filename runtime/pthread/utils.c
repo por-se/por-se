@@ -42,6 +42,32 @@ void __notify_threads(__pthread_impl_stack* stack) {
   }
 }
 
+bool __checkIfSameSize(char* target, char* reference) {
+  // So this method should check if both of these objects have the same contents
+  size_t sizeOfTarget = klee_get_obj_size((void*) target);
+  size_t sizeOfReference = klee_get_obj_size((void*) reference);
+
+  return sizeOfReference == sizeOfTarget;
+}
+
+bool __checkIfSame(char* target, char* reference) {
+  // So this method should check if both of these objects have the same contents
+  size_t sizeOfTarget = klee_get_obj_size((void*) target);
+  size_t sizeOfReference = klee_get_obj_size((void*) reference);
+
+  if (sizeOfReference != sizeOfTarget) {
+    return false;
+  }
+
+  for (size_t i = 0; i < sizeOfTarget; i++) {
+    if (target[i] != reference[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 //
 //int pthread_getschedparam(pthread_t, int *__restrict, struct sched_param *__restrict);
 //int pthread_setschedparam(pthread_t, int, const struct sched_param *);
