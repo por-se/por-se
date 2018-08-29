@@ -103,7 +103,7 @@ int pthread_join(pthread_t pthread, void **ret) {
   }
 
   uint64_t ownThread = klee_get_thread_id();
-  if (ownThread == pthread) { // We refer to our onw thread
+  if (ownThread == (uint64_t) pthread) { // We refer to our onw thread
     klee_toggle_thread_scheduling(1);
     return EDEADLK;
   }
@@ -241,38 +241,24 @@ int pthread_once(pthread_once_t *o, void (*func)(void)) {
   return 0;
 }
 
-//int pthread_key_create(pthread_key_t *, void (*)(void *));
-//int pthread_key_delete(pthread_key_t);
-//void *pthread_getspecific(pthread_key_t);
-//int pthread_setspecific(pthread_key_t, const void *);
-
-//int pthread_attr_init(pthread_attr_t *);
-//int pthread_attr_destroy(pthread_attr_t *);
-
-//int pthread_attr_getguardsize(const pthread_attr_t *__restrict, size_t *__restrict);
-//int pthread_attr_setguardsize(pthread_attr_t *, size_t);
-//int pthread_attr_getstacksize(const pthread_attr_t *__restrict, size_t *__restrict);
-//int pthread_attr_setstacksize(pthread_attr_t *, size_t);
-//int pthread_attr_getdetachstate(const pthread_attr_t *, int *);
-//int pthread_attr_setdetachstate(pthread_attr_t *, int);
-//int pthread_attr_getstack(const pthread_attr_t *__restrict, void **__restrict, size_t *__restrict);
-//int pthread_attr_setstack(pthread_attr_t *, void *, size_t);
-//int pthread_attr_getscope(const pthread_attr_t *__restrict, int *__restrict);
-//int pthread_attr_setscope(pthread_attr_t *, int);
-//int pthread_attr_getschedpolicy(const pthread_attr_t *__restrict, int *__restrict);
-//int pthread_attr_setschedpolicy(pthread_attr_t *, int);
-//int pthread_attr_getschedparam(const pthread_attr_t *__restrict, struct sched_param *__restrict);
-//int pthread_attr_setschedparam(pthread_attr_t *__restrict, const struct sched_param *__restrict);
-//int pthread_attr_getinheritsched(const pthread_attr_t *__restrict, int *__restrict);
-//int pthread_attr_setinheritsched(pthread_attr_t *, int);
-
-//int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
-
-int pthread_getconcurrency(void) {
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void)) {
+  klee_warning_once("pthread_atfork is not supported and will be completely ignored");
   return 0;
 }
 
+static int __pthread_impl_concurrency = 0;
+
+int pthread_getconcurrency(void) {
+  return __pthread_impl_concurrency;
+}
+
 int pthread_setconcurrency(int n) {
+  if (n < 0) {
+    return EINVAL;
+  }
+
+  __pthread_impl_concurrency = n;
+
   return 0;
 }
 

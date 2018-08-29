@@ -90,33 +90,3 @@ int pthread_cond_signal(pthread_cond_t *c) {
 
   return 0;
 }
-
-int pthread_condattr_init(pthread_condattr_t *a) {
-  klee_warning_once("pthread_condattr_init is currently not supported\n");
-  return 0;
-}
-
-int pthread_condattr_destroy(pthread_condattr_t *a) {
-  klee_warning_once("pthread_condattr_destroy is currently not supported\n");
-  return 0;
-}
-
-int pthread_condattr_setclock(pthread_condattr_t *a, clockid_t c) {
-  klee_warning_once("pthread_condattr_setclock is currently not supported\n");
-  return 0;
-}
-
-int pthread_condattr_setpshared(pthread_condattr_t *a, int p) {
-  klee_warning_once("pthread_condattr_setpshared is currently not supported\n");
-  return 0;
-}
-
-int pthread_condattr_getclock(const pthread_condattr_t *a, clockid_t *c) {
-  klee_warning_once("pthread_condattr_getclock is currently not supported\n");
-  return 0;
-}
-
-int pthread_condattr_getpshared(const pthread_condattr_t *a, int *p) {
-  klee_warning_once("pthread_condattr_getpshared is currently not supported\n");
-  return 0;
-}

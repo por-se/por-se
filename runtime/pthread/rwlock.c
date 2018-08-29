@@ -175,8 +175,3 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(1);
   return 0;
 }
-
-//int pthread_rwlockattr_init(pthread_rwlockattr_t *);
-//int pthread_rwlockattr_destroy(pthread_rwlockattr_t *);
-//int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *, int);
-//int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *__restrict, int *__restrict);

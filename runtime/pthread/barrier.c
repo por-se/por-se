@@ -78,8 +78,3 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
   klee_toggle_thread_scheduling(1);
   return EINVAL;
 }
-
-//int pthread_barrierattr_destroy(pthread_barrierattr_t *);
-//int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict, int *__restrict);
-//int pthread_barrierattr_init(pthread_barrierattr_t *);
-//int pthread_barrierattr_setpshared(pthread_barrierattr_t *, int);

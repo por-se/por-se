@@ -31,7 +31,7 @@ size_t __stack_size(__pthread_impl_stack* stack);
 typedef struct {
   int acquired;
   int type;
-  pthread_t holdingThread;
+  uint64_t holdingThread;
   __pthread_impl_stack waitingThreads;
 } __pthread_impl_mutex;
 
@@ -83,6 +83,11 @@ typedef struct {
 typedef struct {
   uint8_t called;
 } __pthread_impl_once;
+
+typedef struct {
+  void (*destructor)(void*);
+  void* value;
+} __pthread_impl_key;
 
 int __pthread_mutex_unlock_internal(pthread_mutex_t *m);
 void __notify_threads(__pthread_impl_stack* stack);
