@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
+
+static pthread_mutex_t mutexDefault = PTHREAD_MUTEX_INITIALIZER;
 
 static int __create_new_mutex(__pthread_impl_mutex **m) {
   __pthread_impl_mutex* mutex = malloc(sizeof(__pthread_impl_mutex));
@@ -21,20 +24,20 @@ static int __create_new_mutex(__pthread_impl_mutex **m) {
   return 0;
 }
 
-static __pthread_impl_mutex* __obtain_mutex_data(pthread_mutex_t *mutex) {
-  __pthread_impl_mutex *value = *((__pthread_impl_mutex**) mutex);
-  if (value == NULL) {
-    __pthread_impl_mutex* m = NULL;
-    int ret = __create_new_mutex(&m);
-
-    if (ret != 0) {
-      return NULL;
-    }
-
-    return m;
+static int __obtain_mutex(pthread_mutex_t *mutex, __pthread_impl_mutex **dest) {
+  // So we want to check if we actually have a mutex that is valid
+  if (!__checkIfSameSize(mutex, &mutexDefault)) {
+    return -1;
   }
 
-  return value;
+  // So first we have to check if we are any of the default static mutex types
+  if (__checkIfSame(mutex, &mutexDefault)) {
+    return __create_new_mutex(dest);
+  }
+
+  *dest = *((__pthread_impl_mutex**) mutex);
+
+  return 0;
 }
 
 int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
@@ -64,8 +67,8 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
 int pthread_mutex_lock(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
-  if (mutex == NULL) {
+  __pthread_impl_mutex* mutex;
+  if (__obtain_mutex(m, &mutex) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -92,6 +95,12 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
     }
   }
 
+  if (false /* Error checking mutex */) {
+    if (mutex->holdingThread == tid) {
+      return EDEADLK;
+    }
+  }
+
   do {
     __stack_push(&mutex->waitingThreads, (void*) tid);
     klee_toggle_thread_scheduling(1);
@@ -106,11 +115,17 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
 }
 
 int __pthread_mutex_unlock_internal(pthread_mutex_t *m) {
-  __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
+  __pthread_impl_mutex* mutex;
+  if (__obtain_mutex_data(m, &mutex) != 0) {
+    return -1;
+  }
+
   uint64_t tid = klee_get_thread_id();
 
   if (mutex->acquired == 0 || mutex->holdingThread != tid) {
-    return -1;
+    // The return code for error checking mutexes, but we will simply use
+    // it in any case
+    return EPERM;
   }
 
   if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
@@ -141,7 +156,13 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
 int pthread_mutex_trylock(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
+  __pthread_impl_mutex* mutex;
+
+  if (__obtain_mutex(m, &mutex) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
+
   if (mutex->acquired == 0) {
     klee_toggle_thread_scheduling(1);
     return pthread_mutex_lock(m);
@@ -158,7 +179,12 @@ int pthread_mutex_trylock(pthread_mutex_t *m) {
 int pthread_mutex_destroy(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex = __obtain_mutex_data(m);
+  __pthread_impl_mutex* mutex;
+  if (__obtain_mutex(m, &mutex) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
+
   if (mutex->acquired >= 1) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;

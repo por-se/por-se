@@ -74,6 +74,8 @@ typedef struct {
   void* returnValue;
   uint8_t joinState;
   uint64_t joinedThread;
+
+  __pthread_impl_stack cleanUpStack;
 } __pthread_impl_pthread;
 
 typedef struct {

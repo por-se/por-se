@@ -41,6 +41,8 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->joinState = 0;
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
 
+  __stack_create(&thread->cleanUpStack);
+
   if (attr != NULL) {
     int ds = 0;
     pthread_attr_getdetachstate(attr, &ds);
@@ -271,5 +273,32 @@ int pthread_setconcurrency(int n) {
 
   return 0;
 }
+
+#ifndef pthread_cleanup_pop
+void pthread_cleanup_pop(int execute) {
+  __pthread_impl_thread thread* = (__pthread_impl_thread*) klee_get_thread_start_argument();
+  size_t stackSize = __stack_size(&thread->cleanUpStack);
+
+  if (stackSize == 0) {
+    klee_abort();
+  }
+
+  void (*routine)(void*) = __stack_pop(&thread->cleanUpStack);
+
+  if (execute == 0) {
+    return;
+  }
+
+  // TODO: Missing arg...
+  routine(&routine);
+}
+#endif
+
+#ifndef pthread_cleanup_push
+void pthread_cleanup_push(void (*routine)(void*), void *arg) {
+  __pthread_impl_thread thread* = (__pthread_impl_thread*) klee_get_thread_start_argument();
+  __stack_pop(&thread->cleanUpStack, routine);
+}
+#endif
 
 //int pthread_getcpuclockid(pthread_t, clockid_t *);

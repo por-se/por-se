@@ -51,18 +51,21 @@ int sem_destroy (sem_t *__sem) {
 /* Open a named semaphore NAME with open flaot OFLAG.  */
 sem_t *sem_open (__const char *__name, int __oflag, ...) {
   // TODO
+  klee_warning_once("sem_open will do nothing - unsupported");
   return 0;
 }
 
 /* Close descriptor for named semaphore SEM.  */
 int sem_close (sem_t *__sem) {
   // TODO
+  klee_warning_once("sem_open will do nothing - unsupported");
   return 0;
 }
 
 /* Remove named semaphore NAME.  */
 int sem_unlink (__const char *__name) {
   // TODO
+  klee_warning_once("sem_open will do nothing - unsupported");
   return 0;
 }
 
