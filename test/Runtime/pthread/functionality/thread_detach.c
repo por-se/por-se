@@ -12,10 +12,15 @@ static void* test(void* arg) {
 int main(int argc, char **argv) {
   pthread_t t1, t2;
 
-  pthread_create(&t1, NULL, test, NULL);
-  pthread_create(&t2, NULL, test, NULL);
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+  pthread_create(&t1, &attr, test, NULL);
+  pthread_create(&t2, &attr, test, NULL);
 
   // If the threads will not exit, then klee will report and error
+  pthread_attr_destroy(&attr);
 
   return 0;
 }
