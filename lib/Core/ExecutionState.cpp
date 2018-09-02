@@ -85,7 +85,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0) {}
+    : constraints(assumptions), queryCost(0.), ptreeNode(0), memAccessTracker(nullptr) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -228,7 +228,9 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
   // We cannot sync the current thread with the others as the others since we can not
   // infer any knowledge from them
   Thread::ThreadId curTid = getCurrentThreadReference()->getThreadId();
-  memAccessTracker->registerThreadDependency(tid, curTid, currentSchedulingIndex);
+  if (memAccessTracker != nullptr) {
+    memAccessTracker->registerThreadDependency(tid, curTid, currentSchedulingIndex);
+  }
 
   ScheduleDependency dep{};
   dep.scheduleIndex = currentSchedulingIndex;
@@ -296,7 +298,9 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   ep.tid = tid;
   schedulingHistory.push_back(ep);
 
-  memAccessTracker->scheduledNewThread(tid);
+  if (memAccessTracker != nullptr) {
+    memAccessTracker->scheduledNewThread(tid);
+  }
 
   currentSchedulingIndex = schedulingHistory.size() - 1;
   scheduleDependencies[tid].push_back(EpochDependencies());
@@ -366,7 +370,9 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
-    memAccessTracker->registerThreadDependency(tid, curThreadId, currentSchedulingIndex);
+    if (memAccessTracker != nullptr) {
+      memAccessTracker->registerThreadDependency(tid, curThreadId, currentSchedulingIndex);
+    }
 
     ScheduleDependency dep{};
     dep.scheduleIndex = currentSchedulingIndex;
@@ -385,7 +391,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   runnableThreads.erase(thread->getThreadId());
 
   Thread* currentThread = getCurrentThreadReference();
-  if (currentThread->getThreadId() != thread->getThreadId()) {
+  if (currentThread->getThreadId() != thread->getThreadId() && memAccessTracker != nullptr) {
     memAccessTracker->registerThreadDependency(tid, currentThread->tid, currentSchedulingIndex);
   }
 
@@ -397,7 +403,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
   // We do not need to track the memory access for now
-  if (!onlyOneThreadRunnableSinceEpochStart) {
+  if (!onlyOneThreadRunnableSinceEpochStart && memAccessTracker != nullptr) {
     MemoryAccess access;
     access.type = type;
     access.offset = offset;
@@ -435,7 +441,7 @@ void ExecutionState::trackScheduleDependency(ScheduleDependency d) {
   }
 
   Thread::ThreadId tid = getCurrentThreadReference()->getThreadId();
-  if (d.tid != tid && (d.reason & ~ATOMIC_MEMORY_ACCESS) != 0) {
+  if (d.tid != tid && (d.reason & ~ATOMIC_MEMORY_ACCESS) != 0 && memAccessTracker != nullptr) {
     memAccessTracker->registerThreadDependency(tid, d.tid, d.scheduleIndex);
   }
 
