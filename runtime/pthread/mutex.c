@@ -8,23 +8,23 @@
 
 static pthread_mutex_t mutexDefault = PTHREAD_MUTEX_INITIALIZER;
 
-static int __create_new_mutex(__pthread_impl_mutex **m) {
-  __pthread_impl_mutex* mutex = malloc(sizeof(__pthread_impl_mutex));
+static int __create_new_mutex(__kpr_mutex **m) {
+  __kpr_mutex* mutex = malloc(sizeof(__kpr_mutex));
   if (mutex == 0) {
     return -1;
   }
 
-  memset(mutex, 0, sizeof(__pthread_impl_mutex));
+  memset(mutex, 0, sizeof(__kpr_mutex));
 
   mutex->acquired = 0;
   mutex->holdingThread = 0;
-  __stack_create(&mutex->waitingThreads);
+  __kpr_list_create(&mutex->waitingThreads);
 
   *m = mutex;
   return 0;
 }
 
-static int __obtain_mutex(pthread_mutex_t *mutex, __pthread_impl_mutex **dest) {
+static int __obtain_mutex(pthread_mutex_t *mutex, __kpr_mutex **dest) {
   // So we want to check if we actually have a mutex that is valid
   if (!__checkIfSameSize(mutex, &mutexDefault)) {
     return -1;
@@ -35,7 +35,7 @@ static int __obtain_mutex(pthread_mutex_t *mutex, __pthread_impl_mutex **dest) {
     return __create_new_mutex(dest);
   }
 
-  *dest = *((__pthread_impl_mutex**) mutex);
+  *dest = *((__kpr_mutex**) mutex);
 
   return 0;
 }
@@ -43,7 +43,7 @@ static int __obtain_mutex(pthread_mutex_t *mutex, __pthread_impl_mutex **dest) {
 int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex *mutex;
+  __kpr_mutex *mutex;
   int result = __create_new_mutex(&mutex);
 
   if (result != 0) {
@@ -57,7 +57,7 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
     mutex->type = type;
   }
 
-  *((__pthread_impl_mutex**)m) = mutex;
+  *((__kpr_mutex**)m) = mutex;
 
   klee_toggle_thread_scheduling(1);
 
@@ -67,7 +67,7 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
 int pthread_mutex_lock(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex;
+  __kpr_mutex* mutex;
   if (__obtain_mutex(m, &mutex) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
@@ -102,7 +102,7 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
   }
 
   do {
-    __stack_push(&mutex->waitingThreads, (void*) tid);
+    __kpr_list_push(&mutex->waitingThreads, (void*) tid);
     klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
     klee_toggle_thread_scheduling(0);
@@ -115,8 +115,8 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
 }
 
 int __pthread_mutex_unlock_internal(pthread_mutex_t *m) {
-  __pthread_impl_mutex* mutex;
-  if (__obtain_mutex_data(m, &mutex) != 0) {
+  __kpr_mutex* mutex;
+  if (__obtain_mutex(m, &mutex) != 0) {
     return -1;
   }
 
@@ -156,7 +156,7 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
 int pthread_mutex_trylock(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex;
+  __kpr_mutex* mutex;
 
   if (__obtain_mutex(m, &mutex) != 0) {
     klee_toggle_thread_scheduling(1);
@@ -179,7 +179,7 @@ int pthread_mutex_trylock(pthread_mutex_t *m) {
 int pthread_mutex_destroy(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_mutex* mutex;
+  __kpr_mutex* mutex;
   if (__obtain_mutex(m, &mutex) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;

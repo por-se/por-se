@@ -5,8 +5,8 @@
 #include <string.h>
 #include <errno.h>
 
-static __pthread_impl_barrier* __obtain_pthread_barrier(pthread_barrier_t* b) {
-  return *((__pthread_impl_barrier**)b);
+static __kpr_barrier* __obtain_pthread_barrier(pthread_barrier_t* b) {
+  return *((__kpr_barrier**)b);
 }
 
 int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr, unsigned count) {
@@ -16,19 +16,19 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
 
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_barrier* barrier = malloc(sizeof(__pthread_impl_barrier));
+  __kpr_barrier* barrier = malloc(sizeof(__kpr_barrier));
   if (barrier == NULL) {
     klee_toggle_thread_scheduling(1);
     return ENOMEM;
   }
 
-  memset(barrier, 0, sizeof(__pthread_impl_barrier));
+  memset(barrier, 0, sizeof(__kpr_barrier));
 
   barrier->count = count;
   barrier->currentCount = 0;
-  __stack_create(&barrier->waitingThreads);
+  __kpr_list_create(&barrier->waitingThreads);
 
-  *((__pthread_impl_barrier**)b) = barrier;
+  *((__kpr_barrier**)b) = barrier;
 
   klee_toggle_thread_scheduling(1);
 
@@ -38,7 +38,7 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
 int pthread_barrier_destroy(pthread_barrier_t *b) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_barrier* barrier = __obtain_pthread_barrier(b);
+  __kpr_barrier* barrier = __obtain_pthread_barrier(b);
 
   if (barrier->currentCount > 0) {
     klee_toggle_thread_scheduling(1);
@@ -54,12 +54,12 @@ int pthread_barrier_destroy(pthread_barrier_t *b) {
 int pthread_barrier_wait(pthread_barrier_t *b) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_barrier* barrier = __obtain_pthread_barrier(b);
+  __kpr_barrier* barrier = __obtain_pthread_barrier(b);
   barrier->currentCount++;
 
   if (barrier->currentCount < barrier->count) {
     uint64_t tid = klee_get_thread_id();
-    __stack_push(&barrier->waitingThreads, (void*) tid);
+    __kpr_list_push(&barrier->waitingThreads, (void*) tid);
 
     klee_toggle_thread_scheduling(1);
     klee_sleep_thread();

@@ -1,17 +1,18 @@
 #include "klee/klee.h"
 #include "pthread_impl.h"
+#include "key.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-static __pthread_impl_pthread* __obtain_pthread_data(pthread_t pthread) {
-  return ((__pthread_impl_pthread*)pthread);
+static __kpr_pthread* __obtain_pthread_data(pthread_t pthread) {
+  return ((__kpr_pthread*)pthread);
 }
 
-static void* __pthread_impl_wrapper(void* arg, uint64_t tid) {
+static void* __kpr_wrapper(void* arg, uint64_t tid) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_pthread* thread = arg;
+  __kpr_pthread* thread = arg;
   thread->tid = tid;
   void* startArg = thread->startArg;
   klee_toggle_thread_scheduling(1);
@@ -23,14 +24,14 @@ static void* __pthread_impl_wrapper(void* arg, uint64_t tid) {
 int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*startRoutine)(void *), void *arg) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_pthread* thread = malloc(sizeof(__pthread_impl_pthread));
+  __kpr_pthread* thread = malloc(sizeof(__kpr_pthread));
   if (thread == NULL) {
     klee_toggle_thread_scheduling(1);
     return EAGAIN;
   }
-  memset(thread, 0, sizeof(__pthread_impl_mutex));
+  memset(thread, 0, sizeof(__kpr_mutex));
 
-  *((__pthread_impl_pthread**)pthread) = thread;
+  *((__kpr_pthread**)pthread) = thread;
 
   thread->tid = 0;
   thread->startRoutine = startRoutine;
@@ -41,7 +42,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->joinState = 0;
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
 
-  __stack_create(&thread->cleanUpStack);
+  __kpr_list_create(&thread->cleanUpStack);
 
   if (attr != NULL) {
     int ds = 0;
@@ -54,7 +55,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
 
   klee_toggle_thread_scheduling(1);
 
-  klee_create_thread(__pthread_impl_wrapper, thread);
+  klee_create_thread(__kpr_wrapper, thread);
   klee_preempt_thread();
 
   return 0;
@@ -67,7 +68,7 @@ int pthread_detach(pthread_t pthread) {
 
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_pthread* thread = __obtain_pthread_data(pthread);
+  __kpr_pthread* thread = __obtain_pthread_data(pthread);
   if (thread->mode == 1) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
@@ -86,10 +87,11 @@ void pthread_exit(void* arg) {
   uint64_t tid = klee_get_thread_id();
 
   if (tid != 0) {
-    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument();
+    __kpr_pthread* thread = (__kpr_pthread*) klee_get_thread_start_argument();
 
     if (thread->mode == 1) {
       klee_toggle_thread_scheduling(1);
+      __pthread_key_clear_data_of_thread(tid);
       klee_exit_thread();
     }
 
@@ -107,12 +109,13 @@ void pthread_exit(void* arg) {
   }
 
   klee_toggle_thread_scheduling(1);
+  __pthread_key_clear_data_of_thread(tid);
   klee_exit_thread();
 }
 
 int pthread_join(pthread_t pthread, void **ret) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_pthread* thread = __obtain_pthread_data(pthread);
+  __kpr_pthread* thread = __obtain_pthread_data(pthread);
 
   if (thread->mode == 1) { // detached state
     klee_toggle_thread_scheduling(1);
@@ -185,7 +188,7 @@ int pthread_setcancelstate(int state, int *oldState) {
 
   uint64_t tid = klee_get_thread_id();
   if (tid != 0) {
-    __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument;
+    __kpr_pthread* thread = (__kpr_pthread*) klee_get_thread_start_argument;
     *oldState = thread->cancelState;
     thread->cancelState = state;
   }
@@ -205,7 +208,7 @@ void pthread_testcancel() {
 
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_pthread* thread = (__pthread_impl_pthread*) klee_get_thread_start_argument;
+  __kpr_pthread* thread = (__kpr_pthread*) klee_get_thread_start_argument;
   if (thread->cancelState == PTHREAD_CANCEL_DISABLE) {
     klee_toggle_thread_scheduling(1);
     return;
@@ -221,7 +224,7 @@ void pthread_testcancel() {
 
 int pthread_cancel(pthread_t tid) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_pthread* thread = (__pthread_impl_pthread*) tid;
+  __kpr_pthread* thread = (__kpr_pthread*) tid;
   thread->cancelSignalReceived = 1;
   klee_toggle_thread_scheduling(1);
 
@@ -258,10 +261,10 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(vo
   return 0;
 }
 
-static int __pthread_impl_concurrency = 0;
+static int __kpr_concurrency = 0;
 
 int pthread_getconcurrency(void) {
-  return __pthread_impl_concurrency;
+  return __kpr_concurrency;
 }
 
 int pthread_setconcurrency(int n) {
@@ -269,21 +272,21 @@ int pthread_setconcurrency(int n) {
     return EINVAL;
   }
 
-  __pthread_impl_concurrency = n;
+  __kpr_concurrency = n;
 
   return 0;
 }
 
 #ifndef pthread_cleanup_pop
 void pthread_cleanup_pop(int execute) {
-  __pthread_impl_thread thread* = (__pthread_impl_thread*) klee_get_thread_start_argument();
-  size_t stackSize = __stack_size(&thread->cleanUpStack);
+  __kpr_thread thread* = (__kpr_thread*) klee_get_thread_start_argument();
+  size_t stackSize = __kpr_list_size(&thread->cleanUpStack);
 
   if (stackSize == 0) {
     klee_abort();
   }
 
-  void (*routine)(void*) = __stack_pop(&thread->cleanUpStack);
+  void (*routine)(void*) = __kpr_list_pop(&thread->cleanUpStack);
 
   if (execute == 0) {
     return;
@@ -296,8 +299,8 @@ void pthread_cleanup_pop(int execute) {
 
 #ifndef pthread_cleanup_push
 void pthread_cleanup_push(void (*routine)(void*), void *arg) {
-  __pthread_impl_thread thread* = (__pthread_impl_thread*) klee_get_thread_start_argument();
-  __stack_pop(&thread->cleanUpStack, routine);
+  __kpr_thread thread* = (__kpr_thread*) klee_get_thread_start_argument();
+  __kpr_list_pop(&thread->cleanUpStack, routine);
 }
 #endif
 

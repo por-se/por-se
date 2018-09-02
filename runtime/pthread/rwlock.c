@@ -6,24 +6,24 @@
 #include <string.h>
 #include <errno.h>
 
-static __pthread_impl_rwlock* __obtain_pthread_rwlock(pthread_rwlock_t *lock) {
-  return *((__pthread_impl_rwlock**) lock);
+static __kpr_rwlock* __obtain_pthread_rwlock(pthread_rwlock_t *lock) {
+  return *((__kpr_rwlock**) lock);
 }
 
 int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_rwlock* lock = malloc(sizeof(__pthread_impl_rwlock));
-  memset(lock, 0, sizeof(__pthread_impl_rwlock));
+  __kpr_rwlock* lock = malloc(sizeof(__kpr_rwlock));
+  memset(lock, 0, sizeof(__kpr_rwlock));
 
-  *((__pthread_impl_rwlock**)l) = lock;
+  *((__kpr_rwlock**)l) = lock;
 
   lock->acquiredWriter = 0;
   lock->mode = 0;
   lock->acquiredReaderCount = 0;
 
-  __stack_create(&lock->waitingReaders);
-  __stack_create(&lock->waitingWriters);
+  __kpr_list_create(&lock->waitingReaders);
+  __kpr_list_create(&lock->waitingWriters);
 
   klee_toggle_thread_scheduling(1);
 
@@ -32,7 +32,7 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
 
 int pthread_rwlock_destroy(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != 0) {
     klee_toggle_thread_scheduling(1);
@@ -54,11 +54,11 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
     return result;
   }
 
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   // Otherwise the lock is currently locked by a writer
   uint64_t tid = klee_get_thread_id();
-  __stack_push(&lock->waitingReaders, (void*) tid);
+  __kpr_list_push(&lock->waitingReaders, (void*) tid);
   klee_sleep_thread();
 
   lock->mode = 1; // Reader mode
@@ -72,7 +72,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode == 0 || lock->mode == 1) {
     lock->mode = 1; // Reader mode
@@ -96,11 +96,11 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
     return result;
   }
 
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   // Otherwise the lock is currently locked by another writer or reader
   uint64_t tid = klee_get_thread_id();
-  __stack_push(&lock->waitingWriters, (void*) tid);
+  __kpr_list_push(&lock->waitingWriters, (void*) tid);
   klee_toggle_thread_scheduling(1);
 
   klee_sleep_thread();
@@ -116,7 +116,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
 int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode != 0) {
     klee_toggle_thread_scheduling(1);
@@ -136,7 +136,7 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
 
 int pthread_rwlock_unlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_rwlock* lock = __obtain_pthread_rwlock(l);
+  __kpr_rwlock* lock = __obtain_pthread_rwlock(l);
 
   if (lock->mode == 0 || (lock->mode == 2 && lock->acquiredWriter != klee_get_thread_id())) {
     klee_toggle_thread_scheduling(1);
@@ -156,16 +156,16 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
   }
 
   // For now always prefer writers
-  if (__stack_size(&lock->waitingWriters) > 0) {
+  if (__kpr_list_size(&lock->waitingWriters) > 0) {
     // TODO: we should not just use the top one, but rather
     // make a symbolic value to determine the next writer
-    uint64_t tid = (uint64_t) __stack_pop(&lock->waitingWriters);
+    uint64_t tid = (uint64_t) __kpr_list_pop(&lock->waitingWriters);
     klee_wake_up_thread(tid);
     klee_toggle_thread_scheduling(1);
     return 0;
   }
 
-  if (__stack_size(&lock->waitingReaders) > 0) {
+  if (__kpr_list_size(&lock->waitingReaders) > 0) {
     __notify_threads(&lock->waitingReaders);
     klee_toggle_thread_scheduling(1);
     klee_preempt_thread();

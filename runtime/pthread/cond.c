@@ -6,20 +6,20 @@
 #include <string.h>
 #include <errno.h>
 
-static __pthread_impl_cond* __obtain_pthread_cond(pthread_cond_t *lock) {
-  return *((__pthread_impl_cond**) lock);
+static __kpr_cond* __obtain_pthread_cond(pthread_cond_t *lock) {
+  return *((__kpr_cond**) lock);
 }
 
 int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_cond* lock = malloc(sizeof(__pthread_impl_cond));
-  memset(lock, 0, sizeof(__pthread_impl_cond));
+  __kpr_cond* lock = malloc(sizeof(__kpr_cond));
+  memset(lock, 0, sizeof(__kpr_cond));
 
-  *((__pthread_impl_cond**)l) = lock;
+  *((__kpr_cond**)l) = lock;
 
   lock->mode = 0;
-  __stack_create(&lock->waitingList);
+  __kpr_list_create(&lock->waitingList);
   klee_toggle_thread_scheduling(1);
 
   return 0;
@@ -28,9 +28,9 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 int pthread_cond_destroy(pthread_cond_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_impl_cond* lock = __obtain_pthread_cond(l);
+  __kpr_cond* lock = __obtain_pthread_cond(l);
 
-  if (lock->mode != 0 || __stack_size(&lock->waitingList) != 0) {
+  if (lock->mode != 0 || __kpr_list_size(&lock->waitingList) != 0) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -50,10 +50,10 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
     return EINVAL;
   }
 
-  __pthread_impl_cond* lock = __obtain_pthread_cond(c);
+  __kpr_cond* lock = __obtain_pthread_cond(c);
 
   uint64_t tid = klee_get_thread_id();
-  __stack_push(&lock->waitingList, (void*) tid);
+  __kpr_list_push(&lock->waitingList, (void*) tid);
 
   klee_toggle_thread_scheduling(1);
   klee_sleep_thread();
@@ -65,7 +65,7 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
 
 int pthread_cond_broadcast(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_cond* lock = __obtain_pthread_cond(c);
+  __kpr_cond* lock = __obtain_pthread_cond(c);
 
   __notify_threads(&lock->waitingList);
   klee_toggle_thread_scheduling(1);
@@ -75,14 +75,14 @@ int pthread_cond_broadcast(pthread_cond_t *c) {
 
 int pthread_cond_signal(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
-  __pthread_impl_cond* lock = __obtain_pthread_cond(c);
+  __kpr_cond* lock = __obtain_pthread_cond(c);
 
-  if (__stack_size(&lock->waitingList) == 0) {
+  if (__kpr_list_size(&lock->waitingList) == 0) {
     klee_toggle_thread_scheduling(1);
     return 0;
   }
 
-  uint64_t waiting = (uint64_t) __stack_pop(&lock->waitingList);
+  uint64_t waiting = (uint64_t) __kpr_list_pop(&lock->waitingList);
   klee_wake_up_thread(waiting);
 
   klee_toggle_thread_scheduling(1);
