@@ -502,9 +502,20 @@ void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
                    << " (incoming edge: " << src->getName() << ")\n";
     }
 
+    // unregister previous
+    fingerprint.updateUint8(7);
+    fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
+    fingerprint.applyToFingerprintLocalDelta();
+
     unregisterConsumedLocals(src);
   }
   updateBasicBlockInfo(dst);
+
+  // register new basic block (program counter)
+  fingerprint.updateUint8(7);
+  fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
+  fingerprint.applyToFingerprintLocalDelta();
+
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: The following variables are live "
