@@ -489,12 +489,21 @@ void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
     return;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: Entering BasicBlock " << dst->getName()
-                 << " (incoming edge: " << src->getName() << ")\n";
-  }
+  if (src == nullptr) {
+    assert(&(dst->getParent()->getEntryBlock()) == dst &&
+           "dst is not an entry basic block");
+    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      llvm::errs() << "MemoryState: Entering BasicBlock " << dst->getName()
+                   << "\n";
+    }
+  } else {
+    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      llvm::errs() << "MemoryState: Entering BasicBlock " << dst->getName()
+                   << " (incoming edge: " << src->getName() << ")\n";
+    }
 
-  unregisterConsumedLocals(src);
+    unregisterConsumedLocals(src);
+  }
   updateBasicBlockInfo(dst);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -520,48 +529,6 @@ void MemoryState::phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
   }
 
   unregisterKilledLocals(dst, src);
-}
-
-
-void MemoryState::registerEntryBasicBlock(const llvm::BasicBlock *entry) {
-  if (disableMemoryState) {
-    return;
-  }
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: Register entry BasicBlock "
-                 << entry->getName() << " [fingerprint: "
-                 << fingerprint.getFingerprintAsString() << "]\n";
-  }
-
-  if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-    // entry basic blocks have no predecessor from which we would have to clean
-    // up using enterBasicBlock (which would then call updateBasicBlockInfo())
-    updateBasicBlockInfo(entry);
-  }
-
-  // TODO: separate method for entry still needed?
-  // TODO: PC into fingerprint
-  assert(0 && "TODO: IMPLEMENT PC into fingerprint");
-}
-
-void MemoryState::registerBasicBlock(const llvm::BasicBlock *bb) {
-  if (disableMemoryState) {
-    return;
-  }
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: Register BasicBlock "
-                 << bb->getName() << " [fingerprint: "
-                 << fingerprint.getFingerprintAsString() << "]\n";
-  }
-
-  if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-    assert(bb == basicBlockInfo.bb && "basic block was not properly entered!");
-  }
-
-  // TODO: PC into fingerprint
-  assert(0 && "TODO: IMPLEMENT PC into fingerprint");
 }
 
 void MemoryState::unregisterKilledLocals(const llvm::BasicBlock *dst,

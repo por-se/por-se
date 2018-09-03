@@ -226,12 +226,9 @@ public:
   void registerExternalFunctionCall();
 
   void enterBasicBlock(const llvm::BasicBlock *dst,
-                       const llvm::BasicBlock *src);
+                       const llvm::BasicBlock *src = nullptr);
   void phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src);
-
-  void registerEntryBasicBlock(const llvm::BasicBlock *entry);
-  void registerBasicBlock(const llvm::BasicBlock *bb);
 
   void registerPushFrame(const KFunction *kf);
   void registerPopFrame(const llvm::BasicBlock *returningBB,
