@@ -154,20 +154,16 @@ public:
     updateDisableMemoryState();
   }
 
-  static std::pair<size_t, size_t> getTraceStructSizes() {
-    return MemoryTrace::getTraceStructSizes();
+  static size_t getStackStructSize() {
+    return MemoryTrace::getStackStructSize();
   }
 
-  std::pair<size_t, size_t> getTraceLength() const {
-    return trace.getTraceLength();
+  size_t getStackLength() const {
+    return trace.getStackLength();
   }
 
-  std::pair<size_t, size_t> getTraceCapacity() const {
-    return trace.getTraceCapacity();
-  }
-
-  size_t getNumberOfEntriesInCurrentStackFrame() const {
-    return trace.getNumberOfEntriesInCurrentStackFrame();
+  size_t getStackCapacity() const {
+    return trace.getStackCapacity();
   }
 
   size_t getFunctionListsLength() const {
@@ -237,16 +233,9 @@ public:
   void registerEntryBasicBlock(const llvm::BasicBlock *entry);
   void registerBasicBlock(const llvm::BasicBlock *bb);
 
-  bool findInfiniteLoopInFunction();
-  bool findInfiniteRecursion();
-
   void registerPushFrame(const KFunction *kf);
   void registerPopFrame(const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
-
-  void dumpTrace(llvm::raw_ostream &out = llvm::errs()) const {
-    trace.dumpTrace(out);
-  }
 };
 }
 

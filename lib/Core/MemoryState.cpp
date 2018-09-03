@@ -540,8 +540,9 @@ void MemoryState::registerEntryBasicBlock(const llvm::BasicBlock *entry) {
     updateBasicBlockInfo(entry);
   }
 
-  const KInstruction *inst = getKInstruction(entry);
-  trace.registerBasicBlock(inst, fingerprint.getFingerprint());
+  // TODO: separate method for entry still needed?
+  // TODO: PC into fingerprint
+  assert(0 && "TODO: IMPLEMENT PC into fingerprint");
 }
 
 void MemoryState::registerBasicBlock(const llvm::BasicBlock *bb) {
@@ -559,8 +560,8 @@ void MemoryState::registerBasicBlock(const llvm::BasicBlock *bb) {
     assert(bb == basicBlockInfo.bb && "basic block was not properly entered!");
   }
 
-  const KInstruction *inst = getKInstruction(bb);
-  trace.registerBasicBlock(inst, fingerprint.getFingerprint());
+  // TODO: PC into fingerprint
+  assert(0 && "TODO: IMPLEMENT PC into fingerprint");
 }
 
 void MemoryState::unregisterKilledLocals(const llvm::BasicBlock *dst,
@@ -643,40 +644,6 @@ void MemoryState::clearLocal(const llvm::Instruction *inst) {
     clearLocal(kinst);
   }
   assert(getLocalValue(inst).isNull());
-}
-
-bool MemoryState::findInfiniteLoopInFunction() {
-  if (disableMemoryState) {
-    // we do not want to find infinite loops in library or output functions
-    return false;
-  }
-
-  bool result = trace.findInfiniteLoopInFunction();
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_TRACE)) {
-    if (result) {
-      trace.dumpTrace();
-    }
-  }
-
-  return result;
-}
-
-bool MemoryState::findInfiniteRecursion() {
-  if (disableMemoryState) {
-    // we do not want to find infinite loops in library or output functions
-    return false;
-  }
-
-  bool result = trace.findInfiniteRecursion();
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_TRACE)) {
-    if (result) {
-      trace.dumpTrace();
-    }
-  }
-
-  return result;
 }
 
 bool MemoryState::enterListedFunction(llvm::Function *f) {

@@ -86,7 +86,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_clear_memory_state", handleClearMemoryState, false),
   add("klee_disable_memory_state", handleDisableMemoryState, false),
   add("klee_enable_memory_state", handleEnableMemoryState, false),
-  add("klee_dump_memory_trace", handleDumpMemoryTrace, false),
   add("klee_get_valuef", handleGetValue, true),
   add("klee_get_valued", handleGetValue, true),
   add("klee_get_valuel", handleGetValue, true),
@@ -756,15 +755,6 @@ void SpecialFunctionHandler::handleEnableMemoryState(ExecutionState &state,
   if (DetectInfiniteLoops) {
     state.memoryState.enable();
     klee_warning_once(target, "enabling memory state of infinite loop detection");
-  }
-}
-
-void SpecialFunctionHandler::handleDumpMemoryTrace(ExecutionState &state,
-                                                          KInstruction *target,
-                                                          std::vector<ref<Expr>>
-                                                            &arguments) {
-  if (DetectInfiniteLoops) {
-    state.memoryState.dumpTrace();
   }
 }
 

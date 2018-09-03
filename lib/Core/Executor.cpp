@@ -266,7 +266,6 @@ namespace {
 		    clEnumValN(Executor::Exec, "Exec", "Trying to execute an unexpected instruction"),
 		    clEnumValN(Executor::External, "External", "External objects referenced"),
 		    clEnumValN(Executor::Free, "Free", "Freeing invalid memory"),
-		    clEnumValN(Executor::InfiniteLoop, "InfiniteLoop", "Infinite loop encountered"),
 		    clEnumValN(Executor::Model, "Model", "Memory model limit hit"),
 		    clEnumValN(Executor::Overflow, "Overflow", "An overflow occurred"),
 		    clEnumValN(Executor::Ptr, "Ptr", "Pointer error"),
@@ -315,7 +314,6 @@ const char *Executor::TerminateReasonNames[] = {
   [ Exec ] = "exec",
   [ External ] = "external",
   [ Free ] = "free",
-  [ InfiniteLoop ] = "infty",
   [ Model ] = "model",
   [ Overflow ] = "overflow",
   [ Ptr ] = "ptr",
@@ -437,10 +435,8 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
         (*statesJSONFile) << "  {\n";
         (*statesJSONFile) << "    \"functionpointer_size\": "
                           << sizeof(llvm::Function *) << ",\n";
-        (*statesJSONFile) << "    \"trace_entry_size\": "
-                          << MemoryState::getTraceStructSizes().first << ",\n";
         (*statesJSONFile) << "    \"frames_entry_size\": "
-                          << MemoryState::getTraceStructSizes().second << ",\n";
+                          << MemoryState::getStackStructSize() << ",\n";
         (*statesJSONFile) << "    \"memory_state_size\": "
                           << sizeof(MemoryState) << ",\n";
         (*statesJSONFile) << "    \"truncate_on_fork\": ";
@@ -1539,9 +1535,6 @@ void Executor::executeCall(ExecutionState &state,
 
     if (DetectInfiniteLoops) {
       state.memoryState.registerEntryBasicBlock(state.pc->inst->getParent());
-      if (state.memoryState.findInfiniteRecursion()) {
-        terminateStateOnError(state, "infinite loop", InfiniteLoop);
-      }
     }
   }
 }
@@ -1590,9 +1583,6 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
         InfiniteLoopDetectionDisableTwoPredecessorOpt) {
       // more than one predecessor
       state.memoryState.registerBasicBlock(dst);
-      if (state.memoryState.findInfiniteLoopInFunction()) {
-        terminateStateOnError(state, "infinite loop", InfiniteLoop);
-      }
     }
   }
 }
@@ -3017,29 +3007,20 @@ void Executor::updateStatesJSON(KInstruction *ki, const ExecutionState &state,
     auto milliseconds =
       std::chrono::duration_cast<std::chrono::milliseconds>(time) - seconds;
 
-    static size_t lastTraceLength = 0;
     static size_t lastStackFrames = 0;
     static size_t lastStateId = 0;
 
     if (lastStateId != state.id
-        || lastTraceLength != state.memoryState.getTraceLength().first
-        || lastStackFrames != state.memoryState.getTraceLength().second
+        || lastStackFrames != state.memoryState.getStackLength()
         || !ktest.empty()
         || !error.empty()
     ) {
       (*statesJSONFile) << ",\n  {\n";
       (*statesJSONFile) << "    \"state_id\": " << state.id << ",\n";
-      (*statesJSONFile) << "    \"trace_length\": "
-                        << state.memoryState.getTraceLength().first << ",\n";
       (*statesJSONFile) << "    \"frames_length\": "
-                        << state.memoryState.getTraceLength().second << ",\n";
-      (*statesJSONFile) << "    \"trace_capacity\": "
-                        << state.memoryState.getTraceCapacity().first << ",\n";
+                        << state.memoryState.getStackLength() << ",\n";
       (*statesJSONFile) << "    \"frames_capacity\": "
-                        << state.memoryState.getTraceCapacity().second << ",\n";
-      size_t topSF = state.memoryState.getNumberOfEntriesInCurrentStackFrame();
-      (*statesJSONFile) << "    \"current_frame_length\": "
-                        << topSF << ",\n";
+                        << state.memoryState.getStackCapacity() << ",\n";
       if (!ktest.empty()) {
         (*statesJSONFile) << "    \"ktest\": \"" << ktest << "\",\n";
       }
@@ -3060,8 +3041,7 @@ void Executor::updateStatesJSON(KInstruction *ki, const ExecutionState &state,
       }
       (*statesJSONFile) << "  }";
 
-      lastTraceLength = state.memoryState.getTraceLength().first;
-      lastStackFrames = state.memoryState.getTraceLength().second;
+      lastStackFrames = state.memoryState.getStackLength();
       lastStateId = state.id;
     }
   }
@@ -3093,18 +3073,12 @@ void Executor::updateForkJSON(const ExecutionState &current,
       (*forkJSONFile) << "    \"false_id\": " << falseState.id << ",\n";
     }
     if (trueState.id == falseState.id || current.id != trueState.id) {
-      (*forkJSONFile) << "    \"new_trace_capacity\": "
-                      << trueState.memoryState.getTraceCapacity().first
-                      << ",\n";
       (*forkJSONFile) << "    \"new_frames_capacity\": "
-                      << trueState.memoryState.getTraceCapacity().second
+                      << trueState.memoryState.getStackCapacity()
                       << ",\n";
     } else {
-      (*forkJSONFile) << "    \"new_trace_capacity\": "
-                      << falseState.memoryState.getTraceCapacity().first
-                      << ",\n";
       (*forkJSONFile) << "    \"new_frames_capacity\": "
-                      << falseState.memoryState.getTraceCapacity().second
+                      << falseState.memoryState.getStackCapacity()
                       << ",\n";
     }
     (*forkJSONFile) << "    \"timestamp\": " << seconds.count()
@@ -3326,13 +3300,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
     msg << "Time to error: " << seconds.count() << "." << milliseconds.count() << " seconds\n";
     msg << "Stack: \n";
     state.dumpStack(msg);
-
-    if (DetectInfiniteLoops) {
-      if (termReason == InfiniteLoop) {
-        msg << "Memory Trace: \n";
-        state.memoryState.dumpTrace(msg);
-      }
-    }
 
     std::string info_str = info.str();
     if (info_str != "")
