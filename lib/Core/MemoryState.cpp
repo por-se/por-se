@@ -743,12 +743,14 @@ void MemoryState::leaveMemoryFunction() {
   registerWrite(memoryFunction.address, *mo, *os, memoryFunction.bytes);
 }
 
-void MemoryState::registerPushFrame(const KFunction *kf) {
+void MemoryState::registerPushFrame(const KFunction *callee,
+                                    const KInstruction *caller,
+                                    size_t stackFrameIndex) {
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
-  trace.registerEndOfStackFrame(kf,
+  trace.registerEndOfStackFrame(caller,
                                 fingerprint.getLocalDelta(),
                                 fingerprint.getAllocaDelta());
 
@@ -757,6 +759,13 @@ void MemoryState::registerPushFrame(const KFunction *kf) {
   // record alloca allocations and changes for this new stack frame separately
   // from those of other stack frames (without removing the latter)
   fingerprint.applyAndResetAllocaDelta();
+
+  // register stack frame
+  fingerprint.updateUint8(8);
+  fingerprint.updateUint64(stackFrameIndex);
+  fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(caller));
+  fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(callee));
+  fingerprint.applyToFingerprintAllocaDelta();
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "Fingerprint: " << fingerprint.getFingerprintAsString()

@@ -17,11 +17,13 @@
 
 namespace klee {
 
-void MemoryTrace::registerEndOfStackFrame(const KFunction* kf,
+void MemoryTrace::registerEndOfStackFrame(const KInstruction* caller,
                                           fingerprint_t fingerprintLocalDelta,
                                           fingerprint_t fingerprintAllocaDelta)
 {
-  stackFrames.emplace_back(kf, fingerprintLocalDelta, fingerprintAllocaDelta);
+  stackFrames.emplace_back(caller,
+                           fingerprintLocalDelta,
+                           fingerprintAllocaDelta);
 }
 
 void MemoryTrace::clear() {

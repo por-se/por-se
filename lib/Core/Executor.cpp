@@ -1434,11 +1434,11 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    KFunction *leavingFunction = state.stack.back().kf;
     state.pushFrame(state.prevPC, kf);
     state.pc = kf->instructions;
     if (DetectInfiniteLoops) {
-      state.memoryState.registerPushFrame(leavingFunction);
+      state.memoryState.registerPushFrame(kf, state.prevPC,
+                                          state.stack.size() - 1);
     }
 
     if (statsTracker)

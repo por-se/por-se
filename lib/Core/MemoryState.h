@@ -230,7 +230,9 @@ public:
   void phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src);
 
-  void registerPushFrame(const KFunction *kf);
+  void registerPushFrame(const KFunction *callee,
+                         const KInstruction *caller,
+                         size_t stackFrameIndex);
   void registerPopFrame(const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
 };

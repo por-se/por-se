@@ -9,7 +9,6 @@
 
 namespace klee {
 class ExecutionState;
-struct KFunction;
 class MemoryObject;
 struct StackFrame;
 
@@ -19,17 +18,17 @@ using fingerprint_t = MemoryFingerprint::fingerprint_t;
 
 public:
   struct StackFrameEntry {
-    // function that is executed in this stack frame
-    const KFunction *kf;
+    // caller
+    const KInstruction *caller;
     // locals and arguments only visible within this stack frame
     fingerprint_t fingerprintLocalDelta;
     // allocas allocated in this stack frame
     fingerprint_t fingerprintAllocaDelta;
 
-    StackFrameEntry(const KFunction *kf,
+    StackFrameEntry(const KInstruction *caller,
                     fingerprint_t fingerprintLocalDelta,
                     fingerprint_t fingerprintAllocaDelta)
-        : kf(kf),
+        : caller(caller),
           fingerprintLocalDelta(fingerprintLocalDelta),
           fingerprintAllocaDelta(fingerprintAllocaDelta) {}
   };
@@ -53,7 +52,7 @@ public:
     return sizeof(StackFrameEntry);
   }
 
-  void registerEndOfStackFrame(const KFunction *kf,
+  void registerEndOfStackFrame(const KInstruction* caller,
                                fingerprint_t fingerprintLocalDelta,
                                fingerprint_t fingerprintAllocaDelta);
   StackFrameEntry popFrame();
