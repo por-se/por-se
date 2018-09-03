@@ -185,8 +185,6 @@ public:
                             std::vector<ref<Expr>> &arguments);
   void registerFunctionRet(llvm::Function *f);
 
-  void clearEverything();
-
   void registerWrite(ref<Expr> address, const MemoryObject &mo,
                      const ObjectState &os, std::size_t bytes);
   void registerWrite(ref<Expr> address, const MemoryObject &mo,

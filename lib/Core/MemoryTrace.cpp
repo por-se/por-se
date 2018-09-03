@@ -26,10 +26,6 @@ void MemoryTrace::registerEndOfStackFrame(const KInstruction* caller,
                            fingerprintAllocaDelta);
 }
 
-void MemoryTrace::clear() {
-  stackFrames.clear();
-}
-
 std::size_t MemoryTrace::getNumberOfStackFrames() {
   return stackFrames.size();
 }

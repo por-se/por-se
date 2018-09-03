@@ -166,11 +166,6 @@ void MemoryState::registerFunctionRet(llvm::Function *f) {
 }
 
 
-void MemoryState::clearEverything() {
-  trace.clear();
-  fingerprint.discardEverything();
-}
-
 void MemoryState::registerExternalFunctionCall() {
   if (listedFunction.entered) {
     return;

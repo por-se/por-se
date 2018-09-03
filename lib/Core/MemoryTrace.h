@@ -56,7 +56,6 @@ public:
                                fingerprint_t fingerprintLocalDelta,
                                fingerprint_t fingerprintAllocaDelta);
   StackFrameEntry popFrame();
-  void clear();
   std::size_t getNumberOfStackFrames();
 
   static bool isAllocaAllocationInCurrentStackFrame(const ExecutionState &state,
