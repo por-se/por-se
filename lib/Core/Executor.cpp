@@ -439,13 +439,6 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                           << MemoryState::getStackStructSize() << ",\n";
         (*statesJSONFile) << "    \"memory_state_size\": "
                           << sizeof(MemoryState) << ",\n";
-        (*statesJSONFile) << "    \"truncate_on_fork\": ";
-        if (InfiniteLoopDetectionTruncateOnFork) {
-          (*statesJSONFile) << "true";
-        } else {
-          (*statesJSONFile) << "false";
-        }
-        (*statesJSONFile) << ",\n";
       }
 
       std::string fork_file_name =
@@ -1052,10 +1045,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   } else {
     TimerStatIncrementer timer(stats::forkTime);
     ExecutionState *falseState, *trueState = &current;
-
-    if (DetectInfiniteLoops && InfiniteLoopDetectionTruncateOnFork) {
-      current.memoryState.clearEverything();
-    }
 
     ++stats::forks;
 

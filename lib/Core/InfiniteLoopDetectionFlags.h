@@ -14,8 +14,6 @@ enum DebugInfiniteLoopDetectionType {
 
 extern llvm::cl::bits<DebugInfiniteLoopDetectionType> DebugInfiniteLoopDetection;
 
-extern llvm::cl::opt<bool> InfiniteLoopDetectionTruncateOnFork;
-
 extern llvm::cl::opt<bool> InfiniteLoopDetectionDisableTwoPredecessorOpt;
 
 extern llvm::cl::opt<bool> InfiniteLoopDetectionDisableLiveVariableAnalysis;
