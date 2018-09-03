@@ -25,6 +25,7 @@
 
 namespace klee {
 
+size_t MemoryState::externalFunctionCallCounter = 0;
 KModule *MemoryState::kmodule = nullptr;
 std::vector<llvm::Function *> MemoryState::outputFunctionsWhitelist;
 std::vector<llvm::Function *> MemoryState::inputFunctionsBlacklist;
@@ -217,9 +218,12 @@ void MemoryState::registerExternalFunctionCall() {
   }
 
   // it is unknown whether control flow is changed by an external function, so
-  // we cannot detect infinite loop iterations that started before this call
-  trace.clear();
-  fingerprint.discardEverything();
+  // we cannot make any assumptions about the state after this call
+
+  // mask fingerprint with global counter
+  fingerprint.updateUint8(9);
+  fingerprint.updateUint64(externalFunctionCallCounter++);
+  fingerprint.applyToFingerprint();
 }
 
 void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,

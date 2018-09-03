@@ -61,6 +61,8 @@ private:
     std::vector<llvm::Value *> liveRegisters;
   } basicBlockInfo;
 
+  static size_t externalFunctionCallCounter;
+
   static KModule *kmodule;
   static std::vector<llvm::Function *> outputFunctionsWhitelist;
   static std::vector<llvm::Function *> inputFunctionsBlacklist;
