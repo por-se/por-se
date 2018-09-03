@@ -28,7 +28,6 @@ namespace klee {
 size_t MemoryState::externalFunctionCallCounter = 0;
 KModule *MemoryState::kmodule = nullptr;
 std::vector<llvm::Function *> MemoryState::outputFunctionsWhitelist;
-std::vector<llvm::Function *> MemoryState::inputFunctionsBlacklist;
 std::vector<llvm::Function *> MemoryState::libraryFunctionsList;
 std::vector<llvm::Function *> MemoryState::memoryFunctionsList;
 
@@ -45,32 +44,6 @@ void MemoryState::setKModule(KModule *_kmodule) {
 
     // POSIX
     "write"
-  };
-
-  // blacklist: input functions
-  const char* inputFunctions[] = {
-    // stdio.h
-    "fopen", "freopen", "fread", "fgetc", "getc", "fgetwc", "getwc", "fgets",
-    "fgetws", "getchar", "getwchar", "gets", "scanf", "fscanf", "sscanf",
-    "wscanf", "fwscanf", "swscanf", "vscanf", "vfscanf", "vsscanf", "vwscanf",
-    "vfwscanf", "vswscanf", "ftell", "ftello", "fseek", "fseeko", "fgetpos",
-    "fsetpos", "feof", "ferror",
-
-    // POSIX
-    "open", "creat", "socket", "accept", "socketpair", "pipe", "opendir",
-    "dirfd", "fileno", "read", "readv", "pread", "recv", "recvmsg", "lseek",
-    "fstat", "fdopen", "ftruncate", "fsync", "fdatasync", "fstatvfs",
-    "select", "pselect", "poll", "epoll", "flock", "fcntl", "lockf",
-
-    // dirent.h
-    "opendir", "readdir", "readdir_r", "telldir",
-
-    // future POSIX
-    "openat", "faccessat", "fstatat", "readlinkat", "fdopendir",
-
-    // LFS
-    "fgetpos64", "fopen64", "freopen64", "fseeko64", "fsetpos64", "ftello64",
-    "fstat64", "lstat64", "open64", "readdir64", "stat64"
   };
 
   // library function that might use heavy loops that we do not want to inspect
@@ -99,7 +72,6 @@ void MemoryState::setKModule(KModule *_kmodule) {
   };
 
   initializeFunctionList(_kmodule, outputFunctions, outputFunctionsWhitelist);
-  initializeFunctionList(_kmodule, inputFunctions, inputFunctionsBlacklist);
   initializeFunctionList(_kmodule, libraryFunctions, libraryFunctionsList);
   initializeFunctionList(_kmodule, memoryFunctions, memoryFunctionsList);
 
@@ -136,22 +108,13 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
                                        std::vector<ref<Expr>> &arguments) {
   if (globalDisableMemoryState) {
     // we only check for global disable and not for library or listed functions
-    // as we assume that those will not call any input or output functions
+    // as we assume that those will not call any output functions
     return;
   }
 
-  if (std::binary_search(inputFunctionsBlacklist.begin(),
-                         inputFunctionsBlacklist.end(),
+  if (std::binary_search(outputFunctionsWhitelist.begin(),
+                         outputFunctionsWhitelist.end(),
                          f)) {
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: blacklisted input function call to "
-                   << f->getName() << "()\n";
-    }
-    clearEverything();
-    enterListedFunction(f);
-  } else if (std::binary_search(outputFunctionsWhitelist.begin(),
-                                outputFunctionsWhitelist.end(),
-                                f)) {
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       llvm::errs() << "MemoryState: whitelisted output function call to "
                    << f->getName() << "()\n";

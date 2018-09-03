@@ -65,7 +65,6 @@ private:
 
   static KModule *kmodule;
   static std::vector<llvm::Function *> outputFunctionsWhitelist;
-  static std::vector<llvm::Function *> inputFunctionsBlacklist;
   static std::vector<llvm::Function *> libraryFunctionsList;
   static std::vector<llvm::Function *> memoryFunctionsList;
 
@@ -170,14 +169,12 @@ public:
 
   size_t getFunctionListsLength() const {
     return MemoryState::outputFunctionsWhitelist.size()
-        + MemoryState::inputFunctionsBlacklist.size()
         + MemoryState::libraryFunctionsList.size()
         + MemoryState::memoryFunctionsList.size();
   }
 
   size_t getFunctionListsCapacity() const {
     return MemoryState::outputFunctionsWhitelist.capacity()
-        + MemoryState::inputFunctionsBlacklist.capacity()
         + MemoryState::libraryFunctionsList.capacity()
         + MemoryState::memoryFunctionsList.capacity();
   }
