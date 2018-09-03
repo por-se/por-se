@@ -101,11 +101,11 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
   // Otherwise the lock is currently locked by another writer or reader
   uint64_t tid = klee_get_thread_id();
   __kpr_list_push(&lock->waitingWriters, (void*) tid);
-  klee_toggle_thread_scheduling(1);
 
+  // klee_toggle_thread_scheduling(1);
   klee_sleep_thread();
+  // klee_toggle_thread_scheduling(0);
 
-  klee_toggle_thread_scheduling(0);
   lock->mode = 2;
   lock->acquiredWriter = klee_get_thread_id();
   klee_toggle_thread_scheduling(1);

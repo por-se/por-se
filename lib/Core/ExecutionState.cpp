@@ -85,7 +85,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 }
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : constraints(assumptions), queryCost(0.), ptreeNode(0), memAccessTracker(nullptr) {}
+    : constraints(assumptions), memAccessTracker(nullptr), queryCost(0.), ptreeNode(0) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -302,6 +302,13 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
     memAccessTracker->scheduledNewThread(tid);
   }
 
+  // So it can happen that this is the first execution of the thread since it was going to sleep
+  // so we might have to disable thread scheduling again
+  if (threadIt->second.threadSchedulingWasDisabled) {
+    threadIt->second.threadSchedulingWasDisabled = false;
+    threadSchedulingEnabled = false;
+  }
+
   currentSchedulingIndex = schedulingHistory.size() - 1;
   scheduleDependencies[tid].push_back(EpochDependencies());
 
@@ -339,6 +346,12 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 void ExecutionState::sleepCurrentThread() {
   Thread* thread = getCurrentThreadReference();
   thread->state = Thread::ThreadState::SLEEPING;
+
+  // If a thread goes to sleep when it had deactivated thread scheduling,
+  // then we will safe this and will reenable thread scheduling for as long as this thread
+  // is not running again
+  thread->threadSchedulingWasDisabled = !threadSchedulingEnabled;
+  threadSchedulingEnabled = true;
 
   runnableThreads.erase(thread->getThreadId());
 }

@@ -303,19 +303,24 @@ namespace {
             cl::init(true));
 
   cl::opt<bool>
-  ForkOnThreadScheduling("fork-on-thread-scheduling",
-            cl::desc("Fork the states whenever the thread scheduling is not trivial"),
-            cl::init(false));
-
-  cl::opt<bool>
-  ForkOnStatement("fork-on-statement",
-            cl::desc("Fork the current state whenever a possible thread scheduling can take place"),
-            cl::init(false));
-
-  cl::opt<bool>
   DumpTreeOnEnd("dump-tree-on-end",
           cl::desc("Dump the process tree whenever a new thread scheduling has occured"),
           cl::init(false));
+
+  enum ScheduleForksEnum {
+    NEVER,
+    STATEMENT,
+    SYNC_POINT
+  };
+
+  cl::opt<ScheduleForksEnum>ScheduleForks("schedule-forks",
+            cl::desc("When to fork for schedule reasons"),
+            cl::values(
+                    clEnumValN(NEVER, "never", "never (default)"),
+                    clEnumValN(STATEMENT, "statement", "Fork for statements where thread interference is possible"),
+                    clEnumValN(SYNC_POINT, "sync-point", "Fork only at sync points (thread schedule changes)")
+                    KLEE_LLVM_CL_VAL_END),
+            cl::init(NEVER));
 
   enum SameScheduleAnalysisEnum {
     NONE,
@@ -816,6 +821,12 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i)
     if (result[i])
       addConstraint(*result[i], conditions[i]);
+
+  if (scheduleTree != nullptr) {
+    auto n = scheduleTree->getNodeOfExecutionState(&state);
+    assert(n != nullptr && "Should have a base node");
+    scheduleTree->registerSymbolicForks(n, result, conditions);
+  }
 }
 
 Executor::StatePair 
@@ -1040,14 +1051,30 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    ref<Expr> invertedCondition = Expr::createIsZero(condition);
     addConstraint(*trueState, condition);
-    addConstraint(*falseState, Expr::createIsZero(condition));
+    addConstraint(*falseState, invertedCondition);
 
     // Kinda gross, do we even really still want this option?
     if (MaxDepth && MaxDepth<=trueState->depth) {
       terminateStateEarly(*trueState, "max-depth exceeded.");
       terminateStateEarly(*falseState, "max-depth exceeded.");
       return StatePair(0, 0);
+    }
+
+    if (scheduleTree != nullptr) {
+      auto n = scheduleTree->getNodeOfExecutionState(&current);
+      assert(n != nullptr && "should exist");
+
+      std::vector<ExecutionState*> newStates;
+      newStates.push_back(trueState);
+      newStates.push_back(falseState);
+
+      std::vector<ref<Expr>> expressions;
+      expressions.push_back(condition);
+      expressions.push_back(invertedCondition);
+
+      scheduleTree->registerSymbolicForks(n, newStates, expressions);
     }
 
     return StatePair(trueState, falseState);
@@ -3030,14 +3057,15 @@ void Executor::run(ExecutionState &initialState) {
     checkMemoryUsage();
 
     bool shouldForkAfterStatement = false;
-    if (ForkOnStatement) {
+    if (ScheduleForks == STATEMENT) {
       auto itInRemoved = std::find(removedStates.begin(), removedStates.end(), &state);
       shouldForkAfterStatement = itInRemoved == removedStates.end();
     }
 
-    // We only want to fork if we do not have forked already
-    if (shouldForkAfterStatement && !hasScheduledThreads) {
-      scheduleThreads(state);
+    // We only want to fork if we do not have forked already or we can actually fork for a reason
+    if (shouldForkAfterStatement && !hasScheduledThreads && state.runnableThreads.size() > 1 && state.threadSchedulingEnabled) {
+      std::vector<ExecutionState*> forks;
+      forkForThreadScheduling(state, forks, state.runnableThreads.size() - 1);
     }
 
     updateStates(&state);
@@ -3910,7 +3938,6 @@ void Executor::runFunctionAsMain(Function *f,
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
   // By default the state should create the main thread
-  // TODO: maybe we should expllicitly set the main thread here up?
   Thread* thread = state->getCurrentThreadReference();
   
   if (pathWriter) 
@@ -4367,7 +4394,21 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
         return true;
       } else if (canBeSafe) {
         ExecutionState* newState = forkToNewState(state);
-        addConstraint(*newState, unsafeQuery);
+        addConstraint(*newState, query);
+
+        if (scheduleTree != nullptr) {
+          std::vector<ExecutionState*> forkStates;
+          forkStates.push_back(&state);
+          forkStates.push_back(newState);
+
+          std::vector<ref<Expr>> expressions;
+          expressions.push_back(EqExpr::createIsZero(query));
+          expressions.push_back(query);
+
+          ScheduleTree::Node* base = scheduleTree->getNodeOfExecutionState(&state);
+          assert(base != nullptr && "The state should have a base node");
+          scheduleTree->registerSymbolicForks(base, forkStates, expressions);
+        }
       }
     } else {
       // We were not successful, so go ahead and add the constraint
@@ -4566,6 +4607,38 @@ void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
   }
 }
 
+void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
+  assert(newForkCount < state.runnableThreads.size());
+
+  // Before we actually fork the states, make sure we honor MaxForks
+  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
+    newForkCount = MaxForks - stats::forks;
+  }
+
+  stats::forks += newForkCount;
+
+  auto rIt = state.runnableThreads.begin();
+  newStates.reserve(newForkCount + 1);
+
+  for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
+    // we want to reuse the current state when that is possible
+    ExecutionState* st;
+    if (i == newForkCount) {
+      st = &state;
+    } else {
+      st = forkToNewState(state);
+      addedStates.push_back(st);
+    }
+    newStates.push_back(st);
+
+    st->scheduleNextThread(*rIt);
+    st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
+    st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
+  }
+
+  hasScheduledThreads = true;
+}
+
 void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
   // After updating the hash, we should also update the hash in the
   // schedule tree
@@ -4647,38 +4720,14 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
     return;
   }
 
-  // Before we actually fork the states, make sure we honor MaxForks
   uint64_t newForkCount = runnable.size() - 1;
-  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
-    newForkCount = MaxForks - stats::forks;
-  }
 
-  if (!ForkOnThreadScheduling) {
+  if (ScheduleForks == NEVER) {
     newForkCount = 0;
   }
 
-  stats::forks += newForkCount;
-
-
-  auto rIt = runnable.begin();
   std::vector<ExecutionState*> newStates;
-  newStates.reserve(newForkCount + 1);
-
-  for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
-    // we want to reuse the current state when that is possible
-    ExecutionState* st;
-    if (i == newForkCount) {
-      st = &state;
-    } else {
-      st = forkToNewState(state);
-      addedStates.push_back(st);
-    }
-    newStates.push_back(st);
-
-    st->scheduleNextThread(*rIt);
-    st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
-    st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
-  }
+  forkForThreadScheduling(state, newStates, newForkCount);
 
   if (scheduleTreeNode != nullptr) {
     scheduleTree->registerScheduleDecision(scheduleTreeNode, newStates);

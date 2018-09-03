@@ -19,23 +19,35 @@ namespace klee {
         uint8_t reason;
       };
 
+      enum NodeType {
+        UNDEFINED,
+        SCHEDULING,
+        SYMBOLIC
+      };
+
     public:
       /// @brief a node represents a schedule decision that happened after the parent nodes decisions
-      struct Node {
+      class Node {
         friend class ScheduleTree;
 
         private:
+          // @brief the type why this node exists
+          NodeType type = UNDEFINED;
+
           /// @brief used to step through the tree
           Node* parent = nullptr;
+
+          /// @brief all nodes that are nested
+          std::vector<Node*> children;
+
+          // @brief the symbolic expression why we forked
+          ref<Expr> symbolicExpression = nullptr;
 
           /// @brief the hash for this scheduled step
           uint64_t dependencyHash = 0;
 
           /// @brief the thread that was scheduled as a
           Thread::ThreadId tid = 0;
-
-          /// @brief all nodes that are nested
-          std::vector<Node*> children;
 
           uint64_t scheduleIndex = 0;
 
@@ -54,10 +66,10 @@ namespace klee {
       std::map<ExecutionState*, Node*> activeNodes;
 
       bool hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
-                                           std::set<uint64_t> &sThreads);
+                                     std::vector<ref < Expr>> &constraints);
 
       /// @brief will add a new state to the schedule tree
-      Node* registerNewChild(Node *base, ExecutionState *newState);
+      Node* registerNewChild(Node *base, ExecutionState *newState, ref<Expr> expr);
 
     public:
       explicit ScheduleTree(ExecutionState* state);
@@ -76,6 +88,9 @@ namespace klee {
       void registerSchedulingResult(ExecutionState* state);
 
       void registerScheduleDecision(Node *base, std::vector<ExecutionState *>& newStates);
+
+      void registerSymbolicForks(Node *base, std::vector<ExecutionState *> &newStates,
+                                 const std::vector<ref < Expr>> &expression);
 
       /// @brief tests if there is an equivalent schedule in the tree
       bool hasEquivalentSchedule(Node* node);

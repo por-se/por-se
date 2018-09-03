@@ -103,9 +103,9 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
 
   do {
     __kpr_list_push(&mutex->waitingThreads, (void*) tid);
-    klee_toggle_thread_scheduling(1);
+    // klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
-    klee_toggle_thread_scheduling(0);
+    // klee_toggle_thread_scheduling(0);
   } while (mutex->acquired != 0);
 
   mutex->acquired = 1;

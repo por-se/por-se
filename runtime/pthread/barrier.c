@@ -61,9 +61,9 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
     uint64_t tid = klee_get_thread_id();
     __kpr_list_push(&barrier->waitingThreads, (void*) tid);
 
-    klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
 
+    klee_toggle_thread_scheduling(1);
     return 0;
   } else if (barrier->currentCount == barrier->count) {
     barrier->currentCount = 0;

@@ -184,9 +184,9 @@ int sem_wait (sem_t *__sem) {
 
     if (result == EAGAIN) {
       __kpr_list_push(&sem->waiting, (void*) klee_get_thread_id());
-      klee_toggle_thread_scheduling(1);
+      // klee_toggle_thread_scheduling(1);
       klee_sleep_thread();
-      klee_toggle_thread_scheduling(0);
+      // klee_toggle_thread_scheduling(0);
     } else {
       break;
     }

@@ -4,6 +4,16 @@
 
 using namespace klee;
 
+static bool isInConstraints(std::vector<ref<Expr>> &constraints, ref<Expr> ref) {
+  for (auto e : constraints) {
+    if (*ref == *e) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 ScheduleTree::ScheduleTree(ExecutionState* state) {
   root = new Node();
   activeNodes[state] = root;
@@ -36,7 +46,7 @@ ScheduleTree::Node* ScheduleTree::getNodeOfExecutionState(ExecutionState *state)
 }
 
 bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &hashes, Node *ignore, uint64_t stillNeeded,
-                                             std::set<uint64_t>& sThreads) {
+                                             std::vector<ref<Expr>> &constraints) {
   assert(stillNeeded != 0 && "We always have to find at least one");
 
   for (auto n : base->children) {
@@ -44,22 +54,21 @@ bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &has
       continue;
     }
 
-    bool scheduledThread = sThreads.find(n->tid) != sThreads.end();
-    if (!scheduledThread && false) {
-      // Even if there was a thread scheduled that we did not have in the current
-      // list, we can merge them still if they had no interference
-      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded, sThreads);
-      if (found) {
-        return true;
+    if (n->dependencyHash == 0) {
+      if (n->symbolicExpression.isNull() || n->children.empty()) {
+        continue;
       }
 
-      // If there is nothing in the subtree then we do not want to let the other checks run as well
+      if (!isInConstraints(constraints, n->symbolicExpression)) {
+        continue;
+      }
+    } else if (hashes.find(n->dependencyHash) == hashes.end()) {
+      // If there is a hash that is not in our selection, then it is impossible
+      // to find in the subtree a matching schedule
       continue;
     }
 
-    if (hashes.find(n->dependencyHash) == hashes.end()) {
-      // If there is a hash that is not in our selection, then it is impossible
-      // to find in the subtree a matching schedule
+    if (!n->symbolicExpression.isNull() && !isInConstraints(constraints, n->symbolicExpression)) {
       continue;
     }
 
@@ -69,9 +78,11 @@ bool ScheduleTree::hasEquivalentScheduleStep(Node *base, std::set<uint64_t> &has
       // node without checking the other ones. It is simply impossible to have another
       // child with the same hash
 
-      return true;
+      if (n->dependencyHash != 0) {
+        return true;
+      }
     } else {
-      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1, sThreads);
+      bool found = hasEquivalentScheduleStep(n, hashes, nullptr, stillNeeded - 1, constraints);
       if (found) {
         return true;
       }
@@ -130,16 +141,22 @@ void ScheduleTree::unregisterState(ExecutionState* state) {
   activeNodes.erase(state);
 }
 
-ScheduleTree::Node* ScheduleTree::registerNewChild(Node *base, ExecutionState *newState) {
+ScheduleTree::Node* ScheduleTree::registerNewChild(Node *base, ExecutionState *newState, ref<Expr> expr) {
   assert(base != nullptr && "Base node must be available");
-
-  Thread* curThread = newState->getCurrentThreadReference();
 
   Node* newNode = new Node();
   newNode->parent = base;
-  newNode->tid = curThread->getThreadId();
 
-  newNode->scheduleIndex = base->scheduleIndex + 1;
+  if (expr.isNull()) {
+    newNode->type = SCHEDULING;
+
+    Thread* curThread = newState->getCurrentThreadReference();
+    newNode->scheduleIndex = base->scheduleIndex + 1;
+    newNode->tid = curThread->getThreadId();
+  } else {
+    newNode->symbolicExpression = expr;
+    newNode->type = SYMBOLIC;
+  }
 
   base->children.push_back(newNode);
   activeNodes[newState] = newNode;
@@ -153,7 +170,21 @@ void ScheduleTree::registerScheduleDecision(Node *base, std::vector<ExecutionSta
   base->children.reserve(newStates.size());
 
   for (auto state : newStates) {
-    registerNewChild(base, state);
+    registerNewChild(base, state, nullptr);
+  }
+}
+
+void ScheduleTree::registerSymbolicForks(Node *base, std::vector<ExecutionState *> &newStates,
+                                         const std::vector<ref<Expr>> &expression) {
+  assert(!newStates.empty() && "There has to be a new state otherwise this does not make sense");
+  assert(newStates.size() == expression.size() && "States and expression should be equal");
+
+  base->children.reserve(newStates.size());
+
+  uint64_t i = 0;
+  for (auto state : newStates) {
+    registerNewChild(base, state, expression[i]);
+    i++;
   }
 }
 
@@ -171,26 +202,28 @@ bool ScheduleTree::hasEquivalentSchedule(Node* node) {
   uint64_t stillNeeded = 2;
 
   std::set<uint64_t> availableHashes;
-  std::set<uint64_t> scheduleThreads;
+  std::vector<ref<Expr>> constraints;
 
   availableHashes.insert(node->dependencyHash);
   availableHashes.insert(childToIgnore->dependencyHash);
 
-  scheduleThreads.insert(node->tid);
-  scheduleThreads.insert(childToIgnore->tid);
-
   while (searchBase != nullptr) {
     // If there is only one child, then there is only
     if (searchBase->children.size() > 1) {
-      bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, scheduleThreads);
+      bool found = hasEquivalentScheduleStep(searchBase, availableHashes, childToIgnore, stillNeeded, constraints);
       if (found) {
         return true;
       }
     }
 
+    if (!searchBase->symbolicExpression.isNull()) {
+      constraints.push_back(searchBase->symbolicExpression);
+    }
+
     stillNeeded++;
-    availableHashes.insert(searchBase->dependencyHash);
-    scheduleThreads.insert(searchBase->tid);
+    if (searchBase->dependencyHash != 0) {
+      availableHashes.insert(searchBase->dependencyHash);
+    }
 
     childToIgnore = searchBase;
     searchBase = searchBase->parent;
@@ -214,21 +247,28 @@ void ScheduleTree::dump(llvm::raw_ostream &os) {
     Node* n = stack.front();
     stack.erase(stack.begin());
 
-    os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->tid << "]\"];\n";
+    if (n->dependencyHash != 0) {
+      os << "\tn" << n << "[label=\"" << (n->dependencyHash & 0xFFFF) << " [" << n->tid << "]\"];\n";
+    } else {
+      os << "\tn" << n << "[label=Scheduling];\n";
+    }
+
     if (n->parent != nullptr) {
       os << "\tn" << n->parent << " -> n" << n << " [penwidth=2];\n";
     }
 
-    for (auto& dep : n->dependencies) {
-      bool isMemory = (dep.reason & (1 | 2)) != 0;
-      bool isOther = (dep.reason & (4 | 8 | 16)) != 0;
+    if (n->dependencyHash != 0) {
+      for (auto &dep : n->dependencies) {
+        bool isMemory = (dep.reason & (1 | 2)) != 0;
+        bool isOther = (dep.reason & (4 | 8 | 16)) != 0;
 
-      if (isMemory) {
-        os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\", color=gray];\n";
-      }
+        if (isMemory) {
+          os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\", color=gray];\n";
+        }
 
-      if (isOther) {
-        os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
+        if (isOther) {
+          os << "\tn" << n << " -> n" << dep.referencedNode << " [style=\"dashed\"];\n";
+        }
       }
     }
 

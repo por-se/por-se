@@ -99,10 +99,10 @@ void pthread_exit(void* arg) {
     thread->state = 1;
 
     if (thread->joinState == 0) {
-      klee_toggle_thread_scheduling(1);
+      // klee_toggle_thread_scheduling(1);
       klee_sleep_thread();
+      // klee_toggle_thread_scheduling(0);
       thread->joinState = 1;
-      klee_toggle_thread_scheduling(0);
     } else {
       klee_wake_up_thread(thread->joinedThread);
     }
@@ -141,9 +141,9 @@ int pthread_join(pthread_t pthread, void **ret) {
 
   if (needToSleep == 1) {
     thread->joinedThread = ownThread;
-    klee_toggle_thread_scheduling(1);
+    // klee_toggle_thread_scheduling(1);
     klee_sleep_thread();
-    klee_toggle_thread_scheduling(0);
+    // klee_toggle_thread_scheduling(0);
   } else {
     klee_wake_up_thread(thread->tid);
   }

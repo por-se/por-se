@@ -55,9 +55,9 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   uint64_t tid = klee_get_thread_id();
   __kpr_list_push(&lock->waitingList, (void*) tid);
 
-  klee_toggle_thread_scheduling(1);
   klee_sleep_thread();
 
+  klee_toggle_thread_scheduling(1);
   return pthread_mutex_lock(m);
 }
 

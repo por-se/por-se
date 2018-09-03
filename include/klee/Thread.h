@@ -90,6 +90,9 @@ namespace klee {
       /// @brief the argument with which the thread was started
       ref<Expr> startArg;
 
+      /// @brief if the thread scheduling was disabled when this thread was going sleeping
+      bool threadSchedulingWasDisabled;
+
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
       Thread(const Thread &s);
