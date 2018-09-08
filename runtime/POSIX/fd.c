@@ -30,6 +30,8 @@
 #include <klee/klee.h>
 #include <sys/time.h>
 
+#define SENDFILE_BUFFER_SIZE 64
+
 /* Returns pointer to the symbolic file structure fs the pathname is symbolic */
 static exe_disk_file_t *__get_sym_file(const char *pathname) {
   if (!pathname)
@@ -1376,4 +1378,82 @@ int chroot(const char *path) {
   klee_warning("ignoring (ENOENT)");
   errno = ENOENT;
   return -1;
+}
+
+/* Used by many io stuff */
+
+ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
+  exe_file_t *fOut;
+  exe_file_t *fIn;
+
+  fOut = __get_file(out_fd);
+  fIn = __get_file(in_fd);
+
+  if (!fOut || !fIn) {
+    errno = EBADF;
+    return -1;
+  }
+
+  if (offset != NULL) {
+    if (lseek(in_fd, *offset, SEEK_SET) < 0)
+      return -1;
+  }
+
+  off_t origpos = lseek(in_fd, 0, SEEK_CUR);
+
+  // Now we do the actual transfer
+  char buffer[SENDFILE_BUFFER_SIZE];
+
+  size_t wtotal = 0; // Total bytes transferred
+  size_t rtotal = 0; // Total bytes read
+
+  size_t rpos = 0;
+  size_t wpos = 0;
+  ssize_t res = 0;
+
+  while (count > 0) {
+    if (rpos - wpos == 0) {
+      res = read(in_fd, buffer,
+                        (count > SENDFILE_BUFFER_SIZE) ? SENDFILE_BUFFER_SIZE : count);
+
+      if (res <= 0) {
+        // We don't assert anything here, since reads can be undone
+        break;
+      }
+
+      rpos = res;
+      wpos = 0;
+      rtotal += res;
+    }
+
+    res = write(out_fd, &buffer[wpos], rpos - wpos);
+    if (res <= 0) {
+      if (res == -1)
+        assert(wtotal == 0);
+      break;
+    }
+
+    wtotal += res;
+    count -= res;
+    wpos += res;
+  }
+
+  assert(wtotal <= rtotal);
+
+  if (res < 0) {
+    // Error, need to undo everything
+    int _errno = errno;
+    lseek(in_fd, origpos, SEEK_SET);
+
+    errno = _errno;
+    return -1;
+  }
+
+  if (offset)
+    lseek(in_fd, origpos + wtotal, SEEK_SET);
+  else
+    lseek(in_fd, origpos, SEEK_SET);
+
+
+  return wtotal;
 }
