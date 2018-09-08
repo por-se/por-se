@@ -138,6 +138,12 @@ void ScheduleTree::unregisterState(ExecutionState* state) {
     return;
   }
 
+  while (n->parent != nullptr && n->children.size() == 1) {
+    n = n->parent;
+  }
+
+  delete(n);
+
   activeNodes.erase(state);
 }
 
