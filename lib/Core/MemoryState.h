@@ -155,6 +155,10 @@ public:
     updateDisableMemoryState();
   }
 
+  bool isEnabled() {
+    return !disableMemoryState;
+  }
+
   static size_t getStackStructSize() {
     return MemoryTrace::getStackStructSize();
   }
@@ -232,6 +236,8 @@ public:
                          size_t stackFrameIndex);
   void registerPopFrame(const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
+
+  MemoryFingerprint::fingerprint_t getFingerprint();
 };
 }
 

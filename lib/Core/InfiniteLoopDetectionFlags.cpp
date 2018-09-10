@@ -5,7 +5,7 @@ namespace klee {
 llvm::cl::opt<bool> DetectInfiniteLoops(
   "detect-infinite-loops",
   llvm::cl::desc("Enable detection of infinite loops (default=false)"),
-  llvm::cl::init(false));
+  llvm::cl::init(true)); // XXX: prototype same-state detection
 
 llvm::cl::bits<DebugInfiniteLoopDetectionType> DebugInfiniteLoopDetection(
   "debug-infinite-loop-detection",
@@ -26,7 +26,7 @@ llvm::cl::opt<bool> InfiniteLoopDetectionDisableTwoPredecessorOpt(
 llvm::cl::opt<bool> InfiniteLoopDetectionDisableLiveVariableAnalysis(
   "infinite-loop-detection-disable-live-variable-analysis",
   llvm::cl::desc("Disable live variable analysis used for infinite loop detection (default=false)"),
-  llvm::cl::init(false));
+  llvm::cl::init(true)); // XXX: prototype same-state detection
 
 llvm::cl::opt<bool> InfiniteLoopDetectionDebugLiveVariableAnalysis(
   "infinite-loop-detection-debug-live-variable-analysis",

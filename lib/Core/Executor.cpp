@@ -1567,6 +1567,22 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
     // need to call it on every BasicBlock change (even if it does not contain
     // any PHI nodes).
     state.memoryState.phiNodeProcessingCompleted(dst, src);
+    if (state.memoryState.isEnabled()) {
+      if ((dst->getSinglePredecessor() == nullptr) ||
+          InfiniteLoopDetectionDisableTwoPredecessorOpt) {
+        // more than one predecessor
+        MemoryFingerprint::fingerprint_t fingerprint = state.memoryState.getFingerprint();
+        std::string str = MemoryFingerprint::toString(fingerprint);
+        if (fingerprints.count(fingerprint) != 0) {
+          std::string warning = "same state found! (" + str + ")";
+          klee_warning(warning.c_str());
+          // silently terminate state
+          terminateState(state);
+        } else {
+          fingerprints.insert(fingerprint);
+        }
+      }
+    }
   }
 }
 

@@ -26,10 +26,11 @@
 #include "llvm/ADT/Twine.h"
 
 #include <chrono>
-#include <vector>
-#include <string>
 #include <map>
 #include <set>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 struct KTest;
 
@@ -129,6 +130,7 @@ private:
   TimingSolver *solver;
   MemoryManager *memory;
   std::set<ExecutionState*> states;
+  std::set<MemoryFingerprint::fingerprint_t> fingerprints;
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;

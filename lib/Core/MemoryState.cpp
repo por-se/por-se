@@ -112,7 +112,8 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
     return;
   }
 
-  if (std::binary_search(outputFunctionsWhitelist.begin(),
+  // XXX: prototype same-state detection
+  /*if (std::binary_search(outputFunctionsWhitelist.begin(),
                          outputFunctionsWhitelist.end(),
                          f)) {
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -120,7 +121,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
                    << f->getName() << "()\n";
     }
     enterListedFunction(f);
-  } else if (std::binary_search(libraryFunctionsList.begin(),
+  } else*/ if (std::binary_search(libraryFunctionsList.begin(),
                                 libraryFunctionsList.end(),
                                 f)) {
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -504,6 +505,10 @@ void MemoryState::phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
   }
 
   unregisterKilledLocals(dst, src);
+}
+
+MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
+  return fingerprint.getFingerprint();
 }
 
 void MemoryState::unregisterKilledLocals(const llvm::BasicBlock *dst,
