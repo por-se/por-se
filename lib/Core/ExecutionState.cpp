@@ -25,14 +25,7 @@
 
 #include "MemoryAccessTracker.h"
 
-// stub for typeid to use CryptoPP without RTTI
-template<typename T> const std::type_info& FakeTypeID(void) {
-  assert(0 && "CryptoPP tries to use typeid()");
-}
-#define typeid(a) FakeTypeID<a>()
 #include <cryptopp/sha.h>
-#include <cryptopp/blake2.h>
-#undef typeid
 
 #include <algorithm>
 #include <iomanip>

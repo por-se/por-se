@@ -45,6 +45,8 @@ namespace klee {
   class Thread {
     friend class Executor;
     friend class ExecutionState;
+    friend class MemoryState;
+    friend class MemoryTrace;
     friend class StatsTracker;
     friend class Searcher;
     friend class WeightedRandomSearcher;

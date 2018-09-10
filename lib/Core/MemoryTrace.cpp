@@ -48,21 +48,24 @@ MemoryTrace::StackFrameEntry MemoryTrace::popFrame() {
 bool MemoryTrace::isAllocaAllocationInCurrentStackFrame(
   const ExecutionState &state, const MemoryObject &mo)
 {
-  return (state.stack.size() - 1 == mo.getStackframeIndex());
+  Thread *thread = state.getCurrentThreadReference();
+  return (thread->stack.size() - 1 == mo.getStackframeIndex());
 }
 
 MemoryTrace::fingerprint_t *MemoryTrace::getPreviousAllocaDelta(
   const ExecutionState &state, const MemoryObject &mo) {
   assert(!isAllocaAllocationInCurrentStackFrame(state, mo));
 
+  Thread *thread = state.getCurrentThreadReference();
+
   size_t index = mo.getStackframeIndex();
 
-  // Compared to stackFrames, state.stack contains at least one more stack
+  // Compared to stackFrames, thread->stack contains at least one more stack
   // frame, i.e. the currently executed one (top most entry)
-  assert(stackFrames.size() + 1 <= state.stack.size());
+  assert(stackFrames.size() + 1 <= thread->stack.size());
 
   // smallest index that is present in MemoryTrace
-  size_t smallestIndex = state.stack.size() - (stackFrames.size() + 1);
+  size_t smallestIndex = thread->stack.size() - (stackFrames.size() + 1);
   if (index < smallestIndex) {
     // MemoryTrace has been cleared since the time of allocation
     return nullptr;

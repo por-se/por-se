@@ -663,8 +663,9 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
 MemoryObject * Executor::addExternalObject(ExecutionState &state, 
                                            void *addr, unsigned size, 
                                            bool isReadOnly) {
+  Thread* thread = state.getCurrentThreadReference();
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
-                                  size, nullptr, state.stack.size()-1);
+                                  size, nullptr, thread->stack.size()-1);
   ObjectState *os = bindObjectInState(state, mo, false);
   for(unsigned i = 0; i < size; i++)
     os->write8(i, ((uint8_t*)addr)[i]);
@@ -677,6 +678,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
 extern void *__dso_handle __attribute__ ((__weak__));
 
 void Executor::initializeGlobals(ExecutionState &state) {
+  Thread* thread = state.getCurrentThreadReference();
   Module *m = kmodule->module.get();
 
   if (m->getModuleInlineAsm() != "")
@@ -779,7 +781,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          state.stack.size()-1,
+                                          thread->stack.size()-1,
                                           /*alignment=*/globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(v, mo));
@@ -806,7 +808,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          state.stack.size()-1,
+                                          thread->stack.size()-1,
                                           /*alignment=*/globalObjectAlignment);
       if (!mo)
         llvm::report_fatal_error("out of memory");
@@ -1567,7 +1569,7 @@ void Executor::executeCall(ExecutionState &state,
 
       MemoryObject *mo = sf.varargs =
           memory->allocate(size, true, false, thread->prevPc->inst,
-                           state.stack.size()-1,
+                           thread->stack.size()-1,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
         terminateStateOnExecError(state, "out of memory (varargs)");
@@ -1611,7 +1613,7 @@ void Executor::executeCall(ExecutionState &state,
       bindArgument(kf, i, state, arguments[i]);
 
     if (DetectInfiniteLoops) {
-      state.memoryState.enterBasicBlock(state.pc->inst->getParent());
+      state.memoryState.enterBasicBlock(thread->pc->inst->getParent());
     }
   }
 }
@@ -1645,7 +1647,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   }
   if (thread->pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread->pc->inst);
-    state.incomingBBIndex = first->getBasicBlockIndex(src);
+    thread->incomingBBIndex = first->getBasicBlockIndex(src);
   } else {
     phiNodeProcessingCompleted(dst, src, state);
   }
@@ -2155,10 +2157,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::PHI: {
     ref<Expr> result = eval(ki, thread->incomingBBIndex, state).value;
     bindLocal(ki, state, result);
-    assert(ki == state.prevPC && "executing instruction different from state.prevPC");
+    assert(ki == thread->prevPc && "executing instruction different from thread->prevPc");
     if (i->getNextNode()->getOpcode() != Instruction::PHI) {
       // no more PHI nodes coming
-      BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(state.incomingBBIndex);
+      BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread->incomingBBIndex);
       phiNodeProcessingCompleted(i->getParent(), src, state);
     }
     break;
@@ -3834,7 +3836,7 @@ void Executor::executeAlloc(ExecutionState &state,
     size_t allocationAlignment = getAllocationAlignment(allocSite);
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
-                         allocSite, state.stack.size()-1, allocationAlignment);
+                         allocSite, thread->stack.size()-1, allocationAlignment);
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
