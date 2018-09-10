@@ -57,6 +57,7 @@
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <string>
 
 
 using namespace llvm;
@@ -138,6 +139,11 @@ namespace {
   WithPOSIXRuntime("posix-runtime",
 		cl::desc("Link with POSIX runtime.  Options that can be passed as arguments to the programs are: --sym-arg <max-len>  --sym-args <min-argvs> <max-argvs> <max-len> + file model options"),
 		cl::init(false));
+
+  cl::opt<bool>
+  WithPThreadRuntime("pthread-runtime",
+    cl::desc("Link with pthread runtime."),
+    cl::init(false));
 
   cl::opt<bool>
   OptimizeModule("optimize",
@@ -447,6 +453,12 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
       *f << errorMessage;
       delete f;
     }
+
+    llvm::raw_fd_ostream *fSchedules = openTestFile("tschedules", id);
+    for (auto& sd : state.schedulingHistory) {
+      *fSchedules << sd.tid << "\n";
+    }
+    delete(fSchedules);
 
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
@@ -764,6 +776,14 @@ static const char *modelledExternals[] = {
   "klee_warning_once",
   "klee_alias_function",
   "klee_stack_trace",
+  "klee_create_thread",
+  "klee_sleep_thread",
+  "klee_wake_up_thread",
+  "klee_get_thread_id",
+  "klee_preempt_thread",
+  "klee_exit_thread",
+  "klee_toggle_thread_scheduling",
+  "klee_get_thread_start_argument",
   "llvm.dbg.declare",
   "llvm.dbg.value",
   "llvm.va_start",
@@ -1264,6 +1284,17 @@ int main(int argc, char **argv, char **envp) {
     if (!klee::loadFile(Path.c_str(), mainModule->getContext(), loadedModules,
                         errorMsg))
       klee_error("error loading POSIX support '%s': %s", Path.c_str(),
+                 errorMsg.c_str());
+  }
+
+  if (WithPThreadRuntime) {
+    SmallString<128> Path(Opts.LibraryDir);
+    llvm::sys::path::append(Path, "libkleeRuntimePThread.bca");
+    klee_message("NOTE: Using PThread model: %s", Path.c_str());
+
+    if (!klee::loadFile(Path.c_str(), mainModule->getContext(), loadedModules,
+                        errorMsg))
+      klee_error("error loading PThread support '%s': %s", Path.c_str(),
                  errorMsg.c_str());
   }
 

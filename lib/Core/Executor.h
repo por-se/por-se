@@ -21,6 +21,10 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
+
+#include "PartialOrderExplorer.h"
+#include "ScheduleTree.h"
+
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
@@ -114,6 +118,8 @@ public:
     ReadOnly,
     ReportError,
     User,
+    Deadlock,
+    UnsafeMemoryAccess,
     Unhandled
   };
 
@@ -136,6 +142,9 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   std::vector<TimerInfo*> timers;
   PTree *processTree;
+
+  ScheduleTree *scheduleTree = nullptr;
+  PartialOrderExplorer *poExplorer = nullptr;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -218,6 +227,8 @@ private:
   /// The maximum time to allow for a single core solver query.
   /// (e.g. for a single STP query)
   double coreSolverTimeout;
+
+  bool hasScheduledThreads;
 
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
@@ -374,12 +385,16 @@ private:
   Cell& getArgumentCell(ExecutionState &state,
                         KFunction *kf,
                         unsigned index) {
-    return state.stack.back().locals[kf->getArgRegister(index)];
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = state.getCurrentThreadReference();
+    return thread->stack.back().locals[kf->getArgRegister(index)];
   }
 
   Cell& getDestCell(ExecutionState &state,
                     KInstruction *target) {
-    return state.stack.back().locals[target->dest];
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = state.getCurrentThreadReference();
+    return thread->stack.back().locals[target->dest];
   }
 
   void bindLocal(KInstruction *target, 
@@ -434,6 +449,8 @@ private:
   void pauseState(ExecutionState& state);
   // add state to searcher only
   void continueState(ExecutionState& state);
+  // remove state from queue and delete it without registering anything
+  void terminateStateSilently(ExecutionState &state);
   // remove state from queue and delete
   void terminateState(ExecutionState &state);
   // call exit handler and terminate state
@@ -485,6 +502,27 @@ private:
   void checkMemoryUsage();
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
+
+  KFunction* obtainFunctionFromExpression(ref<Expr> address);
+
+  void exitWithDeadlock(ExecutionState &state);
+
+  void exitWithUnsafeMemAccess(ExecutionState &state,
+                               const MemoryObject* mo);
+
+  bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
+                           ref<Expr> offset, uint8_t type);
+
+  void registerFork(ExecutionState &state, ExecutionState* fork);
+  ExecutionState* forkToNewState(ExecutionState &state);
+
+  void scheduleThreadsWithPartialOrder(ExecutionState &state);
+
+  void scheduleThreadsWithScheduleTree(ExecutionState &state);
+
+  void scheduleThreads(ExecutionState &state);
+
+  void forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount);
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,
@@ -555,6 +593,13 @@ public:
 
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
+
+  void createThread(ExecutionState &state, ref <Expr> startRoutine, ref <Expr> arg);
+  void sleepThread(ExecutionState &state);
+  void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);
+  void preemptThread(ExecutionState &state);
+  void exitThread(ExecutionState &state);
+  void toggleThreadScheduling(ExecutionState &state, bool enabled);
 };
   
 } // End klee namespace

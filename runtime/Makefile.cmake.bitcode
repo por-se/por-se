@@ -16,5 +16,8 @@ DIRS += FreeStanding
 ifneq ($(ENABLE_POSIX_RUNTIME),0)
 	DIRS += POSIX
 endif
+ifneq ($(ENABLE_PTHREAD_RUNTIME),0)
+	DIRS += pthread
+endif
 
 include $(LEVEL)/Makefile.cmake.bitcode.rules

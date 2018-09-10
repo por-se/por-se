@@ -24,7 +24,7 @@
 #include "TimingSolver.h"
 #include "UserSearcher.h"
 #include "ExecutorTimerInfo.h"
-
+#include "MemoryAccessTracker.h"
 
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
@@ -88,6 +88,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <memory>
 
 #include <sys/mman.h>
 
@@ -300,6 +301,41 @@ namespace {
   MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
             cl::init(true));
+
+  cl::opt<bool>
+  DumpTreeOnEnd("dump-tree-on-end",
+          cl::desc("Dump the process tree whenever a new thread scheduling has occured"),
+          cl::init(false));
+
+  enum ScheduleForksEnum {
+    NEVER,
+    STATEMENT,
+    SYNC_POINT
+  };
+
+  cl::opt<ScheduleForksEnum>ScheduleForks("schedule-forks",
+            cl::desc("When to fork for schedule reasons"),
+            cl::values(
+                    clEnumValN(NEVER, "never", "never (default)"),
+                    clEnumValN(STATEMENT, "statement", "Fork for statements where thread interference is possible"),
+                    clEnumValN(SYNC_POINT, "sync-point", "Fork only at sync points (thread schedule changes)")
+                    KLEE_LLVM_CL_VAL_END),
+            cl::init(NEVER));
+
+  enum SameScheduleAnalysisEnum {
+    NONE,
+    PERMUTATION_COMPARISON,
+    PARTIAL_ORDER
+  };
+
+  cl::opt<SameScheduleAnalysisEnum>SameScheduleAnalysis("same-schedule-analysis",
+            cl::desc("The analysis do use in order to avoid exploring duplicate schedules"),
+            cl::values(
+                clEnumValN(NONE, "none", "none (default)"),
+                clEnumValN(PERMUTATION_COMPARISON, "perm-comparison", "Compare permutation of schedules afterwards"),
+                clEnumValN(PARTIAL_ORDER, "partial-order", "Use a partial order to limit schedule duplicates")
+                KLEE_LLVM_CL_VAL_END),
+            cl::init(NONE));
 }
 
 
@@ -320,6 +356,8 @@ const char *Executor::TerminateReasonNames[] = {
   [ ReadOnly ] = "readonly",
   [ ReportError ] = "reporterror",
   [ User ] = "user",
+  [ Deadlock ] = "deadlock",
+  [ UnsafeMemoryAccess ] = "unsafememoryaccess",
   [ Unhandled ] = "xxx",
 };
 
@@ -891,6 +929,12 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i)
     if (result[i])
       addConstraint(*result[i], conditions[i]);
+
+  if (scheduleTree != nullptr) {
+    auto n = scheduleTree->getNodeOfExecutionState(&state);
+    assert(n != nullptr && "Should have a base node");
+    scheduleTree->registerSymbolicForks(n, result, conditions);
+  }
 }
 
 Executor::StatePair 
@@ -905,7 +949,11 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
       statsTracker->elapsed() > 60.) {
     StatisticManager &sm = *theStatisticManager;
-    CallPathNode *cpn = current.stack.back().callPathNode;
+
+    // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
+    Thread* thread = current.getCurrentThreadReference();
+    CallPathNode *cpn = thread->stack.back().callPathNode;
+
     if ((MaxStaticForkPct<1. &&
          sm.getIndexedValue(stats::forks, sm.getIndex()) > 
          stats::forks*MaxStaticForkPct) ||
@@ -934,7 +982,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(0);
   if (!success) {
-    current.pc = current.prevPC;
+    // Since we were unsuccessful, restore the previous program counter for the current thread
+    Thread* thread = current.getCurrentThreadReference();
+    thread->pc = thread->prevPc;
+
     terminateStateEarly(current, "Query timed out (fork).");
     return StatePair(0, 0);
   }
@@ -1110,14 +1161,30 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    ref<Expr> invertedCondition = Expr::createIsZero(condition);
     addConstraint(*trueState, condition);
-    addConstraint(*falseState, Expr::createIsZero(condition));
+    addConstraint(*falseState, invertedCondition);
 
     // Kinda gross, do we even really still want this option?
     if (MaxDepth && MaxDepth<=trueState->depth) {
       terminateStateEarly(*trueState, "max-depth exceeded.");
       terminateStateEarly(*falseState, "max-depth exceeded.");
       return StatePair(0, 0);
+    }
+
+    if (scheduleTree != nullptr) {
+      auto n = scheduleTree->getNodeOfExecutionState(&current);
+      assert(n != nullptr && "should exist");
+
+      std::vector<ExecutionState*> newStates;
+      newStates.push_back(trueState);
+      newStates.push_back(falseState);
+
+      std::vector<ref<Expr>> expressions;
+      expressions.push_back(condition);
+      expressions.push_back(invertedCondition);
+
+      scheduleTree->registerSymbolicForks(n, newStates, expressions);
     }
 
     return StatePair(trueState, falseState);
@@ -1172,7 +1239,13 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    StackFrame &sf = state.stack.back();
+    Thread* thread = state.getCurrentThreadReference();
+    StackFrame &sf = thread->stack.back();
+
+    if (sf.locals[index].value.get() == nullptr) {
+      klee_warning("Null pointer");
+    }
+
     return sf.locals[index];
   }
 }
@@ -1236,11 +1309,14 @@ Executor::toConstant(ExecutionState &state,
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
 
+  Thread* thread = state.getCurrentThreadReference();
+
   std::string str;
   llvm::raw_string_ostream os(str);
+
   os << "silently concretizing (reason: " << reason << ") expression " << e
-     << " to value " << value << " (" << (*(state.pc)).info->file << ":"
-     << (*(state.pc)).info->line << ")";
+     << " to value " << value << " (" << (*(thread->pc)).info->file << ":"
+     << (*(thread->pc)).info->line << ")";
 
   if (AllExternalWarnings)
     klee_warning(reason, os.str().c_str());
@@ -1308,16 +1384,18 @@ void Executor::printDebugInstructions(ExecutionState &state) {
   else
     stream = &debugLogBuffer;
 
+  Thread* thread = state.getCurrentThreadReference();
+
   if (!DebugPrintInstructions.isSet(STDERR_COMPACT) &&
       !DebugPrintInstructions.isSet(FILE_COMPACT)) {
-    (*stream) << "     " << state.pc->getSourceLocation() << ":";
+    (*stream) << "     " << thread->pc->getSourceLocation() << ":";
   }
 
-  (*stream) << state.pc->info->assemblyLine;
+  (*stream) << thread->pc->info->assemblyLine;
 
   if (DebugPrintInstructions.isSet(STDERR_ALL) ||
       DebugPrintInstructions.isSet(FILE_ALL))
-    (*stream) << ":" << *(state.pc->inst);
+    (*stream) << ":" << *(thread->pc->inst);
   (*stream) << "\n";
 
   if (DebugPrintInstructions.isSet(FILE_ALL) ||
@@ -1334,10 +1412,12 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
+  Thread* thread = state.getCurrentThreadReference();
+
   ++stats::instructions;
   ++state.steppedInstructions;
-  state.prevPC = state.pc;
-  ++state.pc;
+  thread->prevPc = thread->pc;
+  ++thread->pc;
 
   if (stats::instructions==StopAfterNInstructions)
     haltExecution = true;
@@ -1347,13 +1427,17 @@ void Executor::executeCall(ExecutionState &state,
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
-
   if (DetectInfiniteLoops) {
     state.memoryState.registerFunctionCall(f, arguments);
   }
 
-  Instruction *i = ki->inst;
-  if (f && f->isDeclaration()) {
+  Instruction *i = nullptr;
+  Thread* thread = state.getCurrentThreadReference();
+
+  if (ki)
+    i = ki->inst;
+
+  if (ki && f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
@@ -1363,7 +1447,7 @@ void Executor::executeCall(ExecutionState &state,
       // va_arg is handled by caller and intrinsic lowering, see comment for
       // ExecutionState::varargs
     case Intrinsic::vastart:  {
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = thread->stack.back();
 
       // varargs can be zero if no varargs were provided
       if (!sf.varargs)
@@ -1423,15 +1507,17 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    state.pushFrame(state.prevPC, kf);
-    state.pc = kf->instructions;
+    thread->pushFrame(thread->prevPc, kf);
+    thread->pc = kf->instructions;
     if (DetectInfiniteLoops) {
-      state.memoryState.registerPushFrame(kf, state.prevPC,
-                                          state.stack.size() - 1);
+      state.memoryState.registerPushFrame(kf, thread->prevPc,
+                                          thread->stack.size() - 1);
     }
 
-    if (statsTracker)
-      statsTracker->framePushed(state, &state.stack[state.stack.size()-2]);
+    if (statsTracker) {
+      StackFrame* current = &thread->stack.back();
+      statsTracker->framePushed(current, &thread->stack[thread->stack.size() - 2]);
+    }
 
      // TODO: support "byval" parameter attribute
      // TODO: support zeroext, signext, sret attributes
@@ -1456,7 +1542,7 @@ void Executor::executeCall(ExecutionState &state,
         return;
       }
 
-      StackFrame &sf = state.stack.back();
+      StackFrame &sf = thread->stack.back();
       unsigned size = 0;
       bool requires16ByteAlignment = false;
       for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -1480,7 +1566,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       MemoryObject *mo = sf.varargs =
-          memory->allocate(size, true, false, state.prevPC->inst,
+          memory->allocate(size, true, false, thread->prevPc->inst,
                            state.stack.size()-1,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
@@ -1489,6 +1575,8 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       if (mo) {
+        processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::ALLOC_ACCESS);
+
         if ((WordSize == Expr::Int64) && (mo->address & 15) &&
             requires16ByteAlignment) {
           // Both 64bit Linux/Glibc and 64bit MacOSX should align to 16 bytes.
@@ -1542,18 +1630,21 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // With that done we simply set an index in the state so that PHI
   // instructions know which argument to eval, set the pc, and continue.
 
+  Thread* thread = state.getCurrentThreadReference();
+
   // XXX this lookup has to go ?
-  KFunction *kf = state.stack.back().kf;
+  KFunction *kf = thread->stack.back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
-  state.pc = &kf->instructions[entry];
+
+  thread->pc = &kf->instructions[entry];
   if (DetectInfiniteLoops) {
     // enterBasicBlock updates live register information, thus we need to call
     // it on every BasicBlock change, not only on ones to a BasicBlock with more
     // than one predecessor
     state.memoryState.enterBasicBlock(dst, src);
   }
-  if (state.pc->inst->getOpcode() == Instruction::PHI) {
-    PHINode *first = static_cast<PHINode*>(state.pc->inst);
+  if (thread->pc->inst->getOpcode() == Instruction::PHI) {
+    PHINode *first = static_cast<PHINode*>(thread->pc->inst);
     state.incomingBBIndex = first->getBasicBlockIndex(src);
   } else {
     phiNodeProcessingCompleted(dst, src, state);
@@ -1650,12 +1741,13 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
+  Thread* thread = state.getCurrentThreadReference();
 
   switch (i->getOpcode()) {
     // Control flow
   case Instruction::Ret: {
     ReturnInst *ri = cast<ReturnInst>(i);
-    StackFrame &sf = state.stack.back();
+    StackFrame &sf = thread->stack.back();
     KInstIterator kcaller = sf.caller;
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
@@ -1670,9 +1762,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = eval(ki, 0, state).value;
     }
     
-    if (state.stack.size() <= 1) {
+    if (thread->stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      terminateStateOnExit(state);
+      state.exitThread(thread->getThreadId());
+      scheduleThreads(state);
     } else {
       if (DetectInfiniteLoops) {
         const llvm::BasicBlock *returningBB = ki->inst->getParent();
@@ -1682,7 +1775,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         // be left
         state.memoryState.registerPopFrame(returningBB, callerBB);
       }
-      state.popFrame();
+
+      // When we pop the stack frame, we free the memory regions
+      // this means that we need to check these memory accesses
+      std::vector<const MemoryObject*> freedAllocas = thread->stack.back().allocas;
+      for (auto mo : freedAllocas) {
+        processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+      }
+
+      state.popFrameOfCurrentThread();
 
       if (statsTracker)
         statsTracker->framePopped(state);
@@ -1690,8 +1791,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (InvokeInst *ii = dyn_cast<InvokeInst>(caller)) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
-        state.pc = kcaller;
-        ++state.pc;
+        thread->pc = kcaller;
+        ++thread->pc;
       }
 
       if (!isVoidReturn) {
@@ -1706,7 +1807,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
                            CallSite(cast<CallInst>(caller)));
 
             // XXX need to check other param attrs ?
-      bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+            bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
             if (isSExt) {
               result = SExtExpr::create(result, to);
             } else {
@@ -1742,7 +1843,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // requires that we still be in the context of the branch
       // instruction (it reuses its statistic id). Should be cleaned
       // up with convenient instruction specific data.
-      if (statsTracker && state.stack.back().kf->trackCoverage)
+      if (statsTracker && thread->stack.back().kf->trackCoverage)
         statsTracker->markBranchVisited(branches.first, branches.second);
 
       if (branches.first)
@@ -2052,7 +2153,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     break;
   }
   case Instruction::PHI: {
-    ref<Expr> result = eval(ki, state.incomingBBIndex, state).value;
+    ref<Expr> result = eval(ki, thread->incomingBBIndex, state).value;
     bindLocal(ki, state, result);
     assert(ki == state.prevPC && "executing instruction different from state.prevPC");
     if (i->getNextNode()->getOpcode() != Instruction::PHI) {
@@ -2742,6 +2843,171 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // instructions.
     terminateStateOnExecError(state, "Unexpected ShuffleVector instruction");
     break;
+
+  case Instruction::AtomicRMW: {
+    // An atomic instruction gets a pointer and a value. It reads the value at the pointer, perfoms its operation, stores the result and returns the value that was originally at the pointer.
+    AtomicRMWInst *ai = cast<AtomicRMWInst>(i);
+
+    bool wasAtomicPhase = state.atomicPhase;
+    state.atomicPhase = true;
+
+    switch (ai->getOperation()) {
+    case AtomicRMWInst::Xchg: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+
+      executeMemoryOperation(state, true, pointer, value, 0);
+      break;
+    }
+    case AtomicRMWInst::Add: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = AddExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Sub: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SubExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::And: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = AndExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Nand: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = XorExpr::create(AndExpr::create(oldValue, value), ConstantExpr::create(-1, value->getWidth()));
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Or: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = OrExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Xor: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = XorExpr::create(oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Max: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(SgtExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::Min: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(SltExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::UMax: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(UgtExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::UMin: {
+      ref<Expr> pointer = eval(ki, 0, state).value;
+      ref<Expr> value = eval(ki, 1, state).value;
+
+      executeMemoryOperation(state, false, pointer, 0, ki);
+      ref<Expr> oldValue = getDestCell(state, ki).value;
+
+      ref<Expr> result = SelectExpr::create(UltExpr::create(oldValue, value), oldValue, value);
+
+      executeMemoryOperation(state, true, pointer, result, 0);
+      break;
+    }
+    case AtomicRMWInst::BAD_BINOP: terminateStateOnExecError(state, "Bad atomicrmw operation"); break;
+    }
+
+    state.atomicPhase = wasAtomicPhase;
+
+    break;
+  }
+
+  case Instruction::AtomicCmpXchg: {
+    bool wasAtomicPhase = state.atomicPhase;
+    state.atomicPhase = true;
+
+    ref<Expr> pointer = eval(ki, 0, state).value;
+    ref<Expr> compare = eval(ki, 1, state).value;
+    ref<Expr> newValue = eval(ki, 2, state).value;
+
+    executeMemoryOperation(state, false, pointer, 0, ki);
+    ref<Expr> oldValue = getDestCell(state, ki).value;
+
+    ref<Expr> write = SelectExpr::create(EqExpr::create(oldValue, compare), newValue, oldValue);
+
+    executeMemoryOperation(state, true, pointer, write, 0);
+
+    state.atomicPhase = wasAtomicPhase;
+    break;
+  }
+
   // Other instructions...
   // Unhandled
   default:
@@ -2917,7 +3183,8 @@ void Executor::run(ExecutionState &initialState) {
       lastState = it->first;
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
-      KInstruction *ki = state.pc;
+      Thread* thread = state.getCurrentThreadReference();
+      KInstruction *ki = thread->pc;
       stepInstruction(state);
 
       executeInstruction(state, ki);
@@ -2971,8 +3238,13 @@ void Executor::run(ExecutionState &initialState) {
   bool firstInstruction = true;
 
   while (!states.empty() && !haltExecution) {
+    hasScheduledThreads = false;
+
     ExecutionState &state = searcher->selectState();
-    KInstruction *ki = state.pc;
+    Thread* thread = state.getCurrentThreadReference();
+    KInstruction *ki = thread->pc;
+
+    // we will execute a new instruction and therefore we have to reset the flag
     stepInstruction(state);
 
     executeInstruction(state, ki);
@@ -2988,12 +3260,24 @@ void Executor::run(ExecutionState &initialState) {
 
     checkMemoryUsage();
 
+    bool shouldForkAfterStatement = false;
+    if (ScheduleForks == STATEMENT) {
+      auto itInRemoved = std::find(removedStates.begin(), removedStates.end(), &state);
+      shouldForkAfterStatement = itInRemoved == removedStates.end();
+    }
+
+    // We only want to fork if we do not have forked already or we can actually fork for a reason
+    if (shouldForkAfterStatement && !hasScheduledThreads && state.runnableThreads.size() > 1 && state.threadSchedulingEnabled) {
+      std::vector<ExecutionState*> forks;
+      forkForThreadScheduling(state, forks, state.runnableThreads.size() - 1);
+    }
+
     updateStates(&state);
     firstInstruction = false;
   }
 
   delete searcher;
-  searcher = 0;
+  searcher = nullptr;
 
   doDumpStates();
 }
@@ -3161,6 +3445,38 @@ void Executor::continueState(ExecutionState &state){
   }
 }
 
+template<class T>
+static bool isInVector(std::vector<T> list, T tid) {
+  return std::find(list.begin(), list.end(), tid) != list.end();
+}
+
+void Executor::terminateStateSilently(ExecutionState &state) {
+  std::vector<ExecutionState *>::iterator it =
+          std::find(addedStates.begin(), addedStates.end(), &state);
+
+  if (scheduleTree != nullptr) {
+    scheduleTree->unregisterState(&state);
+  }
+
+  if (it == addedStates.end()) {
+    Thread* thread = state.getCurrentThreadReference();
+    thread->pc = thread->prevPc;
+
+    assert(!isInVector(removedStates, &state) && "May not add a state double times");
+
+    removedStates.push_back(&state);
+  } else {
+    // never reached searcher, just delete immediately
+    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 =
+            seedMap.find(&state);
+    if (it3 != seedMap.end())
+      seedMap.erase(it3);
+    addedStates.erase(it);
+    processTree->remove(state.ptreeNode);
+    delete &state;
+  }
+}
+
 void Executor::terminateState(ExecutionState &state) {
   if (replayKTest && replayPosition!=replayKTest->numObjects) {
     klee_warning_once(replayKTest,
@@ -3169,22 +3485,7 @@ void Executor::terminateState(ExecutionState &state) {
 
   interpreterHandler->incPathsExplored();
 
-  std::vector<ExecutionState *>::iterator it =
-      std::find(addedStates.begin(), addedStates.end(), &state);
-  if (it==addedStates.end()) {
-    state.pc = state.prevPC;
-
-    removedStates.push_back(&state);
-  } else {
-    // never reached searcher, just delete immediately
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 = 
-      seedMap.find(&state);
-    if (it3 != seedMap.end())
-      seedMap.erase(it3);
-    addedStates.erase(it);
-    processTree->remove(state.ptreeNode);
-    delete &state;
-  }
+  terminateStateSilently(state);
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, 
@@ -3211,18 +3512,20 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 
 const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const ExecutionState &state,
     Instruction ** lastInstruction) {
+  Thread* thread = state.getCurrentThreadReference();
+
   // unroll the stack of the applications state and find
   // the last instruction which is not inside a KLEE internal function
-  ExecutionState::stack_ty::const_reverse_iterator it = state.stack.rbegin(),
-      itE = state.stack.rend();
+  ExecutionState::stack_ty::const_reverse_iterator it = thread->stack.rbegin(),
+      itE = thread->stack.rend();
 
   // don't check beyond the outermost function (i.e. main())
   itE--;
 
   const InstructionInfo * ii = 0;
   if (kmodule->internalFunctions.count(it->kf->function) == 0){
-    ii =  state.prevPC->info;
-    *lastInstruction = state.prevPC->inst;
+    ii = thread->prevPc->info;
+    *lastInstruction = thread->prevPc->inst;
     //  Cannot return yet because even though
     //  it->function is not an internal function it might of
     //  been called from an internal function.
@@ -3246,8 +3549,8 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
 
   if (!ii) {
     // something went wrong, play safe and return the current instruction info
-    *lastInstruction = state.prevPC->inst;
-    return *state.prevPC->info;
+    *lastInstruction = thread->prevPc->inst;
+    return *thread->prevPc->info;
   }
   return *ii;
 }
@@ -3301,7 +3604,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
     state.dumpStack(msg);
 
     std::string info_str = info.str();
-    if (info_str != "")
+    if (!info_str.empty())
       msg << "Info: \n" << info_str;
 
     std::string suffix_buf;
@@ -3423,7 +3726,9 @@ void Executor::callExternalFunction(ExecutionState &state,
       if (i != arguments.size()-1)
         os << ", ";
     }
-    os << ") at " << state.pc->getSourceLocation();
+
+    Thread* thread = state.getCurrentThreadReference();
+    os << ") at " << thread->pc->getSourceLocation();
     
     if (AllExternalWarnings)
       klee_warning("%s", os.str().c_str());
@@ -3505,8 +3810,10 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // will put multiple copies on this list, but it doesn't really
   // matter because all we use this list for is to unbind the object
   // on function return.
-  if (isLocal)
-    state.stack.back().allocas.push_back(mo);
+  if (isLocal) {
+    Thread* thread = state.getCurrentThreadReference();
+    thread->stack.back().allocas.push_back(mo);
+  }
 
   return os;
 }
@@ -3517,9 +3824,13 @@ void Executor::executeAlloc(ExecutionState &state,
                             KInstruction *target,
                             bool zeroMemory,
                             const ObjectState *reallocFrom) {
+  // TODO: Here we should assign the ownership over the memory region to the
+  //       current thread
+  Thread* thread = state.getCurrentThreadReference();
+
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
-    const llvm::Value *allocSite = state.prevPC->inst;
+    const llvm::Value *allocSite = thread->prevPc->inst;
     size_t allocationAlignment = getAllocationAlignment(allocSite);
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
@@ -3528,6 +3839,9 @@ void Executor::executeAlloc(ExecutionState &state,
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
+      // A free operation should be tracked as well
+      processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::ALLOC_ACCESS);
+
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
         os->initializeToZero();
@@ -3650,7 +3964,12 @@ void Executor::executeFree(ExecutionState &state,
         terminateStateOnError(*it->second, "free of global", Free, NULL,
                               getAddressInfo(*it->second, address));
       } else {
+
         it->second->memoryState.unregisterWrite(*mo, *os);
+
+        // A free operation should be tracked as well
+        processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+
         it->second->addressSpace.unbindObject(mo);
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -3693,6 +4012,8 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> address,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
+
+  Thread* thread = state.getCurrentThreadReference();
   Expr::Width type = (isWrite ? value->getWidth() : 
                      getWidthForLLVMType(target->inst->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -3730,7 +4051,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       inBounds);
     solver->setTimeout(0);
     if (!success) {
-      state.pc = state.prevPC;
+      thread->pc = thread->prevPc;
       terminateStateEarly(state, "Query timed out (bounds check).");
       return;
     }
@@ -3751,13 +4072,16 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           if (DetectInfiniteLoops) {
             state.memoryState.registerWrite(address, *mo, *wos, bytes);
           }
+          processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
         }          
       } else {
         ref<Expr> result = os->read(offset, type);
+
+        processMemoryAccess(state, mo, offset, MemoryAccessTracker::READ_ACCESS);
         
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
-        
+
         bindLocal(target, state, result);
       }
 
@@ -3797,14 +4121,19 @@ void Executor::executeMemoryOperation(ExecutionState &state,
             // unregister previous value to avoid cancellation
             bound->memoryState.unregisterWrite(address, *mo, *wos, bytes);
           }
-          wos->write(mo->getOffsetExpr(address), value);
+          ref<Expr> offset = mo->getOffsetExpr(address);
+          wos->write(offset, value);
           if (DetectInfiniteLoops) {
             bound->memoryState.registerWrite(address, *mo, *wos, bytes);
           }
+          processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
         }
       } else {
-        ref<Expr> result = os->read(mo->getOffsetExpr(address), type);
+        ref<Expr> offset = mo->getOffsetExpr(address);
+        ref<Expr> result = os->read(offset, type);
         bindLocal(target, *bound, result);
+
+        processMemoryAccess(state, mo, offset, MemoryAccessTracker::READ_ACCESS);
       }
     }
 
@@ -3953,6 +4282,8 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+  // By default the state should create the main thread
+  Thread* thread = state->getCurrentThreadReference();
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -3960,8 +4291,10 @@ void Executor::runFunctionAsMain(Function *f,
     state->symPathOS = symPathWriter->open();
 
 
-  if (statsTracker)
-    statsTracker->framePushed(*state, 0);
+  if (statsTracker) {
+    StackFrame* currentFrame = &thread->stack.back();
+    statsTracker->framePushed(currentFrame, 0);
+  }
 
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
   for (unsigned i = 0, e = f->arg_size(); i != e; ++i)
@@ -3980,8 +4313,8 @@ void Executor::runFunctionAsMain(Function *f,
 
         MemoryObject *arg =
             memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
-                             /*allocSite=*/state->pc->inst,
-                             state->stack.size()-1, /*alignment=*/8);
+                             /*allocSite=*/thread->pc->inst,
+                             thread->stack.size()-1, /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
         ObjectState *os = bindObjectInState(*state, arg, false);
@@ -3998,9 +4331,53 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
+
+  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
+    scheduleTree = new ScheduleTree(state);
+  } else if (SameScheduleAnalysis == PARTIAL_ORDER) {
+    std::function<ExecutionState* (ExecutionState*)> function = [=](ExecutionState* st) -> ExecutionState* {
+      // So this would be the correct way to do, but this will add the state to the process tree and then
+      // searchers might activate it, even if it is not in the states set
+      // return forkToNewState(*st);
+
+      return st->branch();
+    };
+
+    poExplorer = new PartialOrderExplorer(state, function);
+  }
+
   run(*state);
   delete processTree;
   processTree = 0;
+
+  char name[32];
+  sprintf(name, "scheduleTree.dot");
+
+  if (scheduleTree != nullptr) {
+    if (DumpTreeOnEnd) {
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        scheduleTree->dump(*os);
+        delete os;
+      }
+    }
+
+    delete scheduleTree;
+    scheduleTree = nullptr;
+  }
+
+  if (poExplorer != nullptr) {
+    if (DumpTreeOnEnd) {
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        poExplorer->dump(*os);
+        delete os;
+      }
+    }
+
+    delete poExplorer;
+    poExplorer = nullptr;
+  }
 
   // hack to clear memory objects
   delete memory;
@@ -4227,6 +4604,492 @@ void Executor::prepareForEarlyExit() {
   if (statsTracker) {
     // Make sure stats get flushed out
     statsTracker->done();
+  }
+}
+
+
+KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
+  for (std::unique_ptr<KFunction>& f : kmodule->functions) {
+    KFunction* actualFunction = f.get();
+
+    ref<Expr> addr = Expr::createPointer((uint64_t) (void*) actualFunction->function);
+
+    if (addr == address) {
+      return actualFunction;
+    }
+  }
+
+  return nullptr;
+}
+
+void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<Expr> arg) {
+  KFunction *kf = obtainFunctionFromExpression(startRoutine);
+  assert(kf && "could not obtain the start routine");
+
+  Thread* thread = state.createThread(kf, arg);
+  StackFrame* threadStartFrame = &thread->stack.back();
+
+  threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
+  threadStartFrame->locals[kf->getArgRegister(1)].value = ConstantExpr::create(thread->getThreadId(), Expr::Int64);
+
+  if (statsTracker)
+    statsTracker->framePushed(&thread->stack.back(), nullptr);
+}
+
+void Executor::sleepThread(ExecutionState &state) {
+  state.sleepCurrentThread();
+  scheduleThreads(state);
+}
+
+void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
+  state.wakeUpThread(tid);
+}
+
+void Executor::preemptThread(ExecutionState &state) {
+  state.preemptThread(state.getCurrentThreadReference()->getThreadId());
+  scheduleThreads(state);
+}
+
+void Executor::exitThread(ExecutionState &state) {
+  state.exitThread(state.getCurrentThreadReference()->getThreadId());
+  scheduleThreads(state);
+}
+
+void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
+  state.threadSchedulingEnabled = enabled;
+}
+
+bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
+  MemoryAccess access;
+  access.offset = offset;
+  access.type = type;
+  access.safeMemoryAccess = false;
+  access.atomicMemoryAccess = state.atomicPhase;
+
+  MemAccessSafetyResult result = state.memAccessTracker->testIfUnsafeMemoryAccess(mo->getId(), access);
+
+  if (result.possibleCandidates.empty()) {
+    access.safeMemoryAccess = result.wasSafe;
+  } else {
+    // First build one big expression to test if one of them matches
+    ref<Expr> query = ConstantExpr::create(1, Expr::Bool);
+
+    for (auto& candidateIt : result.possibleCandidates) {
+      ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
+      query = AndExpr::create(query, condition);
+    }
+
+    solver->setTimeout(coreSolverTimeout);
+    bool noViolation = true;
+    bool solverSuccessful = solver->mustBeTrue(state, query, noViolation);
+    solver->setTimeout(0);
+
+    if (!solverSuccessful) {
+      klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
+      return true;
+    }
+
+    if (!noViolation) {
+      // So we now know that at least one of the possible candidates match
+      // Now test every one of them with the solver to know the exact one
+      for (auto &candidateIt : result.possibleCandidates) {
+        ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
+
+        solver->setTimeout(coreSolverTimeout);
+        bool alwaysDifferent = true;
+        solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
+        solver->setTimeout(0);
+
+        if (!solverSuccessful) {
+          klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
+          continue;
+        }
+
+        if (!alwaysDifferent) {
+          // Now we know that both can be equal!
+
+          // the error is that both offsets point to the same memory region so go
+          // ahead and add the constraint that they are equal
+          addConstraint(state, EqExpr::create(offset, candidateIt.offset));
+
+          // Extract all important info in order to generate a proper report we should
+          // probably be showing info about which thread was causing the race
+          access.safeMemoryAccess = false;
+
+          break;
+        }
+      }
+
+      // Final step test if it is possible that this will not trigger an unsafe memory
+      // access. If there is a possibility that this is safe, then we want to follow these
+      // states as well
+
+      ref<Expr> unsafeQuery = ConstantExpr::create(1, Expr::Bool);
+
+      for (auto& candidateIt : result.possibleCandidates) {
+        ref<Expr> condition = EqExpr::create(offset, candidateIt.offset);
+        unsafeQuery = AndExpr::create(unsafeQuery, condition);
+      }
+
+      solver->setTimeout(coreSolverTimeout);
+      bool canBeSafe = true;
+      solverSuccessful = solver->mayBeFalse(state, unsafeQuery, canBeSafe);
+      solver->setTimeout(0);
+
+      if (!solverSuccessful) {
+        klee_warning("Solver could not complete query for offset; Skipping possible safe mem access path");
+        return true;
+      } else if (canBeSafe) {
+        ExecutionState* newState = forkToNewState(state);
+        addConstraint(*newState, query);
+
+        if (scheduleTree != nullptr) {
+          std::vector<ExecutionState*> forkStates;
+          forkStates.push_back(&state);
+          forkStates.push_back(newState);
+
+          std::vector<ref<Expr>> expressions;
+          expressions.push_back(EqExpr::createIsZero(query));
+          expressions.push_back(query);
+
+          ScheduleTree::Node* base = scheduleTree->getNodeOfExecutionState(&state);
+          assert(base != nullptr && "The state should have a base node");
+          scheduleTree->registerSymbolicForks(base, forkStates, expressions);
+        }
+      }
+    } else {
+      // We were not successful, so go ahead and add the constraint
+      // that they are always unequal
+      addConstraint(state, query);
+    }
+  }
+
+  if (!access.safeMemoryAccess) {
+    // So before we actually exit the state, we have to register all results up to now in the tree
+    if (SameScheduleAnalysis == PARTIAL_ORDER) {
+      state.endCurrentEpoch();
+      scheduleThreadsWithPartialOrder(state);
+    }
+
+    exitWithUnsafeMemAccess(state, mo);
+  } else {
+    ExecutionState::DependencyReason reason = 0;
+
+    if (access.atomicMemoryAccess) {
+      reason |= ExecutionState::ATOMIC_MEMORY_ACCESS;
+    } else {
+      reason |= ExecutionState::SAFE_MEMORY_ACCESS;
+    }
+
+    for (auto dep : result.dataDependencies) {
+      state.trackScheduleDependency(dep.second, dep.first, reason);
+    }
+
+    state.trackMemoryAccess(mo, offset, type);
+  }
+
+  return access.safeMemoryAccess;
+}
+
+void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject* mo) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "Unsafe access to memory from multiple threads\nAffected memory: ";
+
+  std::string memInfo;
+  mo->getAllocInfo(memInfo);
+  os << memInfo << "\n";
+
+  terminateStateOnError(state, "thread unsafe memory access",
+                        UnsafeMemoryAccess, nullptr, os.str());
+}
+
+void Executor::exitWithDeadlock(ExecutionState &state) {
+  std::string TmpStr;
+  llvm::raw_string_ostream os(TmpStr);
+  os << "Deadlock in scheduling with ";
+  state.dumpSchedulingInfo(os);
+  os << "\n Thread scheduling enabled? " << (state.threadSchedulingEnabled ? "Yes" : "No") << "\n";
+  os << "Traces:\n";
+  state.dumpAllThreadStacks(os);
+
+  terminateStateOnError(state, "all non-exited threads are sleeping",
+                        Deadlock, nullptr, os.str());
+}
+
+void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
+  state.ptreeNode->data = nullptr;
+
+  auto res = processTree->split(state.ptreeNode, fork, &state);
+  fork->ptreeNode = res.first;
+  state.ptreeNode = res.second;
+
+  if (pathWriter) {
+    fork->pathOS = pathWriter->open(state.pathOS);
+  }
+
+  if (symPathWriter) {
+    fork->symPathOS = symPathWriter->open(state.symPathOS);
+  }
+}
+
+ExecutionState* Executor::forkToNewState(ExecutionState &state) {
+  ExecutionState* ns = state.branch();
+
+  registerFork(state, ns);
+
+  return ns;
+}
+
+static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
+  os << "digraph G {\n";
+  os << "\tsize=\"10,7.5\";\n";
+  os << "\tratio=fill;\n";
+  os << "\tcenter = \"true\";\n";
+  os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
+  os << "\tedge [arrowsize=.5]\n";
+
+  std::map<Thread::ThreadId, uint64_t> lastExecuted{};
+  std::map<Thread::ThreadId, uint64_t > lastHash{};
+
+  uint64_t epoch = 0;
+
+  for (auto &sd : state.schedulingHistory) {
+    Thread::ThreadId tid = sd.tid;
+    uint64_t currentExecution = lastExecuted[tid] + 1;
+
+    std::string name = "n" + std::to_string(sd.dependencyHash);
+
+    auto* deps = &state.scheduleDependencies[tid][currentExecution - 1];
+
+    os << "\t" << name << " [label=\"" << tid << " @ " << currentExecution << " (" << epoch
+        << ")\\n" << (deps->hash & 0xFFFF) << "\"];\n";
+
+    if (currentExecution > 1) {
+      std::string lEName = "n" + std::to_string(lastHash[tid]);
+      os << "\t" << lEName << " -> " << name << "[dir=\"back\",style=\"dashed\"];\n";
+    }
+
+    for (auto dep : deps->dependencies) {
+      std::string dName = "n" + std::to_string(state.schedulingHistory[dep.scheduleIndex].dependencyHash);
+
+      std::string reason;
+      if (dep.reason & ExecutionState::SAFE_MEMORY_ACCESS) {
+        reason += "memory ";
+      }
+      if (dep.reason & ExecutionState::ATOMIC_MEMORY_ACCESS) {
+        reason += "atomic ";
+      }
+      if (dep.reason & ExecutionState::THREAD_CREATION) {
+        reason += "create ";
+      }
+      if (dep.reason & ExecutionState::THREAD_WAKEUP) {
+        reason += "wakeup ";
+      }
+
+      os << "\t" << dName << " -> " << name << " [dir=\"back\",label=\"" << reason <<"\"];\n";
+    }
+
+    lastHash[tid] = sd.dependencyHash;
+    lastExecuted[tid]++;
+    epoch++;
+  }
+
+  os << "}\n";
+}
+
+void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
+  PartialOrderExplorer::ScheduleResult result = poExplorer->processEpochResult(&state);
+
+  for (auto st : result.stoppedStates) {
+    // Since we do not add these states to anywhere else for now, we can just delete them
+    delete st;
+    // terminateStateSilently(*st);
+  }
+
+  // NOTE: We add the forks into the process tree only now, this is not how this is
+  // actually meant in klee. See the poGraph creation for more info on this
+
+  for (auto st : result.reactivatedStates) {
+    addedStates.push_back(st);
+    registerFork(state, st);
+  }
+
+  // We actually do not really need to add these to the paused states since they
+  // were never seen inside the searcher
+  // for (auto st : result.newInactiveStates) {
+  //   pausedStates.push_back(st);
+  // }
+
+  for (auto st : result.newStates) {
+    addedStates.push_back(st);
+    registerFork(state, st);
+  }
+
+  if (result.finishedState != nullptr) {
+    // Last sanity check if we actually ended because all threads did exit
+    bool allExited = true;
+
+    for (auto &threadIt : state.threads) {
+      if (threadIt.second.state != Thread::ThreadState::EXITED) {
+        allExited = false;
+      }
+    }
+
+    if (DumpTreeOnEnd) {
+      char name[32];
+      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        printScheduleDag(*os, state);
+        delete os;
+      }
+    }
+
+    if (!allExited) {
+      exitWithDeadlock(state);
+    } else {
+      terminateStateOnExit(*result.finishedState);
+    }
+  }
+}
+
+void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
+  assert(newForkCount < state.runnableThreads.size());
+
+  // Before we actually fork the states, make sure we honor MaxForks
+  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
+    newForkCount = MaxForks - stats::forks;
+  }
+
+  stats::forks += newForkCount;
+
+  auto rIt = state.runnableThreads.begin();
+  newStates.reserve(newForkCount + 1);
+
+  for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
+    // we want to reuse the current state when that is possible
+    ExecutionState* st;
+    if (i == newForkCount) {
+      st = &state;
+    } else {
+      st = forkToNewState(state);
+      addedStates.push_back(st);
+    }
+    newStates.push_back(st);
+
+    st->scheduleNextThread(*rIt);
+    st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
+    st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
+  }
+
+  hasScheduledThreads = true;
+}
+
+void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
+  // After updating the hash, we should also update the hash in the
+  // schedule tree
+  ScheduleTree::Node* scheduleTreeNode = nullptr;
+
+  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
+    scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
+
+    if (scheduleTreeNode != nullptr) {
+      scheduleTree->registerSchedulingResult(&state);
+
+      if (scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
+        scheduleTree->pruneState(scheduleTreeNode);
+        terminateStateSilently(state);
+        return;
+      }
+    }
+  }
+
+  // The first thing we have to test is, if we can actually try
+  // to schedule a thread now; (test if scheduling enabled)
+  if (!state.threadSchedulingEnabled) {
+    // So now we have to check if the current thread may be scheduled
+    // or if we have a deadlock
+
+    Thread* curThread = state.getCurrentThreadReference();
+    if (curThread->state == Thread::ThreadState::SLEEPING) {
+      exitWithDeadlock(state);
+      return;
+    } else if (curThread->state != Thread::ThreadState::EXITED) {
+      // So we can actually reschedule the current thread
+      // but make sure that the thread is marked as RUNNABLE
+      curThread->state = Thread::ThreadState::RUNNABLE;
+      Thread::ThreadId tid = curThread->getThreadId();
+      state.scheduleNextThread(tid);
+
+      if (scheduleTreeNode != nullptr) {
+        std::vector<ExecutionState*> states;
+        states.push_back(&state);
+        scheduleTree->registerScheduleDecision(scheduleTreeNode, states);
+      }
+
+      return;
+    }
+
+    // So how do we proceed here? For now just let everything continue normally
+    // this will schedule another thread
+    klee_warning("An exited thread caused a thread scheduling. Resetting the thread scheduling to a safe state.\n");
+    state.threadSchedulingEnabled = true;
+  }
+
+  std::set<Thread::ThreadId>& runnable = state.runnableThreads;
+
+  // Another point of we cannot schedule any other thread
+  if (runnable.empty()) {
+    bool allExited = true;
+
+    for (auto& threadIt : state.threads) {
+      if (threadIt.second.state != Thread::ThreadState::EXITED) {
+        allExited = false;
+      }
+    }
+
+    if (DumpTreeOnEnd) {
+      char name[32];
+      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
+      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
+      if (os) {
+        printScheduleDag(*os, state);
+        delete os;
+      }
+    }
+
+    if (allExited) {
+      terminateStateOnExit(state);
+    } else {
+      exitWithDeadlock(state);
+    }
+
+    return;
+  }
+
+  uint64_t newForkCount = runnable.size() - 1;
+
+  if (ScheduleForks == NEVER) {
+    newForkCount = 0;
+  }
+
+  std::vector<ExecutionState*> newStates;
+  forkForThreadScheduling(state, newStates, newForkCount);
+
+  if (scheduleTreeNode != nullptr) {
+    scheduleTree->registerScheduleDecision(scheduleTreeNode, newStates);
+  }
+}
+
+void Executor::scheduleThreads(ExecutionState &state) {
+  // By default this means the current epoch will end
+  state.endCurrentEpoch();
+
+  if (SameScheduleAnalysis == PARTIAL_ORDER) {
+    scheduleThreadsWithPartialOrder(state);
+  } else {
+    scheduleThreadsWithScheduleTree(state);
   }
 }
 

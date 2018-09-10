@@ -11,9 +11,17 @@
 #define __UTIL_PTREE_H__
 
 #include <klee/Expr.h>
+#include <klee/Thread.h>
+
+#include <set>
 
 namespace klee {
   class ExecutionState;
+
+  typedef struct {
+    Thread::ThreadId scheduledThread;
+    uint64_t epochNumber;
+  } SchedulingDecision;
 
   class PTree { 
     typedef ExecutionState* data_type;
@@ -38,7 +46,10 @@ namespace klee {
   public:
     PTreeNode *parent, *left, *right;
     ExecutionState *data;
+
+    // Reason why this fork exists
     ref<Expr> condition;
+    SchedulingDecision schedulingDecision;
 
   private:
     PTreeNode(PTreeNode *_parent, ExecutionState *_data);

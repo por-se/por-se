@@ -25,10 +25,14 @@ klee_add_component(kleeCore
   MemoryState.cpp
   MemoryTrace.cpp
   PTree.cpp
+  ScheduleTree.cpp
+  PartialOrderExplorer.cpp
+  MemoryAccessTracker.cpp
   Searcher.cpp
   SeedInfo.cpp
   SpecialFunctionHandler.cpp
   StatsTracker.cpp
+  Thread.cpp
   TimingSolver.cpp
   UserSearcher.cpp
 )
@@ -47,6 +51,7 @@ else()
   list(APPEND LLVM_COMPONENTS jit engine)
 endif()
 
+target_link_libraries(kleeCore PRIVATE ${CRYPTOPP_LIBRARIES})
 
 klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
 target_link_libraries(kleeCore PUBLIC ${LLVM_LIBS})

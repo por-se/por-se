@@ -38,6 +38,13 @@ else()
   set(ENABLE_POSIX_RUNTIME 0)
 endif()
 
+if (ENABLE_PTHREAD_RUNTIME)
+  set(ENABLE_PTHREAD_RUNTIME 1)
+else()
+  set(ENABLE_PTHREAD_RUNTIME 0)
+endif()
+
+
 ###############################################################################
 # Find LLVM testing tools
 ###############################################################################

@@ -14,6 +14,7 @@
 #include "klee/MergeHandler.h"
 
 #include "klee/ExecutionState.h"
+#include "klee/Thread.h"
 
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
@@ -31,6 +32,7 @@
 
 #include <errno.h>
 #include <sstream>
+#include <vector>
 
 using namespace llvm;
 using namespace klee;
@@ -113,6 +115,14 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_alias_function", handleAliasFunction, false),
+  add("klee_create_thread", handleCreateThread, false),
+  add("klee_sleep_thread", handleSleepThread, false),
+  add("klee_wake_up_thread", handleWakeUpThread, false),
+  add("klee_get_thread_id", handleGetThreadId, true),
+  add("klee_preempt_thread", handlePreemptThread, false),
+  add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
+  add("klee_get_thread_start_argument", handleGetThreadStartArgument, true),
+  addDNR("klee_exit_thread", handleExitThread),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
 
@@ -528,9 +538,10 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning");
+  Thread* thread = state.getCurrentThreadReference();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning("%s: %s", state.stack.back().kf->function->getName().data(), 
+  klee_warning("%s: %s", thread->stack.back().kf->function->getName().data(),
                msg_str.c_str());
 }
 
@@ -539,9 +550,10 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_warning_once");
+  Thread* thread = state.getCurrentThreadReference();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning_once(0, "%s: %s", state.stack.back().kf->function->getName().data(),
+  klee_warning_once(0, "%s: %s", thread->stack.back().kf->function->getName().data(),
                     msg_str.c_str());
 }
 
@@ -765,12 +777,14 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
          "expect constant address argument to klee_define_fixed_object");
   assert(isa<ConstantExpr>(arguments[1]) &&
          "expect constant size argument to klee_define_fixed_object");
+
+  Thread* thread = state.getCurrentThreadReference();
   
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
   MemoryObject *mo = executor.memory->allocateFixed(address, size,
-                                                    state.prevPC->inst,
-                                                    state.stack.size()-1);
+                                                    thread->prevPc->inst,
+                                                    thread->stack.size()-1);
   executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
 }
@@ -872,4 +886,81 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
                                  Executor::Overflow);
+}
+
+/* Threading support */
+
+void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
+                                                KInstruction *target,
+                                                std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_create_thread");
+
+  executor.createThread(state, arguments[0], arguments[1]);
+}
+
+void SpecialFunctionHandler::handleSleepThread(ExecutionState &state,
+                                               KInstruction *target,
+                                               std::vector<ref<Expr> > &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_sleep_thread");
+  executor.sleepThread(state);
+}
+
+void SpecialFunctionHandler::handleWakeUpThread(ExecutionState &state,
+                                                KInstruction *target,
+                                                std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_wake_up_thread");
+  ref<Expr> tid = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(tid)) {
+    executor.terminateStateOnError(state, "klee_wake_up_thread", Executor::User);
+    return;
+  }
+
+  executor.wakeUpThread(state, cast<ConstantExpr>(tid)->getZExtValue());
+}
+
+void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,
+                                               klee::KInstruction *target,
+                                               std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_id");
+
+  uint64_t tid = state.getCurrentThreadReference()->getThreadId();
+  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int64));
+}
+
+void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
+                                                klee::KInstruction *target,
+                                                std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_preempt_thread");
+  executor.preemptThread(state);
+}
+
+void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
+                                              klee::KInstruction *target,
+                                              std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_exit_thread");
+  executor.exitThread(state);
+}
+
+void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &state,
+                                                          klee::KInstruction *target,
+                                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_toggle_thread_scheduling");
+  ref<Expr> tid = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(tid)) {
+    executor.terminateStateOnError(state, "klee_toggle_thread_scheduling", Executor::User);
+    return;
+  }
+
+  executor.toggleThreadScheduling(state, cast<ConstantExpr>(tid)->getZExtValue() != 0);
+}
+
+void SpecialFunctionHandler::handleGetThreadStartArgument(klee::ExecutionState &state,
+                                                          klee::KInstruction *target,
+                                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_start_argument");
+
+  ref<Expr> arg = state.getCurrentThreadReference()->getStartArgument();
+  executor.bindLocal(target, state, arg);
 }

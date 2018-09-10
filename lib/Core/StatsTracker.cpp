@@ -302,9 +302,11 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
       }
     }
 
-    Instruction *inst = es.pc->inst;
-    const InstructionInfo &ii = *es.pc->info;
-    StackFrame &sf = es.stack.back();
+    Thread* thread = es.getCurrentThreadReference();
+
+    Instruction *inst = thread->pc->inst;
+    const InstructionInfo &ii = *thread->pc->info;
+    StackFrame &sf = thread->stack.back();
     theStatisticManager->setIndex(ii.id);
     if (UseCallPaths)
       theStatisticManager->setContext(&sf.callPathNode->statistics);
@@ -319,11 +321,11 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
         //
         // FIXME: This trick no longer works, we should fix this in the line
         // number propogation.
-          es.coveredLines[&ii.file].insert(ii.line);
-	es.coveredNew = true;
+        es.coveredLines[&ii.file].insert(ii.line);
+        es.coveredNew = true;
         es.instsSinceCovNew = 1;
-	++stats::coveredInstructions;
-	stats::uncoveredInstructions += (uint64_t)-1;
+	      ++stats::coveredInstructions;
+	      stats::uncoveredInstructions += (uint64_t)-1;
       }
     }
   }
@@ -340,33 +342,30 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 ///
 
 /* Should be called _after_ the es->pushFrame() */
-void StatsTracker::framePushed(ExecutionState &es, StackFrame *parentFrame) {
+void StatsTracker::framePushed(StackFrame *current, StackFrame *parentFrame) {
   if (OutputIStats) {
-    StackFrame &sf = es.stack.back();
-
     if (UseCallPaths) {
-      CallPathNode *parent = parentFrame ? parentFrame->callPathNode : 0;
-      CallPathNode *cp = callPathManager.getCallPath(parent, 
-                                                     sf.caller ? sf.caller->inst : 0, 
-                                                     sf.kf->function);
-      sf.callPathNode = cp;
+      CallPathNode *parent = parentFrame ? parentFrame->callPathNode : nullptr;
+      CallPathNode *cp = callPathManager.getCallPath(
+              parent,
+              current->caller ? current->caller->inst : nullptr,
+              current->kf->function);
+      current->callPathNode = cp;
       cp->count++;
     }
   }
 
   if (updateMinDistToUncovered) {
-    StackFrame &sf = es.stack.back();
-
     uint64_t minDistAtRA = 0;
     if (parentFrame)
       minDistAtRA = parentFrame->minDistToUncoveredOnReturn;
 
-    sf.minDistToUncoveredOnReturn =
-        sf.caller ? computeMinDistToUncovered(sf.caller, minDistAtRA) : 0;
+    current->minDistToUncoveredOnReturn =
+            current->caller ? computeMinDistToUncovered(current->caller, minDistAtRA) : 0;
   }
 }
 
-/* Should be called _after_ the es->popFrame() */
+/* Should be called _after_ the es->popFrameOfCurrentThread() */
 void StatsTracker::framePopped(ExecutionState &es) {
   // XXX remove me?
 }
@@ -460,10 +459,13 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
   for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
          ie = executor.states.end(); it != ie; ++it) {
     ExecutionState &state = **it;
-    const InstructionInfo &ii = *state.pc->info;
+    Thread* thread = state.getCurrentThreadReference();
+    const InstructionInfo &ii = *thread->pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
-    if (UseCallPaths)
-      state.stack.back().callPathNode->statistics.incrementValue(stats::states, addend);
+    if (UseCallPaths) {
+      assert(!thread->stack.empty() && "Stack should be available in order to write the stats");
+      thread->stack.back().callPathNode->statistics.incrementValue(stats::states, addend);
+    }
   }
 }
 
@@ -889,14 +891,16 @@ void StatsTracker::computeReachableUncovered() {
   for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
          ie = executor.states.end(); it != ie; ++it) {
     ExecutionState *es = *it;
+    Thread* thread = es->getCurrentThreadReference();
+
     uint64_t currentFrameMinDist = 0;
-    for (ExecutionState::stack_ty::iterator sfIt = es->stack.begin(),
-           sf_ie = es->stack.end(); sfIt != sf_ie; ++sfIt) {
+    for (ExecutionState::stack_ty::iterator sfIt = thread->stack.begin(),
+           sf_ie = thread->stack.end(); sfIt != sf_ie; ++sfIt) {
       ExecutionState::stack_ty::iterator next = sfIt + 1;
       KInstIterator kii;
 
-      if (next==es->stack.end()) {
-        kii = es->pc;
+      if (next == thread->stack.end()) {
+        kii = thread->pc;
       } else {
         kii = next->caller;
         ++kii;

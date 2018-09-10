@@ -29,7 +29,6 @@ else()
   message(STATUS "Could not find CryptoPP include path")
 endif()
 
-
 cmake_push_check_state()
 set(CMAKE_REQUIRED_INCLUDES "${CRYPTOPP_INCLUDE_DIRS}")
 check_cxx_source_compiles("

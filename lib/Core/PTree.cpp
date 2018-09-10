@@ -13,6 +13,9 @@
 #include <klee/util/ExprPPrinter.h>
 
 #include <vector>
+#include <iterator>
+#include <algorithm>
+#include <klee/ExecutionState.h>
 
 using namespace klee;
 
@@ -59,21 +62,28 @@ void PTree::dump(llvm::raw_ostream &os) {
   os << "\trotate=90;\n";
   os << "\tcenter = \"true\";\n";
   os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
-  os << "\tedge [arrowsize=.3]\n";
+  os << "\tedge [arrowsize=.5]\n";
   std::vector<PTree::Node*> stack;
   stack.push_back(root);
   while (!stack.empty()) {
     PTree::Node *n = stack.back();
     stack.pop_back();
     if (n->condition.isNull()) {
-      os << "\tn" << n << " [label=\"\"";
+      if (n->schedulingDecision.epochNumber == 0) {
+        os << "\tn" << n << " [label=\"\"";
+      } else {
+        os << "\tn" << n << " [label=\"";
+        os << n->schedulingDecision.scheduledThread << " @ ep=" << n->schedulingDecision.epochNumber;
+        os << "\",shape=pentagon";
+      }
     } else {
       os << "\tn" << n << " [label=\"";
       pp->print(n->condition);
       os << "\",shape=diamond";
     }
-    if (n->data)
+    if (n->data) {
       os << ",fillcolor=green";
+    }
     os << "];\n";
     if (n->left) {
       os << "\tn" << n << " -> n" << n->left << ";\n";
@@ -95,6 +105,8 @@ PTreeNode::PTreeNode(PTreeNode *_parent,
     right(0),
     data(_data),
     condition(0) {
+  schedulingDecision.epochNumber = 0;
+  schedulingDecision.scheduledThread = 0;
 }
 
 PTreeNode::~PTreeNode() {

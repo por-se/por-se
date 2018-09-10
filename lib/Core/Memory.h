@@ -34,16 +34,17 @@ class MemoryObject {
   friend class STPBuilder;
   friend class ObjectState;
   friend class ExecutionState;
+  friend class Thread;
 
 private:
-  static int counter;
+  static uint64_t counter;
   mutable unsigned refCount;
 
   /// index of stack frame in which this memory object was allocated.
   size_t stackframeIndex;
 
 public:
-  unsigned id;
+  uint64_t id;
   uint64_t address;
 
   /// size in bytes
@@ -113,6 +114,10 @@ public:
 
   void setName(std::string name) const {
     this->name = name;
+  }
+
+  uint64_t getId() const {
+    return id;
   }
 
   ref<ConstantExpr> getBaseExpr() const { 

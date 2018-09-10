@@ -61,7 +61,7 @@ ObjectHolder &ObjectHolder::operator=(const ObjectHolder &b) {
 
 /***/
 
-int MemoryObject::counter = 0;
+uint64_t MemoryObject::counter = 0;
 
 MemoryObject::~MemoryObject() {
   if (parent)
