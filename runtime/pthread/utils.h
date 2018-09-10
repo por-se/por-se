@@ -42,7 +42,6 @@ void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it);
 
 void __notify_threads(__kpr_list* stack);
 
-bool __checkIfSameSize(char* target, char* reference);
 bool __checkIfSame(char* target, char* reference);
 
 #endif //KLEE_PTHREAD_UTILS_H

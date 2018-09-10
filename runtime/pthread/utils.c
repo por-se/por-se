@@ -26,7 +26,7 @@ void __kpr_list_clear(__kpr_list* stack) {
 
 void __kpr_list_push(__kpr_list* stack, void * data) {
   __kpr_list_node* newTail = malloc(sizeof(__kpr_list_node));
-  memset(newTail, 0, sizeof(struct __kpr_list_node));
+  memset(newTail, 0, sizeof(__kpr_list_node));
 
   newTail->data = data;
   newTail->prev = stack->tail;
@@ -42,7 +42,10 @@ void __kpr_list_push(__kpr_list* stack, void * data) {
 }
 
 void* __kpr_list_pop(__kpr_list* stack) {
-  klee_assert(stack->size > 0);
+  if (stack->size == 0) {
+    klee_warning("Invalid pop; there was no data");
+    return NULL;
+  }
 
   __kpr_list_node* top = stack->tail;
   stack->tail = top->prev;
@@ -61,7 +64,7 @@ void* __kpr_list_pop(__kpr_list* stack) {
 
 void __kpr_list_unshift(__kpr_list* stack, void * data) {
   __kpr_list_node* newHead = malloc(sizeof(__kpr_list_node));
-  memset(newHead, 0, sizeof(struct __kpr_list_node));
+  memset(newHead, 0, sizeof(__kpr_list_node));
 
   newHead->data = data;
 
@@ -75,7 +78,10 @@ void __kpr_list_unshift(__kpr_list* stack, void * data) {
 }
 
 void* __kpr_list_shift(__kpr_list* stack) {
-  klee_assert(stack->size > 0);
+  if (stack->size == 0) {
+    klee_warning("Invalid shift; there was no data");
+    return NULL;
+  }
 
   __kpr_list_node* head = stack->head;
   stack->head = head->next;
@@ -124,6 +130,11 @@ void* __kpr_list_iterator_value(__kpr_list_iterator it) {
 
 void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it) {
   // So this method should erase the current iterator and update its value
+  if (it->current == NULL) {
+    klee_warning("Erasing iterator that does not exist");
+    return;
+  }
+
   __kpr_list_node* nodeToDelete = it->current;
 
   if (nodeToDelete->prev != NULL) {
@@ -137,6 +148,16 @@ void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it) {
   if (nodeToDelete->next != NULL) {
     nodeToDelete->next->prev = nodeToDelete->prev;
   }
+
+  if (stack->head == nodeToDelete) {
+    stack->head = nodeToDelete->next;
+  }
+
+  if (stack->tail == nodeToDelete) {
+    stack->tail = nodeToDelete->prev;
+  }
+
+  stack->size--;
 
   free(nodeToDelete);
 }
@@ -167,7 +188,9 @@ bool __checkIfSame(char* target, char* reference) {
   size_t sizeOfTarget = klee_get_obj_size((void*) target);
   size_t sizeOfReference = klee_get_obj_size((void*) reference);
 
-  if (sizeOfReference != sizeOfTarget) {
+  // So it can happen that the structure is embedded into another memory regions
+  // so just check that we are not too small
+  if (sizeOfReference > sizeOfTarget) {
     return false;
   }
 

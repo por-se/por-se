@@ -25,13 +25,8 @@ static int __create_new_mutex(__kpr_mutex **m) {
 }
 
 static int __obtain_mutex(pthread_mutex_t *mutex, __kpr_mutex **dest) {
-  // So we want to check if we actually have a mutex that is valid
-  if (!__checkIfSameSize(mutex, &mutexDefault)) {
-    return -1;
-  }
-
   // So first we have to check if we are any of the default static mutex types
-  if (__checkIfSame(mutex, &mutexDefault)) {
+  if (__checkIfSame((char*) mutex, (char*) &mutexDefault)) {
     return __create_new_mutex(dest);
   }
 

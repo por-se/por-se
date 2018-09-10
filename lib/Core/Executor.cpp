@@ -4686,7 +4686,8 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
 
     // So how do we proceed here? For now just let everything continue normally
     // this will schedule another thread
-    klee_warning("An exited thread caused a thread scheduling. This should not happen.\n");
+    klee_warning("An exited thread caused a thread scheduling. Resetting the thread scheduling to a safe state.\n");
+    state.threadSchedulingEnabled = true;
   }
 
   std::set<Thread::ThreadId>& runnable = state.runnableThreads;

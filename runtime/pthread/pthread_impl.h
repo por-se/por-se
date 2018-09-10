@@ -30,12 +30,14 @@ typedef struct {
 } __kpr_barrier;
 
 typedef struct {
-  uint8_t mode;
   uint64_t acquiredWriter;
-  uint64_t acquiredReaderCount;
 
-  __kpr_list waitingWriters;
-  __kpr_list waitingReaders;
+  __kpr_list acquiredReaderLocks;
+
+  size_t waitingWriterCount;
+  size_t waitingReaderCount;
+
+  __kpr_list waitingList;
 } __kpr_rwlock;
 
 typedef struct {
@@ -64,7 +66,7 @@ typedef struct {
 typedef struct {
   int value;
   __kpr_list waiting;
-  char* name;
+  const char* name;
 } __kpr_semaphore;
 
 typedef struct {

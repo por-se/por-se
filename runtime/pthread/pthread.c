@@ -166,6 +166,11 @@ int pthread_join(pthread_t pthread, void **ret) {
 }
 
 pthread_t pthread_self(void) {
+  if (klee_get_thread_id() == 0) {
+    // Main thread will not have any start argument so make sure that we pass the correct one
+    return 0;
+  }
+
   return (pthread_t) klee_get_thread_start_argument();
 }
 
@@ -231,17 +236,10 @@ int pthread_cancel(pthread_t tid) {
   return 0;
 }
 
-static pthread_once_t __ONCE_STATIC_INIT = PTHREAD_ONCE_INIT;
-
 int pthread_once(pthread_once_t *o, void (*func)(void)) {
   klee_toggle_thread_scheduling(0);
 
   int* onceAsValue = (int*) o;
-
-  if (!__checkIfSameSize((char*) o, (char*) &__ONCE_STATIC_INIT)) {
-    klee_toggle_thread_scheduling(1);
-    return EINVAL;
-  }
 
   if (*onceAsValue != 0) {
     klee_toggle_thread_scheduling(1);
@@ -282,6 +280,8 @@ void pthread_cleanup_pop(int execute) {
   __kpr_thread thread* = (__kpr_thread*) klee_get_thread_start_argument();
   size_t stackSize = __kpr_list_size(&thread->cleanUpStack);
 
+  klee_warning_once("Argument not passed for pthread_cleanup");
+
   if (stackSize == 0) {
     klee_abort();
   }
@@ -301,6 +301,7 @@ void pthread_cleanup_pop(int execute) {
 void pthread_cleanup_push(void (*routine)(void*), void *arg) {
   __kpr_thread thread* = (__kpr_thread*) klee_get_thread_start_argument();
   __kpr_list_pop(&thread->cleanUpStack, routine);
+  klee_warning_once("Argument not passed for pthread_cleanup");
 }
 #endif
 
