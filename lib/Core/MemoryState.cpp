@@ -312,7 +312,8 @@ bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
                     instValue) != basicBlockInfo.liveRegisters.end());
 }
 
-void MemoryState::registerLocal(const KInstruction *target, ref<Expr> value) {
+void MemoryState::registerLocal(std::uint64_t threadID,
+                                const KInstruction *target, ref<Expr> value) {
   if (disableMemoryState) {
     return;
   }
@@ -326,7 +327,7 @@ void MemoryState::registerLocal(const KInstruction *target, ref<Expr> value) {
   if (!isLocalLive(target->inst))
     return;
 
-  registerLocal(inst, value);
+  registerLocal(threadID, inst, value);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: register local %" << target->inst->getName()
@@ -336,8 +337,9 @@ void MemoryState::registerLocal(const KInstruction *target, ref<Expr> value) {
   }
 }
 
-void MemoryState::registerLocal(const llvm::Instruction *inst, ref<Expr> value)
-{
+void MemoryState::registerLocal(std::uint64_t threadID,
+                                const llvm::Instruction *inst,
+                                ref<Expr> value) {
   if (disableMemoryState) {
     return;
   }
@@ -353,11 +355,13 @@ void MemoryState::registerLocal(const llvm::Instruction *inst, ref<Expr> value)
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     fingerprint.updateUint8(3);
+    fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(inst));
     fingerprint.updateConstantExpr(*constant);
   } else {
     // symbolic value
     fingerprint.updateUint8(4);
+    fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(inst));
     fingerprint.updateExpr(value);
   }
@@ -365,7 +369,9 @@ void MemoryState::registerLocal(const llvm::Instruction *inst, ref<Expr> value)
   fingerprint.applyToFingerprintLocalDelta();
 }
 
-void MemoryState::registerArgument(const KFunction *kf, unsigned index,
+void MemoryState::registerArgument(std::uint64_t threadID,
+                                   const KFunction *kf,
+                                   unsigned index,
                                    ref<Expr> value) {
   if (disableMemoryState) {
     return;
@@ -374,12 +380,14 @@ void MemoryState::registerArgument(const KFunction *kf, unsigned index,
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     fingerprint.updateUint8(5);
+    fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(kf));
     fingerprint.updateUint64(index);
     fingerprint.updateConstantExpr(*constant);
   } else {
     // symbolic value
     fingerprint.updateUint8(6);
+    fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(kf));
     fingerprint.updateUint64(index);
     fingerprint.updateExpr(value);
@@ -413,7 +421,8 @@ void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
                                                             liveset.end());
 }
 
-void MemoryState::unregisterConsumedLocals(const llvm::BasicBlock *bb,
+void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
+                                           const llvm::BasicBlock *bb,
                                            bool writeToLocalDelta) {
   // This method is called after the execution of bb to clean up the local
   // delta, but also set locals to NULL within KLEE.
@@ -433,7 +442,7 @@ void MemoryState::unregisterConsumedLocals(const llvm::BasicBlock *bb,
     }
     if (writeToLocalDelta) {
       // remove local from local delta
-      unregisterLocal(inst);
+      unregisterLocal(threadID, inst);
     }
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
@@ -442,7 +451,8 @@ void MemoryState::unregisterConsumedLocals(const llvm::BasicBlock *bb,
 }
 
 
-void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
+void MemoryState::enterBasicBlock(std::uint64_t threadID,
+                                  const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src) {
 
   if (disableMemoryState) {
@@ -464,17 +474,19 @@ void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
 
     // unregister previous
     fingerprint.updateUint8(7);
+    fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
     fingerprint.applyToFingerprintLocalDelta();
 
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
-      unregisterConsumedLocals(src);
+      unregisterConsumedLocals(threadID, src);
   }
   if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
     updateBasicBlockInfo(dst);
 
   // register new basic block (program counter)
   fingerprint.updateUint8(7);
+  fingerprint.updateUint64(threadID);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
   fingerprint.applyToFingerprintLocalDelta();
 
@@ -494,7 +506,8 @@ void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
   }
 }
 
-void MemoryState::phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
+void MemoryState::phiNodeProcessingCompleted(std::uint64_t threadID,
+                                             const llvm::BasicBlock *dst,
                                              const llvm::BasicBlock *src) {
   if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
     return;
@@ -504,14 +517,15 @@ void MemoryState::phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
     return;
   }
 
-  unregisterKilledLocals(dst, src);
+  unregisterKilledLocals(threadID, dst, src);
 }
 
 MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
   return fingerprint.getFingerprint();
 }
 
-void MemoryState::unregisterKilledLocals(const llvm::BasicBlock *dst,
+void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
+                                         const llvm::BasicBlock *dst,
                                          const llvm::BasicBlock *src) {
   // kill registers based on outgoing edge (edge from src to dst)
 
@@ -529,7 +543,7 @@ void MemoryState::unregisterKilledLocals(const llvm::BasicBlock *dst,
                    << ": %" << inst->getName() << "\n";
     }
     // remove local from local delta
-    unregisterLocal(inst);
+    unregisterLocal(threadID, inst);
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
     clearLocal(inst);
@@ -714,7 +728,8 @@ void MemoryState::leaveMemoryFunction() {
   registerWrite(memoryFunction.address, *mo, *os, memoryFunction.bytes);
 }
 
-void MemoryState::registerPushFrame(const KFunction *callee,
+void MemoryState::registerPushFrame(std::uint64_t threadID,
+                                    const KFunction *callee,
                                     const KInstruction *caller,
                                     size_t stackFrameIndex) {
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -733,6 +748,7 @@ void MemoryState::registerPushFrame(const KFunction *callee,
 
   // register stack frame
   fingerprint.updateUint8(8);
+  fingerprint.updateUint64(threadID);
   fingerprint.updateUint64(stackFrameIndex);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(caller));
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(callee));
@@ -744,7 +760,8 @@ void MemoryState::registerPushFrame(const KFunction *callee,
   }
 }
 
-void MemoryState::registerPopFrame(const llvm::BasicBlock *returningBB,
+void MemoryState::registerPopFrame(std::uint64_t threadID,
+                                   const llvm::BasicBlock *returningBB,
                                    const llvm::BasicBlock *callerBB) {
   // IMPORTANT: has to be called prior to state.popFrame()
 
@@ -760,7 +777,7 @@ void MemoryState::registerPopFrame(const llvm::BasicBlock *returningBB,
       // clear consumed locals within KLEE to be able to determine which
       // variable has already been registered during another call to the
       // function we are currently leaving.
-      unregisterConsumedLocals(returningBB, false);
+      unregisterConsumedLocals(threadID, returningBB, false);
     }
 
     MemoryTrace::StackFrameEntry sfe = trace.popFrame();

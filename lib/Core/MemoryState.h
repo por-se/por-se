@@ -97,20 +97,23 @@ private:
   void clearLocal(const KInstruction *kinst);
   void clearLocal(const llvm::Instruction *inst);
 
-  void unregisterConsumedLocals(const llvm::BasicBlock *bb,
+  void unregisterConsumedLocals(std::uint64_t threadID,
+                                const llvm::BasicBlock *bb,
                                 bool writeToLocalDelta = true);
-  void unregisterKilledLocals(const llvm::BasicBlock *dst,
+  void unregisterKilledLocals(std::uint64_t threadID,
+                              const llvm::BasicBlock *dst,
                               const llvm::BasicBlock *src);
 
-  void registerLocal(const llvm::Instruction *inst, ref<Expr> value);
-  void unregisterLocal(const llvm::Instruction *inst) {
+  void registerLocal(std::uint64_t threadID, const llvm::Instruction *inst,
+                     ref<Expr> value);
+  void unregisterLocal(std::uint64_t threadID, const llvm::Instruction *inst) {
     ref<Expr> value = getLocalValue(inst);
 
     // value was already unregistered when it was marked as dead
     if (value.isNull())
       return;
 
-    registerLocal(inst, value);
+    registerLocal(threadID, inst, value);
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       llvm::errs() << "MemoryState: unregister local %" << inst->getName()
@@ -210,8 +213,10 @@ public:
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }
 
-  void registerLocal(const KInstruction *target, ref<Expr> value);
-  void unregisterLocal(const KInstruction *target, ref<Expr> value) {
+  void registerLocal(std::uint64_t threadID, const KInstruction *target,
+                     ref<Expr> value);
+  void unregisterLocal(std::uint64_t threadID, const KInstruction *target,
+                       ref<Expr> value) {
     if (!disableMemoryState
       && DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -219,22 +224,25 @@ public:
       }
     }
 
-    registerLocal(target, value);
+    registerLocal(threadID, target, value);
   }
 
-  void registerArgument(const KFunction *kf, unsigned index, ref<Expr> value);
+  void registerArgument(std::uint64_t threadID,
+                        const KFunction *kf,
+                        unsigned index, ref<Expr> value);
 
   void registerExternalFunctionCall();
 
-  void enterBasicBlock(const llvm::BasicBlock *dst,
+  void enterBasicBlock(std::uint64_t threadID, const llvm::BasicBlock *dst,
                        const llvm::BasicBlock *src = nullptr);
-  void phiNodeProcessingCompleted(const llvm::BasicBlock *dst,
+  void phiNodeProcessingCompleted(std::uint64_t threadID,
+                                  const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src);
 
-  void registerPushFrame(const KFunction *callee,
-                         const KInstruction *caller,
-                         size_t stackFrameIndex);
-  void registerPopFrame(const llvm::BasicBlock *returningBB,
+  void registerPushFrame(std::uint64_t threadID, const KFunction *callee,
+                         const KInstruction *caller, size_t stackFrameIndex);
+  void registerPopFrame(std::uint64_t threadID,
+                        const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
 
   MemoryFingerprint::fingerprint_t getFingerprint();
