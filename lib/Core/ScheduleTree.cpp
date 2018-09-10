@@ -156,9 +156,9 @@ ScheduleTree::Node* ScheduleTree::registerNewChild(Node *base, ExecutionState *n
   if (expr.isNull()) {
     newNode->type = SCHEDULING;
 
-    Thread* curThread = newState->getCurrentThreadReference();
+    Thread& curThread = newState->getCurrentThreadReference();
     newNode->scheduleIndex = base->scheduleIndex + 1;
-    newNode->tid = curThread->getThreadId();
+    newNode->tid = curThread.getThreadId();
   } else {
     newNode->symbolicExpression = expr;
     newNode->type = SYMBOLIC;

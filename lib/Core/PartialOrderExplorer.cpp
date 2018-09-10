@@ -349,7 +349,7 @@ PartialOrderExplorer::PartialOrderExplorer(ExecutionState *state, StateForkProvi
   rootPath->graph = this;
 
   rootPath->root = new Node();
-  rootPath->root->tid = state->getCurrentThreadReference()->getThreadId();
+  rootPath->root->tid = state->getCurrentThreadReference().getThreadId();
   rootPath->scheduleHistory.push_back(rootPath->root);
   rootPath->root->path = rootPath;
 

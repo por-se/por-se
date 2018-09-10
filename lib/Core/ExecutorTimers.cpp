@@ -134,14 +134,14 @@ void Executor::processTimers(ExecutionState *current,
           ExecutionState *es = *it;
           *os << "(" << es << ",";
           *os << "[";
-          Thread* thread = es->getCurrentThreadReference();
-          ExecutionState::stack_ty::iterator next = thread->stack.begin();
+          Thread& thread = es->getCurrentThreadReference();
+          ExecutionState::stack_ty::iterator next = thread.stack.begin();
           ++next;
-          for (ExecutionState::stack_ty::iterator sfIt = thread->stack.begin(),
-                 sf_ie = thread->stack.end(); sfIt != sf_ie; ++sfIt) {
+          for (ExecutionState::stack_ty::iterator sfIt = thread.stack.begin(),
+                 sf_ie = thread.stack.end(); sfIt != sf_ie; ++sfIt) {
             *os << "('" << sfIt->kf->function->getName().str() << "',";
-            if (next == thread->stack.end()) {
-              *os << thread->prevPc->info->line << "), ";
+            if (next == thread.stack.end()) {
+              *os << thread.prevPc->info->line << "), ";
             } else {
               *os << next->caller->info->line << "), ";
               ++next;
@@ -149,11 +149,11 @@ void Executor::processTimers(ExecutionState *current,
           }
           *os << "], ";
 
-          StackFrame &sf = thread->stack.back();
-          uint64_t md2u = computeMinDistToUncovered(thread->pc,
+          StackFrame &sf = thread.stack.back();
+          uint64_t md2u = computeMinDistToUncovered(thread.pc,
                                                     sf.minDistToUncoveredOnReturn);
           uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions,
-                                                               thread->pc->info->id);
+                                                               thread.pc->info->id);
           uint64_t cpicnt = sf.callPathNode->statistics.getValue(stats::instructions);
 
           *os << "{";

@@ -216,7 +216,7 @@ public:
   ExecutionState *branch();
 
   /// @brief returns the reference to the current thread (only valid for one 'klee instruction')
-  Thread* getCurrentThreadReference() const;
+  Thread & getCurrentThreadReference() const;
 
     /// @brief returns the reference to the thread with the given tid (only valid for one 'klee instruction')
   Thread* getThreadReferenceById(Thread::ThreadId tid);

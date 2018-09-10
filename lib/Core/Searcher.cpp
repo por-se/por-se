@@ -197,7 +197,7 @@ ExecutionState &WeightedRandomSearcher::selectState() {
 }
 
 double WeightedRandomSearcher::getWeight(ExecutionState *es) {
-  Thread* thread = es->getCurrentThreadReference();
+  Thread& thread = es->getCurrentThreadReference();
 
   switch(type) {
   default:
@@ -205,12 +205,12 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
     return es->weight;
   case InstCount: {
     uint64_t count = theStatisticManager->getIndexedValue(stats::instructions,
-                                                          thread->pc->info->id);
+                                                          thread.pc->info->id);
     double inv = 1. / std::max((uint64_t) 1, count);
     return inv * inv;
   }
   case CPInstCount: {
-    StackFrame &sf = thread->stack.back();
+    StackFrame &sf = thread.stack.back();
     uint64_t count = sf.callPathNode->statistics.getValue(stats::instructions);
     double inv = 1. / std::max((uint64_t) 1, count);
     return inv;
@@ -219,8 +219,8 @@ double WeightedRandomSearcher::getWeight(ExecutionState *es) {
     return (es->queryCost < .1) ? 1. : 1./es->queryCost;
   case CoveringNew:
   case MinDistToUncovered: {
-    uint64_t md2u = computeMinDistToUncovered(thread->pc,
-                                              thread->stack.back().minDistToUncoveredOnReturn);
+    uint64_t md2u = computeMinDistToUncovered(thread.pc,
+                                              thread.stack.back().minDistToUncoveredOnReturn);
 
     double invMD2U = 1. / (md2u ? md2u : 10000);
     if (type==CoveringNew) {
