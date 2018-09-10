@@ -663,9 +663,9 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
 MemoryObject * Executor::addExternalObject(ExecutionState &state, 
                                            void *addr, unsigned size, 
                                            bool isReadOnly) {
-  Thread* thread = state.getCurrentThreadReference();
+  Thread &thread = state.getCurrentThreadReference();
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
-                                  size, nullptr, thread->stack.size()-1);
+                                  size, nullptr, thread.stack.size()-1);
   ObjectState *os = bindObjectInState(state, mo, false);
   for(unsigned i = 0; i < size; i++)
     os->write8(i, ((uint8_t*)addr)[i]);
@@ -678,7 +678,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
 extern void *__dso_handle __attribute__ ((__weak__));
 
 void Executor::initializeGlobals(ExecutionState &state) {
-  Thread* thread = state.getCurrentThreadReference();
+  Thread &thread = state.getCurrentThreadReference();
   Module *m = kmodule->module.get();
 
   if (m->getModuleInlineAsm() != "")
@@ -781,7 +781,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread->stack.size()-1,
+                                          thread.stack.size()-1,
                                           /*alignment=*/globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(v, mo));
@@ -808,7 +808,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread->stack.size()-1,
+                                          thread.stack.size()-1,
                                           /*alignment=*/globalObjectAlignment);
       if (!mo)
         llvm::report_fatal_error("out of memory");
@@ -1254,14 +1254,14 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, 
                          ref<Expr> value) {
-  Thread *thread = state.getCurrentThreadReference();
+  Thread &thread = state.getCurrentThreadReference();
   Cell &cell = getDestCell(state, target);
   if (DetectInfiniteLoops) {
     if (!cell.value.isNull()) {
       // unregister previous value to avoid cancellation
-      state.memoryState.unregisterLocal(thread->tid, target, cell.value);
+      state.memoryState.unregisterLocal(thread.tid, target, cell.value);
     }
-    state.memoryState.registerLocal(thread->tid, target, value);
+    state.memoryState.registerLocal(thread.tid, target, value);
   }
   cell.value = value;
 }
@@ -1272,8 +1272,8 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
          "argument has previouly been set!");
   if (DetectInfiniteLoops) {
     // no need to unregister argument (can only be set once within the same stack frame)
-    Thread *thread = state.getCurrentThreadReference();
-    state.memoryState.registerArgument(thread->tid, kf, index, value);
+    Thread &thread = state.getCurrentThreadReference();
+    state.memoryState.registerArgument(thread.tid, kf, index, value);
   }
   getArgumentCell(state, kf, index).value = value;
 }
@@ -1615,8 +1615,8 @@ void Executor::executeCall(ExecutionState &state,
       bindArgument(kf, i, state, arguments[i]);
 
     if (DetectInfiniteLoops) {
-      state.memoryState.enterBasicBlock(thread->tid,
-                                        thread->pc->inst->getParent());
+      state.memoryState.enterBasicBlock(thread.tid,
+                                        thread.pc->inst->getParent());
     }
   }
 }
@@ -1645,7 +1645,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
     // enterBasicBlock updates live register information, thus we need to call
     // it on every BasicBlock change, not only on ones to a BasicBlock with more
     // than one predecessor
-    state.memoryState.enterBasicBlock(thread->tid, dst, src);
+    state.memoryState.enterBasicBlock(thread.tid, dst, src);
   }
   if (thread.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
@@ -1661,8 +1661,8 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
     // phiNodeProcessingCompleted updates live register information, thus we
     // need to call it on every BasicBlock change (even if it does not contain
     // any PHI nodes).
-    Thread *thread = state.getCurrentThreadReference();
-    state.memoryState.phiNodeProcessingCompleted(thread->tid, dst, src);
+    Thread &thread = state.getCurrentThreadReference();
+    state.memoryState.phiNodeProcessingCompleted(thread.tid, dst, src);
     if (state.memoryState.isEnabled()) {
       if ((dst->getSinglePredecessor() == nullptr) ||
           InfiniteLoopDetectionDisableTwoPredecessorOpt) {
@@ -1778,7 +1778,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         // has to be called before state.popFrame() to update live register
         // information that is only accessible within the stack frame that is to
         // be left
-        state.memoryState.registerPopFrame(thread->tid, returningBB, callerBB);
+        state.memoryState.registerPopFrame(thread.tid, returningBB, callerBB);
       }
 
       // When we pop the stack frame, we free the memory regions
@@ -2160,10 +2160,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::PHI: {
     ref<Expr> result = eval(ki, thread.incomingBBIndex, state).value;
     bindLocal(ki, state, result);
-    assert(ki == thread->prevPc && "executing instruction different from thread->prevPc");
+    assert(ki == thread.prevPc && "executing instruction different from thread.prevPc");
     if (i->getNextNode()->getOpcode() != Instruction::PHI) {
       // no more PHI nodes coming
-      BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread->incomingBBIndex);
+      BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread.incomingBBIndex);
       phiNodeProcessingCompleted(i->getParent(), src, state);
     }
     break;
@@ -3839,7 +3839,7 @@ void Executor::executeAlloc(ExecutionState &state,
     size_t allocationAlignment = getAllocationAlignment(allocSite);
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
-                         allocSite, thread->stack.size()-1, allocationAlignment);
+                         allocSite, thread.stack.size()-1, allocationAlignment);
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));

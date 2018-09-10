@@ -583,8 +583,8 @@ KFunction *MemoryState::getKFunction(const llvm::BasicBlock *bb) {
 }
 
 ref<Expr> MemoryState::getLocalValue(const KInstruction *kinst) {
-  Thread *thread = executionState->getCurrentThreadReference();
-  return thread->stack.back().locals[kinst->dest].value;
+  Thread &thread = executionState->getCurrentThreadReference();
+  return thread.stack.back().locals[kinst->dest].value;
 }
 
 ref<Expr> MemoryState::getLocalValue(const llvm::Instruction *inst) {
@@ -596,8 +596,8 @@ ref<Expr> MemoryState::getLocalValue(const llvm::Instruction *inst) {
 }
 
 void MemoryState::clearLocal(const KInstruction *kinst) {
-  Thread *thread = executionState->getCurrentThreadReference();
-  thread->stack.back().locals[kinst->dest].value = nullptr;
+  Thread &thread = executionState->getCurrentThreadReference();
+  thread.stack.back().locals[kinst->dest].value = nullptr;
   assert(getLocalValue(kinst).isNull());
 }
 
