@@ -443,9 +443,6 @@ void MemoryState::unregisterConsumedLocals(const llvm::BasicBlock *bb,
 
 void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src) {
-  if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-    return;
-  }
 
   if (disableMemoryState) {
     return;
@@ -469,15 +466,20 @@ void MemoryState::enterBasicBlock(const llvm::BasicBlock *dst,
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
     fingerprint.applyToFingerprintLocalDelta();
 
-    unregisterConsumedLocals(src);
+    if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
+      unregisterConsumedLocals(src);
   }
-  updateBasicBlockInfo(dst);
+  if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
+    updateBasicBlockInfo(dst);
 
   // register new basic block (program counter)
   fingerprint.updateUint8(7);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
   fingerprint.applyToFingerprintLocalDelta();
 
+  if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
+    return;
+  }
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: The following variables are live "
