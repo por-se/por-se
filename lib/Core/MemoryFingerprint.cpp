@@ -1,5 +1,6 @@
 #include "MemoryFingerprint.h"
 
+#include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
 
@@ -275,8 +276,56 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         output = true;
         break;
       }
+      case 7: {
+        result << "Program Counter: ";
+        std::uintptr_t ptr;
+
+        item >> ptr;
+        llvm::BasicBlock *bb = reinterpret_cast<llvm::BasicBlock *>(ptr);
+
+        result << bb->getName();
+        result << " in ";
+        result << bb->getParent()->getName();
+
+        output = true;
+        break;
+      }
+      case 8: {
+        result << "Stack Frame: ";
+        std::size_t stackFrameIndex;
+        std::uintptr_t callerPtr;
+        std::uintptr_t calleePtr;
+
+        item >> stackFrameIndex;
+        item >> callerPtr;
+        item >> calleePtr;
+
+        KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
+        KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
+
+        result << stackFrameIndex << ": ";
+        result << callee->function->getName();
+        result << "( called from ";
+        result << caller->inst;
+        result << ")";
+
+        output = true;
+        break;
+      }
+      case 9: {
+        result << "External Function Call: ";
+        std::size_t externalCallNum;
+
+        item >> externalCallNum;
+        result << externalCallNum;
+
+        output = true;
+        break;
+      }
       default:
+        result << "[UNKNOWN:";
         result << *it;
+        result << "]";
         output = true;
     }
     if (std::next(it) != fingerprint.end() && output) {
