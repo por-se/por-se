@@ -473,8 +473,6 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
         (*statesJSONFile) << "  {\n";
         (*statesJSONFile) << "    \"functionpointer_size\": "
                           << sizeof(llvm::Function *) << ",\n";
-        (*statesJSONFile) << "    \"frames_entry_size\": "
-                          << MemoryState::getStackStructSize() << ",\n";
         (*statesJSONFile) << "    \"memory_state_size\": "
                           << sizeof(MemoryState) << ",\n";
       }
@@ -3295,20 +3293,14 @@ void Executor::updateStatesJSON(KInstruction *ki, const ExecutionState &state,
     auto milliseconds =
       std::chrono::duration_cast<std::chrono::milliseconds>(time) - seconds;
 
-    static size_t lastStackFrames = 0;
     static size_t lastStateId = 0;
 
     if (lastStateId != state.id
-        || lastStackFrames != state.memoryState.getStackLength()
         || !ktest.empty()
         || !error.empty()
     ) {
       (*statesJSONFile) << ",\n  {\n";
       (*statesJSONFile) << "    \"state_id\": " << state.id << ",\n";
-      (*statesJSONFile) << "    \"frames_length\": "
-                        << state.memoryState.getStackLength() << ",\n";
-      (*statesJSONFile) << "    \"frames_capacity\": "
-                        << state.memoryState.getStackCapacity() << ",\n";
       if (!ktest.empty()) {
         (*statesJSONFile) << "    \"ktest\": \"" << ktest << "\",\n";
       }
@@ -3329,7 +3321,6 @@ void Executor::updateStatesJSON(KInstruction *ki, const ExecutionState &state,
       }
       (*statesJSONFile) << "  }";
 
-      lastStackFrames = state.memoryState.getStackLength();
       lastStateId = state.id;
     }
   }
@@ -3359,15 +3350,6 @@ void Executor::updateForkJSON(const ExecutionState &current,
     } else {
       (*forkJSONFile) << "    \"true_id\": " << trueState.id << ",\n";
       (*forkJSONFile) << "    \"false_id\": " << falseState.id << ",\n";
-    }
-    if (trueState.id == falseState.id || current.id != trueState.id) {
-      (*forkJSONFile) << "    \"new_frames_capacity\": "
-                      << trueState.memoryState.getStackCapacity()
-                      << ",\n";
-    } else {
-      (*forkJSONFile) << "    \"new_frames_capacity\": "
-                      << falseState.memoryState.getStackCapacity()
-                      << ",\n";
     }
     (*forkJSONFile) << "    \"timestamp\": " << seconds.count()
                     << "." << milliseconds.count() << ",\n";

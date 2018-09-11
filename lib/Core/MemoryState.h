@@ -4,7 +4,6 @@
 #include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "MemoryFingerprint.h"
-#include "MemoryTrace.h"
 
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
@@ -29,7 +28,6 @@ private:
   MemoryState(const MemoryState &) = default;
 
   MemoryFingerprint fingerprint;
-  MemoryTrace trace;
   const ExecutionState *executionState = nullptr;
 
   // klee_enable_memory_state() is inserted by KLEE before executing the entry
@@ -162,18 +160,6 @@ public:
     return !disableMemoryState;
   }
 
-  static size_t getStackStructSize() {
-    return MemoryTrace::getStackStructSize();
-  }
-
-  size_t getStackLength() const {
-    return trace.getStackLength();
-  }
-
-  size_t getStackCapacity() const {
-    return trace.getStackCapacity();
-  }
-
   size_t getFunctionListsLength() const {
     return MemoryState::outputFunctionsWhitelist.size()
         + MemoryState::libraryFunctionsList.size()
@@ -244,6 +230,11 @@ public:
   void registerPopFrame(std::uint64_t threadID,
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
+
+  bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo);
+
+  MemoryFingerprint::fingerprint_t *
+  getPreviousAllocaDelta(const MemoryObject &mo);
 
   MemoryFingerprint::fingerprint_t getFingerprint();
 };

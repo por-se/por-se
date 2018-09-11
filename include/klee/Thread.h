@@ -10,6 +10,8 @@
 #include "../../lib/Core/CallPathManager.h"
 // #include "CallPathManager.h"
 
+#include "../../lib/Core/MemoryFingerprint.h"
+
 #include <vector>
 
 namespace klee {
@@ -34,6 +36,12 @@ namespace klee {
     // does not pass vaarg through as expected). VACopy is lowered inside
     // of intrinsic lowering.
     MemoryObject *varargs;
+
+    // locals and arguments only visible within this stack frame
+    MemoryFingerprint::fingerprint_t fingerprintLocalDelta;
+
+    // allocas allocated in this stack frame
+    MemoryFingerprint::fingerprint_t fingerprintAllocaDelta;
 
     StackFrame(KInstIterator caller, KFunction *kf);
     StackFrame(const StackFrame &s);

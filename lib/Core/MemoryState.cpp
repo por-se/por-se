@@ -213,8 +213,8 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
 
   if (mo.isLocal) {
     isLocal = true;
-    if (!trace.isAllocaAllocationInCurrentStackFrame(*executionState, mo)) {
-      externalDelta = trace.getPreviousAllocaDelta(*executionState, mo);
+    if (!isAllocaAllocationInCurrentStackFrame(mo)) {
+      externalDelta = getPreviousAllocaDelta(mo);
       if (externalDelta == nullptr) {
         // allocation was made in previous stack frame that is not available
         // anymore due to an external function call
@@ -732,13 +732,16 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
                                     const KFunction *callee,
                                     const KInstruction *caller,
                                     size_t stackFrameIndex) {
+  // IMPORTANT: has to be called after state.popFrame()
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
-  trace.registerEndOfStackFrame(caller,
-                                fingerprint.getLocalDelta(),
-                                fingerprint.getAllocaDelta());
+  Thread &thread = executionState->getCurrentThreadReference();
+  // second but last stack frame
+  StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
+  sf.fingerprintLocalDelta = fingerprint.getLocalDelta();
+  sf.fingerprintAllocaDelta = fingerprint.getAllocaDelta();
 
   // make locals and arguments "invisible"
   fingerprint.discardLocalDelta();
@@ -771,7 +774,9 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
                  << "\n";
   }
 
-  if (trace.getNumberOfStackFrames() > 0) {
+  Thread &thread = executionState->getCurrentThreadReference();
+
+  if (thread.stack.size() > 0) {
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
       // Even though the local delta is removed in the next step, we have to
       // clear consumed locals within KLEE to be able to determine which
@@ -780,20 +785,21 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
       unregisterConsumedLocals(threadID, returningBB, false);
     }
 
-    MemoryTrace::StackFrameEntry sfe = trace.popFrame();
+    // second but last stack frame
+    StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
 
     // remove locals and arguments of stack frame that is to be left
     fingerprint.discardLocalDelta();
     // set local delta to fingerprint local delta of stack frame that is to be
     // entered to make locals and arguments "visible" again
-    fingerprint.setLocalDelta(sfe.fingerprintLocalDelta);
+    fingerprint.setLocalDelta(sf.fingerprintLocalDelta);
 
     // remove allocas allocated in stack frame that is to be left
     fingerprint.discardAllocaDelta();
     // initialize alloca delta with previous fingerprint alloca delta which
     // contains information on allocas allocated in the stack frame that is to
     // be entered
-    fingerprint.setAllocaDeltaToPreviousValue(sfe.fingerprintAllocaDelta);
+    fingerprint.setAllocaDeltaToPreviousValue(sf.fingerprintAllocaDelta);
 
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
       updateBasicBlockInfo(callerBB);
@@ -814,6 +820,22 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
       llvm::errs() << "no stackframe left in trace\n";
     }
   }
+}
+
+bool
+MemoryState::isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) {
+  Thread &thread = executionState->getCurrentThreadReference();
+  return (thread.stack.size() - 1 == mo.getStackframeIndex());
+}
+
+MemoryFingerprint::fingerprint_t *
+MemoryState::getPreviousAllocaDelta(const MemoryObject &mo) {
+  assert(!isAllocaAllocationInCurrentStackFrame(mo));
+
+  Thread &thread = executionState->getCurrentThreadReference();
+
+  size_t index = mo.getStackframeIndex();
+  return &thread.stack.at(index).fingerprintAllocaDelta;
 }
 
 

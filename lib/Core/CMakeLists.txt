@@ -23,7 +23,6 @@ klee_add_component(kleeCore
   MemoryFingerprint.cpp
   MemoryManager.cpp
   MemoryState.cpp
-  MemoryTrace.cpp
   PTree.cpp
   ScheduleTree.cpp
   PartialOrderExplorer.cpp
