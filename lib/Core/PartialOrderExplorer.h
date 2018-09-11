@@ -10,7 +10,7 @@ namespace klee {
     public:
       typedef std::function <ExecutionState* (ExecutionState*)> StateForkProvider;
 
-      struct Node;
+      class Node;
 
       struct ScheduleResult {
         /// @brief the state that is now completely discovered
@@ -112,7 +112,7 @@ namespace klee {
 
     public:
       /// @brief a node represents a schedule decision that happened after the parent nodes decisions
-      struct Node {
+      class Node {
           friend class PartialOrderExplorer;
 
         private:
@@ -185,7 +185,7 @@ namespace klee {
           Path() = default;
 
           void registerRestriction(OrderingRelation* rel, bool newOne);
-          
+
           /// @brief will split this path at the node of the specified schedule index
           Path* splitPathAt(uint64_t scheduleIndex);
 

@@ -10,7 +10,7 @@ namespace klee {
   /// @brief tree to record all already processed schedules and to search for equivalent ones
   class ScheduleTree {
     public:
-      struct Node;
+      class Node;
 
     private:
       struct ScheduleDependency {
