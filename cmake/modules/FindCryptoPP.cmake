@@ -35,7 +35,7 @@ check_cxx_source_compiles("
   #include <cryptopp/config.h>
   #include <cstdint>
   int main() {
-    static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
+    static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t), \"Invalid byte size of CryptoPP\");
     return 0;
   }"
   HAVE_CRYPTOPP_BYTE
