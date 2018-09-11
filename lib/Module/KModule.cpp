@@ -144,16 +144,19 @@ static Function *getStubFunctionForCtorList(Module *m,
   return fn;
 }
 
-static void injectStaticConstructorsAndDestructors(Module *m) {
+static void
+injectStaticConstructorsAndDestructors(Module *m,
+                                       llvm::StringRef entryFunction) {
   GlobalVariable *ctors = m->getNamedGlobal("llvm.global_ctors");
   GlobalVariable *dtors = m->getNamedGlobal("llvm.global_dtors");
 
   if (!ctors && !dtors)
     return;
 
-  Function *mainFn = m->getFunction("main");
+  Function *mainFn = m->getFunction(entryFunction);
   if (!mainFn)
-    klee_error("Could not find main() function.");
+    klee_error("Entry function '%s' not found in module.",
+               entryFunction.str().c_str());
 
   if (ctors) {
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
@@ -241,7 +244,7 @@ void KModule::optimiseAndPrepare(
 
   // Needs to happen after linking (since ctors/dtors can be modified)
   // and optimization (since global optimization can rewrite lists).
-  injectStaticConstructorsAndDestructors(module.get());
+  injectStaticConstructorsAndDestructors(module.get(), opts.EntryPoint);
 
   // Finally, run the passes that maintain invariants we expect during
   // interpretation. We run the intrinsic cleaner just in case we
