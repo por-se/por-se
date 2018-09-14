@@ -8,7 +8,6 @@
 int _Atomic result = 0;
 
 pthread_once_t once = PTHREAD_ONCE_INIT;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void onceFunction(void) {
   __c11_atomic_fetch_add(&result, 1, 0);
