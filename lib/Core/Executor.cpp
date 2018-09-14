@@ -486,11 +486,11 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       if (!InfiniteLoopCompressLogStateJSON) {
 #endif
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-        std::error_code ec;
-        forkJSONFile = new llvm::raw_fd_ostream(fork_file_name.c_str(), ec,
+        std::error_code ecode;
+        forkJSONFile = new llvm::raw_fd_ostream(fork_file_name.c_str(), ecode,
                                               llvm::sys::fs::OpenFlags::F_Text);
-        if (ec)
-          ErrorInfo = ec.message();
+        if (ecode)
+          ErrorInfo = ecode.message();
 #elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
         forkJSONFile = new llvm::raw_fd_ostream(fork_file_name.c_str(), ErrorInfo,
                                                   llvm::sys::fs::OpenFlags::F_Text);
