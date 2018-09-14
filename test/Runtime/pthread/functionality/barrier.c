@@ -26,7 +26,7 @@ static void* func(void* arg) {
   n1 = atomic_load(&number1);
   n2 = atomic_load(&number2);
 
-  assert(n1 == 1 && n2 == 2 && "Should be impossible to process beyond barriers");
+  assert(n1 == 1 && n2 == 1 && "Should be impossible to process beyond barriers");
 
   pthread_barrier_wait(&barrier);
 
