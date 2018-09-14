@@ -6,8 +6,32 @@
 #include <string.h>
 #include <errno.h>
 
-static __kpr_cond* __obtain_pthread_cond(pthread_cond_t *lock) {
-  return *((__kpr_cond**) lock);
+static pthread_cond_t condDefault = PTHREAD_ONCE_INIT;
+
+static int __create_new_cond(__kpr_cond **c) {
+  __kpr_cond* cond = malloc(sizeof(__kpr_cond));
+  if (cond == 0) {
+    return -1;
+  }
+
+  memset(cond, 0, sizeof(__kpr_cond));
+
+  cond->mode = 0;
+  __kpr_list_create(&cond->waitingList);
+
+  *c = cond;
+  return 0;
+}
+
+static int __obtain_cond(pthread_cond_t *cond, __kpr_cond **dest) {
+  // So first we have to check if we are any of the default static mutex types
+  if (__checkIfSame((char*) cond, (char*) &condDefault)) {
+    return __create_new_cond(dest);
+  }
+
+  *dest = *((__kpr_cond**) cond);
+
+  return 0;
 }
 
 int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
@@ -20,6 +44,7 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 
   lock->mode = 0;
   __kpr_list_create(&lock->waitingList);
+
   klee_toggle_thread_scheduling(1);
 
   return 0;
@@ -28,7 +53,12 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 int pthread_cond_destroy(pthread_cond_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_cond* lock = __obtain_pthread_cond(l);
+  __kpr_cond* lock;
+
+  if (__obtain_cond(l, &lock) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
 
   if (lock->mode != 0 || __kpr_list_size(&lock->waitingList) != 0) {
     klee_toggle_thread_scheduling(1);
@@ -50,7 +80,11 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
     return EINVAL;
   }
 
-  __kpr_cond* lock = __obtain_pthread_cond(c);
+  __kpr_cond* lock;
+  if (__obtain_cond(c, &lock) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
 
   uint64_t tid = klee_get_thread_id();
   __kpr_list_push(&lock->waitingList, (void*) tid);
@@ -65,7 +99,12 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
 
 int pthread_cond_broadcast(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
-  __kpr_cond* lock = __obtain_pthread_cond(c);
+
+  __kpr_cond* lock;
+  if (__obtain_cond(c, &lock) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
 
   __notify_threads(&lock->waitingList);
   klee_toggle_thread_scheduling(1);
@@ -75,7 +114,12 @@ int pthread_cond_broadcast(pthread_cond_t *c) {
 
 int pthread_cond_signal(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
-  __kpr_cond* lock = __obtain_pthread_cond(c);
+
+  __kpr_cond* lock;
+  if (__obtain_cond(c, &lock) != 0) {
+    klee_toggle_thread_scheduling(1);
+    return -1;
+  }
 
   if (__kpr_list_size(&lock->waitingList) == 0) {
     klee_toggle_thread_scheduling(1);
