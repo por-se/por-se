@@ -94,8 +94,6 @@ int pthread_attr_setdetachstate(pthread_attr_t *a, int ds) {
     return EINVAL;
   }
 
-  klee_warning_once("pthread_attr_setdetachstate is not supported");
-
   get_thread_attr(a)->detachstate = ds;
   return 0;
 }

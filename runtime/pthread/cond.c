@@ -16,8 +16,8 @@ static int __create_new_cond(__kpr_cond **c) {
 
   memset(cond, 0, sizeof(__kpr_cond));
 
-  cond->mode = 0;
   __kpr_list_create(&cond->waitingList);
+  cond->waitingMutex = NULL;
 
   *c = cond;
   return 0;
@@ -42,7 +42,7 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 
   *((__kpr_cond**)l) = lock;
 
-  lock->mode = 0;
+  lock->waitingMutex = NULL;
   __kpr_list_create(&lock->waitingList);
 
   klee_toggle_thread_scheduling(1);
@@ -60,7 +60,7 @@ int pthread_cond_destroy(pthread_cond_t *l) {
     return -1;
   }
 
-  if (lock->mode != 0 || __kpr_list_size(&lock->waitingList) != 0) {
+  if (__kpr_list_size(&lock->waitingList) != 0) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -86,6 +86,14 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
     return -1;
   }
 
+  if (m != lock->waitingMutex) {
+    if (lock->waitingMutex == NULL) {
+      lock->waitingMutex = m;
+    } else {
+      klee_report_error(__FILE__, __LINE__, "Calling pthread_cond_wait with different mutexes results in undefined behaviour", "undef");
+    }
+  }
+
   uint64_t tid = klee_get_thread_id();
   __kpr_list_push(&lock->waitingList, (void*) tid);
 
@@ -107,6 +115,8 @@ int pthread_cond_broadcast(pthread_cond_t *c) {
   }
 
   __notify_threads(&lock->waitingList);
+  lock->waitingMutex = NULL;
+
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
   return 0;
@@ -128,6 +138,10 @@ int pthread_cond_signal(pthread_cond_t *c) {
 
   uint64_t waiting = (uint64_t) __kpr_list_pop(&lock->waitingList);
   klee_wake_up_thread(waiting);
+
+  if (__kpr_list_size(&lock->waitingList) == 0) {
+    lock->waitingMutex = NULL;
+  }
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();

@@ -41,9 +41,8 @@ typedef struct {
 } __kpr_rwlock;
 
 typedef struct {
-  uint8_t mode;
-
   __kpr_list waitingList;
+  pthread_mutex_t* waitingMutex;
 } __kpr_cond;
 
 typedef struct {
