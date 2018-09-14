@@ -6,7 +6,7 @@
 #include <string.h>
 #include <errno.h>
 
-static pthread_cond_t condDefault = PTHREAD_ONCE_INIT;
+static pthread_cond_t condDefault = PTHREAD_COND_INITIALIZER;
 
 static int __create_new_cond(__kpr_cond **c) {
   __kpr_cond* cond = malloc(sizeof(__kpr_cond));
