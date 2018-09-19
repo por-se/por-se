@@ -1560,10 +1560,18 @@ void Executor::executeCall(ExecutionState &state,
           //
           // Alignment requirements for scalar types is the same as their size
           if (argWidth > Expr::Int64) {
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+             size = llvm::alignTo(size, 16);
+#else
              size = llvm::RoundUpToAlignment(size, 16);
+#endif
              requires16ByteAlignment = true;
           }
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+          size += llvm::alignTo(argWidth, WordSize) / 8;
+#else
           size += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
+#endif
         }
       }
 
@@ -1599,10 +1607,18 @@ void Executor::executeCall(ExecutionState &state,
 
             Expr::Width argWidth = arguments[i]->getWidth();
             if (argWidth > Expr::Int64) {
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+              offset = llvm::alignTo(offset, 16);
+#else
               offset = llvm::RoundUpToAlignment(offset, 16);
+#endif
             }
             os->write(offset, arguments[i]);
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+            offset += llvm::alignTo(argWidth, WordSize) / 8;
+#else
             offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
+#endif
           }
         }
       }
@@ -1731,12 +1747,21 @@ static bool isDebugIntrinsic(const Function *f, KModule *KM) {
 
 static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   switch(width) {
+#if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
+  case Expr::Int32:
+    return &llvm::APFloat::IEEEsingle();
+  case Expr::Int64:
+    return &llvm::APFloat::IEEEdouble();
+  case Expr::Fl80:
+    return &llvm::APFloat::x87DoubleExtended();
+#else
   case Expr::Int32:
     return &llvm::APFloat::IEEEsingle;
   case Expr::Int64:
     return &llvm::APFloat::IEEEdouble;
   case Expr::Fl80:
     return &llvm::APFloat::x87DoubleExtended;
+#endif
   default:
     return 0;
   }
@@ -3059,8 +3084,7 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
       uint64_t addend = sl->getElementOffset((unsigned) ci->getZExtValue());
       constantOffset = constantOffset->Add(ConstantExpr::alloc(addend,
                                                                Context::get().getPointerWidth()));
-    } else {
-      const SequentialType *set = cast<SequentialType>(*ii);
+    } else if (const auto set = dyn_cast<SequentialType>(*ii)) {
       uint64_t elementSize = 
         kmodule->targetData->getTypeStoreSize(set->getElementType());
       Value *operand = ii.getOperand();
@@ -3074,7 +3098,22 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
       } else {
         kgepi->indices.push_back(std::make_pair(index, elementSize));
       }
-    }
+#if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
+    } else if (const auto ptr = dyn_cast<PointerType>(*ii)) {
+      auto elementSize =
+        kmodule->targetData->getTypeStoreSize(ptr->getElementType());
+      auto operand = ii.getOperand();
+      if (auto c = dyn_cast<Constant>(operand)) {
+        auto index = evalConstant(c)->SExt(Context::get().getPointerWidth());
+        auto addend = index->Mul(ConstantExpr::alloc(elementSize,
+                                         Context::get().getPointerWidth()));
+        constantOffset = constantOffset->Add(addend);
+      } else {
+        kgepi->indices.push_back(std::make_pair(index, elementSize));
+      }
+#endif
+    } else
+      assert("invalid type" && 0);
     index++;
   }
   kgepi->offset = constantOffset->getZExtValue();
