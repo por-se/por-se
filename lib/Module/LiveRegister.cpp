@@ -311,7 +311,7 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
       InstructionInfo &ii = instructions[i];
 
       // generate predecessorEdges
-      if (i == bb.begin()) {
+      if (i == &*bb.begin()) {
         // first instruction in basic block: insert terminator instructions of
         // all preceding basic blocks as predecessors
         for (auto it = pred_begin(&bb), e = pred_end(&bb); it != e; ++it) {

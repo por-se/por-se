@@ -1,5 +1,7 @@
 #include "InfiniteLoopDetectionFlags.h"
 
+#include "klee/Config/Version.h"
+
 namespace klee {
 
 llvm::cl::opt<bool> DetectInfiniteLoops(
@@ -14,8 +16,8 @@ llvm::cl::bits<DebugInfiniteLoopDetectionType> DebugInfiniteLoopDetection(
     clEnumValN(STDERR_STATE, "state:stderr",
       "Log all MemoryState information to stderr"),
     clEnumValN(STDERR_TRACE, "trace:stderr",
-      "Log all MemoryTrace information to stderr"),
-        clEnumValEnd),
+      "Log all MemoryTrace information to stderr")
+        KLEE_LLVM_CL_VAL_END),
   llvm::cl::CommaSeparated);
 
 llvm::cl::opt<bool> InfiniteLoopDetectionDisableTwoPredecessorOpt(
