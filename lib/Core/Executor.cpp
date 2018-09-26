@@ -1684,10 +1684,23 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
         MemoryFingerprint::fingerprint_t fingerprint = state.memoryState.getFingerprint();
         std::string str = MemoryFingerprint::toString(fingerprint);
         if (fingerprints.count(fingerprint) != 0) {
-          std::string warning = "same state found! (" + str + ")";
-          klee_warning(warning.c_str());
-          // silently terminate state
-          terminateState(state);
+          klee_warning("same state found! (%s)", str.c_str());
+
+          // We can only remove a state if this state was not removed before
+          auto it = std::find(removedStates.begin(), removedStates.end(), &state);
+          if (it != removedStates.end()) {
+            // if we terminate a state because we already had the fingerprint already, then
+            // we can prune this state
+            if (scheduleTree != nullptr) {
+              auto scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
+              if (scheduleTreeNode != nullptr) {
+                scheduleTree->pruneState(scheduleTreeNode);
+              }
+            }
+
+            // silently terminate state
+            terminateState(state);
+          }
         } else {
           fingerprints.insert(fingerprint);
         }
@@ -3523,6 +3536,16 @@ void Executor::terminateStateEarly(ExecutionState &state,
                                                 (message + "\n").str().c_str(),
                                                 "early");
   updateStatesJSON(nullptr, state, ktest, "early");
+
+  // if we terminate a state early then this means we will not have a valid result
+  // so make sure we prune this state correctly
+  if (scheduleTree != nullptr) {
+    auto scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
+    if (scheduleTreeNode != nullptr) {
+      scheduleTree->pruneState(scheduleTreeNode);
+    }
+  }
+
   terminateState(state);
 }
 
@@ -5025,7 +5048,9 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
 
       if (scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
         scheduleTree->pruneState(scheduleTreeNode);
-        terminateStateSilently(state);
+
+        // We actually did process this state so we have to increment the paths explored
+        terminateState(state);
         return;
       }
     }
