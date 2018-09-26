@@ -1692,9 +1692,9 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
             // if we terminate a state because we already had the fingerprint already, then
             // we can prune this state
             if (scheduleTree != nullptr) {
-              auto scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
-              if (scheduleTreeNode != nullptr) {
-                scheduleTree->pruneState(scheduleTreeNode);
+              auto node = scheduleTree->getNodeOfExecutionState(&state);
+              if (node != nullptr) {
+                scheduleTree->pruneState(node);
               }
             }
 

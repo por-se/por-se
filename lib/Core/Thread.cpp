@@ -20,7 +20,9 @@ StackFrame::StackFrame(const StackFrame &s)
           callPathNode(s.callPathNode),
           allocas(s.allocas),
           minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
-          varargs(s.varargs) {
+          varargs(s.varargs),
+          fingerprintLocalDelta(s.fingerprintLocalDelta),
+          fingerprintAllocaDelta(s.fingerprintAllocaDelta) {
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i = 0; i < s.kf->numRegisters; i++)
     locals[i] = s.locals[i];

@@ -23,8 +23,10 @@ ScheduleTree::~ScheduleTree() {
   // So go ahead and delete all nodes
   activeNodes.clear();
 
-  delete root;
-  root = nullptr;
+  if (root != nullptr) {
+    delete root;
+    root = nullptr;
+  }
 }
 
 ScheduleTree::Node::~Node() {
@@ -120,6 +122,15 @@ void ScheduleTree::registerSchedulingResult(ExecutionState* state) {
 }
 
 void ScheduleTree::pruneState(Node *pruneNode) {
+  auto it = activeNodes.begin();
+  while (it != activeNodes.end()) {
+    if (it->second == pruneNode) {
+      it = activeNodes.erase(it);
+    } else {
+      it++;
+    }
+  }
+
   while (pruneNode->parent != nullptr && pruneNode->parent->children.size() == 1) {
     pruneNode = pruneNode->parent;
   }
@@ -130,6 +141,11 @@ void ScheduleTree::pruneState(Node *pruneNode) {
   }
 
   delete pruneNode;
+
+  if (pruneNode == root) {
+    root = nullptr;
+    activeNodes.clear();
+  }
 }
 
 void ScheduleTree::unregisterState(ExecutionState* state) {
@@ -140,6 +156,16 @@ void ScheduleTree::unregisterState(ExecutionState* state) {
 
   while (n->parent != nullptr && n->children.size() == 1) {
     n = n->parent;
+  }
+
+  if (n->parent != nullptr) {
+    Node* p = n->parent;
+    p->children.erase(std::remove(p->children.begin(), p->children.end(), n), p->children.end());
+  }
+
+  if (n == root) {
+    root = nullptr;
+    activeNodes.clear();
   }
 
   delete(n);
