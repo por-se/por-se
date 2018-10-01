@@ -41,6 +41,9 @@ using namespace klee;
 namespace { 
   cl::opt<bool>
   DebugLogStateMerge("debug-log-state-merge");
+
+  cl::opt<bool>
+  TrackMemoryAccesses("track-memory-accesses", cl::init(true));
 }
 
 size_t ExecutionState::next_id = 0;
@@ -63,7 +66,10 @@ ExecutionState::ExecutionState(KFunction *kf) :
     ptreeNode(0),
     memoryState(this),
     steppedInstructions(0) {
-  memAccessTracker = new MemoryAccessTracker();
+
+  if (TrackMemoryAccesses) {
+    memAccessTracker = new MemoryAccessTracker();
+  }
 
   // Thread 0 is always the main function thread
   Thread thread = Thread(0, kf);
@@ -147,7 +153,11 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     steppedInstructions(state.steppedInstructions)
 {
   // So make sure that we also make a correct copy of the mem access tracker
-  memAccessTracker = new MemoryAccessTracker(*state.memAccessTracker);
+  if (state.memAccessTracker != nullptr) {
+    memAccessTracker = new MemoryAccessTracker(*state.memAccessTracker);
+  } else {
+    memAccessTracker = nullptr;
+  }
 
   // Since we copied the threads, we can use the thread id to look it up
   Thread& curStateThread = state.getCurrentThreadReference();

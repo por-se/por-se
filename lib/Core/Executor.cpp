@@ -4384,6 +4384,10 @@ void Executor::runFunctionAsMain(Function *f,
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
 
+  if (state->memAccessTracker == nullptr && SameScheduleAnalysis != NONE) {
+    klee_error("Cannot make a schedule analysis without memory tracking. Aborting");
+  }
+
   if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
     scheduleTree = new ScheduleTree(state);
   } else if (SameScheduleAnalysis == PARTIAL_ORDER) {
@@ -4712,6 +4716,11 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
 }
 
 bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
+  if (state.memAccessTracker == nullptr) {
+    // If we do not have a memory access tracker, then just assume the access is valid
+    return true;
+  }
+
   MemoryAccess access;
   access.offset = offset;
   access.type = type;
