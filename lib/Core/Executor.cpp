@@ -5023,6 +5023,11 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
     newForkCount = MaxForks - stats::forks;
   }
 
+  // So we are not able to fork for new states when we should not
+  if (atMemoryLimit || inhibitForking) {
+    newForkCount = 0;
+  }
+
   stats::forks += newForkCount;
 
   auto rIt = state.runnableThreads.begin();
