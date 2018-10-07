@@ -69,6 +69,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
   if (TrackMemoryAccesses) {
     memAccessTracker = new MemoryAccessTracker();
+  } else {
+    memAccessTracker = nullptr;
   }
 
   // Thread 0 is always the main function thread
