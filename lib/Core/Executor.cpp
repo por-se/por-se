@@ -1684,7 +1684,8 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
         MemoryFingerprint::fingerprint_t fingerprint = state.memoryState.getFingerprint();
         std::string str = MemoryFingerprint::toString(fingerprint);
         if (fingerprints.count(fingerprint) != 0) {
-          klee_warning("same state found! (%s)", str.c_str());
+          std::string warning = "same state found! (" + str + ") @ " + src->getName().str() + " -> " + dst->getName().str();
+          klee_warning(warning.c_str());
 
           // We can only remove a state if this state was not removed before
           auto it = std::find(removedStates.begin(), removedStates.end(), &state);
