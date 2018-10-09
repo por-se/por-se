@@ -1688,7 +1688,7 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
 
           // We can only remove a state if this state was not removed before
           auto it = std::find(removedStates.begin(), removedStates.end(), &state);
-          if (it != removedStates.end()) {
+          if (it == removedStates.end()) {
             // if we terminate a state because we already had the fingerprint already, then
             // we can prune this state
             if (scheduleTree != nullptr) {
