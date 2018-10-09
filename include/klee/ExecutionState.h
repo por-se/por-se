@@ -192,7 +192,7 @@ private:
   ExecutionState() : id(next_id++), ptreeNode(0),
                      memoryState(memoryState, this) {}
 
-  std::vector<const MemoryObject *> popFrameOfThread(Thread* thread);
+  void popFrameOfThread(Thread* thread);
 
   bool hasSameThreadState(const ExecutionState &b, Thread::ThreadId tid);
 
@@ -249,7 +249,7 @@ public:
 
   void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 
-  std::vector<const MemoryObject *> popFrameOfCurrentThread();
+  void popFrameOfCurrentThread();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }

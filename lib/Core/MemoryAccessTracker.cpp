@@ -5,19 +5,13 @@ using namespace klee;
 
 static const uint64_t NOT_EXECUTED = ~((uint64_t) 0);
 
-MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses() = default;
-
 MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryAccesses& ac) {
-
   owner = ac.owner;
   tid = ac.tid;
   accesses = ac.accesses;
   preThreadAccesses = ac.preThreadAccesses;
   scheduleIndex = ac.scheduleIndex;
 }
-
-MemoryAccessTracker::MemoryAccessTracker() = default;
-MemoryAccessTracker::MemoryAccessTracker(const MemoryAccessTracker &list) = default;
 
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
@@ -136,7 +130,7 @@ uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread
 }
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
-                                                        uint64_t id, MemoryAccess &access) {
+                                                        uint64_t id, const MemoryAccess &access) {
   uint64_t exec = lastExecutions[tid];
   if (exec == NOT_EXECUTED) {
     return;
@@ -231,7 +225,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
   }
 }
 
-MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id, MemoryAccess &access) {
+MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id, const MemoryAccess &access) {
   assert(!accessLists.empty() && "There should be at least one scheduling phase");
 
   MemAccessSafetyResult result;

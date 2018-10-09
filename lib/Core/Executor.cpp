@@ -3494,8 +3494,7 @@ static bool isInVector(std::vector<T> list, T tid) {
 }
 
 void Executor::terminateStateSilently(ExecutionState &state) {
-  std::vector<ExecutionState *>::iterator it =
-          std::find(addedStates.begin(), addedStates.end(), &state);
+  auto it = std::find(addedStates.begin(), addedStates.end(), &state);
 
   if (scheduleTree != nullptr) {
     scheduleTree->unregisterState(&state);

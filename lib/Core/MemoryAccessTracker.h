@@ -4,8 +4,6 @@
 #include "klee/Expr.h"
 #include "klee/Thread.h"
 
-#include "TimingSolver.h"
-
 #include <vector>
 #include <map>
 
@@ -48,7 +46,7 @@ namespace klee {
         std::shared_ptr<EpochMemoryAccesses> preThreadAccesses;
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
 
-        EpochMemoryAccesses();
+        EpochMemoryAccesses() = default;
         EpochMemoryAccesses(const EpochMemoryAccesses& ac);
       };
 
@@ -64,11 +62,11 @@ namespace klee {
       uint64_t* getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference);
 
       void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
-                                         uint64_t id, MemoryAccess &access);
+                                         uint64_t id, const MemoryAccess &access);
 
     public:
-      MemoryAccessTracker();
-      MemoryAccessTracker(const MemoryAccessTracker& list);
+      MemoryAccessTracker() = default;
+      MemoryAccessTracker(const MemoryAccessTracker& list) = default;
 
       void scheduledNewThread(Thread::ThreadId tid);
 
@@ -76,7 +74,7 @@ namespace klee {
 
       void registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch);
 
-      MemAccessSafetyResult testIfUnsafeMemoryAccess(uint64_t id, MemoryAccess &access);
+      MemAccessSafetyResult testIfUnsafeMemoryAccess(uint64_t id, const MemoryAccess &access);
   };
 }
 

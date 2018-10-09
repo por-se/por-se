@@ -200,24 +200,20 @@ ExecutionState::EpochDependencies* ExecutionState::getCurrentEpochDependencies()
   return &(scheduleDependencies[getCurrentThreadReference().getThreadId()].back());
 }
 
-std::vector<const MemoryObject *> ExecutionState::popFrameOfThread(Thread* thread) {
+void ExecutionState::popFrameOfThread(Thread* thread) {
   // We want to unbind all the objects from the current tread frame
   StackFrame &sf = thread->stack.back();
   for (auto &it : sf.allocas) {
     addressSpace.unbindObject(it);
   }
 
-  std::vector<const MemoryObject *> freedAllocas = sf.allocas;
-
   // Let the thread class handle the rest
   thread->popStackFrame();
-
-  return freedAllocas;
 }
 
-std::vector<const MemoryObject *> ExecutionState::popFrameOfCurrentThread() {
+void ExecutionState::popFrameOfCurrentThread() {
   Thread& thread = getCurrentThreadReference();
-  return popFrameOfThread(&thread);
+  popFrameOfThread(&thread);
 }
 
 Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
