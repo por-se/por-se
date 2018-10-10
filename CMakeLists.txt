@@ -588,6 +588,16 @@ else()
 endif()
 
 ################################################################################
+# KLEE pthread Runtime Support
+################################################################################
+option(ENABLE_PTHREAD_RUNTIME "Enable KLEE's pthread runtime" OFF)
+if (ENABLE_POSIX_RUNTIME)
+  message(STATUS "pthread runtime enabled")
+else()
+  message(STATUS "pthread runtime disabled")
+endif()
+
+################################################################################
 # KLEE uclibc support
 ################################################################################
 option(ENABLE_KLEE_UCLIBC "Enable support for klee-uclibc" OFF)
