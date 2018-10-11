@@ -195,6 +195,11 @@ public:
 
     registerWrite(address, mo, os, bytes);
   }
+
+  void unregisterWrite(ref<Expr> address, const MemoryObject &mo,
+                                          const ObjectState &os) {
+    unregisterWrite(address, mo, os, os.size);
+  }
   void unregisterWrite(const MemoryObject &mo, const ObjectState &os) {
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }

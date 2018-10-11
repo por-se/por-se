@@ -4205,11 +4205,16 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   }
 }
 
-void Executor::executeMakeSymbolic(ExecutionState &state, 
+void Executor::executeMakeSymbolic(ExecutionState &state,
+                                   ref<Expr> address,
                                    const MemoryObject *mo,
+                                   const ObjectState *os,
                                    const std::string &name) {
   // Create a new object state for the memory object (instead of a copy).
   if (!replayKTest) {
+    if (DetectInfiniteLoops)
+      state.memoryState.unregisterWrite(address, *mo, *os);
+
     // Find a unique name for this array.  First try the original name,
     // or if that fails try adding a unique identifier.
     unsigned id = 0;
@@ -4218,8 +4223,11 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       uniqueName = name + "_" + llvm::utostr(++id);
     }
     const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
-    bindObjectInState(state, mo, false, array);
+    os = bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
+
+    if (DetectInfiniteLoops)
+      state.memoryState.registerWrite(address, *mo, *os);
     
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
       seedMap.find(&state);

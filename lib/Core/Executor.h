@@ -353,7 +353,10 @@ private:
                               ref<Expr> value /* undef if read */,
                               KInstruction *target /* undef if write */);
 
-  void executeMakeSymbolic(ExecutionState &state, const MemoryObject *mo,
+  void executeMakeSymbolic(ExecutionState &state,
+                           ref<Expr> address,
+                           const MemoryObject *mo,
+                           const ObjectState *os,
                            const std::string &name);
 
   /// Create a new state where each input condition has been added as
