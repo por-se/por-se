@@ -234,6 +234,7 @@ private:
   unsigned m_numTotalTests;     // Number of tests received from the interpreter
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsExplored; // number of paths explored so far
+  unsigned m_pathsPruned; // number of paths pruned
 
   // used for writing .ktest files
   int m_argc;
@@ -248,6 +249,8 @@ public:
   unsigned getNumTestCases() { return m_numGeneratedTests; }
   unsigned getNumPathsExplored() { return m_pathsExplored; }
   void incPathsExplored() { m_pathsExplored++; }
+  unsigned getNumPathsPruned() { return m_pathsPruned; }
+  void incPathsPruned() { m_pathsPruned++; }
 
   void setInterpreter(Interpreter *i);
 
@@ -1499,6 +1502,8 @@ int main(int argc, char **argv, char **envp) {
 
   handler->getInfoStream()
     << "KLEE: done: explored paths = " << 1 + forks << "\n";
+  handler->getInfoStream()
+    << "KLEE: done: pruned paths = " << handler->getNumPathsPruned() << "\n";
 
   // Write some extra information in the info file which users won't
   // necessarily care about or understand.
@@ -1518,6 +1523,8 @@ int main(int argc, char **argv, char **envp) {
         << instructions << "\n";
   stats << "KLEE: done: completed paths = "
         << handler->getNumPathsExplored() << "\n";
+  stats << "KLEE: done: pruned paths = "
+        << handler->getNumPathsPruned() << "\n";
   stats << "KLEE: done: generated tests = "
         << handler->getNumTestCases() << "\n";
 

@@ -1699,6 +1699,8 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
               }
             }
 
+            interpreterHandler->incPathsPruned();
+
             // silently terminate state
             terminateState(state);
           }
