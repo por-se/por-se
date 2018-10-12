@@ -345,6 +345,7 @@ if (ENABLE_CRYPTOPP)
     message(FATAL_ERROR "ENABLE_CRYPTOPP is true but CryptoPP could not be found")
   endif()
 else()
+  message(FATAL_ERROR "CryptoPP is required for ExecutionState::assembleDependencyIndicator()") # FIXME
   message(STATUS "CryptoPP support disabled")
   unset(USE_CRYPTOPP) # for config.h
 endif()
