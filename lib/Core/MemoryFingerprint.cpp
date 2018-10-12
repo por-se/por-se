@@ -140,7 +140,7 @@ void MemoryFingerprint_Dummy::updateUint8(const std::uint8_t value) {
   } else {
     current += " ";
   }
-  current += std::to_string(value);
+  current += std::to_string(static_cast<unsigned>(value));
 }
 
 void MemoryFingerprint_Dummy::updateUint64(const std::uint64_t value) {
@@ -205,7 +205,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
             item >> value;
             result << value;
           } else {
-            std::uint8_t value;
+            unsigned value;
             item >> value;
             result << value;
           }
