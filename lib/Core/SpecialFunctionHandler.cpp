@@ -125,6 +125,8 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
 
+  add("puts", handlePuts, false),
+
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
   // operator delete(void*)
@@ -948,4 +950,13 @@ void SpecialFunctionHandler::handleGetThreadStartArgument(klee::ExecutionState &
 
   ref<Expr> arg = state.getCurrentThreadReference().getStartArgument();
   executor.bindLocal(target, state, arg);
+}
+
+void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,
+                                        klee::KInstruction *target,
+                                        std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to puts");
+
+  llvm::outs() << readStringAtAddress(state, arguments[0]) << "\n";
+  llvm::outs().flush();
 }
