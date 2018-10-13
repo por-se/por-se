@@ -7,14 +7,13 @@
 #include "klee/Internal/Module/KModule.h"
 
 // FIXME: We do not want to be exposing these? :(
-#include "../../lib/Core/CallPathManager.h"
-// #include "CallPathManager.h"
-
 #include "../../lib/Core/MemoryFingerprint.h"
 
 #include <vector>
 
 namespace klee {
+  class CallPathNode;
+
   struct StackFrame {
     KInstIterator caller;
     KFunction *kf;

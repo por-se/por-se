@@ -1,6 +1,8 @@
 #include "klee/Thread.h"
 #include "Memory.h"
 
+#include "CallPathManager.h"
+
 using namespace llvm;
 using namespace klee;
 
