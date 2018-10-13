@@ -7,6 +7,7 @@
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
+#include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
@@ -593,12 +594,6 @@ void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
     // this prevents us from unregistering this local twice
     clearLocal(inst);
   }
-}
-
-KInstruction *MemoryState::getKInstruction(const llvm::BasicBlock* bb) {
-  KFunction *kf = getKFunction(bb);
-  unsigned entry = kf->basicBlockEntry[const_cast<llvm::BasicBlock *>(bb)];
-  return kf->instructions[entry];
 }
 
 KInstruction *MemoryState::getKInstruction(const llvm::Instruction* inst) {

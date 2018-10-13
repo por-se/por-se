@@ -5,9 +5,6 @@
 #include "Memory.h"
 #include "MemoryFingerprint.h"
 
-#include "klee/Internal/Module/KInstruction.h"
-#include "klee/Internal/Module/KModule.h"
-
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Function.h"
 
@@ -21,6 +18,9 @@ class Function;
 
 namespace klee {
 class ExecutionState;
+class KFunction;
+class KInstruction;
+class KModule;
 
 class MemoryState {
 
@@ -87,7 +87,6 @@ private:
   void leaveMemoryFunction();
 
   void updateBasicBlockInfo(const llvm::BasicBlock *bb);
-  KInstruction *getKInstruction(const llvm::BasicBlock* bb);
   KInstruction *getKInstruction(const llvm::Instruction* inst);
   KFunction *getKFunction(const llvm::BasicBlock *bb);
   ref<Expr> getLocalValue(const KInstruction *kinst);
