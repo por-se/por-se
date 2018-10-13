@@ -41,7 +41,7 @@ class MemoryFingerprintT {
 
 protected:
   using hash_t = std::array<std::uint8_t, hashSize>;
-  using dummy_t = std::unordered_set<std::string>;
+  using dummy_t = std::set<std::string>;
 
 public:
   typedef typename std::conditional<hashSize == 0, dummy_t, hash_t>::type
