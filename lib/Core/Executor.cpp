@@ -1257,9 +1257,9 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state,
   if (DetectInfiniteLoops) {
     if (!cell.value.isNull()) {
       // unregister previous value to avoid cancellation
-      state.memoryState.unregisterLocal(thread.tid, target, cell.value);
+      state.memoryState.unregisterLocal(thread.tid, thread.stack.size() - 1, target, cell.value);
     }
-    state.memoryState.registerLocal(thread.tid, target, value);
+    state.memoryState.registerLocal(thread.tid, thread.stack.size() - 1, target, value);
   }
   cell.value = value;
 }
@@ -1271,7 +1271,7 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
   if (DetectInfiniteLoops) {
     // no need to unregister argument (can only be set once within the same stack frame)
     Thread &thread = state.getCurrentThreadReference();
-    state.memoryState.registerArgument(thread.tid, kf, index, value);
+    state.memoryState.registerArgument(thread.tid, thread.stack.size() - 1, kf, index, value);
   }
   getArgumentCell(state, kf, index).value = value;
 }
@@ -1512,8 +1512,8 @@ void Executor::executeCall(ExecutionState &state,
     thread.pushFrame(thread.prevPc, kf);
     thread.pc = kf->instructions;
     if (DetectInfiniteLoops) {
-      state.memoryState.registerPushFrame(thread.tid, kf, thread.prevPc,
-                                          thread.stack.size() - 1);
+      state.memoryState.registerPushFrame(thread.tid, thread.stack.size() - 1,
+                                          kf, thread.prevPc);
     }
 
     if (statsTracker) {
@@ -1630,6 +1630,7 @@ void Executor::executeCall(ExecutionState &state,
 
     if (DetectInfiniteLoops) {
       state.memoryState.enterBasicBlock(thread.tid,
+                                        thread.stack.size() - 1,
                                         thread.pc->inst->getParent());
     }
   }
@@ -1659,7 +1660,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
     // enterBasicBlock updates live register information, thus we need to call
     // it on every BasicBlock change, not only on ones to a BasicBlock with more
     // than one predecessor
-    state.memoryState.enterBasicBlock(thread.tid, dst, src);
+    state.memoryState.enterBasicBlock(thread.tid, thread.stack.size() - 1, dst, src);
   }
   if (thread.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
@@ -1676,7 +1677,7 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
     // need to call it on every BasicBlock change (even if it does not contain
     // any PHI nodes).
     Thread &thread = state.getCurrentThreadReference();
-    state.memoryState.phiNodeProcessingCompleted(thread.tid, dst, src);
+    state.memoryState.phiNodeProcessingCompleted(thread.tid, thread.stack.size() - 1, dst, src);
     if (state.memoryState.isEnabled()) {
       if ((dst->getSinglePredecessor() == nullptr) ||
           InfiniteLoopDetectionDisableTwoPredecessorOpt) {

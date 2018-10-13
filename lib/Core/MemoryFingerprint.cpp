@@ -216,9 +216,11 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
       case 3:
       case 4: {
         std::uint64_t tid;
+        std::uint64_t sfid;
         std::uintptr_t ptr;
 
         item >> tid;
+        item >> sfid;
         item >> ptr;
         llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
@@ -234,7 +236,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         auto filename = scope.getFilename();
 #endif
 
-        result << "[T" << tid << ']';
+        result << "[T" << tid << ':' << sfid << ']';
         result << "Local: ";
         if (inst->hasName()) {
           result << '%' << inst->getName();
@@ -264,18 +266,20 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
       case 5:
       case 6: {
         std::uint64_t tid;
+        std::uint64_t sfid;
         std::uintptr_t ptr;
         std::size_t argumentIndex;
         std::uint64_t value;
 
         item >> tid;
+        item >> sfid;
         item >> ptr;
         KFunction *kf = reinterpret_cast<KFunction *>(ptr);
         item >> argumentIndex;
         std::size_t total = kf->function->arg_size();
         item >> value;
 
-        result << "[T" << tid << ']';
+        result << "[T" << tid << ':' << sfid << ']';
         result << "Argument: ";
         result << kf->function->getName() << "(";
         for (std::size_t i = 0; i < total; ++i) {
@@ -294,13 +298,15 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
       }
       case 7: {
         std::uint64_t tid;
+        std::uint64_t sfid;
         std::uintptr_t ptr;
 
         item >> tid;
+        item >> sfid;
         item >> ptr;
         llvm::BasicBlock *bb = reinterpret_cast<llvm::BasicBlock *>(ptr);
 
-        result << "[T" << tid << ']';
+        result << "[T" << tid << ':' << sfid << ']';
         result << "Program Counter: ";
         result << bb->getName();
         result << " in ";
@@ -311,21 +317,20 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
       }
       case 8: {
         std::uint64_t tid;
-        std::size_t stackFrameIndex;
+        std::uint64_t sfid;
         std::uintptr_t callerPtr;
         std::uintptr_t calleePtr;
 
         item >> tid;
-        item >> stackFrameIndex;
+        item >> sfid;
         item >> callerPtr;
         item >> calleePtr;
 
         KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
         KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
 
-        result << "[T" << tid << ']';
+        result << "[T" << tid << ':' << sfid << ']';
         result << "Stack Frame: ";
-        result << stackFrameIndex << ": ";
         result << callee->function->getName();
         result << "( called from ";
         result << caller->inst;

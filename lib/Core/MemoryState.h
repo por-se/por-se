@@ -96,22 +96,26 @@ private:
   void clearLocal(const llvm::Instruction *inst);
 
   void unregisterConsumedLocals(std::uint64_t threadID,
+                                std::size_t stackFrameIndex,
                                 const llvm::BasicBlock *bb,
                                 bool writeToLocalDelta = true);
   void unregisterKilledLocals(std::uint64_t threadID,
+                              std::size_t stackFrameIndex,
                               const llvm::BasicBlock *dst,
                               const llvm::BasicBlock *src);
 
-  void registerLocal(std::uint64_t threadID, const llvm::Instruction *inst,
-                     ref<Expr> value);
-  void unregisterLocal(std::uint64_t threadID, const llvm::Instruction *inst) {
+  void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
+                     const llvm::Instruction *inst, ref<Expr> value);
+  void unregisterLocal(std::uint64_t threadID,
+                       std::size_t stackFrameIndex,
+                       const llvm::Instruction *inst) {
     ref<Expr> value = getLocalValue(inst);
 
     // value was already unregistered when it was marked as dead
     if (value.isNull())
       return;
 
-    registerLocal(threadID, inst, value);
+    registerLocal(threadID, stackFrameIndex, inst, value);
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       llvm::errs() << "MemoryState: unregister local %" << inst->getName()
@@ -204,10 +208,10 @@ public:
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }
 
-  void registerLocal(std::uint64_t threadID, const KInstruction *target,
-                     ref<Expr> value);
-  void unregisterLocal(std::uint64_t threadID, const KInstruction *target,
-                       ref<Expr> value) {
+  void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
+                     const KInstruction *target, ref<Expr> value);
+  void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
+                       const KInstruction *target, ref<Expr> value) {
     if (!disableMemoryState
       && DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
@@ -215,23 +219,27 @@ public:
       }
     }
 
-    registerLocal(threadID, target, value);
+    registerLocal(threadID, stackFrameIndex, target, value);
   }
 
   void registerArgument(std::uint64_t threadID,
+                        std::size_t stackFrameIndex,
                         const KFunction *kf,
                         unsigned index, ref<Expr> value);
 
   void registerExternalFunctionCall();
 
-  void enterBasicBlock(std::uint64_t threadID, const llvm::BasicBlock *dst,
+  void enterBasicBlock(std::uint64_t threadID,
+                       std::size_t stackFrameIndex,
+                       const llvm::BasicBlock *dst,
                        const llvm::BasicBlock *src = nullptr);
   void phiNodeProcessingCompleted(std::uint64_t threadID,
+                                  std::size_t stackFrameIndex,
                                   const llvm::BasicBlock *dst,
                                   const llvm::BasicBlock *src);
 
-  void registerPushFrame(std::uint64_t threadID, const KFunction *callee,
-                         const KInstruction *caller, size_t stackFrameIndex);
+  void registerPushFrame(std::uint64_t threadID, size_t stackFrameIndex,
+                         const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(std::uint64_t threadID,
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
