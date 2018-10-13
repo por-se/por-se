@@ -193,15 +193,46 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  ref<ConstantExpr> base = mo.getBaseExpr();
-
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: processing "
+    ref<ConstantExpr> base = mo.getBaseExpr();
+    llvm::errs() << "MemoryState: registering "
                  << (mo.isLocal ? "local " : "global ")
                  << "ObjectState at base address "
                  << ExprString(base) << "\n";
   }
 
+  applyWriteFragment(address, mo, os, bytes);
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << " [fingerprint: "
+                 << fingerprint.getFingerprintAsString() << "]\n";
+  }
+}
+
+void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
+                                  const ObjectState &os, std::size_t bytes) {
+ if (disableMemoryState) {
+    return;
+  }
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    ref<ConstantExpr> base = mo.getBaseExpr();
+    llvm::errs() << "MemoryState: unregistering "
+                 << (mo.isLocal ? "local " : "global ")
+                 << "ObjectState at base address "
+                 << ExprString(base) << "\n";
+  }
+
+  applyWriteFragment(address, mo, os, bytes);
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << " [fingerprint: "
+                 << fingerprint.getFingerprintAsString() << "]\n";
+  }
+}
+
+void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
+                                     const ObjectState &os, std::size_t bytes) {
   ref<Expr> offset = mo.getOffsetExpr(address);
   ConstantExpr *concreteOffset = dyn_cast<ConstantExpr>(offset);
 
@@ -237,6 +268,8 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
       end = begin + bytes;
     }
   }
+
+  ref<ConstantExpr> base = mo.getBaseExpr();
 
   for (std::uint64_t i = begin; i < end; i++) {
     std::uint64_t baseAddress = base->getZExtValue(64);
@@ -292,10 +325,6 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
         llvm::errs() << " ";
       }
     }
-  }
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << " [fingerprint: "
-                 << fingerprint.getFingerprintAsString() << "]\n";
   }
 }
 

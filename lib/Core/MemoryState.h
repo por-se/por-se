@@ -103,6 +103,8 @@ private:
                               const llvm::BasicBlock *dst,
                               const llvm::BasicBlock *src);
 
+  void applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
+                          const ObjectState &os, std::size_t bytes);
   void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
                           const llvm::Instruction *inst, ref<Expr> value);
 
@@ -171,17 +173,7 @@ public:
     registerWrite(address, mo, os, os.size);
   }
   void unregisterWrite(ref<Expr> address, const MemoryObject &mo,
-                       const ObjectState &os, std::size_t bytes) {
-    if (disableMemoryState) {
-      return;
-    }
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: UNREGISTER\n";
-    }
-
-    registerWrite(address, mo, os, bytes);
-  }
-
+                       const ObjectState &os, std::size_t bytes);
   void unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                                           const ObjectState &os) {
     unregisterWrite(address, mo, os, os.size);
