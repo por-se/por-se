@@ -53,7 +53,7 @@ private:
   }
 
   fingerprint_t fingerprint = {};
-  fingerprint_t fingerprintAllocaDelta = {};
+  fingerprint_t fingerprintStackFrameDelta = {};
 
   template<typename T,
     typename std::enable_if<std::is_same<T, hash_t>::value, int>::type = 0>
@@ -91,16 +91,16 @@ public:
     getDerived().clearHash();
   }
 
-  void applyToFingerprintAllocaDelta() {
-    applyToFingerprintAllocaDelta(fingerprintAllocaDelta);
+  void applyToFingerprintStackFrameDelta() {
+    applyToFingerprintStackFrameDelta(fingerprintStackFrameDelta);
   }
 
-  void applyToFingerprintAllocaDelta(fingerprint_t &deltaDst) {
+  void applyToFingerprintStackFrameDelta(fingerprint_t &deltaDst) {
     getDerived().generateHash();
     executeXOR(deltaDst, buffer);
-    // All changes that are applied to alloca deltas are also applied to
+    // All changes that are applied to stack frame deltas are also applied to
     // fingerprint immediately, since we need to be able to remove just the
-    // allocas of a single stack frame in a simple manner.
+    // changes of a single stack frame in a simple manner.
     executeXOR(fingerprint, buffer);
     getDerived().clearHash();
   }
@@ -109,32 +109,32 @@ public:
     return fingerprint;
   }
 
-  fingerprint_t getAllocaDelta() {
-    return fingerprintAllocaDelta;
+  fingerprint_t getStackFrameDelta() {
+    return fingerprintStackFrameDelta;
   }
 
-  void applyAndResetAllocaDelta() {
-    // This is trivial as changes made in fingerprintAlloca are already applied
-    // to fingerprint. Thus, we just need to do the reset part.
-    fingerprintAllocaDelta = {};
+  void applyAndResetStackFrameDelta() {
+    // This is trivial as changes made in fingerprintStackFrameDelta are already
+    // applied to fingerprint. Thus, we just need to do the reset part.
+    fingerprintStackFrameDelta = {};
   }
 
-  // WARNING: This function can only be used with an allocaDelta that has been
-  // created and modified using the current instance of MemoryFingerprint, as
-  // it assumes that every change recorded in allocaDelta has also been applied
-  // to fingerprint.
-  void setAllocaDeltaToPreviousValue(fingerprint_t allocaDelta) {
+  // WARNING: This function can only be used with a stackFrameDelta that has
+  // been created and modified using the current instance of MemoryFingerprint,
+  // as it assumes that every change recorded in stackFrameDelta has also been
+  // applied to fingerprint.
+  void setStackFrameDeltaToPreviousValue(fingerprint_t stackFrameDelta) {
     // TODO: write separate dummy method that actually checks this assumption?
-    fingerprintAllocaDelta = allocaDelta;
+    fingerprintStackFrameDelta = stackFrameDelta;
   }
 
-  void discardAllocaDelta() {
-    executeXOR(fingerprint, fingerprintAllocaDelta);
-    fingerprintAllocaDelta = {};
+  void discardStackFrameDelta() {
+    executeXOR(fingerprint, fingerprintStackFrameDelta);
+    fingerprintStackFrameDelta = {};
   }
 
   void discardEverything() {
-    fingerprintAllocaDelta = {};
+    fingerprintStackFrameDelta = {};
     fingerprint = {};
   }
 
@@ -172,8 +172,8 @@ public:
     return toString(getFingerprint());
   }
 
-  std::string getAllocaDeltaAsString() {
-    return toString(fingerprintAllocaDelta);
+  std::string getStackFrameDeltaAsString() {
+    return toString(fingerprintStackFrameDelta);
   }
 };
 

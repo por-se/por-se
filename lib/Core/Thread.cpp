@@ -21,7 +21,7 @@ StackFrame::StackFrame(const StackFrame &s)
           allocas(s.allocas),
           minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
           varargs(s.varargs),
-          fingerprintAllocaDelta(s.fingerprintAllocaDelta) {
+          fingerprintDelta(s.fingerprintDelta) {
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i = 0; i < s.kf->numRegisters; i++)
     locals[i] = s.locals[i];

@@ -37,8 +37,8 @@ namespace klee {
     // of intrinsic lowering.
     MemoryObject *varargs;
 
-    // allocas allocated in this stack frame
-    MemoryFingerprint::fingerprint_t fingerprintAllocaDelta;
+    // changes w.r.t. this stack frame
+    MemoryFingerprint::fingerprint_t fingerprintDelta;
 
     StackFrame(KInstIterator caller, KFunction *kf);
     StackFrame(const StackFrame &s);

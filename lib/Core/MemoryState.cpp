@@ -214,7 +214,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
   if (mo.isLocal) {
     isLocal = true;
     if (!isAllocaAllocationInCurrentStackFrame(mo)) {
-      externalDelta = getPreviousAllocaDelta(mo);
+      externalDelta = getPreviousStackFrameDelta(mo);
       if (externalDelta == nullptr) {
         // allocation was made in previous stack frame that is not available
         // anymore due to an external function call
@@ -225,7 +225,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
 
   if (libraryFunction.entered) {
     if (isLocal && externalDelta == nullptr) {
-      // change is only to be made to allocaDelta of current stack frame
+      // change is only to be made to delta of current stack frame
       return;
     }
   }
@@ -276,10 +276,10 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
     if (isLocal) {
       if (externalDelta == nullptr) {
         // current stack frame
-        fingerprint.applyToFingerprintAllocaDelta();
+        fingerprint.applyToFingerprintStackFrameDelta();
       } else {
         // previous stack frame that is still available
-        fingerprint.applyToFingerprintAllocaDelta(*externalDelta);
+        fingerprint.applyToFingerprintStackFrameDelta(*externalDelta);
       }
     } else {
       fingerprint.applyToFingerprint();
@@ -371,7 +371,7 @@ void MemoryState::registerLocal(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToFingerprintAllocaDelta();
+  fingerprint.applyToFingerprintStackFrameDelta();
 }
 
 void MemoryState::registerArgument(std::uint64_t threadID,
@@ -401,7 +401,7 @@ void MemoryState::registerArgument(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToFingerprintAllocaDelta();
+  fingerprint.applyToFingerprintStackFrameDelta();
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
@@ -481,7 +481,7 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
     fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(stackFrameIndex);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
-    fingerprint.applyToFingerprintAllocaDelta();
+    fingerprint.applyToFingerprintStackFrameDelta();
 
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
       unregisterConsumedLocals(threadID, stackFrameIndex, src);
@@ -494,7 +494,7 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
   fingerprint.updateUint64(threadID);
   fingerprint.updateUint64(stackFrameIndex);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
-  fingerprint.applyToFingerprintAllocaDelta();
+  fingerprint.applyToFingerprintStackFrameDelta();
 
   if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
     return;
@@ -747,11 +747,11 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   Thread &thread = executionState->getCurrentThreadReference();
   // second but last stack frame
   StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
-  sf.fingerprintAllocaDelta = fingerprint.getAllocaDelta();
+  sf.fingerprintDelta = fingerprint.getStackFrameDelta();
 
   // record alloca allocations and changes for this new stack frame separately
   // from those of other stack frames (without removing the latter)
-  fingerprint.applyAndResetAllocaDelta();
+  fingerprint.applyAndResetStackFrameDelta();
 
   // register stack frame
   fingerprint.updateUint8(8);
@@ -759,7 +759,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   fingerprint.updateUint64(stackFrameIndex);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(caller));
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(callee));
-  fingerprint.applyToFingerprintAllocaDelta();
+  fingerprint.applyToFingerprintStackFrameDelta();
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "Fingerprint: " << fingerprint.getFingerprintAsString()
@@ -791,20 +791,17 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     // second but last stack frame
     StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
 
-    // remove allocas allocated in stack frame that is to be left
-    fingerprint.discardAllocaDelta();
-    // initialize alloca delta with previous fingerprint alloca delta which
-    // contains information on allocas allocated in the stack frame that is to
-    // be entered
-    fingerprint.setAllocaDeltaToPreviousValue(sf.fingerprintAllocaDelta);
+    // remove changes local to stack frame that is to be left
+    fingerprint.discardStackFrameDelta();
+    fingerprint.setStackFrameDeltaToPreviousValue(sf.fingerprintDelta);
 
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
       updateBasicBlockInfo(callerBB);
     }
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "reapplying alloca delta: "
-                   << fingerprint.getAllocaDeltaAsString()
+      llvm::errs() << "reapplying stack frame delta: "
+                   << fingerprint.getStackFrameDeltaAsString()
                    << "\nFingerprint: " << fingerprint.getFingerprintAsString()
                    << "\n";
     }
@@ -824,13 +821,13 @@ MemoryState::isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) {
 }
 
 MemoryFingerprint::fingerprint_t *
-MemoryState::getPreviousAllocaDelta(const MemoryObject &mo) {
+MemoryState::getPreviousStackFrameDelta(const MemoryObject &mo) {
   assert(!isAllocaAllocationInCurrentStackFrame(mo));
 
   Thread &thread = executionState->getCurrentThreadReference();
 
   size_t index = mo.getStackframeIndex();
-  return &thread.stack.at(index).fingerprintAllocaDelta;
+  return &thread.stack.at(index).fingerprintDelta;
 }
 
 

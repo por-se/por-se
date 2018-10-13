@@ -246,7 +246,7 @@ public:
   bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo);
 
   MemoryFingerprint::fingerprint_t *
-  getPreviousAllocaDelta(const MemoryObject &mo);
+  getPreviousStackFrameDelta(const MemoryObject &mo);
 
   MemoryFingerprint::fingerprint_t getFingerprint();
 };
