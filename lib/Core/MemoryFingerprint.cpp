@@ -195,7 +195,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
           std::uint64_t addr;
           item >> addr;
 
-          result << "Write: ";
+          result << "[G]Write: ";
           result << addr;
           result << " =";
 
@@ -215,8 +215,10 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         break;
       case 3:
       case 4: {
+        std::uint64_t tid;
         std::uintptr_t ptr;
 
+        item >> tid;
         item >> ptr;
         llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
@@ -232,7 +234,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         auto filename = scope.getFilename();
 #endif
 
-
+        result << "[T" << tid << ']';
         result << "Local: ";
         if (inst->hasName()) {
           result << '%' << inst->getName();
@@ -261,16 +263,20 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
       }
       case 5:
       case 6: {
-        result << "Argument: ";
+        std::uint64_t tid;
         std::uintptr_t ptr;
         std::size_t argumentIndex;
         std::uint64_t value;
 
+        item >> tid;
         item >> ptr;
         KFunction *kf = reinterpret_cast<KFunction *>(ptr);
         item >> argumentIndex;
         std::size_t total = kf->function->arg_size();
         item >> value;
+
+        result << "[T" << tid << ']';
+        result << "Argument: ";
         result << kf->function->getName() << "(";
         for (std::size_t i = 0; i < total; ++i) {
           if (argumentIndex == i) {
@@ -287,12 +293,15 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         break;
       }
       case 7: {
-        result << "Program Counter: ";
+        std::uint64_t tid;
         std::uintptr_t ptr;
 
+        item >> tid;
         item >> ptr;
         llvm::BasicBlock *bb = reinterpret_cast<llvm::BasicBlock *>(ptr);
 
+        result << "[T" << tid << ']';
+        result << "Program Counter: ";
         result << bb->getName();
         result << " in ";
         result << bb->getParent()->getName();
@@ -301,11 +310,12 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         break;
       }
       case 8: {
-        result << "Stack Frame: ";
+        std::uint64_t tid;
         std::size_t stackFrameIndex;
         std::uintptr_t callerPtr;
         std::uintptr_t calleePtr;
 
+        item >> tid;
         item >> stackFrameIndex;
         item >> callerPtr;
         item >> calleePtr;
@@ -313,6 +323,8 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
         KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
 
+        result << "[T" << tid << ']';
+        result << "Stack Frame: ";
         result << stackFrameIndex << ": ";
         result << callee->function->getName();
         result << "( called from ";
@@ -323,10 +335,11 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         break;
       }
       case 9: {
-        result << "External Function Call: ";
         std::size_t externalCallNum;
 
         item >> externalCallNum;
+
+        result << "[G]External Function Call: ";
         result << externalCallNum;
 
         output = true;
