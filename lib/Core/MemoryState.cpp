@@ -312,49 +312,58 @@ bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
                     instValue) != basicBlockInfo.liveRegisters.end());
 }
 
-void MemoryState::registerLocal(std::uint64_t threadID,
-                                std::size_t stackFrameIndex,
-                                const KInstruction *target,
-                                ref<Expr> value) {
-  if (disableMemoryState) {
-    return;
-  }
 
-  if (value.isNull()) {
-    return;
-  }
+bool MemoryState::shouldRegisterLocal(const llvm::Instruction *inst) {
+  if (disableMemoryState)
+    return false;
 
-  llvm::Instruction *inst = target->inst;
+  if (!isLocalLive(inst))
+    return false;
 
-  if (!isLocalLive(target->inst))
-    return;
-
-  registerLocal(threadID, stackFrameIndex, inst, value);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: register local %" << target->inst->getName()
-                 << ": " << ExprString(value)
-                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "]\n";
-  }
+  return true;
 }
 
 void MemoryState::registerLocal(std::uint64_t threadID,
                                 std::size_t stackFrameIndex,
                                 const llvm::Instruction *inst,
                                 ref<Expr> value) {
-  if (disableMemoryState) {
+  if (inst == nullptr || value.isNull() || !shouldRegisterLocal(inst))
     return;
-  }
 
-  if (value.isNull()) {
-    return;
-  }
+  applyLocalFragment(threadID, stackFrameIndex, inst, value);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "registerLocal(%" << inst->getName() << ", value)\n";
+    llvm::errs() << "MemoryState: register local %" << inst->getName()
+                 << ": " << ExprString(value)
+                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
+                 << "]\n";
   }
+}
 
+void MemoryState::unregisterLocal(std::uint64_t threadID,
+                                  std::size_t stackFrameIndex,
+                                  const llvm::Instruction *inst,
+                                  ref<Expr> value) {
+  if (inst == nullptr || value.isNull() || !shouldRegisterLocal(inst))
+    return;
+
+  applyLocalFragment(threadID, stackFrameIndex, inst, value);
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: unregister local %" << inst->getName()
+                 << ": " << ExprString(value)
+                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
+                 << "]\n";
+  }
+}
+
+
+
+
+void MemoryState::applyLocalFragment(std::uint64_t threadID,
+                                     std::size_t stackFrameIndex,
+                                     const llvm::Instruction *inst,
+                                     ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     fingerprint.updateUint8(3);

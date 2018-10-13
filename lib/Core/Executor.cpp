@@ -1257,9 +1257,9 @@ void Executor::bindLocal(KInstruction *target, ExecutionState &state,
   if (DetectInfiniteLoops) {
     if (!cell.value.isNull()) {
       // unregister previous value to avoid cancellation
-      state.memoryState.unregisterLocal(thread.tid, thread.stack.size() - 1, target, cell.value);
+      state.memoryState.unregisterLocal(thread.tid, thread.stack.size() - 1, target->inst, cell.value);
     }
-    state.memoryState.registerLocal(thread.tid, thread.stack.size() - 1, target, value);
+    state.memoryState.registerLocal(thread.tid, thread.stack.size() - 1, target->inst, value);
   }
   cell.value = value;
 }

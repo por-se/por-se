@@ -103,28 +103,11 @@ private:
                               const llvm::BasicBlock *dst,
                               const llvm::BasicBlock *src);
 
-  void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                     const llvm::Instruction *inst, ref<Expr> value);
-  void unregisterLocal(std::uint64_t threadID,
-                       std::size_t stackFrameIndex,
-                       const llvm::Instruction *inst) {
-    ref<Expr> value = getLocalValue(inst);
-
-    // value was already unregistered when it was marked as dead
-    if (value.isNull())
-      return;
-
-    registerLocal(threadID, stackFrameIndex, inst, value);
-
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: unregister local %" << inst->getName()
-                   << ": " << ExprString(value) << " "
-                   << "[fingerprint: " << fingerprint.getFingerprintAsString()
-                   << "]\n";
-    }
-  }
+  void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
+                          const llvm::Instruction *inst, ref<Expr> value);
 
   bool isLocalLive(const llvm::Instruction *inst);
+  bool shouldRegisterLocal(const llvm::Instruction *inst);
 
   void updateDisableMemoryState() {
     disableMemoryState = listedFunction.entered || libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
@@ -208,17 +191,13 @@ public:
   }
 
   void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                     const KInstruction *target, ref<Expr> value);
+                     const llvm::Instruction *inst, ref<Expr> value);
   void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                       const KInstruction *target, ref<Expr> value) {
-    if (!disableMemoryState
-      && DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-        llvm::errs() << "MemoryState: UNREGISTER LOCAL (KInst)\n";
-      }
-    }
-
-    registerLocal(threadID, stackFrameIndex, target, value);
+                       const llvm::Instruction *inst, ref<Expr> value);
+  void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
+                       const llvm::Instruction *inst) {
+    ref<Expr> value = getLocalValue(inst);
+    unregisterLocal(threadID, stackFrameIndex, inst, value);
   }
 
   void registerArgument(std::uint64_t threadID,
