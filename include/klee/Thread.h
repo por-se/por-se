@@ -37,9 +37,6 @@ namespace klee {
     // of intrinsic lowering.
     MemoryObject *varargs;
 
-    // locals and arguments only visible within this stack frame
-    MemoryFingerprint::fingerprint_t fingerprintLocalDelta;
-
     // allocas allocated in this stack frame
     MemoryFingerprint::fingerprint_t fingerprintAllocaDelta;
 

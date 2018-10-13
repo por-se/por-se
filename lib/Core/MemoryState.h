@@ -97,8 +97,7 @@ private:
 
   void unregisterConsumedLocals(std::uint64_t threadID,
                                 std::size_t stackFrameIndex,
-                                const llvm::BasicBlock *bb,
-                                bool writeToLocalDelta = true);
+                                const llvm::BasicBlock *bb);
   void unregisterKilledLocals(std::uint64_t threadID,
                               std::size_t stackFrameIndex,
                               const llvm::BasicBlock *dst,

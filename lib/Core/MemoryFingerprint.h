@@ -53,7 +53,6 @@ private:
   }
 
   fingerprint_t fingerprint = {};
-  fingerprint_t fingerprintLocalDelta = {};
   fingerprint_t fingerprintAllocaDelta = {};
 
   template<typename T,
@@ -92,14 +91,6 @@ public:
     getDerived().clearHash();
   }
 
-  void applyToFingerprintLocalDelta() {
-    getDerived().generateHash();
-    executeXOR(fingerprintLocalDelta, buffer);
-    // fingerprintLocalDelta is only applied to fingerprint when the whole
-    // fingerprint is requested, see getFingerprint()
-    getDerived().clearHash();
-  }
-
   void applyToFingerprintAllocaDelta() {
     applyToFingerprintAllocaDelta(fingerprintAllocaDelta);
   }
@@ -115,14 +106,7 @@ public:
   }
 
   fingerprint_t getFingerprint() {
-    fingerprint_t result = fingerprint;
-    executeXOR(result, fingerprintLocalDelta);
-    // fingerprintAllocaDelta is already part of fingerprint, no need to XOR
-    return result;
-  }
-
-  fingerprint_t getLocalDelta() {
-    return fingerprintLocalDelta;
+    return fingerprint;
   }
 
   fingerprint_t getAllocaDelta() {
@@ -135,10 +119,6 @@ public:
     fingerprintAllocaDelta = {};
   }
 
-  void setLocalDelta(fingerprint_t localDelta) {
-    fingerprintLocalDelta = localDelta;
-  }
-
   // WARNING: This function can only be used with an allocaDelta that has been
   // created and modified using the current instance of MemoryFingerprint, as
   // it assumes that every change recorded in allocaDelta has also been applied
@@ -148,17 +128,12 @@ public:
     fingerprintAllocaDelta = allocaDelta;
   }
 
-  void discardLocalDelta() {
-    fingerprintLocalDelta = {};
-  }
-
   void discardAllocaDelta() {
     executeXOR(fingerprint, fingerprintAllocaDelta);
     fingerprintAllocaDelta = {};
   }
 
   void discardEverything() {
-    fingerprintLocalDelta = {};
     fingerprintAllocaDelta = {};
     fingerprint = {};
   }
@@ -195,10 +170,6 @@ public:
 
   std::string getFingerprintAsString() {
     return toString(getFingerprint());
-  }
-
-  std::string getLocalDeltaAsString() {
-    return toString(fingerprintLocalDelta);
   }
 
   std::string getAllocaDeltaAsString() {

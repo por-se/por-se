@@ -371,7 +371,7 @@ void MemoryState::registerLocal(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToFingerprintLocalDelta();
+  fingerprint.applyToFingerprintAllocaDelta();
 }
 
 void MemoryState::registerArgument(std::uint64_t threadID,
@@ -401,7 +401,7 @@ void MemoryState::registerArgument(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToFingerprintLocalDelta();
+  fingerprint.applyToFingerprintAllocaDelta();
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
@@ -431,12 +431,9 @@ void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
 
 void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
                                            std::size_t stackFrameIndex,
-                                           const llvm::BasicBlock *bb,
-                                           bool writeToLocalDelta) {
+                                           const llvm::BasicBlock *bb) {
   // This method is called after the execution of bb to clean up the local
   // delta, but also set locals to NULL within KLEE.
-  // The parameter "writeToLocalDelta" can be set to false in order to omit
-  // changes to a local delta that will be discarded immediately after.
 
   KFunction *kf = getKFunction(bb);
   auto consumed = kf->basicBlockValueLivenessInfo.at(bb).getConsumedValues();
@@ -449,10 +446,7 @@ void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
                    << ") is dead in any successor: "
                    << "%" << inst->getName() << "\n";
     }
-    if (writeToLocalDelta) {
-      // remove local from local delta
-      unregisterLocal(threadID, stackFrameIndex, inst);
-    }
+    unregisterLocal(threadID, stackFrameIndex, inst);
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
     clearLocal(inst);
@@ -487,7 +481,7 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
     fingerprint.updateUint64(threadID);
     fingerprint.updateUint64(stackFrameIndex);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
-    fingerprint.applyToFingerprintLocalDelta();
+    fingerprint.applyToFingerprintAllocaDelta();
 
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
       unregisterConsumedLocals(threadID, stackFrameIndex, src);
@@ -500,7 +494,7 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
   fingerprint.updateUint64(threadID);
   fingerprint.updateUint64(stackFrameIndex);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
-  fingerprint.applyToFingerprintLocalDelta();
+  fingerprint.applyToFingerprintAllocaDelta();
 
   if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
     return;
@@ -556,7 +550,6 @@ void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
                    << " (after evaluation of PHI nodes, if any)"
                    << ": %" << inst->getName() << "\n";
     }
-    // remove local from local delta
     unregisterLocal(threadID, stackFrameIndex, inst);
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
@@ -754,11 +747,8 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   Thread &thread = executionState->getCurrentThreadReference();
   // second but last stack frame
   StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
-  sf.fingerprintLocalDelta = fingerprint.getLocalDelta();
   sf.fingerprintAllocaDelta = fingerprint.getAllocaDelta();
 
-  // make locals and arguments "invisible"
-  fingerprint.discardLocalDelta();
   // record alloca allocations and changes for this new stack frame separately
   // from those of other stack frames (without removing the latter)
   fingerprint.applyAndResetAllocaDelta();
@@ -792,21 +782,14 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
 
   if (thread.stack.size() > 0) {
     if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-      // Even though the local delta is removed in the next step, we have to
-      // clear consumed locals within KLEE to be able to determine which
-      // variable has already been registered during another call to the
+      // We have to clear consumed locals within KLEE to be able to determine
+      // which variable has already been registered during another call to the
       // function we are currently leaving.
-      unregisterConsumedLocals(threadID, thread.stack.size() - 1, returningBB, false);
+      unregisterConsumedLocals(threadID, thread.stack.size() - 1, returningBB);
     }
 
     // second but last stack frame
     StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
-
-    // remove locals and arguments of stack frame that is to be left
-    fingerprint.discardLocalDelta();
-    // set local delta to fingerprint local delta of stack frame that is to be
-    // entered to make locals and arguments "visible" again
-    fingerprint.setLocalDelta(sf.fingerprintLocalDelta);
 
     // remove allocas allocated in stack frame that is to be left
     fingerprint.discardAllocaDelta();
@@ -820,9 +803,7 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     }
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "reapplying local delta: "
-                   << fingerprint.getLocalDeltaAsString()
-                   << "\nreapplying alloca delta: "
+      llvm::errs() << "reapplying alloca delta: "
                    << fingerprint.getAllocaDeltaAsString()
                    << "\nFingerprint: " << fingerprint.getFingerprintAsString()
                    << "\n";
