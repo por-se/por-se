@@ -232,8 +232,16 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         auto filename = scope.getFilename();
 #endif
 
+
         result << "Local: ";
-        result << inst->getName();
+        if (inst->hasName()) {
+          result << '%' << inst->getName();
+        } else {
+          result << "unnamed(@"
+                 << reinterpret_cast<std::uintptr_t>(inst)
+                 << ')';
+        }
+
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
         if (dl) {
 #else
