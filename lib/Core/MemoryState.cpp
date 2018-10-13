@@ -776,7 +776,7 @@ void MemoryState::leaveMemoryFunction() {
 void MemoryState::registerPushFrame(std::uint64_t threadID,
                                     std::size_t stackFrameIndex,
                                     const KFunction *callee,
-                                    const KInstruction *caller) {
+                                    const llvm::Instruction *caller) {
   // IMPORTANT: has to be called after state.popFrame()
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";

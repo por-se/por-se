@@ -209,7 +209,7 @@ public:
                                   const llvm::BasicBlock *src);
 
   void registerPushFrame(std::uint64_t threadID, size_t stackFrameIndex,
-                         const KFunction *callee, const KInstruction *caller);
+                         const KFunction *callee, const llvm::Instruction *caller);
   void registerPopFrame(std::uint64_t threadID,
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);

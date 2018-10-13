@@ -1513,7 +1513,7 @@ void Executor::executeCall(ExecutionState &state,
     thread.pc = kf->instructions;
     if (DetectInfiniteLoops) {
       state.memoryState.registerPushFrame(thread.tid, thread.stack.size() - 1,
-                                          kf, thread.prevPc);
+                                          kf, thread.prevPc->inst);
     }
 
     if (statsTracker) {
