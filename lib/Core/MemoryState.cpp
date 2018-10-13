@@ -104,6 +104,91 @@ void MemoryState::initializeFunctionList(KModule *_kmodule,
 }
 
 
+void MemoryState::leaveListedFunction() {
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: leaving listed function: "
+                 << listedFunction.function->getName() << "\n";
+  }
+
+  listedFunction.entered = false;
+  listedFunction.function = nullptr;
+
+  updateDisableMemoryState();
+}
+
+bool MemoryState::enterLibraryFunction(llvm::Function *f) {
+  if (libraryFunction.entered) {
+    return false;
+  }
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: entering library function: "
+                 << f->getName() << "\n";
+  }
+
+  libraryFunction.entered = true;
+  libraryFunction.function = f;
+
+  updateDisableMemoryState();
+
+  return true;
+}
+
+void MemoryState::leaveLibraryFunction() {
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: leaving library function: "
+                 << libraryFunction.function->getName() << "\n";
+  }
+
+  libraryFunction.entered = false;
+  libraryFunction.function = nullptr;
+
+  updateDisableMemoryState();
+}
+
+bool MemoryState::enterMemoryFunction(llvm::Function *f,
+  ref<ConstantExpr> address, const MemoryObject *mo, const ObjectState *os,
+  std::size_t bytes) {
+  if (memoryFunction.entered) {
+    // we can only enter one library function at a time
+    klee_warning_once(f, "already entered a memory function");
+    return false;
+  }
+
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: entering memory function: "
+                 << f->getName() << "\n";
+  }
+
+  unregisterWrite(address, *mo, *os, bytes);
+
+  memoryFunction.entered = true;
+  memoryFunction.function = f;
+  memoryFunction.address = address;
+  memoryFunction.mo = mo;
+  memoryFunction.bytes = bytes;
+
+  updateDisableMemoryState();
+
+  return true;
+}
+
+void MemoryState::leaveMemoryFunction() {
+  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    llvm::errs() << "MemoryState: leaving memory function: "
+                 << memoryFunction.function->getName() << "\n";
+  }
+
+  const MemoryObject *mo = memoryFunction.mo;
+  const ObjectState *os = executionState->addressSpace.findObject(mo);
+
+  memoryFunction.entered = false;
+  memoryFunction.function = nullptr;
+
+  updateDisableMemoryState();
+
+  registerWrite(memoryFunction.address, *mo, *os, memoryFunction.bytes);
+}
 
 void MemoryState::registerFunctionCall(llvm::Function *f,
                                        std::vector<ref<Expr>> &arguments) {
@@ -248,8 +333,8 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
     if (!isAllocaAllocationInCurrentStackFrame(mo)) {
       externalDelta = getPreviousStackFrameDelta(mo);
       if (externalDelta == nullptr) {
-        // allocation was made in previous stack frame that is not available
-        // anymore due to an external function call
+        // allocation was made in previous stack frame that is not available,
+        // treat as global
         isLocal = false;
       }
     }
@@ -387,9 +472,6 @@ void MemoryState::unregisterLocal(std::uint64_t threadID,
   }
 }
 
-
-
-
 void MemoryState::applyLocalFragment(std::uint64_t threadID,
                                      std::size_t stackFrameIndex,
                                      const llvm::Instruction *inst,
@@ -492,6 +574,31 @@ void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
   }
 }
 
+void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
+                                         std::size_t stackFrameIndex,
+                                         const llvm::BasicBlock *dst,
+                                         const llvm::BasicBlock *src) {
+  // kill registers based on outgoing edge (edge from src to dst)
+
+  KFunction *kf = getKFunction(src);
+  auto killed = kf->basicBlockValueLivenessInfo.at(src).getKilledValues(dst);
+
+  // unregister and clear locals that are not live at the end of dst
+  for (auto &k : killed) {
+    llvm::Instruction *inst = static_cast<llvm::Instruction *>(k);
+    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      llvm::errs() << "MemoryState: Following variable (last accessed "
+                   << "in BasicBlock %" << src->getName()
+                   << ") is dead in BasicBlock %" << dst->getName()
+                   << " (after evaluation of PHI nodes, if any)"
+                   << ": %" << inst->getName() << "\n";
+    }
+    unregisterLocal(threadID, stackFrameIndex, inst);
+    // set local within KLEE to NULL to mark it as dead
+    // this prevents us from unregistering this local twice
+    clearLocal(inst);
+  }
+}
 
 void MemoryState::enterBasicBlock(std::uint64_t threadID,
                                   std::size_t stackFrameIndex,
@@ -566,89 +673,6 @@ void MemoryState::phiNodeProcessingCompleted(std::uint64_t threadID,
   unregisterKilledLocals(threadID, stackFrameIndex, dst, src);
 }
 
-MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
-  return fingerprint.getFingerprint();
-}
-
-void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
-                                         std::size_t stackFrameIndex,
-                                         const llvm::BasicBlock *dst,
-                                         const llvm::BasicBlock *src) {
-  // kill registers based on outgoing edge (edge from src to dst)
-
-  KFunction *kf = getKFunction(src);
-  auto killed = kf->basicBlockValueLivenessInfo.at(src).getKilledValues(dst);
-
-  // unregister and clear locals that are not live at the end of dst
-  for (auto &k : killed) {
-    llvm::Instruction *inst = static_cast<llvm::Instruction *>(k);
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Following variable (last accessed "
-                   << "in BasicBlock %" << src->getName()
-                   << ") is dead in BasicBlock %" << dst->getName()
-                   << " (after evaluation of PHI nodes, if any)"
-                   << ": %" << inst->getName() << "\n";
-    }
-    unregisterLocal(threadID, stackFrameIndex, inst);
-    // set local within KLEE to NULL to mark it as dead
-    // this prevents us from unregistering this local twice
-    clearLocal(inst);
-  }
-}
-
-KInstruction *MemoryState::getKInstruction(const llvm::Instruction* inst) {
-  // FIXME: ugly hack
-  llvm::BasicBlock *bb = const_cast<llvm::BasicBlock *>(inst->getParent());
-  if (bb != nullptr) {
-    KFunction *kf = getKFunction(bb);
-    if (kf != nullptr) {
-      unsigned entry = kf->basicBlockEntry[bb];
-      while ((entry + 1) < kf->numInstructions
-             && kf->instructions[entry]->inst != inst)
-      {
-        entry++;
-      }
-      return kf->instructions[entry];
-    }
-  }
-  return nullptr;
-}
-
-KFunction *MemoryState::getKFunction(const llvm::BasicBlock *bb) {
-  llvm::Function *f = const_cast<llvm::Function *>(bb->getParent());
-  assert(f != nullptr && "failed to retrieve Function for BasicBlock");
-  KFunction *kf = kmodule->functionMap[f];
-  assert(kf != nullptr && "failed to retrieve KFunction");
-  return kf;
-}
-
-ref<Expr> MemoryState::getLocalValue(const KInstruction *kinst) {
-  Thread &thread = executionState->getCurrentThreadReference();
-  return thread.stack.back().locals[kinst->dest].value;
-}
-
-ref<Expr> MemoryState::getLocalValue(const llvm::Instruction *inst) {
-  KInstruction *kinst = getKInstruction(inst);
-  if (kinst != nullptr) {
-    return getLocalValue(kinst);
-  }
-  return nullptr;
-}
-
-void MemoryState::clearLocal(const KInstruction *kinst) {
-  Thread &thread = executionState->getCurrentThreadReference();
-  thread.stack.back().locals[kinst->dest].value = nullptr;
-  assert(getLocalValue(kinst).isNull());
-}
-
-void MemoryState::clearLocal(const llvm::Instruction *inst) {
-  KInstruction *kinst = getKInstruction(inst);
-  if (kinst != nullptr) {
-    clearLocal(kinst);
-  }
-  assert(getLocalValue(inst).isNull());
-}
-
 bool MemoryState::enterListedFunction(llvm::Function *f) {
   if (listedFunction.entered) {
     // we can only enter one listed function at a time
@@ -668,104 +692,6 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
   updateDisableMemoryState();
 
   return true;
-}
-
-void MemoryState::leaveListedFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: leaving listed function: "
-                 << listedFunction.function->getName() << "\n";
-  }
-
-  listedFunction.entered = false;
-  listedFunction.function = nullptr;
-
-  updateDisableMemoryState();
-}
-
-bool MemoryState::isInListedFunction(llvm::Function *f) {
-  return (listedFunction.entered && f == listedFunction.function);
-}
-
-bool MemoryState::enterLibraryFunction(llvm::Function *f) {
-  if (libraryFunction.entered) {
-    return false;
-  }
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: entering library function: "
-                 << f->getName() << "\n";
-  }
-
-  libraryFunction.entered = true;
-  libraryFunction.function = f;
-
-  updateDisableMemoryState();
-
-  return true;
-}
-
-void MemoryState::leaveLibraryFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: leaving library function: "
-                 << libraryFunction.function->getName() << "\n";
-  }
-
-  libraryFunction.entered = false;
-  libraryFunction.function = nullptr;
-
-  updateDisableMemoryState();
-}
-
-bool MemoryState::isInLibraryFunction(llvm::Function *f) {
-  return (libraryFunction.entered && f == libraryFunction.function);
-}
-
-bool MemoryState::enterMemoryFunction(llvm::Function *f,
-  ref<ConstantExpr> address, const MemoryObject *mo, const ObjectState *os,
-  std::size_t bytes) {
-  if (memoryFunction.entered) {
-    // we can only enter one library function at a time
-    klee_warning_once(f, "already entered a memory function");
-    return false;
-  }
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: entering memory function: "
-                 << f->getName() << "\n";
-  }
-
-  unregisterWrite(address, *mo, *os, bytes);
-
-  memoryFunction.entered = true;
-  memoryFunction.function = f;
-  memoryFunction.address = address;
-  memoryFunction.mo = mo;
-  memoryFunction.bytes = bytes;
-
-  updateDisableMemoryState();
-
-  return true;
-}
-
-bool MemoryState::isInMemoryFunction(llvm::Function *f) {
-  return (memoryFunction.entered && f == memoryFunction.function);
-}
-
-void MemoryState::leaveMemoryFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: leaving memory function: "
-                 << memoryFunction.function->getName() << "\n";
-  }
-
-  const MemoryObject *mo = memoryFunction.mo;
-  const ObjectState *os = executionState->addressSpace.findObject(mo);
-
-  memoryFunction.entered = false;
-  memoryFunction.function = nullptr;
-
-  updateDisableMemoryState();
-
-  registerWrite(memoryFunction.address, *mo, *os, memoryFunction.bytes);
 }
 
 void MemoryState::registerPushFrame(std::uint64_t threadID,
@@ -870,6 +796,59 @@ std::string MemoryState::ExprString(ref<Expr> expr) {
   expr->print(ostream);
   ostream.flush();
   return result;
+}
+
+KInstruction *MemoryState::getKInstruction(const llvm::Instruction* inst) {
+  // FIXME: ugly hack
+  llvm::BasicBlock *bb = const_cast<llvm::BasicBlock *>(inst->getParent());
+  if (bb != nullptr) {
+    KFunction *kf = getKFunction(bb);
+    if (kf != nullptr) {
+      unsigned entry = kf->basicBlockEntry[bb];
+      while ((entry + 1) < kf->numInstructions
+             && kf->instructions[entry]->inst != inst)
+      {
+        entry++;
+      }
+      return kf->instructions[entry];
+    }
+  }
+  return nullptr;
+}
+
+KFunction *MemoryState::getKFunction(const llvm::BasicBlock *bb) {
+  llvm::Function *f = const_cast<llvm::Function *>(bb->getParent());
+  assert(f != nullptr && "failed to retrieve Function for BasicBlock");
+  KFunction *kf = kmodule->functionMap[f];
+  assert(kf != nullptr && "failed to retrieve KFunction");
+  return kf;
+}
+
+ref<Expr> MemoryState::getLocalValue(const KInstruction *kinst) {
+  Thread &thread = executionState->getCurrentThreadReference();
+  return thread.stack.back().locals[kinst->dest].value;
+}
+
+ref<Expr> MemoryState::getLocalValue(const llvm::Instruction *inst) {
+  KInstruction *kinst = getKInstruction(inst);
+  if (kinst != nullptr) {
+    return getLocalValue(kinst);
+  }
+  return nullptr;
+}
+
+void MemoryState::clearLocal(const KInstruction *kinst) {
+  Thread &thread = executionState->getCurrentThreadReference();
+  thread.stack.back().locals[kinst->dest].value = nullptr;
+  assert(getLocalValue(kinst).isNull());
+}
+
+void MemoryState::clearLocal(const llvm::Instruction *inst) {
+  KInstruction *kinst = getKInstruction(inst);
+  if (kinst != nullptr) {
+    clearLocal(kinst);
+  }
+  assert(getLocalValue(inst).isNull());
 }
 
 }

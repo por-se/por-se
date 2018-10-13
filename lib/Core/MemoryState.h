@@ -75,25 +75,37 @@ private:
 
   bool enterListedFunction(llvm::Function *f);
   void leaveListedFunction();
-  bool isInListedFunction(llvm::Function *f);
+  bool isInListedFunction(llvm::Function *f) {
+    return (listedFunction.entered && f == listedFunction.function);
+  }
 
   bool enterLibraryFunction(llvm::Function *f);
   void leaveLibraryFunction();
-  bool isInLibraryFunction(llvm::Function *f);
+  bool isInLibraryFunction(llvm::Function *f) {
+    return (libraryFunction.entered && f == libraryFunction.function);
+  }
 
   bool enterMemoryFunction(llvm::Function *f, ref<ConstantExpr> address,
     const MemoryObject *mo, const ObjectState *os, std::size_t bytes);
-  bool isInMemoryFunction(llvm::Function *f);
+  bool isInMemoryFunction(llvm::Function *f) {
+    return (memoryFunction.entered && f == memoryFunction.function);
+  }
   void leaveMemoryFunction();
 
-  void updateBasicBlockInfo(const llvm::BasicBlock *bb);
-  KInstruction *getKInstruction(const llvm::Instruction* inst);
-  KFunction *getKFunction(const llvm::BasicBlock *bb);
-  ref<Expr> getLocalValue(const KInstruction *kinst);
-  ref<Expr> getLocalValue(const llvm::Instruction *inst);
-  void clearLocal(const KInstruction *kinst);
-  void clearLocal(const llvm::Instruction *inst);
+  void updateDisableMemoryState() {
+    disableMemoryState = listedFunction.entered || libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
 
+    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      llvm::errs() << "MemoryState: updating disableMemoryState: "
+                   << "(listedFunction: " << listedFunction.entered << " || "
+                   << "libraryFunction: " << libraryFunction.entered << " || "
+                   << "memoryFunction: " << memoryFunction.entered << " || "
+                   << "globalDisable: " << globalDisableMemoryState << ") "
+                   << "= " << disableMemoryState << "\n";
+    }
+  }
+
+  void updateBasicBlockInfo(const llvm::BasicBlock *bb);
   void unregisterConsumedLocals(std::uint64_t threadID,
                                 std::size_t stackFrameIndex,
                                 const llvm::BasicBlock *bb);
@@ -110,18 +122,16 @@ private:
   bool isLocalLive(const llvm::Instruction *inst);
   bool shouldRegisterLocal(const llvm::Instruction *inst);
 
-  void updateDisableMemoryState() {
-    disableMemoryState = listedFunction.entered || libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
+  bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo);
+  MemoryFingerprint::fingerprint_t *
+  getPreviousStackFrameDelta(const MemoryObject &mo);
 
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: updating disableMemoryState: "
-                   << "(listedFunction: " << listedFunction.entered << " || "
-                   << "libraryFunction: " << libraryFunction.entered << " || "
-                   << "memoryFunction: " << memoryFunction.entered << " || "
-                   << "globalDisable: " << globalDisableMemoryState << ") "
-                   << "= " << disableMemoryState << "\n";
-    }
-  }
+  KInstruction *getKInstruction(const llvm::Instruction* inst);
+  KFunction *getKFunction(const llvm::BasicBlock *bb);
+  ref<Expr> getLocalValue(const KInstruction *kinst);
+  ref<Expr> getLocalValue(const llvm::Instruction *inst);
+  void clearLocal(const KInstruction *kinst);
+  void clearLocal(const llvm::Instruction *inst);
 
 public:
   MemoryState() = delete;
@@ -131,7 +141,7 @@ public:
   MemoryState(const MemoryState &from, const ExecutionState *state)
     : MemoryState(from) {
     executionState = state;
- }
+  }
 
   void disable() {
     globalDisableMemoryState = true;
@@ -213,12 +223,10 @@ public:
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
 
-  bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo);
 
-  MemoryFingerprint::fingerprint_t *
-  getPreviousStackFrameDelta(const MemoryObject &mo);
-
-  MemoryFingerprint::fingerprint_t getFingerprint();
+  MemoryFingerprint::fingerprint_t getFingerprint() {
+    return fingerprint.getFingerprint();
+  }
 };
 }
 
