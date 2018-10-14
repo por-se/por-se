@@ -122,9 +122,9 @@ private:
   bool isLocalLive(const llvm::Instruction *inst);
   bool shouldRegisterLocal(const llvm::Instruction *inst);
 
-  bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo);
+  bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const;
   MemoryFingerprint::fingerprint_t *
-  getPreviousStackFrameDelta(const MemoryObject &mo);
+  getPreviousStackFrameDelta(const MemoryObject &mo) const;
 
   KInstruction *getKInstruction(const llvm::Instruction* inst);
   KFunction *getKFunction(const llvm::BasicBlock *bb);

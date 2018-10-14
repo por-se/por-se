@@ -747,10 +747,9 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
       unregisterConsumedLocals(threadID, thread.stack.size() - 1, returningBB);
     }
 
-    // second but last stack frame
-    StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
 
-    // remove changes local to stack frame that is to be left
+    // remove changes only accessible to stack frame that is to be left
+    StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
     fingerprint.discardStackFrameDelta();
     fingerprint.setStackFrameDeltaToPreviousValue(sf.fingerprintDelta);
 
@@ -774,13 +773,13 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
 }
 
 bool
-MemoryState::isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) {
+MemoryState::isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const {
   Thread &thread = executionState->getCurrentThreadReference();
   return (thread.stack.size() - 1 == mo.getStackframeIndex());
 }
 
 MemoryFingerprint::fingerprint_t *
-MemoryState::getPreviousStackFrameDelta(const MemoryObject &mo) {
+MemoryState::getPreviousStackFrameDelta(const MemoryObject &mo) const {
   assert(!isAllocaAllocationInCurrentStackFrame(mo));
 
   Thread &thread = executionState->getCurrentThreadReference();
