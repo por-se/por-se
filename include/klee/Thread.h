@@ -10,8 +10,10 @@
 #include "../../lib/Core/MemoryFingerprint.h"
 
 #include <vector>
+#include <unordered_map>
 
 namespace klee {
+  class Array;
   class CallPathNode;
 
   struct StackFrame {
@@ -38,6 +40,9 @@ namespace klee {
 
     // changes w.r.t. this stack frame
     MemoryFingerprint::fingerprint_t fingerprintDelta;
+
+    // reference counting for symbolic variables in fingerprintDelta
+    std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 
     StackFrame(KInstIterator caller, KFunction *kf);
     StackFrame(const StackFrame &s);

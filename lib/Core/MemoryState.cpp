@@ -5,11 +5,13 @@
 #include "Memory.h"
 
 #include "klee/ExecutionState.h"
+#include "klee/Expr.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
+#include "klee/util/ExprVisitor.h"
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/BasicBlock.h"
@@ -287,7 +289,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
                  << ExprString(base) << "\n";
   }
 
-  applyWriteFragment(address, mo, os, bytes);
+  applyWriteFragment(address, mo, os, bytes, true);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << " [fingerprint: "
@@ -309,7 +311,7 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                  << ExprString(base) << "\n";
   }
 
-  applyWriteFragment(address, mo, os, bytes);
+  applyWriteFragment(address, mo, os, bytes, false);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << " [fingerprint: "
@@ -318,7 +320,8 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
 }
 
 void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
-                                     const ObjectState &os, std::size_t bytes) {
+                                     const ObjectState &os, std::size_t bytes,
+                                     bool increaseReferenceCount) {
   ref<Expr> offset = mo.getOffsetExpr(address);
   ConstantExpr *concreteOffset = dyn_cast<ConstantExpr>(offset);
 
@@ -357,6 +360,8 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
 
   ref<ConstantExpr> base = mo.getBaseExpr();
 
+  auto symref = getSymbolicReferences(mo);
+
   for (std::uint64_t i = begin; i < end; i++) {
     std::uint64_t baseAddress = base->getZExtValue(64);
 
@@ -387,6 +392,11 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
       fingerprint.updateUint64(baseAddress + i);
 
       fingerprint.updateExpr(valExpr);
+      if (increaseReferenceCount) {
+        increaseExprReferenceCount(valExpr, symref);
+      } else {
+        decreaseExprReferenceCount(valExpr, symref);
+      }
       if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
         llvm::errs() << ExprString(valExpr);
       }
@@ -440,6 +450,9 @@ void MemoryState::registerLocal(std::uint64_t threadID,
 
   applyLocalFragment(threadID, stackFrameIndex, inst, value);
 
+  if (!isa<ConstantExpr>(value))
+    increaseExprReferenceCount(value);
+
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: register local %" << inst->getName()
                  << ": " << ExprString(value)
@@ -462,6 +475,9 @@ void MemoryState::unregisterLocal(std::uint64_t threadID,
     return;
 
   applyLocalFragment(threadID, stackFrameIndex, inst, value);
+
+  if (!isa<ConstantExpr>(value))
+    decreaseExprReferenceCount(value);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: unregister local %" << inst->getName()
@@ -519,6 +535,10 @@ void MemoryState::registerArgument(std::uint64_t threadID,
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(kf));
     fingerprint.updateUint64(index);
     fingerprint.updateExpr(value);
+
+    Thread &thread = executionState->getCurrentThreadReference();
+    auto &sf = thread.stack.back();
+    increaseExprReferenceCount(value, &sf.symbolicReferences);
   }
 
   fingerprint.applyToFingerprintStackFrameDelta();
@@ -748,6 +768,10 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
       unregisterConsumedLocals(threadID, thread.stack.size() - 1, returningBB);
     }
 
+    // subtract symbolic references of stackframe delta that is to be removed
+    for (auto s : thread.stack.back().symbolicReferences) {
+      symbolicReferences[s.first] -= s.second;
+    }
 
     // remove changes only accessible to stack frame that is to be left
     StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
@@ -773,6 +797,46 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
   }
 }
 
+
+class ExprArrayCounter : public ExprVisitor {
+public:
+  MemoryState::sym_ref_map_t references;
+
+public:
+  ExprArrayCounter() = default;
+
+  Action visitRead(const ReadExpr &e) {
+    // this actually counts the number of bytes referenced,
+    // as each ReadExpr represents a one byte read
+    const Array *arr = e.updates.root;
+    ++references[arr];
+    return Action::doChildren();
+  }
+};
+
+
+void MemoryState::increaseExprReferenceCount(ref<Expr> expr,
+                                             sym_ref_map_t *references) {
+    ExprArrayCounter visitor;
+    visitor.visit(expr);
+    for (auto v : visitor.references) {
+      if (references != nullptr)
+        (*references)[v.first] += v.second;
+      symbolicReferences[v.first] += v.second;
+    }
+}
+
+void MemoryState::decreaseExprReferenceCount(ref<Expr> expr,
+                                             sym_ref_map_t *references) {
+    ExprArrayCounter visitor;
+    visitor.visit(expr);
+    for (auto v : visitor.references) {
+      if (references != nullptr)
+        (*references)[v.first] -= v.second;
+      symbolicReferences[v.first] -= v.second;
+    }
+}
+
 bool
 MemoryState::isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const {
   Thread &thread = executionState->getCurrentThreadReference();
@@ -789,6 +853,17 @@ MemoryState::getPreviousStackFrameDelta(const MemoryObject &mo) const {
   return &thread.stack.at(index).fingerprintDelta;
 }
 
+
+std::unordered_map<const Array *, std::uint64_t> *
+MemoryState::getSymbolicReferences(const MemoryObject &mo) const {
+  if (mo.isLocal) {
+    Thread &thread = executionState->getCurrentThreadReference();
+    size_t index = mo.getStackframeIndex();
+    assert(index == (thread.stack.size() - 1));
+    return &thread.stack.at(index).symbolicReferences;
+  }
+  return nullptr;
+}
 
 std::string MemoryState::ExprString(ref<Expr> expr) {
   std::string result;

@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
 
 namespace llvm {
 class BasicBlock;
@@ -17,18 +18,23 @@ class Function;
 }
 
 namespace klee {
+class Array;
 class ExecutionState;
 class KFunction;
 class KInstruction;
 class KModule;
 
 class MemoryState {
+public:
+  typedef std::unordered_map<const Array *, std::uint64_t> sym_ref_map_t;
 
 private:
   MemoryState(const MemoryState &) = default;
 
-  MemoryFingerprint fingerprint;
   const ExecutionState *executionState = nullptr;
+
+  MemoryFingerprint fingerprint;
+  sym_ref_map_t symbolicReferences;
 
   // klee_enable_memory_state() is inserted by KLEE before executing the entry
   // point chosen by the user. Thus, the initialization of (uc)libc or POSIX
@@ -121,7 +127,8 @@ private:
                        bool force);
 
   void applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
-                          const ObjectState &os, std::size_t bytes);
+                          const ObjectState &os, std::size_t bytes,
+                          bool increaseReferenceCount);
   void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
                           const llvm::Instruction *inst, ref<Expr> value);
 
@@ -130,6 +137,14 @@ private:
   bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const;
   MemoryFingerprint::fingerprint_t *
   getPreviousStackFrameDelta(const MemoryObject &mo) const;
+
+  std::unordered_map<const Array *, std::uint64_t> *
+  getSymbolicReferences(const MemoryObject &mo) const;
+
+  void increaseExprReferenceCount(ref<Expr> expr,
+    sym_ref_map_t *references = nullptr);
+  void decreaseExprReferenceCount(ref<Expr> expr,
+    sym_ref_map_t *references = nullptr);
 
   KInstruction *getKInstruction(const llvm::Instruction* inst);
   KFunction *getKFunction(const llvm::BasicBlock *bb);
