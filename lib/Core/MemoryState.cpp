@@ -815,6 +815,60 @@ public:
 };
 
 
+MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
+  std::vector<ref<Expr>> expressions;
+  for (auto expr : executionState->constraints) {
+    expressions.push_back(expr);
+  }
+  std::sort(expressions.begin(), expressions.end(), [](ref<Expr> a, ref<Expr> b) {
+    return a->hash() < b->hash();
+  });
+
+  // map all expressions to arrays that they constrain
+  std::unordered_map<const Array *, std::set<ref<Expr>>> constraintsMap;
+  for (auto expr : expressions) {
+    ExprArrayCounter counter;
+    counter.visit(expr);
+    for (auto s : counter.references) {
+      // exclude all arrays that have reference count 0
+      if (symbolicReferences.count(s.first) && symbolicReferences[s.first] != 0) {
+        constraintsMap[s.first].insert(expr);
+      }
+    }
+  }
+
+
+  // TODO: transitive closure
+
+
+  if (constraintsMap.empty())
+    return fingerprint.getFingerprint();
+
+  Thread &thread = executionState->getCurrentThreadReference();
+  fingerprint.updateUint8(10);
+  fingerprint.updateUint64(thread.tid);
+  for (auto v : constraintsMap) {
+    for (ref<Expr> expr : v.second) {
+      fingerprint.updateExpr(expr);
+    }
+  }
+  fingerprint.applyToFingerprint();
+
+  auto result = fingerprint.getFingerprint();
+
+  // FIXME: code duplication
+  fingerprint.updateUint8(10);
+  fingerprint.updateUint64(thread.tid);
+  for (auto v : constraintsMap) {
+    for (ref<Expr> expr : v.second) {
+      fingerprint.updateExpr(expr);
+    }
+  }
+  fingerprint.applyToFingerprint();
+
+  return result;
+}
+
 void MemoryState::increaseExprReferenceCount(ref<Expr> expr,
                                              sym_ref_map_t *references) {
     ExprArrayCounter visitor;

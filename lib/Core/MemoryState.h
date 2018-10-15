@@ -240,10 +240,7 @@ public:
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
 
-
-  MemoryFingerprint::fingerprint_t getFingerprint() {
-    return fingerprint.getFingerprint();
-  }
+  MemoryFingerprint::fingerprint_t getFingerprint();
 };
 }
 

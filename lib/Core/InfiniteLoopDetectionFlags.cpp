@@ -23,12 +23,12 @@ llvm::cl::bits<DebugInfiniteLoopDetectionType> DebugInfiniteLoopDetection(
 llvm::cl::opt<bool> InfiniteLoopDetectionDisableTwoPredecessorOpt(
   "infinite-loop-detection-disable-two-predecessor-optimization",
   llvm::cl::desc("Disable infinite loop detection optimization that only starts searching for loops on basic blocks with at least two predecessors (default=false)"),
-  llvm::cl::init(false));
+  llvm::cl::init(true)); // XXX: prototype same-state detection
 
 llvm::cl::opt<bool> InfiniteLoopDetectionDisableLiveVariableAnalysis(
   "infinite-loop-detection-disable-live-variable-analysis",
   llvm::cl::desc("Disable live variable analysis used for infinite loop detection (default=false)"),
-  llvm::cl::init(true)); // XXX: prototype same-state detection
+  llvm::cl::init(false));
 
 llvm::cl::opt<bool> InfiniteLoopDetectionDebugLiveVariableAnalysis(
   "infinite-loop-detection-debug-live-variable-analysis",

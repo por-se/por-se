@@ -349,6 +349,19 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         output = true;
         break;
       }
+      case 10: {
+        std::uint64_t tid;
+        item >> tid;
+
+        result << "[T" << tid << ']';
+        result << "Path Constraint:";
+
+        for (std::string line; std::getline(item, line); ) {
+          result << line;
+        }
+        output = true;
+        break;
+      }
       default:
         result << "[UNKNOWN:";
         result << *it;
