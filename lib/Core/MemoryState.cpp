@@ -427,22 +427,15 @@ bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
                     instValue) != basicBlockInfo.liveRegisters.end());
 }
 
-
-bool MemoryState::shouldRegisterLocal(const llvm::Instruction *inst) {
-  if (disableMemoryState)
-    return false;
-
-  if (!isLocalLive(inst))
-    return false;
-
-  return true;
-}
-
 void MemoryState::registerLocal(std::uint64_t threadID,
                                 std::size_t stackFrameIndex,
                                 const llvm::Instruction *inst,
                                 ref<Expr> value) {
-  if (inst == nullptr || value.isNull() || !shouldRegisterLocal(inst))
+  bool abort = disableMemoryState;
+  abort |= (inst == nullptr);
+  abort |= value.isNull();
+  abort |= !isLocalLive(inst);
+  if (abort)
     return;
 
   applyLocalFragment(threadID, stackFrameIndex, inst, value);
@@ -458,8 +451,14 @@ void MemoryState::registerLocal(std::uint64_t threadID,
 void MemoryState::unregisterLocal(std::uint64_t threadID,
                                   std::size_t stackFrameIndex,
                                   const llvm::Instruction *inst,
-                                  ref<Expr> value) {
-  if (inst == nullptr || value.isNull() || !shouldRegisterLocal(inst))
+                                  ref<Expr> value,
+                                  bool force) {
+  bool abort = disableMemoryState;
+  abort |= (inst == nullptr);
+  abort |= value.isNull();
+  // in case of removal of dead locals, shouldRegisterLocal() is already false
+  abort |= !(isLocalLive(inst) || force);
+  if (abort)
     return;
 
   applyLocalFragment(threadID, stackFrameIndex, inst, value);
@@ -567,7 +566,8 @@ void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
                    << ") is dead in any successor: "
                    << "%" << inst->getName() << "\n";
     }
-    unregisterLocal(threadID, stackFrameIndex, inst);
+    ref<Expr> value = getLocalValue(inst);
+    unregisterLocal(threadID, stackFrameIndex, inst, value, true);
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
     clearLocal(inst);
@@ -593,7 +593,8 @@ void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
                    << " (after evaluation of PHI nodes, if any)"
                    << ": %" << inst->getName() << "\n";
     }
-    unregisterLocal(threadID, stackFrameIndex, inst);
+    ref<Expr> value = getLocalValue(inst);
+    unregisterLocal(threadID, stackFrameIndex, inst, value, true);
     // set local within KLEE to NULL to mark it as dead
     // this prevents us from unregistering this local twice
     clearLocal(inst);

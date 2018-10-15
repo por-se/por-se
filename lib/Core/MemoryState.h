@@ -114,13 +114,18 @@ private:
                               const llvm::BasicBlock *dst,
                               const llvm::BasicBlock *src);
 
+  void unregisterLocal(std::uint64_t threadID,
+                       std::size_t stackFrameIndex,
+                       const llvm::Instruction *inst,
+                       ref<Expr> value,
+                       bool force);
+
   void applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
                           const ObjectState &os, std::size_t bytes);
   void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
                           const llvm::Instruction *inst, ref<Expr> value);
 
   bool isLocalLive(const llvm::Instruction *inst);
-  bool shouldRegisterLocal(const llvm::Instruction *inst);
 
   bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const;
   MemoryFingerprint::fingerprint_t *
@@ -194,11 +199,8 @@ public:
   void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
                      const llvm::Instruction *inst, ref<Expr> value);
   void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                       const llvm::Instruction *inst, ref<Expr> value);
-  void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                       const llvm::Instruction *inst) {
-    ref<Expr> value = getLocalValue(inst);
-    unregisterLocal(threadID, stackFrameIndex, inst, value);
+                       const llvm::Instruction *inst, ref<Expr> value) {
+    unregisterLocal(threadID, stackFrameIndex, inst, value, false);
   }
 
   void registerArgument(std::uint64_t threadID,
