@@ -719,7 +719,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
                                     std::size_t stackFrameIndex,
                                     const KFunction *callee,
                                     const llvm::Instruction *caller) {
-  // IMPORTANT: has to be called after state.popFrame()
+  // IMPORTANT: has to be called after state.pushFrame()
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
@@ -773,6 +773,11 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
       symbolicReferences[s.first] -= s.second;
     }
 
+    std::string previousDelta;
+    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+        previousDelta = fingerprint.getStackFrameDeltaAsString();
+    }
+
     // remove changes only accessible to stack frame that is to be left
     StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
     fingerprint.discardStackFrameDelta();
@@ -783,8 +788,7 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     }
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "reapplying stack frame delta: "
-                   << fingerprint.getStackFrameDeltaAsString()
+      llvm::errs() << "removing stack frame delta: " << previousDelta
                    << "\nFingerprint: " << fingerprint.getFingerprintAsString()
                    << "\n";
     }
