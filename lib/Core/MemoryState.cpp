@@ -917,7 +917,6 @@ MemoryState::getSymbolicReferences(const MemoryObject &mo) const {
   if (mo.isLocal) {
     Thread &thread = executionState->getCurrentThreadReference();
     size_t index = mo.getStackframeIndex();
-    assert(index == (thread.stack.size() - 1));
     return &thread.stack.at(index).symbolicReferences;
   }
   return nullptr;
