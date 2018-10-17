@@ -812,9 +812,26 @@ public:
   Action visitRead(const ReadExpr &e) {
     // this actually counts the number of bytes referenced,
     // as each ReadExpr represents a one byte read
+
+    // root array
     const Array *arr = e.updates.root;
     ++references[arr];
-    return Action::doChildren();
+
+    // symbolic index
+    if (!isa<ConstantExpr>(e.index))
+      visit(e.index);
+
+    // update list
+    auto update = e.updates.head;
+    for (; update != nullptr; update=update->next) {
+      if (!isa<ConstantExpr>(update->index))
+        visit(update->index);
+      if (!isa<ConstantExpr>(update->value))
+        visit(update->value);
+    }
+
+    // only child node is index, which is already handled
+    return Action::skipChildren();
   }
 };
 
