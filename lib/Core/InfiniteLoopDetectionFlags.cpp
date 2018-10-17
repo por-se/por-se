@@ -1,7 +1,5 @@
 #include "InfiniteLoopDetectionFlags.h"
 
-#include "klee/Config/Version.h"
-
 namespace klee {
 
 llvm::cl::opt<bool> DetectInfiniteLoops(

@@ -1,7 +1,9 @@
 #ifndef KLEE_INFINITELOOPDETECTIONFLAGS_H
 #define KLEE_INFINITELOOPDETECTIONFLAGS_H
 
-#include "klee/CommandLine.h"
+#include "klee/Config/Version.h"
+
+#include "llvm/Support/CommandLine.h"
 
 namespace klee {
 
