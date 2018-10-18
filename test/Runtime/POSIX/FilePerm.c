@@ -1,6 +1,6 @@
 // RUN: %llvmgcc %s -emit-llvm -O0 -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --posix-runtime %t.bc --sym-files 1 10 --sym-stdout 2>%t.log 
+// RUN: %klee --output-dir=%t.klee-out -detect-infinite-loops=0 --posix-runtime %t.bc --sym-files 1 10 --sym-stdout 2>%t.log
 // RUN: test -f %t.klee-out/test000001.ktest
 // RUN: test -f %t.klee-out/test000002.ktest
 // RUN: test -f %t.klee-out/test000003.ktest
