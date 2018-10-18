@@ -180,6 +180,7 @@ void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
           if (phiLive.count(phiValue) > 0) {
             // result of PHI node is live after evaluation of last PHI node
             killed.erase(phiValue);
+            succInfo.termLive->insert(phiValue);
           }
         } else {
           // http://releases.llvm.org/3.4.2/docs/LangRef.html#phi-instruction
