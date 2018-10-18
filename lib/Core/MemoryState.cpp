@@ -842,7 +842,13 @@ MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
     expressions.push_back(expr);
   }
   std::sort(expressions.begin(), expressions.end(), [](ref<Expr> a, ref<Expr> b) {
-    return a->hash() < b->hash();
+    auto aHash = a->hash();
+    auto bHash = b->hash();
+    if (aHash != bHash) {
+      return aHash < bHash;
+    } else {
+      return a < b;
+    }
   });
 
   // map all expressions to arrays that they constrain
