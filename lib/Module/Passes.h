@@ -185,13 +185,15 @@ public:
 /// of another pass).
 class LiveRegisterPass : public llvm::FunctionPass {
 private:
-  bool annotate;
+  bool annotate = false;
+  llvm::Function *F = nullptr;
 
 public:
   static char ID;
-  LiveRegisterPass(bool debug) : FunctionPass(ID), annotate(debug) {}
+  LiveRegisterPass(bool debug = false) : FunctionPass(ID), annotate(debug) {}
 
   bool runOnFunction(llvm::Function &F) override;
+  void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
 
 private:
   typedef std::pair<llvm::Instruction*, llvm::Instruction*> edge_t;

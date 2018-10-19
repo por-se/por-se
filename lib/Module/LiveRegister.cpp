@@ -30,6 +30,8 @@ namespace klee {
 char LiveRegisterPass::ID = 0;
 
 bool LiveRegisterPass::runOnFunction(Function &F) {
+  this->F = &F;
+
   // Add nop instruction before the first instruction of each basic block
   // to get live registers at the beginning of each basic block (as our analysis
   // propagates backwards, we would otherwise only know which registers are live
@@ -363,6 +365,48 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
 
       previ = i;
     }
+  }
+}
+
+template<typename T>
+void printValuesAsSet(raw_ostream &os, T &set) {
+  os << "{";
+  bool first = true;
+  for (Value *value : set) {
+    os << (first ? "" : ", ");
+    if (value->hasName())
+      os << "%" << value->getName();
+    else
+      os << "unnamed";
+    first = false;
+  }
+  os << "}\n";
+}
+
+void LiveRegisterPass::print(raw_ostream &os, const Module *M) const {
+  const Function &F = *this->F;
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
+    const BasicBlock &bb = *it;
+    const BasicBlockInfo &bbInfo = basicBlocks.at(&bb);
+    const valueset_t &termLive = *bbInfo.termLive;
+    const valueset_t &consumed = bbInfo.consumed;
+
+    os << bb.getName() << ":\n";
+    os << "  live after terminator instruction: ";
+    printValuesAsSet(os, termLive);
+    os << "  consumed during BasicBlock: ";
+    printValuesAsSet(os, consumed);
+
+    for (auto it = succ_begin(&bb), e = succ_end(&bb); it != e; ++it) {
+      const BasicBlock &succ = **it;
+      const valueset_t &killed = bbInfo.killed.at(&succ);
+
+      os << "  killed on transition to " << succ.getName();
+      os << " (after PHI node processing): ";
+      printValuesAsSet(os, killed);
+    }
+
+    os << "\n";
   }
 }
 
