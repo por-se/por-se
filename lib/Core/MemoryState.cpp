@@ -567,6 +567,10 @@ void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
   auto liveset = kf->basicBlockValueLivenessInfo.at(bb).getLiveValues();
   basicBlockInfo.liveRegisters = std::vector<llvm::Value *>(liveset.begin(),
                                                             liveset.end());
+  auto consumed = kf->basicBlockValueLivenessInfo.at(bb).getConsumedValues();
+  basicBlockInfo.liveRegisters.insert(basicBlockInfo.liveRegisters.end(),
+                                      consumed.begin(),
+                                      consumed.end());
 }
 
 void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
