@@ -355,9 +355,16 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
 
 template<typename T>
 void printValuesAsSet(raw_ostream &os, T &set) {
+  auto values = std::vector<Value *>(set.begin(), set.end());
+  std::sort(values.begin(), values.end(), [](Value *a, Value *b) {
+    if (!a->hasName()) return false;
+    if (b->hasName())
+      return a->getName() < b->getName();
+    return true;
+  });
   os << "{";
   bool first = true;
-  for (Value *value : set) {
+  for (Value *value : values) {
     os << (first ? "" : ", ");
     if (value->hasName())
       os << "%" << value->getName();
@@ -377,6 +384,19 @@ void LiveRegisterPass::print(raw_ostream &os, const Module *M) const {
     const valueset_t &consumed = bbInfo.consumed;
 
     os << bb.getName() << ":\n";
+    for (auto it = bb.begin(), ie = bb.end(); it != ie; ++it) {
+      const Instruction &inst = *it;
+      os << inst;
+      if (inst.getOpcode() != Instruction::PHI || bbInfo.lastPHI == &inst) {
+        os << " ; live = ";
+        const valueset_t &instLive = instructions.at(&inst).live;
+        printValuesAsSet(os, instLive);
+      } else {
+        os << "\n";
+      }
+    }
+    os << "\n";
+
     os << "  live after terminator instruction: ";
     printValuesAsSet(os, termLive);
     os << "  consumed during BasicBlock: ";
