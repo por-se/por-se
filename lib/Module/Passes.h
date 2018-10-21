@@ -211,7 +211,8 @@ private:
   std::unordered_map<const llvm::Instruction *, InstructionInfo> instructions;
 
   struct BasicBlockInfo {
-    valueset_t *firstLive = nullptr; // InstructionInfo live set of NOP inst
+    const llvm::Instruction *lastPHI = nullptr;
+    valueset_t *phiLive = nullptr; // InstructionInfo live set of lastPHI or NOP
     valueset_t *termLive = nullptr; // InstructionInfo live set of terminator
     valueset_t consumed;
     std::unordered_map<const llvm::BasicBlock *, valueset_t> killed;
@@ -234,6 +235,9 @@ private:
 
   void computeBasicBlockInfo(llvm::Function &F);
   void attachAnalysisResultAsMetadata(llvm::Function &F);
+
+  // returns last PHI node if any, otherwise NOP instruction
+  const llvm::Instruction *getLastPHIInstruction(llvm::BasicBlock &BB) const;
 
   void generateInstructionInfo(llvm::Function &F);
   void addPredecessors(std::vector<edge_t> &worklist,

@@ -123,23 +123,41 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(Function &F) {
   }
 }
 
+const Instruction *
+LiveRegisterPass::getLastPHIInstruction(BasicBlock &BB) const {
+  // Note: We cannot use getFirstNonPHI() here because of the NOP
+  const Instruction *firstRealInstruction = &*std::next(BB.begin());
+  const Instruction *lastPHI = &*BB.begin();
+  if (firstRealInstruction->getOpcode() == Instruction::PHI) {
+    lastPHI = firstRealInstruction;
+    while (lastPHI->getNextNode()->getOpcode() == Instruction::PHI) {
+      lastPHI = lastPHI->getNextNode();
+    }
+  }
+  return lastPHI;
+}
+
 void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
   for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
     BasicBlock &bb = *it;
 
     BasicBlockInfo &bbInfo = basicBlocks[&bb];
 
-    // "firstLive": registers that are live at the start of BB
-    // use live register set of nop instruction since instruction info only
+    // "lastPHI": last PHI node if any, otherwise NOP instruction
+    bbInfo.lastPHI = getLastPHIInstruction(bb);
+
+    // "phiLive": registers that are live after the last PHI node or NOP
+    // In other words: before first "real" instruction.
+    // Use live register set of NOP instruction since instruction info only
     // reflects registers that are live *after* the execution of the associated
     // instruction
-    bbInfo.firstLive = &instructions[&*bb.begin()].live;
+    bbInfo.phiLive = &instructions[bbInfo.lastPHI].live;
 
     // "termLive": registers that are live at the end of the BB
     bbInfo.termLive = &instructions[bb.getTerminator()].live;
 
     // "consumed": registers that are not read in any of BB's successors
-    bbInfo.consumed = set_difference(*bbInfo.firstLive, *bbInfo.termLive);
+    bbInfo.consumed = set_difference(*bbInfo.phiLive, *bbInfo.termLive);
   }
 
   // in the following, we assume that consumed registers are already calculated
@@ -157,44 +175,11 @@ void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
       // "killed": registers that are only used by specific succeeding BBs but
       // not by succ (the currently considered successor)
       auto &killed = bbInfo.killed[&succ];
-      killed = set_difference(*bbInfo.termLive, *succInfo.firstLive);
+      auto &firstLive = instructions[&*succ.begin()].live;
+      killed = set_difference(*bbInfo.termLive, firstLive);
 
       // exclude registers that are consumed during the succeeding basic block
       set_subtract(killed, succInfo.consumed);
-
-      // exclude registers that are being written to by PHI nodes in
-      // succeeding basic block
-      for (auto it = std::next(succ.begin()), e = succ.end(); it != e; ++it) {
-        const Instruction &i = *it;
-        const Instruction *lastPHI = &i;
-        if (i.getOpcode() == Instruction::PHI) {
-          Value *phiValue = cast<Value>(const_cast<Instruction *>(&i));
-
-          // last PHI node in current BasicBlock
-          // Note: We cannot use getFirstNonPHI() here because of the NOP.
-          while (lastPHI->getNextNode()->getOpcode() == Instruction::PHI) {
-            lastPHI = lastPHI->getNextNode();
-          }
-
-          // values live after the evaluation of last PHI node
-          valueset_t &phiLive = instructions[lastPHI].live;
-
-          if (phiLive.count(phiValue) > 0) {
-            // result of PHI node is live after evaluation of last PHI node
-            killed.erase(phiValue);
-            succInfo.termLive->insert(phiValue);
-          }
-        } else {
-          // http://releases.llvm.org/3.4.2/docs/LangRef.html#phi-instruction
-          // "There must be no non-phi instructions between the start of a
-          //  basic block and the PHI instructions: i.e. PHI instructions must
-          //  be first in a basic block."
-          // Thus, we can abort as soon as we encounter a non-PHI instruction
-          // (This is only valid here, because in this for-loop, we skip the
-          // nop instruction inserted at the begining of each basic block)
-          break;
-        }
-      }
     }
   }
 }
