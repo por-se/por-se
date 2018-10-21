@@ -268,13 +268,6 @@ void KModule::optimiseAndPrepare(
   pm3.add(new IntrinsicCleanerPass(*targetData));
   pm3.add(new PhiCleanerPass());
   pm3.add(operandTypeCheckPass);
-
-  // this LiveRegisterPass run is only used for annotating debug metadata,
-  // the actual analysis result is not used.
-  if (DetectInfiniteLoops && !InfiniteLoopDetectionDisableLiveVariableAnalysis)
-    if (InfiniteLoopDetectionDebugLiveVariableAnalysis)
-      pm3.add(new LiveRegisterPass(true));
-
   pm3.run(*module);
 
   // Enforce the operand type invariants that the Executor expects.  This
@@ -343,9 +336,8 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
     llvm::errs() << "]\n";
   }
 
-  if (DetectInfiniteLoops && !InfiniteLoopDetectionDisableLiveVariableAnalysis)
-  {
-    LiveRegisterPass lrp(InfiniteLoopDetectionDebugLiveVariableAnalysis);
+  if (DetectInfiniteLoops) {
+    LiveRegisterPass lrp;
     for (auto &kf : functions) {
       lrp.runOnFunction(*kf->function);
       auto bbInfo = lrp.getBasicBlockInfoMap();

@@ -185,12 +185,11 @@ public:
 /// of another pass).
 class LiveRegisterPass : public llvm::FunctionPass {
 private:
-  bool annotate = false;
   llvm::Function *F = nullptr;
 
 public:
   static char ID;
-  LiveRegisterPass(bool debug = false) : FunctionPass(ID), annotate(debug) {}
+  LiveRegisterPass() : FunctionPass(ID) {}
 
   bool runOnFunction(llvm::Function &F) override;
   void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
@@ -234,7 +233,6 @@ private:
   void propagatePhiUseToLiveSet(llvm::Function &F);
 
   void computeBasicBlockInfo(llvm::Function &F);
-  void attachAnalysisResultAsMetadata(llvm::Function &F);
 
   // returns last PHI node if any, otherwise NOP instruction
   const llvm::Instruction *getLastPHIInstruction(llvm::BasicBlock &BB) const;

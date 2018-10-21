@@ -28,11 +28,6 @@ llvm::cl::opt<bool> InfiniteLoopDetectionDisableLiveVariableAnalysis(
   llvm::cl::desc("Disable live variable analysis used for infinite loop detection (default=false)"),
   llvm::cl::init(false));
 
-llvm::cl::opt<bool> InfiniteLoopDetectionDebugLiveVariableAnalysis(
-  "infinite-loop-detection-debug-live-variable-analysis",
-  llvm::cl::desc("Debug live variable analysis used for infinite loop detection by adding LLVM IR Metadata (default=false)"),
-  llvm::cl::init(false));
-
 llvm::cl::opt<bool> InfiniteLoopLogStateJSON(
   "infinite-loop-detection-log-state-json-files",
   llvm::cl::desc("Creates two files (states.json, states_fork.json) in output directory that record relevant information about states such as MemoryTrace length (default=false)"),
