@@ -195,8 +195,8 @@ public:
   void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
 
 private:
-  typedef std::pair<llvm::Instruction*, llvm::Instruction*> edge_t;
-  typedef std::unordered_set<llvm::Value *> valueset_t;
+  typedef std::pair<const llvm::Instruction*, const llvm::Instruction*> edge_t;
+  typedef std::unordered_set<const llvm::Value *> valueset_t;
 
   std::vector<edge_t> worklist;
 
@@ -228,16 +228,17 @@ public:
 
 private:
 
-  void initializeWorklist(llvm::Function &F);
+  void initializeWorklist(const llvm::Function &F);
   void executeWorklistAlgorithm();
-  void propagatePhiUseToLiveSet(llvm::Function &F);
+  void propagatePhiUseToLiveSet(const llvm::Function &F);
 
-  void computeBasicBlockInfo(llvm::Function &F);
+  void computeBasicBlockInfo(const llvm::Function &F);
 
   // returns last PHI node if any, otherwise NOP instruction
-  const llvm::Instruction *getLastPHIInstruction(llvm::BasicBlock &BB) const;
+  const llvm::Instruction *
+  getLastPHIInstruction(const llvm::BasicBlock &BB) const;
 
-  void generateInstructionInfo(llvm::Function &F);
+  void generateInstructionInfo(const llvm::Function &F);
   void addPredecessors(std::vector<edge_t> &worklist,
                        const llvm::Instruction *i);
   valueset_t transition(const llvm::Instruction *i, const valueset_t &set);

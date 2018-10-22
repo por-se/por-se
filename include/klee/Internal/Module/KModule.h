@@ -45,7 +45,7 @@ namespace klee {
   struct BasicBlockValueLivenessInfo {
   private:
 
-    typedef std::unordered_set<llvm::Value *> valueset_t;
+    typedef std::unordered_set<const llvm::Value *> valueset_t;
 
     static valueset_t emptySet;
 

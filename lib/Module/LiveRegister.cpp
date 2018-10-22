@@ -36,7 +36,7 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
   // propagates backwards, we would otherwise only know which registers are live
   // after the execution of the first instruction of each basic block).
   // Introduced instructions are removed again at the end of this pass.
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
     BasicBlock &bb = *it;
     LLVMContext &ctx = bb.getContext();
     bb.getInstList().insert(bb.begin(), createNopInstruction(ctx));
@@ -49,7 +49,7 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
   computeBasicBlockInfo(F);
 
   // remove nop instructions that were added in the initialization phase
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
     BasicBlock &bb = *it;
     Instruction &nop = *bb.begin();
     nop.eraseFromParent();
@@ -58,7 +58,7 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
   return false;
 }
 
-void LiveRegisterPass::initializeWorklist(Function &F) {
+void LiveRegisterPass::initializeWorklist(const Function &F) {
   // clean up from previous runs
   worklist.clear();
   instructions.clear();
@@ -66,7 +66,7 @@ void LiveRegisterPass::initializeWorklist(Function &F) {
   // generate gen and kill sets for each instruction
   generateInstructionInfo(F);
 
-  for (inst_iterator it = inst_begin(F), e = inst_end(F); it != e; ++it) {
+  for (auto it = inst_begin(F), ie = inst_end(F); it != ie; ++it) {
     addPredecessors(worklist, &*it);
   }
 }
@@ -88,10 +88,10 @@ void LiveRegisterPass::executeWorklistAlgorithm() {
   }
 }
 
-void LiveRegisterPass::propagatePhiUseToLiveSet(Function &F) {
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
-    BasicBlock &bb = *it;
-    Instruction *term = bb.getTerminator();
+void LiveRegisterPass::propagatePhiUseToLiveSet(const Function &F) {
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
+    const BasicBlock &bb = *it;
+    const Instruction *term = bb.getTerminator();
     valueset_t &termLive = instructions[term].live;
     valueset_t &termGen = instructions[term].gen;
 
@@ -99,13 +99,13 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(Function &F) {
     // included in the gen set of the terminator instruction but was not yet
     // propagated into its live set. Here, we simply insert all values that are
     // used by PHI nodes into the terminator instruction's live set.
-    for (Value *value : termGen) {
+    for (const Value *value : termGen) {
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
       for (auto i = value->user_begin(), e = value->user_end(); i != e; ++i) {
 #else
       for (auto i = value->use_begin(), e = value->use_end(); i != e; ++i) {
 #endif
-        if (Instruction *inst = dyn_cast<Instruction>(*i)) {
+        if (const Instruction *inst = dyn_cast<Instruction>(*i)) {
           if (inst->getOpcode() == Instruction::PHI) {
             // found usage (of value in gen set) by a PHI node
             termLive.insert(value);
@@ -120,7 +120,7 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(Function &F) {
 }
 
 const Instruction *
-LiveRegisterPass::getLastPHIInstruction(BasicBlock &BB) const {
+LiveRegisterPass::getLastPHIInstruction(const BasicBlock &BB) const {
   // Note: We cannot use getFirstNonPHI() here because of the NOP
   const Instruction *firstRealInstruction = &*std::next(BB.begin());
   const Instruction *lastPHI = &*BB.begin();
@@ -133,10 +133,9 @@ LiveRegisterPass::getLastPHIInstruction(BasicBlock &BB) const {
   return lastPHI;
 }
 
-void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
-    BasicBlock &bb = *it;
-
+void LiveRegisterPass::computeBasicBlockInfo(const Function &F) {
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
+    const BasicBlock &bb = *it;
     BasicBlockInfo &bbInfo = basicBlocks[&bb];
 
     // "lastPHI": last PHI node if any, otherwise NOP instruction
@@ -166,18 +165,18 @@ void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
   }
 }
 
-void LiveRegisterPass::generateInstructionInfo(Function &F) {
+void LiveRegisterPass::generateInstructionInfo(const Function &F) {
   basicBlocks.reserve(F.size());
   size_t numInstructions = 0;
   // iterate over all basic blocks
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
-    BasicBlock &bb = *it;
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
+    const BasicBlock &bb = *it;
     basicBlocks[&bb] = {};
     numInstructions += bb.size();
     instructions.reserve(numInstructions);
     // iterate over all instructions within a basic block
-    for (BasicBlock::iterator it = bb.begin(), e = bb.end(); it != e; ++it) {
-      Instruction *i = &*it;
+    for (auto it = bb.begin(), ie = bb.end(); it != ie; ++it) {
+      const Instruction *i = &*it;
       instructions[i] = {};
     }
   }
@@ -187,21 +186,21 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
   // over all instructions twice.
 
   // iterate over all basic blocks
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
-    BasicBlock &bb = *it;
-    Instruction *previ = &*bb.begin();
+  for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
+    const BasicBlock &bb = *it;
+    const Instruction *previ = &*bb.begin();
     // iterate over all instructions within a basic block
-    for (BasicBlock::iterator it = bb.begin(), e = bb.end(); it != e; ++it) {
-      Instruction *i = &*it;
+    for (auto it = bb.begin(), ie = bb.end(); it != ie; ++it) {
+      const Instruction *i = &*it;
       InstructionInfo &ii = instructions[i];
 
       // generate predecessorEdges
       if (it == bb.begin()) {
         // first instruction in basic block: insert terminator instructions of
         // all preceding basic blocks as predecessors
-        for (auto it = pred_begin(&bb), e = pred_end(&bb); it != e; ++it) {
-          BasicBlock *pred = *it;
-          if (Instruction *predTerm = pred->getTerminator()) {
+        for (auto it = pred_begin(&bb), ie = pred_end(&bb); it != ie; ++it) {
+          const BasicBlock *pred = *it;
+          if (const Instruction *predTerm = pred->getTerminator()) {
             ii.predecessorEdges.emplace_back(std::make_pair(i, predTerm));
           }
         }
@@ -224,22 +223,22 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
         // block's terminator instruction because operands of PHI nodes
         // are not in general live at the start of the basic block that
         // contain the corresponding PHI node
-        PHINode *phi = cast<PHINode>(i);
+        const PHINode *phi = cast<PHINode>(i);
 
         // iterate over all incoming basic blocks
         for (auto ib = phi->block_begin(), e = phi->block_end(); ib != e; ++ib)
         {
-          Value *value = phi->getIncomingValueForBlock(*ib);
+          const Value *value = phi->getIncomingValueForBlock(*ib);
           if (isa<Instruction>(value)) {
-            Instruction *incomingTerm = (*ib)->getTerminator();
+            const Instruction *incomingTerm = (*ib)->getTerminator();
             InstructionInfo &incomingII = instructions[incomingTerm];
             incomingII.gen.insert(value);
           }
         }
       } else if (i->getNumOperands() != 0) {
         // iterate over all operands (uses) of the current instruction
-        for (auto use = i->op_begin(), e = i->op_end(); use != e; ++use) {
-          if (Instruction *op = dyn_cast<Instruction>(use->get())) {
+        for (auto use = i->op_begin(), ie = i->op_end(); use != ie; ++use) {
+          if (const Instruction *op = dyn_cast<Instruction>(use->get())) {
             ii.gen.insert(op);
           }
         }
@@ -252,8 +251,8 @@ void LiveRegisterPass::generateInstructionInfo(Function &F) {
 
 template<typename T>
 void printValuesAsSet(raw_ostream &os, T &set) {
-  auto values = std::vector<Value *>(set.begin(), set.end());
-  std::sort(values.begin(), values.end(), [](Value *a, Value *b) {
+  auto values = std::vector<const Value *>(set.begin(), set.end());
+  std::sort(values.begin(), values.end(), [](const Value *a, const Value *b) {
     if (!a->hasName()) return false;
     if (b->hasName())
       return a->getName() < b->getName();
@@ -261,7 +260,7 @@ void printValuesAsSet(raw_ostream &os, T &set) {
   });
   os << "{";
   bool first = true;
-  for (Value *value : values) {
+  for (const Value *value : values) {
     os << (first ? "" : ", ");
     if (value->hasName())
       os << "%" << value->getName();
@@ -299,7 +298,7 @@ void LiveRegisterPass::print(raw_ostream &os, const Module *M) const {
     os << "  live after terminator instruction: ";
     printValuesAsSet(os, termLive);
 
-    for (auto it = succ_begin(&bb), e = succ_end(&bb); it != e; ++it) {
+    for (auto it = succ_begin(&bb), ie = succ_end(&bb); it != ie; ++it) {
       const BasicBlock &succ = **it;
       const valueset_t &killed = bbInfo.killed.at(&succ);
 
