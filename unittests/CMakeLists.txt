@@ -7,6 +7,16 @@
 #
 #===------------------------------------------------------------------------===#
 
+if (TARGET gtest OR TARGET gtest_main)
+  if (LLVM_BUILD_MAIN_SRC_DIR)
+    # Reuse LLVM's googletest setup
+    set(GTEST_INCLUDE_DIR "${LLVM_BUILD_MAIN_SRC_DIR}/utils/unittest/googletest/include")
+  else()
+    message(FATAL_ERROR "Target 'gtest' or 'gtest_main' is already defined, "
+      "but LLVM source is not available. You may disable unit tests by passing"
+      "-DENABLE_UNIT_TESTS=OFF to cmake.")
+  endif()
+else()
 # Build GTest. We don't use a pre-built version due to
 # https://github.com/google/googletest/blob/master/googletest/docs/FAQ.md#why-is-it-not-recommended-to-install-a-pre-compiled-copy-of-google-test-for-example-into-usrlocal
 set(GTEST_SRC_DIR
@@ -43,6 +53,15 @@ add_subdirectory(${GTEST_SRC_DIR} "${CMAKE_CURRENT_BINARY_DIR}/gtest_build")
 
 set(CMAKE_CXX_FLAGS "${_OLD_CMAKE_CXX_FLAGS}") # Restore the flags
 
+set(GTEST_INCLUDE_DIR
+  "${GTEST_SRC_DIR}/include"
+  CACHE
+  PATH
+  "Path to GTest include directory"
+)
+endif()
+
+
 # This keeps track of all the unit test
 # targets so we can ensure they are built
 # before trying to run them.
@@ -50,13 +69,6 @@ define_property(GLOBAL
   PROPERTY KLEE_UNIT_TEST_TARGETS
   BRIEF_DOCS "KLEE unit tests"
   FULL_DOCS "KLEE unit tests"
-)
-
-set(GTEST_INCLUDE_DIR
-  "${GTEST_SRC_DIR}/include"
-  CACHE
-  PATH
-  "Path to GTest include directory"
 )
 
 if (NOT IS_DIRECTORY "${GTEST_INCLUDE_DIR}")
