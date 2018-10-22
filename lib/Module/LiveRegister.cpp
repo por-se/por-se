@@ -144,38 +144,24 @@ void LiveRegisterPass::computeBasicBlockInfo(Function &F) {
 
     // "phiLive": registers that are live after the last PHI node or NOP
     // In other words: before first "real" instruction.
-    // Use live register set of NOP instruction since instruction info only
-    // reflects registers that are live *after* the execution of the associated
-    // instruction
     bbInfo.phiLive = &instructions[bbInfo.lastPHI].live;
 
     // "termLive": registers that are live at the end of the BB
     bbInfo.termLive = &instructions[bb.getTerminator()].live;
 
     // "consumed": registers that are not read in any of BB's successors
+    // this can be values from previous BB but also ones written in PHI nodes
     bbInfo.consumed = set_difference(*bbInfo.phiLive, *bbInfo.termLive);
-  }
 
-  // in the following, we assume that consumed registers are already calculated
-  // for all BBs
+    for (auto it = pred_begin(&bb), ie = pred_end(&bb); it != ie; ++it) {
+      const BasicBlock &pred = **it;
+      BasicBlockInfo &predInfo = basicBlocks[&pred];
+      const Instruction *predTerm = pred.getTerminator();
 
-  for (Function::iterator it = F.begin(), e = F.end(); it != e; ++it) {
-    BasicBlock &bb = *it;
-    BasicBlockInfo &bbInfo = basicBlocks[&bb];
-
-    std::vector<Value *> k;
-    for (auto it = succ_begin(&bb), e = succ_end(&bb); it != e; ++it) {
-      BasicBlock &succ = **it;
-      BasicBlockInfo &succInfo = basicBlocks[&succ];
-
-      // "killed": registers that are only used by specific succeeding BBs but
-      // not by succ (the currently considered successor)
-      auto &killed = bbInfo.killed[&succ];
-      auto &firstLive = instructions[&*succ.begin()].live;
-      killed = set_difference(*bbInfo.termLive, firstLive);
-
-      // exclude registers that are consumed during the succeeding basic block
-      set_subtract(killed, succInfo.consumed);
+      // "killed": registers that are not used in `bb` succeeding `pred` after
+      // evaluation of PHI nodes, but may be live in other BBs succeeding `pred`
+      predInfo.killed[&bb] = set_difference(instructions[predTerm].live,
+                                            *bbInfo.phiLive);
     }
   }
 }
@@ -308,10 +294,10 @@ void LiveRegisterPass::print(raw_ostream &os, const Module *M) const {
     }
     os << "\n";
 
+    os << "  consumed after PHI nodes (if any): ";
+    printValuesAsSet(os, consumed);
     os << "  live after terminator instruction: ";
     printValuesAsSet(os, termLive);
-    os << "  consumed during BasicBlock: ";
-    printValuesAsSet(os, consumed);
 
     for (auto it = succ_begin(&bb), e = succ_end(&bb); it != e; ++it) {
       const BasicBlock &succ = **it;

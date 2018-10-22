@@ -432,9 +432,8 @@ bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
   updateBasicBlockInfo(inst->getParent());
 
   const llvm::Value *instValue = cast<llvm::Value>(inst);
-  return (std::find(basicBlockInfo.liveRegisters.begin(),
-                    basicBlockInfo.liveRegisters.end(),
-                    instValue) != basicBlockInfo.liveRegisters.end());
+  auto &live = basicBlockInfo.liveRegisters;
+  return (live.find(instValue) != live.end());
 }
 
 void MemoryState::registerLocal(std::uint64_t threadID,
@@ -560,17 +559,13 @@ void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
   if (basicBlockInfo.bb == bb)
     return;
 
-  basicBlockInfo.bb = bb;
-  basicBlockInfo.liveRegisters.clear();
-
   KFunction *kf = getKFunction(bb);
-  auto liveset = kf->basicBlockValueLivenessInfo.at(bb).getLiveValues();
-  basicBlockInfo.liveRegisters = std::vector<llvm::Value *>(liveset.begin(),
-                                                            liveset.end());
+  auto termLive = kf->basicBlockValueLivenessInfo.at(bb).getLiveValues();
   auto consumed = kf->basicBlockValueLivenessInfo.at(bb).getConsumedValues();
-  basicBlockInfo.liveRegisters.insert(basicBlockInfo.liveRegisters.end(),
-                                      consumed.begin(),
-                                      consumed.end());
+
+  basicBlockInfo.bb = bb;
+  basicBlockInfo.liveRegisters = termLive; // clears old values
+  basicBlockInfo.liveRegisters.insert(consumed.begin(), consumed.end());
 }
 
 void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
@@ -585,10 +580,9 @@ void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
   for (auto &c : consumed) {
     llvm::Instruction *inst = static_cast<llvm::Instruction *>(c);
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Following variable (last written to "
-                   << "in BasicBlock %" << bb->getName()
-                   << ") is dead in any successor: "
-                   << "%" << inst->getName() << "\n";
+      llvm::errs() << "MemoryState: Following variable is dead"
+                   << " after transition from BasicBlock %" << bb->getName()
+                   << ": %" << inst->getName() << "\n";
     }
     ref<Expr> value = getLocalValue(inst);
     unregisterLocal(threadID, stackFrameIndex, inst, value, true);
@@ -672,12 +666,12 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
   }
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: The following variables are live "
-                 << "at the end of BasicBlock " << dst->getName() << ": {";
-    for (std::size_t i = 0; i < basicBlockInfo.liveRegisters.size(); ++i) {
-      bool last = (i == basicBlockInfo.liveRegisters.size() - 1);
-      llvm::Value *liveRegister = basicBlockInfo.liveRegisters.at(i);
-      llvm::errs() << "%" << liveRegister->getName() << (last ? "" : ", ");
+    llvm::errs() << "MemoryState: The following variables are live: {";
+    std::string delimiter = "";
+    for (auto &value : basicBlockInfo.liveRegisters) {
+      auto name = (value->hasName() ? ("%" + value->getName()) : "unnamed");
+      llvm::errs() << delimiter << name;
+      delimiter = ", ";
     }
     llvm::errs() << "}\n";
   }

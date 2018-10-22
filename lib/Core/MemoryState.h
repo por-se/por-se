@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace llvm {
 class BasicBlock;
@@ -62,7 +63,7 @@ private:
 
   struct basicBlockInfo {
     const llvm::BasicBlock *bb = nullptr;
-    std::vector<llvm::Value *> liveRegisters;
+    std::unordered_set<const llvm::Value *> liveRegisters;
   } basicBlockInfo;
 
   static size_t externalFunctionCallCounter;
