@@ -35,6 +35,19 @@ if (USE_CMAKE_FIND_PACKAGE_LLVM)
   endfunction()
   # HACK: This information is not exported so just pretend its OFF for now.
   set(LLVM_ENABLE_VISIBILITY_INLINES_HIDDEN OFF)
+
+  function(klee_add_llvm_loadable_module name)
+    if(POLICY CMP0057)
+      cmake_policy(SET CMP0057 NEW)
+    endif()
+
+    list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+    include(AddLLVM)
+    add_definitions(${LLVM_DEFINITIONS})
+    include_directories(${LLVM_INCLUDE_DIRS})
+    add_llvm_loadable_module(${name} ${ARGN})
+  endfunction()
+
 else()
   # Use the llvm-config binary to get the information needed.
   # Try to detect it in the user's environment. The user can
@@ -229,6 +242,10 @@ else()
     endif()
 
     set(${OUTPUT_VAR} ${targets_to_return} PARENT_SCOPE)
+  endfunction()
+
+  function(klee_add_llvm_loadable_module name)
+    message(FATAL_ERROR "klee_add_llvm_loadable_module not implemented with llvm-config")
   endfunction()
 endif()
 

@@ -26,8 +26,6 @@ using namespace llvm;
 
 namespace klee {
 
-char LiveRegisterPass::ID = 0;
-
 bool LiveRegisterPass::runOnFunction(Function &F) {
   this->F = &F;
 
@@ -331,5 +329,10 @@ Instruction *LiveRegisterPass::createNopInstruction(LLVMContext &ctx) const {
   ConstantInt *zero = ConstantInt::get(ctx, APInt(1, 0, false));
   return BinaryOperator::Create(Instruction::BinaryOps::Or, zero, zero);
 }
+
+
+char LiveRegisterPass::ID = 0;
+static RegisterPass<LiveRegisterPass> X("live-register", "Live Register Pass",
+                                        false, false);
 
 }
