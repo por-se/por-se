@@ -223,11 +223,13 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         item >> ptr;
         llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
-        llvm::DebugLoc dl = inst->getDebugLoc();
+        const llvm::DebugLoc &dl = inst->getDebugLoc();
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
         std::string filename = "";
-        if (dl)
-          filename = dl.get()->getFilename();
+        auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
+        if (scope) {
+          filename = scope->getFilename();
+        }
 #else
         llvm::BasicBlock *bb = inst->getParent();
         llvm::LLVMContext &ctx = bb->getContext();
