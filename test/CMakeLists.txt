@@ -41,6 +41,8 @@ endif()
 if (ENABLE_PTHREAD_RUNTIME)
   set(ENABLE_PTHREAD_RUNTIME 1)
 else()
+    message(AUTHOR_WARNING
+      "Disabling pthread runtime tests!")
   set(ENABLE_PTHREAD_RUNTIME 0)
 endif()
 
