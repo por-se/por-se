@@ -21,6 +21,7 @@ namespace llvm {
 }
 
 namespace klee {
+class KInstruction;
 
   /* Stores debug information for a KInstruction */
   struct InstructionInfo {
@@ -28,6 +29,9 @@ namespace klee {
     const std::string &file;
     unsigned line;
     unsigned assemblyLine;
+
+  private:
+    KInstruction *ki = nullptr;
 
   public:
     InstructionInfo(unsigned _id,
@@ -38,6 +42,19 @@ namespace klee {
         file(_file),
         line(_line),
         assemblyLine(_assemblyLine) {
+    }
+
+    bool setKInstruction(KInstruction *kinst) {
+      if (ki)
+        return false;
+
+      // only set ki if it was nullptr
+      ki = kinst;
+      return true;
+    }
+
+    KInstruction *getKInstruction() const {
+      return ki;
     }
   };
 

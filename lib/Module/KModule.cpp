@@ -308,6 +308,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
       ki->info = &infos->getInfo(ki->inst);
+      const_cast<InstructionInfo *>(ki->info)->setKInstruction(ki);
     }
 
     functionMap.insert(std::make_pair(&Function, kf.get()));
