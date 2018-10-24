@@ -22,9 +22,6 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
 
-#include "PartialOrderExplorer.h"
-#include "ScheduleTree.h"
-
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
@@ -146,9 +143,6 @@ private:
   std::vector<TimerInfo*> timers;
   PTree *processTree;
 
-  ScheduleTree *scheduleTree = nullptr;
-  PartialOrderExplorer *poExplorer = nullptr;
-
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
   /// which ran into a klee_open_merge(), and not all states in the set have
@@ -230,8 +224,6 @@ private:
   /// The maximum time to allow for a single core solver query.
   /// (e.g. for a single STP query)
   double coreSolverTimeout;
-
-  bool hasScheduledThreads;
 
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
@@ -524,10 +516,6 @@ private:
 
   void registerFork(ExecutionState &state, ExecutionState* fork);
   ExecutionState* forkToNewState(ExecutionState &state);
-
-  void scheduleThreadsWithPartialOrder(ExecutionState &state);
-
-  void scheduleThreadsWithScheduleTree(ExecutionState &state);
 
   void scheduleThreads(ExecutionState &state);
 

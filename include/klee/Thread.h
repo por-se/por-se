@@ -95,9 +95,6 @@ namespace klee {
       /// @brief the state this thread is in
       ThreadState state;
 
-      /// @brief the count of epochs this thread has run
-      uint64_t epochRunCount;
-
       /// @brief the argument with which the thread was started
       ref<Expr> startArg;
 

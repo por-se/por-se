@@ -299,41 +299,6 @@ namespace {
   MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
             cl::init(true));
-
-  cl::opt<bool>
-  DumpTreeOnEnd("dump-tree-on-end",
-          cl::desc("Dump the process tree whenever a new thread scheduling has occured"),
-          cl::init(false));
-
-  enum ScheduleForksEnum {
-    NEVER,
-    STATEMENT,
-    SYNC_POINT
-  };
-
-  cl::opt<ScheduleForksEnum>ScheduleForks("schedule-forks",
-            cl::desc("When to fork for schedule reasons"),
-            cl::values(
-                    clEnumValN(NEVER, "never", "never (default)"),
-                    clEnumValN(STATEMENT, "statement", "Fork for statements where thread interference is possible"),
-                    clEnumValN(SYNC_POINT, "sync-point", "Fork only at sync points (thread schedule changes)")
-                    KLEE_LLVM_CL_VAL_END),
-            cl::init(NEVER));
-
-  enum SameScheduleAnalysisEnum {
-    NONE,
-    PERMUTATION_COMPARISON,
-    PARTIAL_ORDER
-  };
-
-  cl::opt<SameScheduleAnalysisEnum>SameScheduleAnalysis("same-schedule-analysis",
-            cl::desc("The analysis do use in order to avoid exploring duplicate schedules"),
-            cl::values(
-                clEnumValN(NONE, "none", "none (default)"),
-                clEnumValN(PERMUTATION_COMPARISON, "perm-comparison", "Compare permutation of schedules afterwards"),
-                clEnumValN(PARTIAL_ORDER, "partial-order", "Use a partial order to limit schedule duplicates")
-                KLEE_LLVM_CL_VAL_END),
-            cl::init(NONE));
 }
 
 
@@ -879,12 +844,6 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i)
     if (result[i])
       addConstraint(*result[i], conditions[i]);
-
-  if (scheduleTree != nullptr) {
-    auto n = scheduleTree->getNodeOfExecutionState(&state);
-    assert(n != nullptr && "Should have a base node");
-    scheduleTree->registerSymbolicForks(n, result, conditions);
-  }
 }
 
 Executor::StatePair 
@@ -1120,21 +1079,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       terminateStateEarly(*trueState, "max-depth exceeded.");
       terminateStateEarly(*falseState, "max-depth exceeded.");
       return StatePair(0, 0);
-    }
-
-    if (scheduleTree != nullptr) {
-      auto n = scheduleTree->getNodeOfExecutionState(&current);
-      assert(n != nullptr && "should exist");
-
-      std::vector<ExecutionState*> newStates;
-      newStates.push_back(trueState);
-      newStates.push_back(falseState);
-
-      std::vector<ref<Expr>> expressions;
-      expressions.push_back(condition);
-      expressions.push_back(invertedCondition);
-
-      scheduleTree->registerSymbolicForks(n, newStates, expressions);
     }
 
     return StatePair(trueState, falseState);
@@ -1645,17 +1589,7 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
           // We can only remove a state if this state was not removed before
           auto it = std::find(removedStates.begin(), removedStates.end(), &state);
           if (it == removedStates.end()) {
-            // if we terminate a state because we already had the fingerprint already, then
-            // we can prune this state
-            if (scheduleTree != nullptr) {
-              auto node = scheduleTree->getNodeOfExecutionState(&state);
-              if (node != nullptr) {
-                scheduleTree->pruneState(node);
-              }
-            }
-
             interpreterHandler->incPathsPruned();
-
             // silently terminate state
             terminateState(state);
           }
@@ -3258,8 +3192,6 @@ void Executor::run(ExecutionState &initialState) {
   bool firstInstruction = true;
 
   while (!states.empty() && !haltExecution) {
-    hasScheduledThreads = false;
-
     ExecutionState &state = searcher->selectState();
     Thread& thread = state.getCurrentThreadReference();
     KInstruction *ki = thread.pc;
@@ -3279,18 +3211,6 @@ void Executor::run(ExecutionState &initialState) {
     updateStatesJSON(ki, state);
 
     checkMemoryUsage();
-
-    bool shouldForkAfterStatement = false;
-    if (ScheduleForks == STATEMENT) {
-      auto itInRemoved = std::find(removedStates.begin(), removedStates.end(), &state);
-      shouldForkAfterStatement = itInRemoved == removedStates.end();
-    }
-
-    // We only want to fork if we do not have forked already or we can actually fork for a reason
-    if (shouldForkAfterStatement && !hasScheduledThreads && state.runnableThreads.size() > 1 && state.threadSchedulingEnabled) {
-      std::vector<ExecutionState*> forks;
-      forkForThreadScheduling(state, forks, state.runnableThreads.size() - 1);
-    }
 
     updateStates(&state);
     firstInstruction = false;
@@ -3457,10 +3377,6 @@ static bool isInVector(std::vector<T> list, T tid) {
 void Executor::terminateStateSilently(ExecutionState &state) {
   auto it = std::find(addedStates.begin(), addedStates.end(), &state);
 
-  if (scheduleTree != nullptr) {
-    scheduleTree->unregisterState(&state);
-  }
-
   if (it == addedStates.end()) {
     Thread& thread = state.getCurrentThreadReference();
     thread.pc = thread.prevPc;
@@ -3500,16 +3416,6 @@ void Executor::terminateStateEarly(ExecutionState &state,
                                                 (message + "\n").str().c_str(),
                                                 "early");
   updateStatesJSON(nullptr, state, ktest, "early");
-
-  // if we terminate a state early then this means we will not have a valid result
-  // so make sure we prune this state correctly
-  if (scheduleTree != nullptr) {
-    auto scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
-    if (scheduleTreeNode != nullptr) {
-      scheduleTree->pruneState(scheduleTreeNode);
-    }
-  }
-
   terminateState(state);
 }
 
@@ -4361,56 +4267,9 @@ void Executor::runFunctionAsMain(Function *f,
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
 
-  if (state->memAccessTracker == nullptr && SameScheduleAnalysis != NONE) {
-    klee_error("Cannot make a schedule analysis without memory tracking. Aborting");
-  }
-
-  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
-    scheduleTree = new ScheduleTree(state);
-  } else if (SameScheduleAnalysis == PARTIAL_ORDER) {
-    std::function<ExecutionState* (ExecutionState*)> function = [=](ExecutionState* st) -> ExecutionState* {
-      // So this would be the correct way to do, but this will add the state to the process tree and then
-      // searchers might activate it, even if it is not in the states set
-      // return forkToNewState(*st);
-
-      return st->branch();
-    };
-
-    poExplorer = new PartialOrderExplorer(state, function);
-  }
-
   run(*state);
   delete processTree;
   processTree = 0;
-
-  char name[32];
-  sprintf(name, "scheduleTree.dot");
-
-  if (scheduleTree != nullptr) {
-    if (DumpTreeOnEnd) {
-      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        scheduleTree->dump(*os);
-        delete os;
-      }
-    }
-
-    delete scheduleTree;
-    scheduleTree = nullptr;
-  }
-
-  if (poExplorer != nullptr) {
-    if (DumpTreeOnEnd) {
-      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        poExplorer->dump(*os);
-        delete os;
-      }
-    }
-
-    delete poExplorer;
-    poExplorer = nullptr;
-  }
 
   // hack to clear memory objects
   delete memory;
@@ -4780,20 +4639,6 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       } else if (canBeSafe) {
         ExecutionState* newState = forkToNewState(state);
         addConstraint(*newState, query);
-
-        if (scheduleTree != nullptr) {
-          std::vector<ExecutionState*> forkStates;
-          forkStates.push_back(&state);
-          forkStates.push_back(newState);
-
-          std::vector<ref<Expr>> expressions;
-          expressions.push_back(EqExpr::createIsZero(query));
-          expressions.push_back(query);
-
-          ScheduleTree::Node* base = scheduleTree->getNodeOfExecutionState(&state);
-          assert(base != nullptr && "The state should have a base node");
-          scheduleTree->registerSymbolicForks(base, forkStates, expressions);
-        }
       }
     } else {
       // We were not successful, so go ahead and add the constraint
@@ -4803,24 +4648,17 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   }
 
   if (!access.safeMemoryAccess) {
-    // So before we actually exit the state, we have to register all results up to now in the tree
-    if (SameScheduleAnalysis == PARTIAL_ORDER) {
-      state.endCurrentEpoch();
-      scheduleThreadsWithPartialOrder(state);
-    }
-
     exitWithUnsafeMemAccess(state, mo);
   } else {
-    ExecutionState::DependencyReason reason = 0;
+    if (!access.atomicMemoryAccess) {
+      Thread::ThreadId tid = state.getCurrentThreadReference().getThreadId();
 
-    if (access.atomicMemoryAccess) {
-      reason |= ExecutionState::ATOMIC_MEMORY_ACCESS;
-    } else {
-      reason |= ExecutionState::SAFE_MEMORY_ACCESS;
-    }
+      for (auto dep : result.dataDependencies) {
+        uint64_t scheduleIndex = dep.second;
+        uint64_t dTid = dep.first;
 
-    for (auto dep : result.dataDependencies) {
-      state.trackScheduleDependency(dep.second, dep.first, reason);
+        state.memAccessTracker->registerThreadDependency(tid, dTid, scheduleIndex);
+      }
     }
 
     state.trackMemoryAccess(mo, offset, type);
@@ -4879,119 +4717,6 @@ ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   return ns;
 }
 
-static void printScheduleDag(llvm::raw_ostream &os, ExecutionState &state) {
-  os << "digraph G {\n";
-  os << "\tsize=\"10,7.5\";\n";
-  os << "\tratio=fill;\n";
-  os << "\tcenter = \"true\";\n";
-  os << "\tnode [style=\"filled\",width=.1,height=.1,fontname=\"Terminus\"]\n";
-  os << "\tedge [arrowsize=.5]\n";
-
-  std::map<Thread::ThreadId, uint64_t> lastExecuted{};
-  std::map<Thread::ThreadId, uint64_t > lastHash{};
-
-  uint64_t epoch = 0;
-
-  for (auto &sd : state.schedulingHistory) {
-    Thread::ThreadId tid = sd.tid;
-    uint64_t currentExecution = lastExecuted[tid] + 1;
-
-    std::string name = "n" + std::to_string(sd.dependencyHash);
-
-    auto* deps = &state.scheduleDependencies[tid][currentExecution - 1];
-
-    os << "\t" << name << " [label=\"" << tid << " @ " << currentExecution << " (" << epoch
-        << ")\\n" << (deps->hash & 0xFFFF) << "\"];\n";
-
-    if (currentExecution > 1) {
-      std::string lEName = "n" + std::to_string(lastHash[tid]);
-      os << "\t" << lEName << " -> " << name << "[dir=\"back\",style=\"dashed\"];\n";
-    }
-
-    for (auto dep : deps->dependencies) {
-      std::string dName = "n" + std::to_string(state.schedulingHistory[dep.scheduleIndex].dependencyHash);
-
-      std::string reason;
-      if (dep.reason & ExecutionState::SAFE_MEMORY_ACCESS) {
-        reason += "memory ";
-      }
-      if (dep.reason & ExecutionState::ATOMIC_MEMORY_ACCESS) {
-        reason += "atomic ";
-      }
-      if (dep.reason & ExecutionState::THREAD_CREATION) {
-        reason += "create ";
-      }
-      if (dep.reason & ExecutionState::THREAD_WAKEUP) {
-        reason += "wakeup ";
-      }
-
-      os << "\t" << dName << " -> " << name << " [dir=\"back\",label=\"" << reason <<"\"];\n";
-    }
-
-    lastHash[tid] = sd.dependencyHash;
-    lastExecuted[tid]++;
-    epoch++;
-  }
-
-  os << "}\n";
-}
-
-void Executor::scheduleThreadsWithPartialOrder(ExecutionState &state) {
-  PartialOrderExplorer::ScheduleResult result = poExplorer->processEpochResult(&state);
-
-  for (auto st : result.stoppedStates) {
-    // Since we do not add these states to anywhere else for now, we can just delete them
-    delete st;
-    // terminateStateSilently(*st);
-  }
-
-  // NOTE: We add the forks into the process tree only now, this is not how this is
-  // actually meant in klee. See the poGraph creation for more info on this
-
-  for (auto st : result.reactivatedStates) {
-    addedStates.push_back(st);
-    registerFork(state, st);
-  }
-
-  // We actually do not really need to add these to the paused states since they
-  // were never seen inside the searcher
-  // for (auto st : result.newInactiveStates) {
-  //   pausedStates.push_back(st);
-  // }
-
-  for (auto st : result.newStates) {
-    addedStates.push_back(st);
-    registerFork(state, st);
-  }
-
-  if (result.finishedState != nullptr) {
-    // Last sanity check if we actually ended because all threads did exit
-    bool allExited = true;
-
-    for (auto &threadIt : state.threads) {
-      if (threadIt.second.state != Thread::ThreadState::EXITED) {
-        allExited = false;
-      }
-    }
-
-    if (DumpTreeOnEnd) {
-      char name[32];
-      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
-      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        printScheduleDag(*os, state);
-        delete os;
-      }
-    }
-
-    if (!allExited) {
-      exitWithDeadlock(state);
-    } else {
-      terminateStateOnExit(*result.finishedState);
-    }
-  }
-}
-
 void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
   assert(newForkCount < state.runnableThreads.size());
 
@@ -5025,31 +4750,9 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
     st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
   }
-
-  hasScheduledThreads = true;
 }
 
-void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
-  // After updating the hash, we should also update the hash in the
-  // schedule tree
-  ScheduleTree::Node* scheduleTreeNode = nullptr;
-
-  if (SameScheduleAnalysis == PERMUTATION_COMPARISON) {
-    scheduleTreeNode = scheduleTree->getNodeOfExecutionState(&state);
-
-    if (scheduleTreeNode != nullptr) {
-      scheduleTree->registerSchedulingResult(&state);
-
-      if (scheduleTree->hasEquivalentSchedule(scheduleTreeNode)) {
-        scheduleTree->pruneState(scheduleTreeNode);
-
-        // We actually did process this state so we have to increment the paths explored
-        terminateState(state);
-        return;
-      }
-    }
-  }
-
+void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
   if (!state.threadSchedulingEnabled) {
@@ -5066,13 +4769,6 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
       curThread.state = Thread::ThreadState::RUNNABLE;
       Thread::ThreadId tid = curThread.getThreadId();
       state.scheduleNextThread(tid);
-
-      if (scheduleTreeNode != nullptr) {
-        std::vector<ExecutionState*> states;
-        states.push_back(&state);
-        scheduleTree->registerScheduleDecision(scheduleTreeNode, states);
-      }
-
       return;
     }
 
@@ -5094,16 +4790,6 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
       }
     }
 
-    if (DumpTreeOnEnd) {
-      char name[32];
-      sprintf(name, "schedule%08d.dot", (int) stats::instructions);
-      llvm::raw_ostream *os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        printScheduleDag(*os, state);
-        delete os;
-      }
-    }
-
     if (allExited) {
       terminateStateOnExit(state);
     } else {
@@ -5114,28 +4800,8 @@ void Executor::scheduleThreadsWithScheduleTree(ExecutionState &state) {
   }
 
   uint64_t newForkCount = runnable.size() - 1;
-
-  if (ScheduleForks == NEVER) {
-    newForkCount = 0;
-  }
-
   std::vector<ExecutionState*> newStates;
   forkForThreadScheduling(state, newStates, newForkCount);
-
-  if (scheduleTreeNode != nullptr) {
-    scheduleTree->registerScheduleDecision(scheduleTreeNode, newStates);
-  }
-}
-
-void Executor::scheduleThreads(ExecutionState &state) {
-  // By default this means the current epoch will end
-  state.endCurrentEpoch();
-
-  if (SameScheduleAnalysis == PARTIAL_ORDER) {
-    scheduleThreadsWithPartialOrder(state);
-  } else {
-    scheduleThreadsWithScheduleTree(state);
-  }
 }
 
 /// Returns the errno location in memory

@@ -24,8 +24,6 @@ klee_add_component(kleeCore
   MemoryManager.cpp
   MemoryState.cpp
   PTree.cpp
-  ScheduleTree.cpp
-  PartialOrderExplorer.cpp
   MemoryAccessTracker.cpp
   Searcher.cpp
   SeedInfo.cpp

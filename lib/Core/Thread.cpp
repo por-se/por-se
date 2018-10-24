@@ -38,7 +38,6 @@ StackFrame::~StackFrame() {
 
 Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->tid = tid;
-  this->epochRunCount = 0;
   this->threadSchedulingWasDisabled = false;
 
   assert(threadStartRoutine && "A thread has to start somewhere");
@@ -59,7 +58,6 @@ Thread::Thread(const Thread &t)
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
-          epochRunCount(t.epochRunCount),
           startArg(t.startArg),
           threadSchedulingWasDisabled(t.threadSchedulingWasDisabled) {
 }

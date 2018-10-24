@@ -52,30 +52,6 @@ public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
-  typedef uint8_t DependencyReason;
-  static const DependencyReason SAFE_MEMORY_ACCESS = 1;
-  static const DependencyReason ATOMIC_MEMORY_ACCESS = 2;
-  static const DependencyReason THREAD_CREATION = 4;
-  static const DependencyReason THREAD_WAKEUP = 8;
-  static const DependencyReason PREDECESSOR = 16;
-
-  struct ScheduleDependency {
-    uint64_t scheduleIndex;
-    Thread::ThreadId tid;
-    DependencyReason reason;
-
-    ScheduleDependency() = default;
-    ScheduleDependency(const ScheduleDependency &d) = default;
-  };
-
-  struct EpochDependencies {
-    uint64_t hash = 0;
-    std::vector<ScheduleDependency> dependencies;
-
-    EpochDependencies() = default;
-    EpochDependencies(const EpochDependencies &d) = default;
-  };
-
   struct ScheduleEpoch {
     Thread::ThreadId tid;
     uint64_t dependencyHash;
@@ -94,8 +70,6 @@ private:
   uint64_t currentSchedulingIndex;
 
   bool onlyOneThreadRunnableSinceEpochStart;
-
-  std::map<Thread::ThreadId, ScheduleDependency> forwardDeclaredDependencies;
 
   /// @brief the tracker that will keep all memory access
   // This is a little bit of a hack: we do not want to expose the tracker to the 'public' api so
@@ -121,10 +95,6 @@ public:
 
   /// @brief if the current state is in an temporary atomic phase
   bool atomicPhase;
-
-  // Thread scheduling specific state data
-
-  std::map<Thread::ThreadId, std::vector<EpochDependencies>> scheduleDependencies;
 
   // Overall state of the state - Data specific
 
@@ -218,14 +188,6 @@ public:
 
     /// @brief returns the reference to the thread with the given tid (only valid for one 'klee instruction')
   Thread* getThreadReferenceById(Thread::ThreadId tid);
-
-  EpochDependencies* getCurrentEpochDependencies();
-
-  void endCurrentEpoch();
-
-  void trackScheduleDependency(ScheduleDependency dep);
-
-  void trackScheduleDependency(uint64_t scheduleIndex, Thread::ThreadId tid, DependencyReason r);
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState
