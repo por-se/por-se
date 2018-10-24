@@ -56,6 +56,10 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
   return false;
 }
 
+void LiveRegisterPass::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.setPreservesAll();
+}
+
 void LiveRegisterPass::initializeWorklist(const Function &F) {
   // clean up from previous runs
   worklist.clear();

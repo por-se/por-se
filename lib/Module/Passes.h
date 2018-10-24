@@ -192,6 +192,7 @@ public:
   LiveRegisterPass() : FunctionPass(ID) {}
 
   bool runOnFunction(llvm::Function &F) override;
+  void getAnalysisUsage(llvm::AnalysisUsage &Info) const override;
   void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
 
 private:
