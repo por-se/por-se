@@ -461,11 +461,10 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
         *f << errorMessage;
     }
 
-    llvm::raw_fd_ostream *fSchedules = openTestFile("tschedules", id);
+    auto fSchedules = openTestFile("tschedules", id);
     for (auto& sd : state.schedulingHistory) {
       *fSchedules << sd.tid << "\n";
     }
-    delete(fSchedules);
 
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
