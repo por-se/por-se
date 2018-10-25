@@ -249,10 +249,10 @@ private:
   std::chrono::steady_clock::time_point executorStartTime;
 
   /// JSON file to print state info to
-  llvm::raw_ostream *statesJSONFile;
+  std::unique_ptr<llvm::raw_ostream> statesJSONFile;
 
   /// JSON file to print state forking info to
-  llvm::raw_ostream *forkJSONFile;
+  std::unique_ptr<llvm::raw_ostream> forkJSONFile;
 
   /// Optimizes expressions
   ExprOptimizer optimizer;

@@ -77,10 +77,6 @@
 #else
 #include "llvm/IR/CallSite.h"
 #endif
- 
-#ifdef HAVE_ZLIB_H
-#include "klee/Internal/Support/CompressionStream.h"
-#endif
 
 #include <cassert>
 #include <algorithm>
@@ -375,8 +371,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                             ? std::min(MaxCoreSolverTime, MaxInstructionTime)
                             : std::max(MaxCoreSolverTime, MaxInstructionTime)),
       debugLogBuffer(debugBufferString),
-      executorStartTime(std::chrono::steady_clock::now()),
-      statesJSONFile(0), forkJSONFile(0) {
+      executorStartTime(std::chrono::steady_clock::now()) {
 
   if (coreSolverTimeout) UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
@@ -422,83 +417,55 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
   }
 
   if (InfiniteLoopLogStateJSON) {
-
     size_t stateLoggingOverhead = util::GetTotalMallocUsage();
 
-    {
-      std::string states_file_name =
-        interpreterHandler->getOutputFilename("states.json");
+    std::string states_file_name =
+      interpreterHandler->getOutputFilename("states.json");
 
-      std::string ErrorInfo;
+    std::string error;
 #ifdef HAVE_ZLIB_H
-      if (!InfiniteLoopCompressLogStateJSON) {
+    if (!InfiniteLoopCompressLogStateJSON) {
 #endif
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-        std::error_code ec;
-        statesJSONFile = new llvm::raw_fd_ostream(states_file_name.c_str(), ec,
-                               llvm::sys::fs::OpenFlags::F_Text);
-        if (ec)
-          ErrorInfo = ec.message();
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-        statesJSONFile = new llvm::raw_fd_ostream(states_file_name.c_str(),
-                               ErrorInfo, llvm::sys::fs::OpenFlags::F_Text);
-#else
-        statesJSONFile =
-            new llvm::raw_fd_ostream(states_file_name.c_str(), ErrorInfo);
-#endif
+      statesJSONFile = klee_open_output_file(states_file_name, error);
 #ifdef HAVE_ZLIB_H
-      } else {
-        statesJSONFile = new compressed_fd_ostream(
-                               (states_file_name + ".gz").c_str(), ErrorInfo);
-      }
+    } else {
+      states_file_name.append(".gz");
+      statesJSONFile = klee_open_compressed_output_file(states_file_name, error);
+    }
 #endif
-      if (ErrorInfo != "") {
-        klee_error("Could not open file %s : %s", states_file_name.c_str(),
-                   ErrorInfo.c_str());
-      }
 
-      if (statesJSONFile) {
-        (*statesJSONFile) << "[\n";
-        (*statesJSONFile) << "  {\n";
-        (*statesJSONFile) << "    \"functionpointer_size\": "
-                          << sizeof(llvm::Function *) << ",\n";
-        (*statesJSONFile) << "    \"memory_state_size\": "
-                          << sizeof(MemoryState) << ",\n";
-      }
+    if (statesJSONFile) {
+      (*statesJSONFile) << "[\n";
+      (*statesJSONFile) << "  {\n";
+      (*statesJSONFile) << "    \"functionpointer_size\": "
+                        << sizeof(llvm::Function *) << ",\n";
+      (*statesJSONFile) << "    \"memory_state_size\": "
+                        << sizeof(MemoryState) << ",\n";
+    } else {
+      klee_error("Could not open file %s : %s",
+                 states_file_name.c_str(),
+                 error.c_str());
+    }
 
-      std::string fork_file_name =
-        interpreterHandler->getOutputFilename("states_fork.json");
+    std::string fork_file_name =
+      interpreterHandler->getOutputFilename("states_fork.json");
 
-      ErrorInfo = "";
+    error = "";
 
 #ifdef HAVE_ZLIB_H
-      if (!InfiniteLoopCompressLogStateJSON) {
+    if (!InfiniteLoopCompressLogStateJSON) {
 #endif
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-        std::error_code ecode;
-        forkJSONFile = new llvm::raw_fd_ostream(fork_file_name.c_str(), ecode,
-                                              llvm::sys::fs::OpenFlags::F_Text);
-        if (ecode)
-          ErrorInfo = ecode.message();
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-        forkJSONFile = new llvm::raw_fd_ostream(fork_file_name.c_str(), ErrorInfo,
-                                                  llvm::sys::fs::OpenFlags::F_Text);
-#else
-        forkJSONFile =
-            new llvm::raw_fd_ostream(fork_file_name.c_str(), ErrorInfo);
-#endif
+      forkJSONFile = klee_open_output_file(fork_file_name, error);
 #ifdef HAVE_ZLIB_H
-      } else {
-        forkJSONFile = new compressed_fd_ostream(
-                             (fork_file_name + ".gz").c_str(), ErrorInfo);
-      }
+    } else {
+      fork_file_name.append(".gz");
+      forkJSONFile = klee_open_compressed_output_file(fork_file_name, error);
+    }
 #endif
-
-      if (ErrorInfo != "") {
-        klee_error("Could not open file %s : %s", fork_file_name.c_str(),
-                   ErrorInfo.c_str());
-      }
-
+    if (!forkJSONFile) {
+      klee_error("Could not open file %s : %s",
+                 fork_file_name.c_str(),
+                 error.c_str());
     }
 
     stateLoggingOverhead = util::GetTotalMallocUsage() - stateLoggingOverhead;
@@ -508,7 +475,6 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                         << stateLoggingOverhead << ",\n";
     }
   }
-
 }
 
 llvm::Module *
@@ -588,11 +554,9 @@ Executor::~Executor() {
   }
   if (statesJSONFile) {
     (*statesJSONFile) << "\n]\n";
-    delete statesJSONFile;
   }
   if (forkJSONFile) {
     (*forkJSONFile) << "\n]\n";
-    delete forkJSONFile;
   }
 }
 
