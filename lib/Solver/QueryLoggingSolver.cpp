@@ -7,17 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 #include "QueryLoggingSolver.h"
-#include "klee/Config/config.h"
-#include "klee/Internal/System/Time.h"
 #include "klee/Statistics.h"
-#ifdef HAVE_ZLIB_H
-#include "klee/Internal/Support/CompressionStream.h"
+#include "klee/Config/config.h"
 #include "klee/Internal/Support/ErrorHandling.h"
-#endif
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-#include "llvm/Support/FileSystem.h"
-#endif
+#include "klee/Internal/Support/FileHandling.h"
+#include "klee/Internal/System/Time.h"
 
 using namespace klee::util;
 
@@ -36,38 +30,28 @@ llvm::cl::opt<bool> CreateCompressedQueryLog(
 QueryLoggingSolver::QueryLoggingSolver(Solver *_solver, std::string path,
                                        const std::string &commentSign,
                                        int queryTimeToLog)
-    : solver(_solver), os(0), BufferString(""), logBuffer(BufferString),
-      queryCount(0), minQueryTimeToLog(queryTimeToLog), startTime(0.0f),
-      lastQueryTime(0.0f), queryCommentSign(commentSign) {
+    : solver(_solver), BufferString(""), logBuffer(BufferString), queryCount(0),
+      minQueryTimeToLog(queryTimeToLog), startTime(0.0f), lastQueryTime(0.0f),
+      queryCommentSign(commentSign) {
+  std::string error;
 #ifdef HAVE_ZLIB_H
   if (!CreateCompressedQueryLog) {
 #endif
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-    std::error_code ec;
-    os = new llvm::raw_fd_ostream(path.c_str(), ec,
-                                  llvm::sys::fs::OpenFlags::F_Text);
-    if (ec)
-      ErrorInfo = ec.message();
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-    os = new llvm::raw_fd_ostream(path.c_str(), ErrorInfo,
-                                  llvm::sys::fs::OpenFlags::F_Text);
-#else
-    os = new llvm::raw_fd_ostream(path.c_str(), ErrorInfo);
-#endif
+    os = klee_open_output_file(path, error);
 #ifdef HAVE_ZLIB_H
   } else {
-    os = new compressed_fd_ostream((path + ".gz").c_str(), ErrorInfo);
-  }
-  if (ErrorInfo != "") {
-    klee_error("Could not open file %s : %s", path.c_str(), ErrorInfo.c_str());
+    path.append(".gz");
+    os = klee_open_compressed_output_file(path, error);
   }
 #endif
+  if (!os) {
+    klee_error("Could not open file %s : %s", path.c_str(), error.c_str());
+  }
   assert(0 != solver);
 }
 
 QueryLoggingSolver::~QueryLoggingSolver() {
   delete solver;
-  delete os;
 }
 
 void QueryLoggingSolver::flushBufferConditionally(bool writeToFile) {

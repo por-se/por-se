@@ -29,8 +29,11 @@
 
 #include "llvm/ADT/Twine.h"
 
+#include "../Expr/ArrayExprOptimizer.h"
+
 #include <chrono>
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -234,7 +237,7 @@ private:
   ArrayCache arrayCache;
 
   /// File to print executed instructions to
-  llvm::raw_ostream *debugInstFile;
+  std::unique_ptr<llvm::raw_ostream> debugInstFile;
 
   // @brief Buffer used by logBuffer
   std::string debugBufferString;
@@ -250,6 +253,9 @@ private:
 
   /// JSON file to print state forking info to
   llvm::raw_ostream *forkJSONFile;
+
+  /// Optimizes expressions
+  ExprOptimizer optimizer;
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);
