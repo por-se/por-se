@@ -1740,7 +1740,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
                            CallSite(cast<CallInst>(caller)));
 
             // XXX need to check other param attrs ?
+#if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
+            bool isSExt = cs.hasRetAttr(llvm::Attribute::SExt);
+#else
             bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+#endif
             if (isSExt) {
               result = SExtExpr::create(result, to);
             } else {
@@ -1872,7 +1876,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // switch to an internal rep.
       llvm::IntegerType *Ty = cast<IntegerType>(si->getCondition()->getType());
       ConstantInt *ci = ConstantInt::get(Ty, CE->getZExtValue());
+#if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
+      unsigned index = si->findCaseValue(ci)->getSuccessorIndex();
+#else
       unsigned index = si->findCaseValue(ci).getSuccessorIndex();
+#endif
       transferToBasicBlock(si->getSuccessor(index), si->getParent(), state);
     } else {
       // Handle possible different branch targets
@@ -2034,7 +2042,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
             if (from != to) {
               // XXX need to check other param attrs ?
+#if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
+              bool isSExt = cs.paramHasAttr(i, llvm::Attribute::SExt);
+#else
               bool isSExt = cs.paramHasAttr(i+1, llvm::Attribute::SExt);
+#endif
               if (isSExt) {
                 arguments[i] = SExtExpr::create(arguments[i], to);
               } else {
@@ -2530,7 +2542,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     llvm::APFloat Arg(*fpWidthToSemantics(arg->getWidth()), arg->getAPValue());
     uint64_t value = 0;
     bool isExact = true;
-    Arg.convertToInteger(&value, resultType, false,
+#if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
+    auto valueRef = makeMutableArrayRef(value);
+#else
+    uint64_t *valueRef = &value;
+#endif
+    Arg.convertToInteger(valueRef, resultType, false,
                          llvm::APFloat::rmTowardZero, &isExact);
     bindLocal(ki, state, ConstantExpr::alloc(value, resultType));
     break;
@@ -2547,7 +2564,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     uint64_t value = 0;
     bool isExact = true;
-    Arg.convertToInteger(&value, resultType, true,
+#if LLVM_VERSION_CODE >= LLVM_VERSION(5, 0)
+    auto valueRef = makeMutableArrayRef(value);
+#else
+    uint64_t *valueRef = &value;
+#endif
+    Arg.convertToInteger(valueRef, resultType, true,
                          llvm::APFloat::rmTowardZero, &isExact);
     bindLocal(ki, state, ConstantExpr::alloc(value, resultType));
     break;
