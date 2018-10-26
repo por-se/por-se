@@ -16,7 +16,7 @@ namespace {
   llvm::cl::opt<bool>
   UseVisitorHash("use-visitor-hash", 
                  llvm::cl::desc("Use hash-consing during expr visitation."),
-                 llvm::cl::init(true));
+                 llvm::cl::init(false));
 }
 
 using namespace klee;
