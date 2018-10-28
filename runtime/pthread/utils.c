@@ -168,8 +168,8 @@ void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it) {
 
 void __notify_threads(__kpr_list* stack) {
   size_t size = __kpr_list_size(stack);
-
-  for (size_t i = 0; i < size; ++i) {
+  size_t i = 0;
+  for (; i < size; ++i) {
     uint64_t data = (uint64_t) __kpr_list_pop(stack);
     klee_wake_up_thread(data);
   }
@@ -194,9 +194,12 @@ bool __checkIfSame(char* target, char* reference) {
     return false;
   }
 
-  for (size_t i = 0; i < sizeOfTarget; i++) {
-    if (target[i] != reference[i]) {
-      return false;
+  {
+    size_t i = 0;
+    for (; i < sizeOfTarget; i++) {
+      if (target[i] != reference[i]) {
+        return false;
+      }
     }
   }
 

@@ -109,7 +109,7 @@ int pthread_setspecific(pthread_key_t k, const void *val) {
   klee_toggle_thread_scheduling(0);
 
   __pthread_key_data* data = __get_data(k);
-  data->value = val;
+  data->value = (void*)val;
 
   klee_toggle_thread_scheduling(1);
   return 0;
@@ -118,7 +118,8 @@ int pthread_setspecific(pthread_key_t k, const void *val) {
 // this is an internal method for the runtime to invoke all destructors that are associated with the
 // keys that this thread created/used
 void __pthread_key_clear_data_of_thread(uint64_t tid) {
-  for (unsigned int i = 0; i < keyCount; i++) {
+  unsigned i = 0;
+  for (; i < keyCount; i++) {
     __pthread_key* key = &keys[i];
 
     if (key->destructor == NULL) {
