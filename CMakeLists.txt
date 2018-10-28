@@ -341,7 +341,7 @@ endif()
 # Exception handling
 ###############################################################################
 if (NOT LLVM_ENABLE_EH)
-  if (ENABLE_SOLVER_METASMT OR USE_CRYPTOPP)
+  if (ENABLE_SOLVER_METASMT OR CRYPTOPP_FOUND)
     message(WARNING "Not disabling exceptions because metaSMT and CryptoPP use them")
   else()
     klee_component_add_cxx_flag("-fno-exceptions" REQUIRED)
