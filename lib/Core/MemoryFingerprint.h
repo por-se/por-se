@@ -4,14 +4,18 @@
 #include "klee/Expr.h"
 #include "klee/Config/config.h"
 
+#ifndef __cpp_rtti
 // stub for typeid to use CryptoPP without RTTI
 template<typename T> const std::type_info& FakeTypeID(void) {
     assert(0 && "CryptoPP tries to use typeid()");
 }
 #define typeid(a) FakeTypeID<a>()
+#endif
 #include <cryptopp/sha.h>
 #include <cryptopp/blake2.h>
+#ifndef __cpp_rtti
 #undef typeid
+#endif
 
 #include <array>
 #include <iomanip>
