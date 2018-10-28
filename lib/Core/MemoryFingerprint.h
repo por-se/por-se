@@ -11,7 +11,6 @@ template<typename T> const std::type_info& FakeTypeID(void) {
 }
 #define typeid(a) FakeTypeID<a>()
 #endif
-#include <cryptopp/sha.h>
 #include <cryptopp/blake2.h>
 #ifndef __cpp_rtti
 #undef typeid
@@ -25,7 +24,6 @@ template<typename T> const std::type_info& FakeTypeID(void) {
 
 namespace klee {
 
-class MemoryFingerprint_CryptoPP_SHA1;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
 class MemoryFingerprint_Dummy;
 
@@ -171,21 +169,6 @@ public:
   std::string getStackFrameDeltaAsString() {
     return toString(fingerprintStackFrameDelta);
   }
-};
-
-
-class MemoryFingerprint_CryptoPP_SHA1 :
-public MemoryFingerprintT<MemoryFingerprint_CryptoPP_SHA1, CryptoPP::SHA1::DIGESTSIZE> {
-friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_SHA1, CryptoPP::SHA1::DIGESTSIZE>;
-private:
-  CryptoPP::SHA1 sha1;
-  void generateHash();
-  void clearHash();
-
-public:
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  void updateExpr(ref<Expr> expr);
 };
 
 

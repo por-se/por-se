@@ -16,42 +16,6 @@
 
 namespace klee {
 
-/* MemoryFingerprint_CryptoPP_SHA1 */
-
-void MemoryFingerprint_CryptoPP_SHA1::updateUint8(const std::uint8_t value) {
-  static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
-  sha1.Update(&value, 1);
-}
-
-void MemoryFingerprint_CryptoPP_SHA1::updateUint64(const std::uint64_t value) {
-  static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
-  sha1.Update(reinterpret_cast<const std::uint8_t*>(&value), 8);
-}
-
-void MemoryFingerprint_CryptoPP_SHA1::updateExpr(ref<Expr> expr) {
-  MemoryFingerprint_ostream<CryptoPP::SHA1> OS(sha1);
-  ExprPPrinter::printSingleExpr(OS, expr);
-}
-
-void MemoryFingerprint_CryptoPP_SHA1::generateHash() {
-  sha1.Final(buffer.data());
-}
-
-void MemoryFingerprint_CryptoPP_SHA1::clearHash() {
-  // not really necessary as Final() already calls this internally
-  sha1.Restart();
-}
-
-/* MemoryFingerprint_ostream<CryptoPP::SHA1> */
-
-template<>
-void MemoryFingerprint_ostream<CryptoPP::SHA1>::write_impl(const char *ptr,
-                                                           std::size_t size) {
-  hash.Update(reinterpret_cast<const CryptoPP::byte*>(ptr), size);
-  pos += size;
-}
-
-
 /* MemoryFingerprint_CryptoPP_BLAKE2b */
 
 void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint8(const std::uint8_t value) {
