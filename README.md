@@ -29,7 +29,7 @@ In addition, we identified a bug in the long decommissioned GNU regex, which is 
 
 We recommend to compile our version of KLEE against **LLVM 3.8.1**. For information on how to compile KLEE in general, please refer to README-CMake.md.
 
-In addition to the usual requirements of KLEE, we use CryptoPP (Version 7.0.0) to generate BLAKE2b hashes (for fingerprint creation). If CMake does not find CryptoPP, it automatically switches to a SHA1 implementation included in this repository.
+In addition to the usual requirements of KLEE, we use CryptoPP (Version 7.0.0) to generate BLAKE2b hashes (for fingerprint creation).
 
 If CryptoPP is located at a custom location on your system, you can use the following to tell CMake where to find it:
 

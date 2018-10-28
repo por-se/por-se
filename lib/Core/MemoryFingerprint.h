@@ -3,9 +3,7 @@
 
 #include "klee/Expr.h"
 #include "klee/Config/config.h"
-#include "klee/Internal/Support/SHA1.h"
 
-#ifdef USE_CRYPTOPP
 // stub for typeid to use CryptoPP without RTTI
 template<typename T> const std::type_info& FakeTypeID(void) {
     assert(0 && "CryptoPP tries to use typeid()");
@@ -14,7 +12,6 @@ template<typename T> const std::type_info& FakeTypeID(void) {
 #include <cryptopp/sha.h>
 #include <cryptopp/blake2.h>
 #undef typeid
-#endif
 
 #include <array>
 #include <iomanip>
@@ -24,17 +21,12 @@ template<typename T> const std::type_info& FakeTypeID(void) {
 
 namespace klee {
 
-class MemoryFingerprint_SHA1;
 class MemoryFingerprint_CryptoPP_SHA1;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
 class MemoryFingerprint_Dummy;
 
 // Set default implementation
-#ifdef USE_CRYPTOPP
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
-#else
-using MemoryFingerprint = MemoryFingerprint_SHA1;
-#endif
 
 template<typename Derived, size_t hashSize>
 class MemoryFingerprintT {
@@ -178,21 +170,6 @@ public:
 };
 
 
-class MemoryFingerprint_SHA1 :
-public MemoryFingerprintT<MemoryFingerprint_SHA1, 20> {
-friend class MemoryFingerprintT<MemoryFingerprint_SHA1, 20>;
-private:
-  util::SHA1 sha1;
-  void generateHash();
-  void clearHash();
-
-public:
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  void updateExpr(ref<Expr> expr);
-};
-
-#ifdef USE_CRYPTOPP
 class MemoryFingerprint_CryptoPP_SHA1 :
 public MemoryFingerprintT<MemoryFingerprint_CryptoPP_SHA1, CryptoPP::SHA1::DIGESTSIZE> {
 friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_SHA1, CryptoPP::SHA1::DIGESTSIZE>;
@@ -207,6 +184,7 @@ public:
   void updateExpr(ref<Expr> expr);
 };
 
+
 class MemoryFingerprint_CryptoPP_BLAKE2b :
 public MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32> {
 friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
@@ -220,7 +198,7 @@ public:
   void updateUint64(const std::uint64_t value);
   void updateExpr(ref<Expr> expr);
 };
-#endif
+
 
 template <typename T>
 class MemoryFingerprint_ostream : public llvm::raw_ostream {
@@ -254,5 +232,3 @@ public:
 
 
 }
-
-#endif

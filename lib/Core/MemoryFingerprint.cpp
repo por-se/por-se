@@ -16,49 +16,8 @@
 
 namespace klee {
 
-/* MemoryFingerprint_SHA1 */
-
-void MemoryFingerprint_SHA1::updateUint8(const std::uint8_t value) {
-  sha1.update_single(static_cast<std::uint8_t>(value));
-}
-
-void MemoryFingerprint_SHA1::updateUint64(const std::uint64_t value) {
-  sha1.update_single(static_cast<std::uint8_t>(value >> 56));
-  sha1.update_single(static_cast<std::uint8_t>(value >> 48));
-  sha1.update_single(static_cast<std::uint8_t>(value >> 40));
-  sha1.update_single(static_cast<std::uint8_t>(value >> 32));
-  sha1.update_single(static_cast<std::uint8_t>(value >> 24));
-  sha1.update_single(static_cast<std::uint8_t>(value >> 16));
-  sha1.update_single(static_cast<std::uint8_t>(value >>  8));
-  sha1.update_single(static_cast<std::uint8_t>(value));
-}
-
-void MemoryFingerprint_SHA1::updateExpr(ref<Expr> expr) {
-  MemoryFingerprint_ostream<util::SHA1> OS(sha1);
-  ExprPPrinter::printSingleExpr(OS, expr);
-}
-
-void MemoryFingerprint_SHA1::generateHash() {
-  sha1.store_result(buffer.begin(), buffer.end());
-}
-
-void MemoryFingerprint_SHA1::clearHash() {
-  sha1.reset();
-}
-
-/* MemoryFingerprint_ostream<util::SHA1> */
-
-template<>
-void MemoryFingerprint_ostream<util::SHA1>::write_impl(const char *ptr,
-                                                       std::size_t size) {
-  static_assert(sizeof(::std::uint8_t) == sizeof(const char));
-  hash.update_range(ptr, ptr+size);
-  pos += size;
-}
-
-
 /* MemoryFingerprint_CryptoPP_SHA1 */
-#ifdef USE_CRYPTOPP
+
 void MemoryFingerprint_CryptoPP_SHA1::updateUint8(const std::uint8_t value) {
   static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
   sha1.Update(&value, 1);
@@ -91,11 +50,10 @@ void MemoryFingerprint_ostream<CryptoPP::SHA1>::write_impl(const char *ptr,
   hash.Update(reinterpret_cast<const CryptoPP::byte*>(ptr), size);
   pos += size;
 }
-#endif
 
 
 /* MemoryFingerprint_CryptoPP_BLAKE2b */
-#ifdef USE_CRYPTOPP
+
 void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint8(const std::uint8_t value) {
   static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
   blake2b.Update(&value, 1);
@@ -128,7 +86,6 @@ void MemoryFingerprint_ostream<CryptoPP::BLAKE2b>::write_impl(const char *ptr,
   hash.Update(reinterpret_cast<const CryptoPP::byte*>(ptr), size);
   pos += size;
 }
-#endif
 
 
 /* MemoryFingerprint_Dummy */
@@ -383,7 +340,5 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
 
   return result.str();
 }
-
-
 
 }
