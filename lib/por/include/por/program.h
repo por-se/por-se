@@ -71,7 +71,7 @@ namespace por {
 			assert(lock_heads().find(lock) != lock_heads().end());
 
 			_thread_heads[thread] = event::lock_destroy::alloc(thread, _thread_heads[thread], _lock_heads[lock]);
-			_lock_heads[lock] = _thread_heads[thread];
+			_lock_heads.erase(lock);
 		}
 
 		void acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
