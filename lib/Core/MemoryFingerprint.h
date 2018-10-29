@@ -48,6 +48,7 @@ private:
 
   fingerprint_t fingerprint = {};
   fingerprint_t fingerprintStackFrameDelta = {};
+  fingerprint_t fingerprintTemporaryDelta = {};
 
   template<typename T,
     typename std::enable_if<std::is_same<T, hash_t>::value, int>::type = 0>
@@ -99,7 +100,14 @@ public:
     getDerived().clearHash();
   }
 
+  void applyToTemporaryDelta() {
+    getDerived().generateHash();
+    executeXOR(fingerprintTemporaryDelta, buffer);
+    getDerived().clearHash();
+  }
+
   fingerprint_t getFingerprint() {
+    executeXOR(fingerprint, fingerprintTemporaryDelta);
     return fingerprint;
   }
 
@@ -127,8 +135,13 @@ public:
     fingerprintStackFrameDelta = {};
   }
 
+  void discardTemporaryDelta() {
+    fingerprintTemporaryDelta = {};
+  }
+
   void discardEverything() {
     fingerprintStackFrameDelta = {};
+    fingerprintTemporaryDelta = {};
     fingerprint = {};
   }
 

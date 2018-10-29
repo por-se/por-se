@@ -877,20 +877,10 @@ MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
       fingerprint.updateExpr(expr);
     }
   }
-  fingerprint.applyToFingerprint();
+  fingerprint.applyToTemporaryDelta();
 
   auto result = fingerprint.getFingerprint();
-
-  // FIXME: code duplication
-  fingerprint.updateUint8(10);
-  fingerprint.updateUint64(thread.tid);
-  for (auto v : constraintsMap) {
-    for (ref<Expr> expr : v.second) {
-      fingerprint.updateExpr(expr);
-    }
-  }
-  fingerprint.applyToFingerprint();
-
+  fingerprint.discardTemporaryDelta();
   return result;
 }
 
