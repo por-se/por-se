@@ -41,7 +41,7 @@ int main(int argc, char** argv){
 		std::cout << "+T" << tid << " (0)\n";
 	}
 
-	std::mt19937_64 gen(42);
+	std::mt19937_64 gen(35);
 	// "warm up" mersenne twister to deal with weak initialization function
 	for(unsigned i = 0; i < 10'000; ++i) {
 		static_cast<void>(gen());
@@ -72,13 +72,20 @@ int main(int argc, char** argv){
 			if(!program.lock_heads().empty()) {
 				auto lid = choose_lock(program, gen);
 				auto tid = por::event::thread_id_t{};
-				if(program.lock_heads().find(lid)->second->kind() == por::event::event_kind::lock_acquire) {
-					tid = program.lock_heads().find(lid)->second->tid();
+				auto lock = program.lock_heads().find(lid)->second;
+				if(lock->kind() == por::event::event_kind::lock_acquire) {
+					if(program.thread_heads()[lock->tid()]->kind() != por::event::event_kind::thread_stop) {
+						tid = lock->tid();
+						program.destroy_lock(tid, lid);
+						std::cout << "-L " << lid << " (" << tid << ")\n";
+					}	else {
+						// nop: lock is being held by a dead thread, and thus cannot be destroyed
+					}
 				} else {
 					tid = choose_thread(program, gen);
+					program.destroy_lock(tid, lid);
+					std::cout << "-L " << lid << " (" << tid << ")\n";
 				}
-				program.destroy_lock(tid, lid);
-				std::cout << "-L " << lid << " (" << tid << ")\n";
 			}
 		} else if(roll < 600) {
 			// acquire lock, if one can be acquired
