@@ -106,7 +106,7 @@ int main(int argc, char** argv){
 			for(bool done = false; !done; ) {
 				unsigned count = 0;
 				for(auto const& l : program.lock_heads()) {
-					if(l.second->kind() == por::event::event_kind::lock_acquire) {
+					if(l.second->kind() == por::event::event_kind::lock_acquire && program.thread_heads()[l.second->tid()]->kind() != por::event::event_kind::thread_stop) {
 						++count;
 						if(rare_choice(gen)) {
 							auto const tid = l.second->tid();
