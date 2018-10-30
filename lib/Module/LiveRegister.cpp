@@ -24,6 +24,32 @@
 
 using namespace llvm;
 
+namespace {
+
+template<typename T>
+void printValuesAsSet(raw_ostream &os, T &set) {
+  auto values = std::vector<const Value *>(set.begin(), set.end());
+  std::sort(values.begin(), values.end(), [](const Value *a, const Value *b) {
+    if (!a->hasName()) return false;
+    if (b->hasName())
+      return a->getName() < b->getName();
+    return true;
+  });
+  os << "{";
+  bool first = true;
+  for (const Value *value : values) {
+    os << (first ? "" : ", ");
+    if (value->hasName())
+      os << "%" << value->getName();
+    else
+      os << "unnamed";
+    first = false;
+  }
+  os << "}\n";
+}
+
+}
+
 namespace klee {
 
 bool LiveRegisterPass::runOnFunction(Function &F) {
@@ -35,9 +61,8 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
   // after the execution of the first instruction of each basic block).
   // Introduced instructions are removed again at the end of this pass.
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
-    BasicBlock &bb = *it;
-    LLVMContext &ctx = bb.getContext();
-    bb.getInstList().insert(bb.begin(), createNopInstruction(ctx));
+    insertNopInstruction(*it);
+
   }
 
   initializeWorklist(F);
@@ -121,18 +146,23 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(const Function &F) {
   }
 }
 
-const Instruction *
-LiveRegisterPass::getLastPHIInstruction(const BasicBlock &BB) const {
-  // Note: We cannot use getFirstNonPHI() here because of the NOP
-  const Instruction *firstRealInstruction = &*std::next(BB.begin());
-  const Instruction *lastPHI = &*BB.begin();
-  if (firstRealInstruction->getOpcode() == Instruction::PHI) {
-    lastPHI = firstRealInstruction;
-    while (lastPHI->getNextNode()->getOpcode() == Instruction::PHI) {
-      lastPHI = lastPHI->getNextNode();
-    }
-  }
-  return lastPHI;
+const Instruction *LiveRegisterPass::getLastPHIInstruction(const BasicBlock &BB) {
+  auto it = BB.begin();
+  auto ie = BB.end();
+  bool firstIsPHI = (BB.begin()->getOpcode() == Instruction::PHI);
+  if (std::next(it) == ie)
+    return firstIsPHI ? nullptr : &*it; // only one instruction in BB
+
+  bool secondIsPHI = (std::next(BB.begin())->getOpcode() == Instruction::PHI);
+  if (!firstIsPHI && secondIsPHI)
+    ++it; // skip NOP instruction
+
+  const Instruction *inst = &*it;
+  do {
+    inst = &*it;
+  } while (it != ie && (++it)->getOpcode() == Instruction::PHI);
+
+  return inst;
 }
 
 void LiveRegisterPass::computeBasicBlockInfo(const Function &F) {
@@ -251,28 +281,6 @@ void LiveRegisterPass::generateInstructionInfo(const Function &F) {
   }
 }
 
-template<typename T>
-void printValuesAsSet(raw_ostream &os, T &set) {
-  auto values = std::vector<const Value *>(set.begin(), set.end());
-  std::sort(values.begin(), values.end(), [](const Value *a, const Value *b) {
-    if (!a->hasName()) return false;
-    if (b->hasName())
-      return a->getName() < b->getName();
-    return true;
-  });
-  os << "{";
-  bool first = true;
-  for (const Value *value : values) {
-    os << (first ? "" : ", ");
-    if (value->hasName())
-      os << "%" << value->getName();
-    else
-      os << "unnamed";
-    first = false;
-  }
-  os << "}\n";
-}
-
 void LiveRegisterPass::print(raw_ostream &os, const Module *M) const {
   const Function &F = *this->F;
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
@@ -329,9 +337,11 @@ LiveRegisterPass::transition(const Instruction *i, const valueset_t &set) {
   return result;
 }
 
-Instruction *LiveRegisterPass::createNopInstruction(LLVMContext &ctx) const {
+void LiveRegisterPass::insertNopInstruction(BasicBlock &bb) {
+  LLVMContext &ctx = bb.getContext();
   ConstantInt *zero = ConstantInt::get(ctx, APInt(1, 0, false));
-  return BinaryOperator::Create(Instruction::BinaryOps::Or, zero, zero);
+  Instruction *nop = BinaryOperator::Create(Instruction::BinaryOps::Or, zero, zero);
+  bb.getInstList().insert(bb.begin(), nop);
 }
 
 

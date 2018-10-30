@@ -235,16 +235,16 @@ private:
 
   void computeBasicBlockInfo(const llvm::Function &F);
 
-  // returns last PHI node if any, otherwise NOP instruction
-  const llvm::Instruction *
-  getLastPHIInstruction(const llvm::BasicBlock &BB) const;
-
   void generateInstructionInfo(const llvm::Function &F);
   void addPredecessors(std::vector<edge_t> &worklist,
                        const llvm::Instruction *i);
   valueset_t transition(const llvm::Instruction *i, const valueset_t &set);
 
-  llvm::Instruction *createNopInstruction(llvm::LLVMContext &ctx) const;
+  // returns last PHI node if any, otherwise nullptr
+  static const llvm::Instruction *
+  getLastPHIInstruction(const llvm::BasicBlock &BB);
+
+  static void insertNopInstruction(llvm::BasicBlock &bb);
 };
 
 } // namespace klee
