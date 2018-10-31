@@ -55,14 +55,13 @@ namespace klee {
 bool LiveRegisterPass::runOnFunction(Function &F) {
   this->F = &F;
 
-  // Add nop instruction before the first instruction of each basic block
+  // Add NOP instruction before the first instruction of each basic block
   // to get live registers at the beginning of each basic block (as our analysis
   // propagates backwards, we would otherwise only know which registers are live
   // after the execution of the first instruction of each basic block).
   // Introduced instructions are removed again at the end of this pass.
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
     insertNopInstruction(*it);
-
   }
 
   initializeWorklist(F);
@@ -71,11 +70,24 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
 
   computeBasicBlockInfo(F);
 
-  // remove nop instructions that were added in the initialization phase
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
-    BasicBlock &bb = *it;
-    Instruction &nop = *bb.begin();
-    nop.eraseFromParent();
+    // remove NOP instructions that were added in the initialization phase
+    {
+      BasicBlock &bb = *it;
+      Instruction &nop = *bb.begin();
+      nop.eraseFromParent();
+    }
+
+    // mark all live sets as valid, starting from the last PHI node
+    // (or the first instruction in absence of PHI nodes)
+    const BasicBlock &bb = *it;
+    const Instruction *firstInstWithValidLiveSet = getLastPHIInstruction(bb);
+    for (auto it = firstInstWithValidLiveSet->getIterator(), ie = bb.end();
+         it != ie; ++it) {
+      const Instruction *inst = &*it;
+      assert(instructions.count(inst) != 0);
+      instructions[inst].isValidLiveSet = true;
+    }
   }
 
   return false;

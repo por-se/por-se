@@ -206,6 +206,7 @@ private:
     valueset_t gen;
     valueset_t kill;
     valueset_t live;
+    bool isValidLiveSet = false;
   };
 
   std::unordered_map<const llvm::Instruction *, InstructionInfo> instructions;
@@ -225,6 +226,18 @@ public:
   const std::unordered_map<const llvm::BasicBlock *, BasicBlockInfo> &
   getBasicBlockInfoMap() {
     return basicBlocks;
+  }
+
+  const valueset_t *getLiveSet(const llvm::Instruction *inst) const {
+    if (instructions.count(inst) == 0)
+      return nullptr;
+
+    const InstructionInfo &ii = instructions.at(inst);
+
+    if (!ii.isValidLiveSet)
+       return nullptr;
+
+    return &ii.live;
   }
 
 private:
