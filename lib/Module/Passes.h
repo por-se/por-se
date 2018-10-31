@@ -228,6 +228,7 @@ public:
   }
 
 private:
+  friend class ModuleTest_LiveRegisterGetLastPHI_Test;
 
   void initializeWorklist(const llvm::Function &F);
   void executeWorklistAlgorithm();

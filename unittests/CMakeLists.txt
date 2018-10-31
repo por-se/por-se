@@ -95,6 +95,7 @@ endfunction()
 # Unit Tests
 add_subdirectory(Assignment)
 add_subdirectory(Expr)
+add_subdirectory(Module)
 add_subdirectory(Ref)
 add_subdirectory(Solver)
 add_subdirectory(TreeStream)
