@@ -3,17 +3,17 @@
 #include "base.h"
 
 namespace por::event {
-	class program_start final : public event {
-		// program start has no predecessors
+	class program_init final : public event {
+		// program init has no predecessors
 
 	protected:
-		program_start()
-		: event(event_kind::program_start, 0)
+		program_init()
+		: event(event_kind::program_init, 0)
 		{ }
 
 	public:
-		static std::shared_ptr<program_start> alloc() {
-			return std::make_shared<program_start>(program_start{});
+		static std::shared_ptr<program_init> alloc() {
+			return std::make_shared<program_init>(program_init{});
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {

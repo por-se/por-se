@@ -3,26 +3,26 @@
 #include "base.h"
 
 namespace por::event {
-	class thread_start final : public event {
+	class thread_init final : public event {
 		// predecessors:
-		// 1. thread creation predecessor (must be a different thread or program start)
+		// 1. thread creation predecessor (must be a different thread or program init)
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
 	protected:
-		thread_start(thread_id_t tid, std::shared_ptr<event>&& creator)
-		: event(event_kind::thread_start, tid)
+		thread_init(thread_id_t tid, std::shared_ptr<event>&& creator)
+		: event(event_kind::thread_init, tid)
 		, _predecessors{std::move(creator)}
 		{
 			assert(this->thread_creation_predecessor());
 			assert(
-				this->thread_creation_predecessor()->kind() == event_kind::program_start
+				this->thread_creation_predecessor()->kind() == event_kind::program_init
 				|| this->thread_creation_predecessor()->kind() == event_kind::thread_create
 			);
 		}
 
 	public:
-		static std::shared_ptr<thread_start> alloc(thread_id_t tid, std::shared_ptr<event> creator) {
-			return std::make_shared<thread_start>(thread_start{tid, std::move(creator)});
+		static std::shared_ptr<thread_init> alloc(thread_id_t tid, std::shared_ptr<event> creator) {
+			return std::make_shared<thread_init>(thread_init{tid, std::move(creator)});
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {

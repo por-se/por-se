@@ -17,7 +17,7 @@ namespace por {
 	public:
 		program() {
 			_thread_heads.reserve(32);
-			_thread_heads.emplace_back(event::program_start::alloc());
+			_thread_heads.emplace_back(event::program_init::alloc());
 		}
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
@@ -26,11 +26,11 @@ namespace por {
 		por::event::thread_id_t const& active_threads() const noexcept { return _active_threads; }
 
 		// Spawn a new thread from tid `source`.
-		// Use `source == 0` to indicate that the thread is spawned as part of program startup.
+		// Use `source == 0` to indicate that the thread is spawned as part of program initup.
 		por::event::thread_id_t spawn_thread(event::thread_id_t source) {
 			assert(source < _thread_heads.size());
-			assert((source > 0 || _thread_heads.size() == 1) && "In our current use cases there is always exactly one main thread spawned at program startup");
-			assert(thread_heads()[source]->kind() != por::event::event_kind::thread_stop);
+			assert((source > 0 || _thread_heads.size() == 1) && "In our current use cases there is always exactly one main thread spawned at program initup");
+			assert(thread_heads()[source]->kind() != por::event::event_kind::thread_exit);
 
 			++_active_threads;
 			if(source > 0) {
@@ -38,25 +38,25 @@ namespace por {
 			}
 			por::event::thread_id_t tid = static_cast<por::event::thread_id_t>(_thread_heads.size());
 			assert(tid > 0);
-			_thread_heads.emplace_back(event::thread_start::alloc(tid, _thread_heads[source]));
+			_thread_heads.emplace_back(event::thread_init::alloc(tid, _thread_heads[source]));
 			return tid;
 		}
 
-		void stop_thread(event::thread_id_t thread) {
+		void exit_thread(event::thread_id_t thread) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 
 			assert(_active_threads > 0);
 			--_active_threads;
 
-			_thread_heads[thread] = event::thread_stop::alloc(thread, _thread_heads[thread]);
+			_thread_heads[thread] = event::thread_exit::alloc(thread, _thread_heads[thread]);
 		}
 
 		por::event::lock_id_t create_lock(event::thread_id_t thread) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 
 			auto const lock_id = _next_lock++;
 			_thread_heads[thread] = event::lock_create::alloc(thread, _thread_heads[thread]);
@@ -67,7 +67,7 @@ namespace por {
 		void destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 			assert(lock_heads().find(lock) != lock_heads().end());
 
 			_thread_heads[thread] = event::lock_destroy::alloc(thread, _thread_heads[thread], _lock_heads[lock]);
@@ -77,7 +77,7 @@ namespace por {
 		void acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 			assert(lock_heads().find(lock) != lock_heads().end());
 
 			_thread_heads[thread] = event::lock_acquire::alloc(thread, _thread_heads[thread], _lock_heads[lock]);
@@ -87,7 +87,7 @@ namespace por {
 		void release_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 			assert(lock_heads().find(lock) != lock_heads().end());
 
 			_thread_heads[thread] = event::lock_release::alloc(thread, _thread_heads[thread], _lock_heads[lock]);
@@ -97,7 +97,7 @@ namespace por {
 		void local(event::thread_id_t thread) {
 			assert(thread > 0);
 			assert(thread < _thread_heads.size());
-			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_stop);
+			assert(thread_heads()[thread]->kind() != por::event::event_kind::thread_exit);
 
 			_thread_heads[thread] = event::local::alloc(thread, _thread_heads[thread]);
 		}

@@ -3,26 +3,26 @@
 #include "base.h"
 
 namespace por::event {
-	class thread_stop final : public event {
+	class thread_exit final : public event {
 		// predecessors:
-		// 1. thread creation predecessor (must be a different thread or program stop)
+		// 1. thread creation predecessor (must be a different thread or program exit)
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
 	protected:
-		thread_stop(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-		: event(event_kind::thread_stop, tid)
+		thread_exit(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
+		: event(event_kind::thread_exit, tid)
 		, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
 			assert(this->thread_predecessor()->tid() == this->tid());
-			assert(this->thread_predecessor()->kind() != event_kind::program_start);
-			assert(this->thread_predecessor()->kind() != event_kind::thread_stop);
+			assert(this->thread_predecessor()->kind() != event_kind::program_init);
+			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 		}
 
 	public:
-		static std::shared_ptr<thread_stop> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
-			return std::make_shared<thread_stop>(thread_stop{tid, std::move(thread_predecessor)});
+		static std::shared_ptr<thread_exit> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
+			return std::make_shared<thread_exit>(thread_exit{tid, std::move(thread_predecessor)});
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {

@@ -12,10 +12,10 @@ namespace por::event {
 
 	enum class event_kind : std::uint8_t {
 		local = 0,
-		program_start = 1,
+		program_init = 1,
 		thread_create = 2,
-		thread_start = 3,
-		thread_stop = 4,
+		thread_init = 3,
+		thread_exit = 4,
 		lock_create = 5,
 		lock_destroy = 6,
 		lock_acquire = 7,

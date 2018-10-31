@@ -12,7 +12,7 @@ namespace {
 		std::uniform_int_distribution<std::size_t> dis(1, program.active_threads());
 		std::size_t chosen = dis(gen);
 		for(std::size_t i = 1, c = 0; i < program.thread_heads().size(); ++i){
-			if(program.thread_heads()[i]->kind() != por::event::event_kind::thread_stop) {
+			if(program.thread_heads()[i]->kind() != por::event::event_kind::thread_exit) {
 				++c;
 				if(c == chosen) {
 					assert(i == program.thread_heads()[i]->tid());
@@ -61,7 +61,7 @@ int main(int argc, char** argv){
 		} else if(roll < 100) {
 			// kill old thread
 			auto tid = choose_thread(program, gen);
-			program.stop_thread(tid);
+			program.exit_thread(tid);
 			std::cout << "-T " << tid << "\n";
 		} else if(roll < 200) {
 			// spawn new lock
@@ -75,7 +75,7 @@ int main(int argc, char** argv){
 				auto tid = por::event::thread_id_t{};
 				auto lock = program.lock_heads().find(lid)->second;
 				if(lock->kind() == por::event::event_kind::lock_acquire) {
-					if(program.thread_heads()[lock->tid()]->kind() != por::event::event_kind::thread_stop) {
+					if(program.thread_heads()[lock->tid()]->kind() != por::event::event_kind::thread_exit) {
 						tid = lock->tid();
 						program.destroy_lock(tid, lid);
 						std::cout << "-L " << lid << " (" << tid << ")\n";
@@ -114,7 +114,7 @@ int main(int argc, char** argv){
 			for(bool done = false; !done; ) {
 				unsigned count = 0;
 				for(auto const& l : program.lock_heads()) {
-					if(l.second->kind() == por::event::event_kind::lock_acquire && program.thread_heads()[l.second->tid()]->kind() != por::event::event_kind::thread_stop) {
+					if(l.second->kind() == por::event::event_kind::lock_acquire && program.thread_heads()[l.second->tid()]->kind() != por::event::event_kind::thread_exit) {
 						++count;
 						if(rare_choice(gen)) {
 							auto const tid = l.second->tid();
