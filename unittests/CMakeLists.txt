@@ -79,6 +79,7 @@ endif()
 function(add_klee_unit_test target_name)
   add_executable(${target_name} ${ARGN})
   target_link_libraries(${target_name} PRIVATE gtest_main)
+  target_include_directories(${target_name} PUBLIC ${KLEE_COMPONENT_EXTRA_INCLUDE_DIRS})
   target_include_directories(${target_name} BEFORE PRIVATE "${GTEST_INCLUDE_DIR}")
   set_target_properties(${target_name}
     PROPERTIES
