@@ -8,4 +8,5 @@
 #include "program_init.h"
 #include "thread_create.h"
 #include "thread_init.h"
+#include "thread_join.h"
 #include "thread_exit.h"

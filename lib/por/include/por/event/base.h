@@ -14,12 +14,13 @@ namespace por::event {
 		local = 0,
 		program_init = 1,
 		thread_create = 2,
-		thread_init = 3,
-		thread_exit = 4,
-		lock_create = 5,
-		lock_destroy = 6,
-		lock_acquire = 7,
-		lock_release = 8,
+		thread_join = 3,
+		thread_init = 4,
+		thread_exit = 5,
+		lock_create = 6,
+		lock_destroy = 7,
+		lock_acquire = 8,
+		lock_release = 9,
 	};
 
 	class event : public std::enable_shared_from_this<event> {

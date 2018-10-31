@@ -9,6 +9,7 @@ target_sources(libpor INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/event/program_init.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_create.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_init.h"
+	"${CMAKE_CURRENT_LIST_DIR}/event/thread_join.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_exit.h"
 	"${CMAKE_CURRENT_LIST_DIR}/program.h"
 )
