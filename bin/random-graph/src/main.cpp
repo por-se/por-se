@@ -21,6 +21,7 @@ namespace {
 			}
 		}
 		assert(false && "Active thread number was too large");
+		std::abort();
 	}
 
 	por::event::lock_id_t choose_lock(por::program const& program, std::mt19937_64& gen) {
