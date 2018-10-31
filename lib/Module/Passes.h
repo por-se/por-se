@@ -240,7 +240,7 @@ private:
                        const llvm::Instruction *i);
   valueset_t transition(const llvm::Instruction *i, const valueset_t &set);
 
-  // returns last PHI node if any, otherwise nullptr
+  // returns last PHI node if any, otherwise the first instruction (i.e. NOP)
   static const llvm::Instruction *
   getLastPHIInstruction(const llvm::BasicBlock &BB);
 

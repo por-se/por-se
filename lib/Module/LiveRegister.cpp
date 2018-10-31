@@ -149,13 +149,16 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(const Function &F) {
 const Instruction *LiveRegisterPass::getLastPHIInstruction(const BasicBlock &BB) {
   auto it = BB.begin();
   auto ie = BB.end();
-  bool firstIsPHI = (BB.begin()->getOpcode() == Instruction::PHI);
-  if (std::next(it) == ie)
-    return firstIsPHI ? nullptr : &*it; // only one instruction in BB
+  bool firstIsPHI = (it->getOpcode() == Instruction::PHI);
+  if (std::next(it) == ie) {
+    // only one instruction in BB
+    assert(!firstIsPHI && "PHINode is not a terminator instruction");
+    return &*it;
+  }
 
-  bool secondIsPHI = (std::next(BB.begin())->getOpcode() == Instruction::PHI);
+  bool secondIsPHI = (std::next(it)->getOpcode() == Instruction::PHI);
   if (!firstIsPHI && secondIsPHI)
-    ++it; // skip NOP instruction
+    ++it; // skip NOP instruction (only if PHI nodes are available)
 
   const Instruction *inst = &*it;
   do {
