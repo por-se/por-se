@@ -241,7 +241,8 @@ public:
   }
 
 private:
-  friend class ModuleTest_LiveRegisterGetLastPHI_Test;
+  friend class LiveRegisterPassTest_GetLastPHI_Test;
+  friend class LiveRegisterPassTest_GetLiveSet_Test;
 
   void initializeWorklist(const llvm::Function &F);
   void executeWorklistAlgorithm();

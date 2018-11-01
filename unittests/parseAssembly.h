@@ -13,9 +13,9 @@
 
 #include <sstream>
 
-using namespace llvm;
-
-std::unique_ptr<Module> parseAssembly(LLVMContext &ctx, StringRef source) {
+std::unique_ptr<llvm::Module> parseAssembly(llvm::LLVMContext &ctx,
+                                            llvm::StringRef source) {
+  using namespace llvm;
   SMDiagnostic Error;
   SlotMapping Mapping;
   auto m = parseAssemblyString(source, Error, ctx, &Mapping);
