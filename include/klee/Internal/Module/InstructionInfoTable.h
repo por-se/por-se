@@ -13,6 +13,7 @@
 #include <map>
 #include <string>
 #include <set>
+#include <vector>
 
 namespace llvm {
   class Function;
@@ -32,6 +33,7 @@ class KInstruction;
 
   private:
     KInstruction *ki = nullptr;
+    std::vector<const KInstruction *> liveLocals;
 
   public:
     InstructionInfo(unsigned _id,
@@ -55,6 +57,14 @@ class KInstruction;
 
     KInstruction *getKInstruction() const {
       return ki;
+    }
+
+    void setLiveLocals(std::vector<const KInstruction *> &&set) {
+      liveLocals = set;
+    }
+
+    const std::vector<const KInstruction *> &getLiveLocals() const {
+      return liveLocals;
     }
   };
 

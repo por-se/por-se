@@ -349,6 +349,29 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
     LiveRegisterPass lrp;
     for (auto &kf : functions) {
       lrp.runOnFunction(*kf->function);
+
+      for (std::size_t i = 0; i < kf->numInstructions; ++i) {
+        // attach set of live KInstruction*s to each KInstruction
+        KInstruction *ki = kf->instructions[i];
+        const auto *set = lrp.getLiveSet(ki->inst);
+        if (set == nullptr)
+          continue;
+
+        std::vector<const KInstruction *> liveKInstSet;
+        liveKInstSet.reserve(set->size());
+
+        for (const Value *liveValue : *set) {
+          // convert Value* to KInstruction*
+          const auto *liveInst = cast<llvm::Instruction>(liveValue);
+          const InstructionInfo &ii = infos->getInfo(liveInst);
+          const KInstruction *liveKInst = ii.getKInstruction();
+          liveKInstSet.push_back(liveKInst);
+        }
+
+        InstructionInfo *ii = const_cast<InstructionInfo *>(ki->info);
+        ii->setLiveLocals(std::move(liveKInstSet));
+      }
+
       auto bbInfo = lrp.getBasicBlockInfoMap();
       for (auto &bb : *kf->function) {
         kf->basicBlockValueLivenessInfo.emplace(
