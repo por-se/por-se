@@ -34,6 +34,7 @@ class KInstruction;
   private:
     KInstruction *ki = nullptr;
     std::vector<const KInstruction *> liveLocals;
+    bool hasValidLiveLocals = false;
 
   public:
     InstructionInfo(unsigned _id,
@@ -61,10 +62,13 @@ class KInstruction;
 
     void setLiveLocals(std::vector<const KInstruction *> &&set) {
       liveLocals = set;
+      hasValidLiveLocals = true;
     }
 
-    const std::vector<const KInstruction *> &getLiveLocals() const {
-      return liveLocals;
+    const std::vector<const KInstruction *> *getLiveLocals() const {
+      if (!hasValidLiveLocals)
+        return nullptr;
+      return &liveLocals;
     }
   };
 

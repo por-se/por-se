@@ -113,19 +113,6 @@ private:
   }
 
   void updateBasicBlockInfo(const llvm::BasicBlock *bb);
-  void unregisterConsumedLocals(std::uint64_t threadID,
-                                std::size_t stackFrameIndex,
-                                const llvm::BasicBlock *bb);
-  void unregisterKilledLocals(std::uint64_t threadID,
-                              std::size_t stackFrameIndex,
-                              const llvm::BasicBlock *dst,
-                              const llvm::BasicBlock *src);
-
-  void unregisterLocal(std::uint64_t threadID,
-                       std::size_t stackFrameIndex,
-                       const llvm::Instruction *inst,
-                       ref<Expr> value,
-                       bool force);
 
   void applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
                           const ObjectState &os, std::size_t bytes,
@@ -149,10 +136,6 @@ private:
 
   KInstruction *getKInstruction(const llvm::Instruction* inst);
   KFunction *getKFunction(const llvm::BasicBlock *bb);
-  ref<Expr> getLocalValue(const KInstruction *kinst);
-  ref<Expr> getLocalValue(const llvm::Instruction *inst);
-  void clearLocal(const KInstruction *kinst);
-  void clearLocal(const llvm::Instruction *inst);
 
 public:
   MemoryState() = delete;
@@ -212,13 +195,6 @@ public:
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }
 
-  void registerLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                     const llvm::Instruction *inst, ref<Expr> value);
-  void unregisterLocal(std::uint64_t threadID, std::size_t stackFrameIndex,
-                       const llvm::Instruction *inst, ref<Expr> value) {
-    unregisterLocal(threadID, stackFrameIndex, inst, value, false);
-  }
-
   void registerArgument(std::uint64_t threadID,
                         std::size_t stackFrameIndex,
                         const KFunction *kf,
@@ -230,10 +206,6 @@ public:
                        std::size_t stackFrameIndex,
                        const llvm::BasicBlock *dst,
                        const llvm::BasicBlock *src = nullptr);
-  void phiNodeProcessingCompleted(std::uint64_t threadID,
-                                  std::size_t stackFrameIndex,
-                                  const llvm::BasicBlock *dst,
-                                  const llvm::BasicBlock *src);
 
   void registerPushFrame(std::uint64_t threadID, size_t stackFrameIndex,
                          const KFunction *callee, const llvm::Instruction *caller);

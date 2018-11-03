@@ -436,56 +436,6 @@ bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
   return (live.find(instValue) != live.end());
 }
 
-void MemoryState::registerLocal(std::uint64_t threadID,
-                                std::size_t stackFrameIndex,
-                                const llvm::Instruction *inst,
-                                ref<Expr> value) {
-  bool abort = disableMemoryState;
-  abort |= (inst == nullptr);
-  abort |= value.isNull();
-  abort |= !isLocalLive(inst);
-  if (abort)
-    return;
-
-  applyLocalFragment(threadID, stackFrameIndex, inst, value);
-
-  if (!isa<ConstantExpr>(value))
-    increaseExprReferenceCount(value);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: register local %" << inst->getName()
-                 << ": " << ExprString(value)
-                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "]\n";
-  }
-}
-
-void MemoryState::unregisterLocal(std::uint64_t threadID,
-                                  std::size_t stackFrameIndex,
-                                  const llvm::Instruction *inst,
-                                  ref<Expr> value,
-                                  bool force) {
-  bool abort = disableMemoryState;
-  abort |= (inst == nullptr);
-  abort |= value.isNull();
-  // in case of removal of dead locals, shouldRegisterLocal() is already false
-  abort |= !(isLocalLive(inst) || force);
-  if (abort)
-    return;
-
-  applyLocalFragment(threadID, stackFrameIndex, inst, value);
-
-  if (!isa<ConstantExpr>(value))
-    decreaseExprReferenceCount(value);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: unregister local %" << inst->getName()
-                 << ": " << ExprString(value)
-                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "]\n";
-  }
-}
-
 void MemoryState::applyLocalFragment(std::uint64_t threadID,
                                      std::size_t stackFrameIndex,
                                      const llvm::Instruction *inst,
@@ -506,7 +456,7 @@ void MemoryState::applyLocalFragment(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToFingerprintStackFrameDelta();
+  fingerprint.applyToTemporaryDelta();
 }
 
 void MemoryState::registerArgument(std::uint64_t threadID,
@@ -568,57 +518,6 @@ void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
   basicBlockInfo.liveRegisters.insert(consumed.begin(), consumed.end());
 }
 
-void MemoryState::unregisterConsumedLocals(std::uint64_t threadID,
-                                           std::size_t stackFrameIndex,
-                                           const llvm::BasicBlock *bb) {
-  // This method is called after the execution of bb to clean up the local
-  // delta, but also set locals to NULL within KLEE.
-
-  KFunction *kf = getKFunction(bb);
-  auto consumed = kf->basicBlockValueLivenessInfo.at(bb).getConsumedValues();
-
-  for (auto &c : consumed) {
-    const llvm::Instruction *inst = static_cast<const llvm::Instruction *>(c);
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Following variable is dead"
-                   << " after transition from BasicBlock %" << bb->getName()
-                   << ": %" << inst->getName() << "\n";
-    }
-    ref<Expr> value = getLocalValue(inst);
-    unregisterLocal(threadID, stackFrameIndex, inst, value, true);
-    // set local within KLEE to NULL to mark it as dead
-    // this prevents us from unregistering this local twice
-    clearLocal(inst);
-  }
-}
-
-void MemoryState::unregisterKilledLocals(std::uint64_t threadID,
-                                         std::size_t stackFrameIndex,
-                                         const llvm::BasicBlock *dst,
-                                         const llvm::BasicBlock *src) {
-  // kill registers based on outgoing edge (edge from src to dst)
-
-  KFunction *kf = getKFunction(src);
-  auto killed = kf->basicBlockValueLivenessInfo.at(src).getKilledValues(dst);
-
-  // unregister and clear locals that are not live at the end of dst
-  for (auto &k : killed) {
-    const llvm::Instruction *inst = static_cast<const llvm::Instruction *>(k);
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Following variable (last accessed "
-                   << "in BasicBlock %" << src->getName()
-                   << ") is dead in BasicBlock %" << dst->getName()
-                   << " (after evaluation of PHI nodes, if any)"
-                   << ": %" << inst->getName() << "\n";
-    }
-    ref<Expr> value = getLocalValue(inst);
-    unregisterLocal(threadID, stackFrameIndex, inst, value, true);
-    // set local within KLEE to NULL to mark it as dead
-    // this prevents us from unregistering this local twice
-    clearLocal(inst);
-  }
-}
-
 void MemoryState::enterBasicBlock(std::uint64_t threadID,
                                   std::size_t stackFrameIndex,
                                   const llvm::BasicBlock *dst,
@@ -647,9 +546,6 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
     fingerprint.updateUint64(stackFrameIndex);
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
     fingerprint.applyToFingerprintStackFrameDelta();
-
-    if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
-      unregisterConsumedLocals(threadID, stackFrameIndex, src);
   }
   if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
     updateBasicBlockInfo(dst);
@@ -675,21 +571,6 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
     }
     llvm::errs() << "}\n";
   }
-}
-
-void MemoryState::phiNodeProcessingCompleted(std::uint64_t threadID,
-                                             std::size_t stackFrameIndex,
-                                             const llvm::BasicBlock *dst,
-                                             const llvm::BasicBlock *src) {
-  if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-    return;
-  }
-
-  if (disableMemoryState) {
-    return;
-  }
-
-  unregisterKilledLocals(threadID, stackFrameIndex, dst, src);
 }
 
 bool MemoryState::enterListedFunction(llvm::Function *f) {
@@ -759,13 +640,6 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
   Thread &thread = executionState->getCurrentThreadReference();
 
   if (thread.stack.size() > 0) {
-    if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-      // We have to clear consumed locals within KLEE to be able to determine
-      // which variable has already been registered during another call to the
-      // function we are currently leaving.
-      unregisterConsumedLocals(threadID, thread.stack.size() - 1, returningBB);
-    }
-
     // subtract symbolic references of stackframe delta that is to be removed
     for (auto s : thread.stack.back().symbolicReferences) {
       symbolicReferences[s.first] -= s.second;
@@ -835,6 +709,29 @@ public:
 
 
 MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
+  // save symbolic references for easy restoration
+  sym_ref_map_t saveSymbolicReferences = symbolicReferences;
+
+  // include live locals of all existing (non-exited) threads
+  for (auto it : executionState->threads) {
+    auto threadID = it.first;
+    const Thread &thread = it.second;
+    if (thread.state == Thread::ThreadState::EXITED)
+      continue;
+
+    assert(thread.pc->info->getLiveLocals() != nullptr);
+    for (const KInstruction *ki : *thread.pc->info->getLiveLocals()) {
+      ref<Expr> value = thread.stack.back().locals[ki->dest].value;
+      if (value.isNull())
+        continue;
+
+      applyLocalFragment(threadID, thread.stack.size() - 1, ki->inst, value);
+
+      if (!isa<ConstantExpr>(value))
+        increaseExprReferenceCount(value);
+    }
+  }
+
   std::vector<ref<Expr>> expressions;
   for (auto expr : executionState->constraints) {
     expressions.push_back(expr);
@@ -866,21 +763,24 @@ MemoryFingerprint::fingerprint_t MemoryState::getFingerprint() {
   // TODO: transitive closure
 
 
-  if (constraintsMap.empty())
-    return fingerprint.getFingerprint();
-
-  Thread &thread = executionState->getCurrentThreadReference();
-  fingerprint.updateUint8(10);
-  fingerprint.updateUint64(thread.tid);
-  for (auto v : constraintsMap) {
-    for (ref<Expr> expr : v.second) {
-      fingerprint.updateExpr(expr);
+  if (!constraintsMap.empty()) {
+    Thread &thread = executionState->getCurrentThreadReference();
+    fingerprint.updateUint8(10);
+    fingerprint.updateUint64(thread.tid);
+    for (auto v : constraintsMap) {
+      for (ref<Expr> expr : v.second) {
+        fingerprint.updateExpr(expr);
+      }
     }
+    fingerprint.applyToTemporaryDelta();
   }
-  fingerprint.applyToTemporaryDelta();
 
   auto result = fingerprint.getFingerprint();
+
+  // cleanup
   fingerprint.discardTemporaryDelta();
+  symbolicReferences = std::move(saveSymbolicReferences);
+
   return result;
 }
 
@@ -965,33 +865,6 @@ KFunction *MemoryState::getKFunction(const llvm::BasicBlock *bb) {
   KFunction *kf = kmodule->functionMap[f];
   assert(kf != nullptr && "failed to retrieve KFunction");
   return kf;
-}
-
-ref<Expr> MemoryState::getLocalValue(const KInstruction *kinst) {
-  Thread &thread = executionState->getCurrentThreadReference();
-  return thread.stack.back().locals[kinst->dest].value;
-}
-
-ref<Expr> MemoryState::getLocalValue(const llvm::Instruction *inst) {
-  KInstruction *kinst = getKInstruction(inst);
-  if (kinst != nullptr) {
-    return getLocalValue(kinst);
-  }
-  return nullptr;
-}
-
-void MemoryState::clearLocal(const KInstruction *kinst) {
-  Thread &thread = executionState->getCurrentThreadReference();
-  thread.stack.back().locals[kinst->dest].value = nullptr;
-  assert(getLocalValue(kinst).isNull());
-}
-
-void MemoryState::clearLocal(const llvm::Instruction *inst) {
-  KInstruction *kinst = getKInstruction(inst);
-  if (kinst != nullptr) {
-    clearLocal(kinst);
-  }
-  assert(getLocalValue(inst).isNull());
 }
 
 }

@@ -1146,15 +1146,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 
 void Executor::bindLocal(KInstruction *target, ExecutionState &state, 
                          ref<Expr> value) {
-  Thread &thread = state.getCurrentThreadReference();
   Cell &cell = getDestCell(state, target);
-  if (DetectInfiniteLoops) {
-    if (!cell.value.isNull()) {
-      // unregister previous value to avoid cancellation
-      state.memoryState.unregisterLocal(thread.tid, thread.stack.size() - 1, target->inst, cell.value);
-    }
-    state.memoryState.registerLocal(thread.tid, thread.stack.size() - 1, target->inst, value);
-  }
   cell.value = value;
 }
 
@@ -1574,8 +1566,6 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
     // phiNodeProcessingCompleted updates live register information, thus we
     // need to call it on every BasicBlock change (even if it does not contain
     // any PHI nodes).
-    Thread &thread = state.getCurrentThreadReference();
-    state.memoryState.phiNodeProcessingCompleted(thread.tid, thread.stack.size() - 1, dst, src);
     if (state.memoryState.isEnabled()) {
       if ((dst->getSinglePredecessor() == nullptr) ||
           InfiniteLoopDetectionDisableTwoPredecessorOpt) {
