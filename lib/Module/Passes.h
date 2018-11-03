@@ -211,23 +211,7 @@ private:
 
   std::unordered_map<const llvm::Instruction *, InstructionInfo> instructions;
 
-  struct BasicBlockInfo {
-    const llvm::Instruction *lastPHI = nullptr;
-    valueset_t *phiLive = nullptr; // InstructionInfo live set of lastPHI or NOP
-    valueset_t *termLive = nullptr; // InstructionInfo live set of terminator
-    valueset_t consumed;
-    std::unordered_map<const llvm::BasicBlock *, valueset_t> killed;
-  };
-
-  std::unordered_map<const llvm::BasicBlock *, BasicBlockInfo> basicBlocks;
-
 public:
-
-  const std::unordered_map<const llvm::BasicBlock *, BasicBlockInfo> &
-  getBasicBlockInfoMap() {
-    return basicBlocks;
-  }
-
   const valueset_t *getLiveSet(const llvm::Instruction *inst) const {
     if (instructions.count(inst) == 0)
       return nullptr;
@@ -247,8 +231,6 @@ private:
   void initializeWorklist(const llvm::Function &F);
   void executeWorklistAlgorithm();
   void propagatePhiUseToLiveSet(const llvm::Function &F);
-
-  void computeBasicBlockInfo(const llvm::Function &F);
 
   void generateInstructionInfo(const llvm::Function &F);
   void addPredecessors(std::vector<edge_t> &worklist,

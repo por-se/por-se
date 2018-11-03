@@ -424,18 +424,6 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   }
 }
 
-bool MemoryState::isLocalLive(const llvm::Instruction *inst) {
-  // all variables are considered live if live variable analysis is disabled
-  if (InfiniteLoopDetectionDisableLiveVariableAnalysis)
-    return true;
-
-  updateBasicBlockInfo(inst->getParent());
-
-  const llvm::Value *instValue = cast<llvm::Value>(inst);
-  auto &live = basicBlockInfo.liveRegisters;
-  return (live.find(instValue) != live.end());
-}
-
 void MemoryState::applyLocalFragment(std::uint64_t threadID,
                                      std::size_t stackFrameIndex,
                                      const llvm::Instruction *inst,
@@ -501,23 +489,6 @@ void MemoryState::registerArgument(std::uint64_t threadID,
   }
 }
 
-
-void MemoryState::updateBasicBlockInfo(const llvm::BasicBlock *bb) {
-  assert(!InfiniteLoopDetectionDisableLiveVariableAnalysis
-         && "should not be called with live variable analysis disabled");
-
-  if (basicBlockInfo.bb == bb)
-    return;
-
-  KFunction *kf = getKFunction(bb);
-  auto termLive = kf->basicBlockValueLivenessInfo.at(bb).getLiveValues();
-  auto consumed = kf->basicBlockValueLivenessInfo.at(bb).getConsumedValues();
-
-  basicBlockInfo.bb = bb;
-  basicBlockInfo.liveRegisters = termLive; // clears old values
-  basicBlockInfo.liveRegisters.insert(consumed.begin(), consumed.end());
-}
-
 void MemoryState::enterBasicBlock(std::uint64_t threadID,
                                   std::size_t stackFrameIndex,
                                   const llvm::BasicBlock *dst,
@@ -547,8 +518,6 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
     fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(src));
     fingerprint.applyToFingerprintStackFrameDelta();
   }
-  if (!InfiniteLoopDetectionDisableLiveVariableAnalysis)
-    updateBasicBlockInfo(dst);
 
   // register new basic block (program counter)
   fingerprint.updateUint8(7);
@@ -556,21 +525,6 @@ void MemoryState::enterBasicBlock(std::uint64_t threadID,
   fingerprint.updateUint64(stackFrameIndex);
   fingerprint.updateUint64(reinterpret_cast<std::uintptr_t>(dst));
   fingerprint.applyToFingerprintStackFrameDelta();
-
-  if (InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-    return;
-  }
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: The following variables are live: {";
-    std::string delimiter = "";
-    for (auto &value : basicBlockInfo.liveRegisters) {
-      auto name = (value->hasName() ? ("%" + value->getName()) : "unnamed");
-      llvm::errs() << delimiter << name;
-      delimiter = ", ";
-    }
-    llvm::errs() << "}\n";
-  }
 }
 
 bool MemoryState::enterListedFunction(llvm::Function *f) {
@@ -654,10 +608,6 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
     fingerprint.discardStackFrameDelta();
     fingerprint.setStackFrameDeltaToPreviousValue(sf.fingerprintDelta);
-
-    if (!InfiniteLoopDetectionDisableLiveVariableAnalysis) {
-      updateBasicBlockInfo(callerBB);
-    }
 
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       llvm::errs() << "removing stack frame delta: " << previousDelta

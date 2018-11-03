@@ -371,17 +371,6 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
         InstructionInfo *ii = const_cast<InstructionInfo *>(ki->info);
         ii->setLiveLocals(std::move(liveKInstSet));
       }
-
-      auto bbInfo = lrp.getBasicBlockInfoMap();
-      for (auto &bb : *kf->function) {
-        kf->basicBlockValueLivenessInfo.emplace(
-          std::piecewise_construct,
-          std::forward_as_tuple(&bb),
-          std::forward_as_tuple(*bbInfo[&bb].termLive,
-                                bbInfo[&bb].consumed,
-                                bbInfo[&bb].killed)
-        );
-      }
     }
   }
 }
@@ -436,8 +425,6 @@ static int getOperandNum(Value *v,
     return -(km->getConstantID(c, ki) + 2);
   }
 }
-
-BasicBlockValueLivenessInfo::valueset_t BasicBlockValueLivenessInfo::emptySet;
 
 KFunction::KFunction(llvm::Function *_function,
                      KModule *km) 

@@ -61,11 +61,6 @@ private:
     std::size_t bytes = 0;
   } memoryFunction;
 
-  struct basicBlockInfo {
-    const llvm::BasicBlock *bb = nullptr;
-    std::unordered_set<const llvm::Value *> liveRegisters;
-  } basicBlockInfo;
-
   static size_t externalFunctionCallCounter;
 
   static KModule *kmodule;
@@ -112,15 +107,11 @@ private:
     }
   }
 
-  void updateBasicBlockInfo(const llvm::BasicBlock *bb);
-
   void applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
                           const ObjectState &os, std::size_t bytes,
                           bool increaseReferenceCount);
   void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
                           const llvm::Instruction *inst, ref<Expr> value);
-
-  bool isLocalLive(const llvm::Instruction *inst);
 
   bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const;
   MemoryFingerprint::fingerprint_t *
