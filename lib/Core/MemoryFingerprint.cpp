@@ -3,13 +3,8 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3,5)
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DebugLoc.h"
-#else
-#include "llvm/DebugInfo.h"
-#include "llvm/Support/DebugLoc.h"
-#endif
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
@@ -144,20 +139,6 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         item >> ptr;
         llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
-        const llvm::DebugLoc &dl = inst->getDebugLoc();
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-        std::string filename = "";
-        auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
-        if (scope) {
-          filename = scope->getFilename();
-        }
-#else
-        llvm::BasicBlock *bb = inst->getParent();
-        llvm::LLVMContext &ctx = bb->getContext();
-        llvm::DIScope scope = llvm::DIScope(dl.getScope(ctx));
-        auto filename = scope.getFilename();
-#endif
-
         result << "[T" << tid << ':' << sfid << ']';
         result << "Local: ";
         if (inst->hasName()) {
@@ -168,14 +149,14 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
                  << ')';
         }
 
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
+        const llvm::DebugLoc &dl = inst->getDebugLoc();
         if (dl) {
-#else
-        if (!dl.isUnknown()) {
-#endif
-          result << " (" << filename;
-          result << ":" << dl.getLine();
-          result << ")";
+          auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
+          if (scope) {
+            result << " (" << scope->getFilename();
+            result << ":" << dl.getLine();
+            result << ")";
+          }
         }
         result << " =";
 
