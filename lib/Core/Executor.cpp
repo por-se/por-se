@@ -4599,7 +4599,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     solver->setTimeout(coreSolverTimeout);
     bool noViolation = true;
     bool solverSuccessful = solver->mustBeTrue(state, query, noViolation);
-    solver->setTimeout(0);
+    solver->setTimeout(time::Span());
 
     if (!solverSuccessful) {
       klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
@@ -4615,7 +4615,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
         solver->setTimeout(coreSolverTimeout);
         bool alwaysDifferent = true;
         solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
-        solver->setTimeout(0);
+        solver->setTimeout(time::Span());
 
         if (!solverSuccessful) {
           klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
@@ -4651,7 +4651,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
       solver->setTimeout(coreSolverTimeout);
       bool canBeSafe = true;
       solverSuccessful = solver->mayBeFalse(state, unsafeQuery, canBeSafe);
-      solver->setTimeout(0);
+      solver->setTimeout(time::Span());
 
       if (!solverSuccessful) {
         klee_warning("Solver could not complete query for offset; Skipping possible safe mem access path");
