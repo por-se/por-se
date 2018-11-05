@@ -107,8 +107,10 @@ public:
   }
 
   fingerprint_t getFingerprint() {
-    executeXOR(fingerprint, fingerprintTemporaryDelta);
-    return fingerprint;
+    // temporarily include temporary delta
+    auto result = fingerprint;
+    executeXOR(result, fingerprintTemporaryDelta);
+    return result;
   }
 
   fingerprint_t getStackFrameDelta() {
