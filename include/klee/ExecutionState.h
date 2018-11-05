@@ -13,6 +13,7 @@
 #include "klee/Constraints.h"
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/TreeStream.h"
+#include "klee/Internal/System/Time.h"
 #include "klee/MergeHandler.h"
 #include "klee/Thread.h"
 
@@ -107,7 +108,7 @@ public:
   /// Statistics and information
 
   /// @brief Costs for all queries issued for this state, in seconds
-  mutable double queryCost;
+  mutable time::Span queryCost;
 
   /// @brief Weight assigned for importance of this state.  Can be
   /// used for searchers to decide what paths to explore

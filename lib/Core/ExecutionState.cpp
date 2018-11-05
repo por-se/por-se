@@ -52,7 +52,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     completedScheduleCount(0),
     threadSchedulingEnabled(true),
     atomicPhase(false),
-    queryCost(0.), 
     weight(1),
     depth(0),
     instsSinceCovNew(0),
@@ -81,7 +80,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
     : id(next_id++), memAccessTracker(nullptr), constraints(assumptions),
-      queryCost(0.), ptreeNode(0), memoryState(this) {}
+      ptreeNode(0), memoryState(this) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)

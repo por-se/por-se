@@ -104,11 +104,6 @@ namespace {
                    cl::init(true),
 		   cl::desc("Dump test cases for all active states on exit (default=on)"));
   
-  cl::opt<bool>
-  AllowExternalSymCalls("allow-external-sym-calls",
-                        cl::init(false),
-			cl::desc("Allow calls with symbolic arguments to external functions.  This concretizes the symbolic arguments.  (default=off)"));
-
   /// The different query logging solvers that can switched on/off
   enum PrintDebugInstructionsType {
     STDERR_ALL, ///
@@ -186,10 +181,21 @@ namespace {
                 cl::init(false),
                 cl::desc("Generate tests cases for all errors "
                          "(default=off, i.e. one per (error,instruction) pair)"));
-  
-  cl::opt<bool>
-  NoExternals("no-externals", 
-           cl::desc("Do not allow external function calls (default=off)"));
+
+  enum class ExternalCallPolicy {
+    None,     // No external calls allowed
+    Concrete, // Only external calls with concrete arguments allowed
+    All,      // All external calls allowed
+  };
+
+  cl::opt<ExternalCallPolicy>
+  ExternalCalls("external-calls",
+                cl::desc("Specify the external call policy"),
+                cl::values(clEnumValN(ExternalCallPolicy::None, "none", "No external function calls are allowed.  Note that KLEE always allows some external calls with concrete arguments to go through (in particular printf and puts), regardless of this option."),
+                           clEnumValN(ExternalCallPolicy::Concrete, "concrete", "Only external function calls with concrete arguments are allowed (default)"),
+                           clEnumValN(ExternalCallPolicy::All, "all", "All external function calls are allowed.  This concretizes any symbolic arguments in calls to external functions.")
+                           KLEE_LLVM_CL_VAL_END),
+                cl::init(ExternalCallPolicy::Concrete));
 
   cl::opt<bool>
   AlwaysOutputSeeds("always-output-seeds",
@@ -245,15 +251,13 @@ namespace {
 		      cl::init(1.),
 		      cl::desc("(default=1.0)"));
 
-  cl::opt<double>
+  cl::opt<std::string>
   MaxInstructionTime("max-instruction-time",
-                     cl::desc("Only allow a single instruction to take this much time (default=0s (off)). Enables --use-forked-solver"),
-                     cl::init(0));
+                     cl::desc("Allow a single instruction to take only this much time (default=0s (off)). Enables --use-forked-solver"));
   
-  cl::opt<double>
+  cl::opt<std::string>
   SeedTime("seed-time",
-           cl::desc("Amount of time to dedicate to seeds, before normal search (default=0 (off))"),
-           cl::init(0));
+           cl::desc("Amount of time to dedicate to seeds, before normal search (default=0s (off))"));
   
   cl::list<Executor::TerminateReason>
   ExitOnErrorType("exit-on-error-type",
@@ -331,12 +335,14 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
       pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
       processTree(0), replayKTest(0), replayPath(0), usingSeeds(0),
       atMemoryLimit(false), inhibitForking(false), haltExecution(false),
-      ivcEnabled(false),
-      coreSolverTimeout(MaxCoreSolverTime != 0 && MaxInstructionTime != 0
-                            ? std::min(MaxCoreSolverTime, MaxInstructionTime)
-                            : std::max(MaxCoreSolverTime, MaxInstructionTime)),
-      debugLogBuffer(debugBufferString),
+      ivcEnabled(false), debugLogBuffer(debugBufferString),
       executorStartTime(std::chrono::steady_clock::now()) {
+
+  const time::Span maxCoreSolverTime(MaxCoreSolverTime);
+  maxInstructionTime = time::Span(MaxInstructionTime);
+  coreSolverTimeout = maxCoreSolverTime && maxInstructionTime ?
+                      std::min(maxCoreSolverTime, maxInstructionTime)
+                    : std::max(maxCoreSolverTime, maxInstructionTime);
 
   if (coreSolverTimeout) UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
@@ -856,7 +862,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   if (!isSeeding && !isa<ConstantExpr>(condition) && 
       (MaxStaticForkPct!=1. || MaxStaticSolvePct != 1. ||
        MaxStaticCPForkPct!=1. || MaxStaticCPSolvePct != 1.) &&
-      statsTracker->elapsed() > 60.) {
+      statsTracker->elapsed() > time::seconds(60)) {
     StatisticManager &sm = *theStatisticManager;
 
     // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
@@ -884,12 +890,12 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     }
   }
 
-  double timeout = coreSolverTimeout;
+  time::Span timeout = coreSolverTimeout;
   if (isSeeding)
     timeout *= it->second.size();
   solver->setTimeout(timeout);
   bool success = solver->evaluate(current, condition, res);
-  solver->setTimeout(0);
+  solver->setTimeout(time::Span());
   if (!success) {
     // Since we were unsuccessful, restore the previous program counter for the current thread
     Thread& thread = current.getCurrentThreadReference();
@@ -1177,7 +1183,7 @@ ref<Expr> Executor::toUnique(const ExecutionState &state,
       if (solver->mustBeTrue(state, cond, isTrue) && isTrue)
         result = value;
     }
-    solver->setTimeout(0);
+    solver->setTimeout(time::Span());
   }
   
   return result;
@@ -3134,7 +3140,7 @@ void Executor::run(ExecutionState &initialState) {
       v.push_back(SeedInfo(*it));
 
     int lastNumSeeds = usingSeeds->size()+10;
-    double lastTime, startTime = lastTime = util::getWallTime();
+    time::Point lastTime, startTime = lastTime = time::getWallTime();
     ExecutionState *lastState = 0;
     while (!seedMap.empty()) {
       if (haltExecution) {
@@ -3154,7 +3160,7 @@ void Executor::run(ExecutionState &initialState) {
       stepInstruction(state);
 
       executeInstruction(state, ki);
-      processTimers(&state, MaxInstructionTime * numSeeds);
+      processTimers(&state, maxInstructionTime * numSeeds);
       updateStates(&state);
 
       if ((stats::instructions % 1000) == 0) {
@@ -3165,13 +3171,14 @@ void Executor::run(ExecutionState &initialState) {
           numSeeds += it->second.size();
           numStates++;
         }
-        double time = util::getWallTime();
-        if (SeedTime>0. && time > startTime + SeedTime) {
+        const auto time = time::getWallTime();
+        const time::Span seedTime(SeedTime);
+        if (seedTime && time > startTime + seedTime) {
           klee_warning("seed time expired, %d seeds remain over %d states",
                        numSeeds, numStates);
           break;
         } else if (numSeeds<=lastNumSeeds-10 ||
-                   time >= lastTime+10) {
+                   time - lastTime >= time::seconds(10)) {
           lastTime = time;
           lastNumSeeds = numSeeds;          
           klee_message("%d seeds remaining over: %d states", 
@@ -3212,7 +3219,7 @@ void Executor::run(ExecutionState &initialState) {
     stepInstruction(state);
 
     executeInstruction(state, ki);
-    processTimers(&state, MaxInstructionTime);
+    processTimers(&state, maxInstructionTime);
     if (firstInstruction && statesJSONFile) {
       (*statesJSONFile) << "    \"functionlists_length\": "
                         << state.memoryState.getFunctionListsLength() << ",\n";
@@ -3580,10 +3587,11 @@ void Executor::callExternalFunction(ExecutionState &state,
     state.memoryState.registerExternalFunctionCall();
   }
 
-  if (NoExternals && !okExternals.count(function->getName())) {
+  if (ExternalCalls == ExternalCallPolicy::None
+      && !okExternals.count(function->getName())) {
     klee_warning("Disallowed call to external function: %s\n",
                function->getName().str().c_str());
-    terminateStateOnError(state, "externals disallowed", User);
+    terminateStateOnError(state, "external calls disallowed", User);
     return;
   }
 
@@ -3596,7 +3604,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   unsigned wordIndex = 2;
   for (std::vector<ref<Expr> >::iterator ai = arguments.begin(), 
        ae = arguments.end(); ai!=ae; ++ai) {
-    if (AllowExternalSymCalls) { // don't bother checking uniqueness
+    if (ExternalCalls == ExternalCallPolicy::All) { // don't bother checking uniqueness
       *ai = optimizer.optimizeExpr(*ai, true);
       ref<ConstantExpr> ce;
       bool success = solver->getValue(state, *ai, ce);
@@ -3971,7 +3979,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     address = toConstant(state, address, "resolveOne failure");
     success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
   }
-  solver->setTimeout(0);
+  solver->setTimeout(time::Span());
 
   if (success) {
     const MemoryObject *mo = op.first;
@@ -3987,7 +3995,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     bool inBounds;
     solver->setTimeout(coreSolverTimeout);
     bool success = solver->mustBeTrue(state, check, inBounds);
-    solver->setTimeout(0);
+    solver->setTimeout(time::Span());
     if (!success) {
       thread.pc = thread.prevPc;
       terminateStateEarly(state, "Query timed out (bounds check).");
@@ -4035,7 +4043,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   solver->setTimeout(coreSolverTimeout);
   bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
                                                0, coreSolverTimeout);
-  solver->setTimeout(0);
+  solver->setTimeout(time::Span());
   
   // XXX there is some query wasteage here. who cares?
   ExecutionState *unbound = &state;
@@ -4381,7 +4389,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
   for (unsigned i = 0; i != state.symbolics.size(); ++i)
     objects.push_back(state.symbolics[i].second);
   bool success = solver->getInitialValues(tmp, objects, values);
-  solver->setTimeout(0);
+  solver->setTimeout(time::Span());
   if (!success) {
     klee_warning("unable to compute initial values (invalid constraints?)!");
     ExprPPrinter::printQuery(llvm::errs(), state.constraints,
