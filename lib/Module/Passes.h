@@ -184,22 +184,11 @@ public:
 /// Attaches analysis information as metatdata to be processed by KLEE (outside
 /// of another pass).
 class LiveRegisterPass : public llvm::FunctionPass {
-private:
-  llvm::Function *F = nullptr;
+  friend class LiveRegisterPassTest_GetLastPHI_Test;
+  friend class LiveRegisterPassTest_GetLiveSet_Test;
 
-public:
-  static char ID;
-  LiveRegisterPass() : FunctionPass(ID) {}
-
-  bool runOnFunction(llvm::Function &F) override;
-  void getAnalysisUsage(llvm::AnalysisUsage &Info) const override;
-  void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
-
-private:
-  typedef std::pair<const llvm::Instruction*, const llvm::Instruction*> edge_t;
+  typedef std::pair<const llvm::Instruction *, const llvm::Instruction *> edge_t;
   typedef std::unordered_set<const llvm::Value *> valueset_t;
-
-  std::vector<edge_t> worklist;
 
   struct InstructionInfo {
     std::vector<edge_t> predecessorEdges;
@@ -209,25 +198,21 @@ private:
     bool isValidLiveSet = false;
   };
 
+  llvm::Function *F = nullptr; // for print
+  std::vector<edge_t> worklist;
   std::unordered_map<const llvm::Instruction *, InstructionInfo> instructions;
 
 public:
-  const valueset_t *getLiveSet(const llvm::Instruction *inst) const {
-    if (instructions.count(inst) == 0)
-      return nullptr;
+  static char ID;
+  LiveRegisterPass() : FunctionPass(ID) {}
 
-    const InstructionInfo &ii = instructions.at(inst);
+  bool runOnFunction(llvm::Function &F) override;
+  void getAnalysisUsage(llvm::AnalysisUsage &Info) const override;
+  void print(llvm::raw_ostream &os, const llvm::Module *M) const override;
 
-    if (!ii.isValidLiveSet)
-       return nullptr;
-
-    return &ii.live;
-  }
+  const valueset_t *getLiveSet(const llvm::Instruction *inst) const;
 
 private:
-  friend class LiveRegisterPassTest_GetLastPHI_Test;
-  friend class LiveRegisterPassTest_GetLiveSet_Test;
-
   void initializeWorklist(const llvm::Function &F);
   void executeWorklistAlgorithm();
   void propagatePhiUseToLiveSet(const llvm::Function &F);
