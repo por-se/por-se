@@ -45,7 +45,7 @@ protected:
                        "\n"
                        "onephi:\n"
                        "  %c = phi i64 [ %x, %twophi ], [ 0, %entry]\n"
-                       "  %z = add i64 %y, 1\n"
+                       "  %z = add i64 %c, 1\n"
                        "  %cmp3 = icmp ult i64 %z, %c\n"
                        "  br i1 %cmp3, label %twophi, label %twoinst\n"
                        "\n"
