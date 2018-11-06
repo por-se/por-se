@@ -1,3 +1,5 @@
 /asan
 /debug
 /release
+
+.vscode

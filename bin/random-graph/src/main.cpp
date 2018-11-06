@@ -10,13 +10,15 @@
 namespace {
 	por::event::thread_id_t choose_thread(por::program const& program, std::mt19937_64& gen) {
 		std::uniform_int_distribution<std::size_t> dis(1, program.active_threads());
-		std::size_t chosen = dis(gen);
-		for(std::size_t i = 1, c = 0; i < program.thread_heads().size(); ++i){
-			if(program.thread_heads()[i]->kind() != por::event::event_kind::thread_exit) {
-				++c;
-				if(c == chosen) {
-					assert(i == program.thread_heads()[i]->tid());
-					return i;
+		std::size_t const chosen = dis(gen);
+		std::size_t count = 0;
+		for(auto it = program.thread_heads().begin(); ; ++it){
+			assert(it != program.thread_heads().end());
+			if(it->second->kind() != por::event::event_kind::thread_exit) {
+				++count;
+				if(count == chosen) {
+					assert(it->first == it->second->tid());
+					return it->first;
 				}
 			}
 		}
@@ -36,11 +38,7 @@ namespace {
 int main(int argc, char** argv){
 	assert(argc > 0);
 
-	por::program program;
-	{
-		auto tid = program.spawn_thread(0);
-		std::cout << "+T" << tid << " (0)\n";
-	}
+	por::program program; // construct a default program with 1 main thread
 
 	std::mt19937_64 gen(35);
 	// "warm up" mersenne twister to deal with weak initialization function
@@ -75,7 +73,7 @@ int main(int argc, char** argv){
 				auto tid = por::event::thread_id_t{};
 				auto lock = program.lock_heads().find(lid)->second;
 				if(lock->kind() == por::event::event_kind::lock_acquire) {
-					if(program.thread_heads()[lock->tid()]->kind() != por::event::event_kind::thread_exit) {
+					if(program.thread_heads().find(lock->tid())->second->kind() != por::event::event_kind::thread_exit) {
 						tid = lock->tid();
 						program.destroy_lock(tid, lid);
 						std::cout << "-L " << lid << " (" << tid << ")\n";
@@ -114,7 +112,7 @@ int main(int argc, char** argv){
 			for(bool done = false; !done; ) {
 				unsigned count = 0;
 				for(auto const& l : program.lock_heads()) {
-					if(l.second->kind() == por::event::event_kind::lock_acquire && program.thread_heads()[l.second->tid()]->kind() != por::event::event_kind::thread_exit) {
+					if(l.second->kind() == por::event::event_kind::lock_acquire && program.thread_heads().find(l.second->tid())->second->kind() != por::event::event_kind::thread_exit) {
 						++count;
 						if(rare_choice(gen)) {
 							auto const tid = l.second->tid();
