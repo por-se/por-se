@@ -791,30 +791,4 @@ std::string MemoryState::ExprString(ref<Expr> expr) {
   return result;
 }
 
-KInstruction *MemoryState::getKInstruction(const llvm::Instruction* inst) {
-  // FIXME: ugly hack
-  llvm::BasicBlock *bb = const_cast<llvm::BasicBlock *>(inst->getParent());
-  if (bb != nullptr) {
-    KFunction *kf = getKFunction(bb);
-    if (kf != nullptr) {
-      unsigned entry = kf->basicBlockEntry[bb];
-      while ((entry + 1) < kf->numInstructions
-             && kf->instructions[entry]->inst != inst)
-      {
-        entry++;
-      }
-      return kf->instructions[entry];
-    }
-  }
-  return nullptr;
-}
-
-KFunction *MemoryState::getKFunction(const llvm::BasicBlock *bb) {
-  llvm::Function *f = const_cast<llvm::Function *>(bb->getParent());
-  assert(f != nullptr && "failed to retrieve Function for BasicBlock");
-  KFunction *kf = kmodule->functionMap[f];
-  assert(kf != nullptr && "failed to retrieve KFunction");
-  return kf;
-}
-
 }

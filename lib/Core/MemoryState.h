@@ -125,9 +125,6 @@ private:
   void decreaseExprReferenceCount(ref<Expr> expr,
     sym_ref_map_t *references = nullptr);
 
-  KInstruction *getKInstruction(const llvm::Instruction* inst);
-  KFunction *getKFunction(const llvm::BasicBlock *bb);
-
 public:
   MemoryState() = delete;
   MemoryState& operator=(const MemoryState&) = delete;
