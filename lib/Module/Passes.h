@@ -183,6 +183,8 @@ public:
 /// it might therefore not be useful for any other use case!
 /// Attaches analysis information as metatdata to be processed by KLEE (outside
 /// of another pass).
+///
+/// NOTE: This pass only considers registers (or locals), not arguments.
 class LiveRegisterPass : public llvm::FunctionPass {
   friend class LiveRegisterPassTest_GetLastPHI_Test;
   friend class LiveRegisterPassTest_GetLiveSet_Test;
