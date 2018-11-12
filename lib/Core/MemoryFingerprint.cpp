@@ -141,13 +141,18 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
         result << "[T" << tid << ':' << sfid << ']';
-        result << "Local: ";
+        result << "Local: %";
         if (inst->hasName()) {
-          result << '%' << inst->getName();
+          result << inst->getName();
         } else {
-          result << "unnamed(@"
-                 << reinterpret_cast<std::uintptr_t>(inst)
-                 << ')';
+          // extract slot number
+          std::string line;
+          llvm::raw_string_ostream sos(line);
+          sos << *inst;
+          sos.flush();
+          std::size_t start = line.find("%") + 1;
+          std::size_t end = line.find(" ", start);
+          result << line.substr(start, end - start);
         }
 
         const llvm::DebugLoc &dl = inst->getDebugLoc();
