@@ -55,7 +55,6 @@ public:
 
   struct ScheduleEpoch {
     Thread::ThreadId tid;
-    uint64_t dependencyHash;
   };
 
 private:
