@@ -194,6 +194,10 @@ void MemoryState::leaveMemoryFunction() {
 
 void MemoryState::registerFunctionCall(llvm::Function *f,
                                        std::vector<ref<Expr>> &arguments) {
+  // NOTE: this method has to deal with the fact that a corresponding call to
+  //       registerFunctionRet for f may not happen, as the call might be
+  //       handled by SpecialFunctionHandler (or the function may not return).
+
   if (globalDisableMemoryState) {
     // we only check for global disable and not for library or listed functions
     // as we assume that those will not call any output functions
@@ -427,7 +431,8 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
 void MemoryState::applyLocalFragment(std::uint64_t threadID,
                                      std::size_t stackFrameIndex,
                                      const llvm::Instruction *inst,
-                                     ref<Expr> value) {
+                                     ref<Expr> value,
+                                     bool temporary) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     fingerprint.updateUint8(3);
@@ -444,7 +449,11 @@ void MemoryState::applyLocalFragment(std::uint64_t threadID,
     fingerprint.updateExpr(value);
   }
 
-  fingerprint.applyToTemporaryDelta();
+  if (temporary) {
+    fingerprint.applyToTemporaryDelta();
+  } else {
+    fingerprint.applyToFingerprintStackFrameDelta();
+  }
 }
 
 void MemoryState::registerArgument(std::uint64_t threadID,
@@ -558,9 +567,27 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   }
 
   Thread &thread = executionState->getCurrentThreadReference();
+
   // second but last stack frame
-  StackFrame &sf = thread.stack.at(thread.stack.size() - 2);
-  sf.fingerprintDelta = fingerprint.getStackFrameDelta();
+  std::size_t oldIndex = thread.stack.size() - 2;
+  StackFrame &oldsf = thread.stack.at(oldIndex);
+
+  // add locals and symbolic references to stackframe fingerprint
+  // these will be automatically removed when the stack frame is popped
+  assert(caller->info->getLiveLocals() != nullptr);
+  for (const KInstruction *ki : *caller->info->getLiveLocals()) {
+    ref<Expr> value = oldsf.locals[ki->dest].value;
+    if (value.isNull())
+      continue;
+
+    applyLocalFragment(thread.getThreadId(), oldIndex, ki->inst, value, false);
+
+    if (!isa<ConstantExpr>(value))
+      increaseExprReferenceCount(value, &oldsf.symbolicReferences);
+  }
+
+  // store stackframe delta
+  oldsf.fingerprintDelta = fingerprint.getStackFrameDelta();
 
   // record alloca allocations and changes for this new stack frame separately
   // from those of other stack frames (without removing the latter)

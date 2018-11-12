@@ -111,7 +111,8 @@ private:
                           const ObjectState &os, std::size_t bytes,
                           bool increaseReferenceCount);
   void applyLocalFragment(std::uint64_t threadID, std::size_t stackFrameIndex,
-                          const llvm::Instruction *inst, ref<Expr> value);
+                          const llvm::Instruction *inst, ref<Expr> value,
+                          bool temporary = true);
 
   bool isAllocaAllocationInCurrentStackFrame(const MemoryObject &mo) const;
   MemoryFingerprint::fingerprint_t *
