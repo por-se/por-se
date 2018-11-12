@@ -1,5 +1,6 @@
 #include "MemoryFingerprint.h"
 
+#include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ExprPPrinter.h"
 
@@ -229,14 +230,14 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         item >> callerPtr;
         item >> calleePtr;
 
-        llvm::Instruction *caller = reinterpret_cast<llvm::Instruction *>(callerPtr);
+        KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
         KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
 
         result << "[T" << tid << ':' << sfid << ']';
         result << "Stack Frame: ";
         result << callee->function->getName();
         result << "( called from ";
-        result << caller;
+        result << caller->inst;
         result << ")";
 
         output = true;
