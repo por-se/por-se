@@ -551,7 +551,7 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
 void MemoryState::registerPushFrame(std::uint64_t threadID,
                                     std::size_t stackFrameIndex,
                                     const KFunction *callee,
-                                    const llvm::Instruction *caller) {
+                                    const KInstruction *caller) {
   // IMPORTANT: has to be called after state.pushFrame()
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
