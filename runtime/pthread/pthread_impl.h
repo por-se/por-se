@@ -20,30 +20,30 @@ typedef struct {
   int acquired;
   int type;
   uint64_t holdingThread;
-  __kpr_list waitingThreads;
-} __kpr_mutex;
+  kpr_list waitingThreads;
+} kpr_mutex;
 
 typedef struct {
   unsigned count;
   unsigned currentCount;
-  __kpr_list waitingThreads;
-} __kpr_barrier;
+  kpr_list waitingThreads;
+} kpr_barrier;
 
 typedef struct {
   uint64_t acquiredWriter;
 
-  __kpr_list acquiredReaderLocks;
+  kpr_list acquiredReaderLocks;
 
   size_t waitingWriterCount;
   size_t waitingReaderCount;
 
-  __kpr_list waitingList;
-} __kpr_rwlock;
+  kpr_list waitingList;
+} kpr_rwlock;
 
 typedef struct {
-  __kpr_list waitingList;
+  kpr_list waitingList;
   pthread_mutex_t* waitingMutex;
-} __kpr_cond;
+} kpr_cond;
 
 typedef struct {
   uint64_t tid;
@@ -59,20 +59,20 @@ typedef struct {
   uint8_t joinState;
   uint64_t joinedThread;
 
-  __kpr_list cleanUpStack;
-} __kpr_pthread;
+  kpr_list cleanUpStack;
+} kpr_pthread;
 
 typedef struct {
   int value;
-  __kpr_list waiting;
+  kpr_list waiting;
   const char* name;
-} __kpr_semaphore;
+} kpr_semaphore;
 
-typedef struct {
-  void (*destructor)(void*);
-  void* value;
-} __kpr_key;
+//typedef struct {
+//  void (*destructor)(void*);
+//  void* value;
+//} kpr_key;
 
-int __pthread_mutex_unlock_internal(pthread_mutex_t *m);
+int kpr_mutex_unlock_internal(pthread_mutex_t *m);
 
 #endif //KLEE_PTHREAD_IMPL_H

@@ -5,16 +5,16 @@
 #include <string.h>
 #include <errno.h>
 
-void __kpr_list_create(__kpr_list* stack) {
+void kpr_list_create(kpr_list* stack) {
   stack->size = 0;
   stack->tail = NULL;
   stack->head = NULL;
 }
 
-void __kpr_list_clear(__kpr_list* stack) {
-  __kpr_list_node* n = stack->head;
+void kpr_list_clear(kpr_list* stack) {
+  kpr_list_node* n = stack->head;
   while (n != NULL) {
-    __kpr_list_node* newN = n->next;
+    kpr_list_node* newN = n->next;
     free(n);
     n = newN;
   }
@@ -24,9 +24,9 @@ void __kpr_list_clear(__kpr_list* stack) {
   stack->size = 0;
 }
 
-void __kpr_list_push(__kpr_list* stack, void * data) {
-  __kpr_list_node* newTail = malloc(sizeof(__kpr_list_node));
-  memset(newTail, 0, sizeof(__kpr_list_node));
+void kpr_list_push(kpr_list* stack, void * data) {
+  kpr_list_node* newTail = malloc(sizeof(kpr_list_node));
+  memset(newTail, 0, sizeof(kpr_list_node));
 
   newTail->data = data;
   newTail->prev = stack->tail;
@@ -41,13 +41,13 @@ void __kpr_list_push(__kpr_list* stack, void * data) {
   stack->size++;
 }
 
-void* __kpr_list_pop(__kpr_list* stack) {
+void* kpr_list_pop(kpr_list* stack) {
   if (stack->size == 0) {
     klee_warning("Invalid pop; there was no data");
     return NULL;
   }
 
-  __kpr_list_node* top = stack->tail;
+  kpr_list_node* top = stack->tail;
   stack->tail = top->prev;
 
   if (top->prev != NULL) {
@@ -62,9 +62,9 @@ void* __kpr_list_pop(__kpr_list* stack) {
   return data;
 }
 
-void __kpr_list_unshift(__kpr_list* stack, void * data) {
-  __kpr_list_node* newHead = malloc(sizeof(__kpr_list_node));
-  memset(newHead, 0, sizeof(__kpr_list_node));
+void kpr_list_unshift(kpr_list* stack, void * data) {
+  kpr_list_node* newHead = malloc(sizeof(kpr_list_node));
+  memset(newHead, 0, sizeof(kpr_list_node));
 
   newHead->data = data;
 
@@ -77,13 +77,13 @@ void __kpr_list_unshift(__kpr_list* stack, void * data) {
   stack->size++;
 }
 
-void* __kpr_list_shift(__kpr_list* stack) {
+void* kpr_list_shift(kpr_list* stack) {
   if (stack->size == 0) {
     klee_warning("Invalid shift; there was no data");
     return NULL;
   }
 
-  __kpr_list_node* head = stack->head;
+  kpr_list_node* head = stack->head;
   stack->head = head->next;
 
   if (head->next != NULL) {
@@ -98,12 +98,12 @@ void* __kpr_list_shift(__kpr_list* stack) {
   return data;
 }
 
-size_t __kpr_list_size(__kpr_list* stack) {
+size_t kpr_list_size(kpr_list* stack) {
   return stack->size;
 }
 
-__kpr_list_iterator __kpr_list_iterate(__kpr_list* stack) {
-  __kpr_list_iterator it = {
+kpr_list_iterator kpr_list_iterate(kpr_list* stack) {
+  kpr_list_iterator it = {
           stack->head,
           NULL
   };
@@ -111,11 +111,11 @@ __kpr_list_iterator __kpr_list_iterate(__kpr_list* stack) {
   return it;
 }
 
-bool __kpr_list_iterator_valid(__kpr_list_iterator it) {
+bool kpr_list_iterator_valid(kpr_list_iterator it) {
   return it.current != NULL || it.next != NULL;
 }
 
-void __kpr_list_iterator_next(__kpr_list_iterator* it) {
+void kpr_list_iterator_next(kpr_list_iterator* it) {
   if (it->next == NULL) {
     it->current = it->current->next;
   } else {
@@ -124,18 +124,18 @@ void __kpr_list_iterator_next(__kpr_list_iterator* it) {
   }
 }
 
-void* __kpr_list_iterator_value(__kpr_list_iterator it) {
+void* kpr_list_iterator_value(kpr_list_iterator it) {
   return it.current == NULL ? NULL : it.current->data;
 }
 
-void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it) {
+void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it) {
   // So this method should erase the current iterator and update its value
   if (it->current == NULL) {
     klee_warning("Erasing iterator that does not exist");
     return;
   }
 
-  __kpr_list_node* nodeToDelete = it->current;
+  kpr_list_node* nodeToDelete = it->current;
 
   if (nodeToDelete->prev != NULL) {
     nodeToDelete->prev->next = nodeToDelete->next;
@@ -166,16 +166,16 @@ void __kpr_list_erase(__kpr_list* stack, __kpr_list_iterator* it) {
  * Here is the stuff that is not directly part of the data structure but rather what is needed as well
  */
 
-void __notify_threads(__kpr_list* stack) {
-  size_t size = __kpr_list_size(stack);
+void kpr_notify_threads(kpr_list* stack) {
+  size_t size = kpr_list_size(stack);
   size_t i = 0;
   for (; i < size; ++i) {
-    uint64_t data = (uint64_t) __kpr_list_pop(stack);
+    uint64_t data = (uint64_t) kpr_list_pop(stack);
     klee_wake_up_thread(data);
   }
 }
 
-bool __checkIfSameSize(char* target, char* reference) {
+bool kpr_checkIfSameSize(char* target, char* reference) {
   // So this method should check if both of these objects have the same contents
   size_t sizeOfTarget = klee_get_obj_size((void*) target);
   size_t sizeOfReference = klee_get_obj_size((void*) reference);
@@ -183,7 +183,7 @@ bool __checkIfSameSize(char* target, char* reference) {
   return sizeOfReference == sizeOfTarget;
 }
 
-bool __checkIfSame(char* target, char* reference) {
+bool kpr_checkIfSame(char* target, char* reference) {
   // So this method should check if both of these objects have the same contents
   size_t sizeOfTarget = klee_get_obj_size((void*) target);
   size_t sizeOfReference = klee_get_obj_size((void*) reference);

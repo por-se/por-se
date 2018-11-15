@@ -8,28 +8,28 @@
 
 static pthread_cond_t condDefault = PTHREAD_COND_INITIALIZER;
 
-static int __create_new_cond(__kpr_cond **c) {
-  __kpr_cond* cond = malloc(sizeof(__kpr_cond));
+static int kpr_create_new_cond(kpr_cond **c) {
+  kpr_cond* cond = malloc(sizeof(kpr_cond));
   if (cond == 0) {
     return -1;
   }
 
-  memset(cond, 0, sizeof(__kpr_cond));
+  memset(cond, 0, sizeof(kpr_cond));
 
-  __kpr_list_create(&cond->waitingList);
+  kpr_list_create(&cond->waitingList);
   cond->waitingMutex = NULL;
 
   *c = cond;
   return 0;
 }
 
-static int __obtain_cond(pthread_cond_t *cond, __kpr_cond **dest) {
+static int kpr_obtain_cond(pthread_cond_t *cond, kpr_cond **dest) {
   // So first we have to check if we are any of the default static mutex types
-  if (__checkIfSame((char*) cond, (char*) &condDefault)) {
-    return __create_new_cond(dest);
+  if (kpr_checkIfSame((char*) cond, (char*) &condDefault)) {
+    return kpr_create_new_cond(dest);
   }
 
-  *dest = *((__kpr_cond**) cond);
+  *dest = *((kpr_cond**) cond);
 
   return 0;
 }
@@ -37,13 +37,13 @@ static int __obtain_cond(pthread_cond_t *cond, __kpr_cond **dest) {
 int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_cond* lock = malloc(sizeof(__kpr_cond));
-  memset(lock, 0, sizeof(__kpr_cond));
+  kpr_cond* lock = malloc(sizeof(kpr_cond));
+  memset(lock, 0, sizeof(kpr_cond));
 
-  *((__kpr_cond**)l) = lock;
+  *((kpr_cond**)l) = lock;
 
   lock->waitingMutex = NULL;
-  __kpr_list_create(&lock->waitingList);
+  kpr_list_create(&lock->waitingList);
 
   klee_toggle_thread_scheduling(1);
 
@@ -53,14 +53,14 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
 int pthread_cond_destroy(pthread_cond_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_cond* lock;
+  kpr_cond* lock;
 
-  if (__obtain_cond(l, &lock) != 0) {
+  if (kpr_obtain_cond(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  if (__kpr_list_size(&lock->waitingList) != 0) {
+  if (kpr_list_size(&lock->waitingList) != 0) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -74,14 +74,14 @@ int pthread_cond_destroy(pthread_cond_t *l) {
 int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
 
-  int result = __pthread_mutex_unlock_internal(m);
+  int result = kpr_mutex_unlock_internal(m);
   if (result != 0) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
-  __kpr_cond* lock;
-  if (__obtain_cond(c, &lock) != 0) {
+  kpr_cond* lock;
+  if (kpr_obtain_cond(c, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -95,7 +95,7 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   }
 
   uint64_t tid = klee_get_thread_id();
-  __kpr_list_push(&lock->waitingList, (void*) tid);
+  kpr_list_push(&lock->waitingList, (void*) tid);
 
   klee_sleep_thread();
 
@@ -103,18 +103,18 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   return pthread_mutex_lock(m);
 }
 
-// int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m, const struct timespec *__restrict);
+// int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m, const struct timespec *kpr_restrict);
 
 int pthread_cond_broadcast(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_cond* lock;
-  if (__obtain_cond(c, &lock) != 0) {
+  kpr_cond* lock;
+  if (kpr_obtain_cond(c, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  __notify_threads(&lock->waitingList);
+  kpr_notify_threads(&lock->waitingList);
   lock->waitingMutex = NULL;
 
   klee_toggle_thread_scheduling(1);
@@ -125,21 +125,21 @@ int pthread_cond_broadcast(pthread_cond_t *c) {
 int pthread_cond_signal(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_cond* lock;
-  if (__obtain_cond(c, &lock) != 0) {
+  kpr_cond* lock;
+  if (kpr_obtain_cond(c, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  if (__kpr_list_size(&lock->waitingList) == 0) {
+  if (kpr_list_size(&lock->waitingList) == 0) {
     klee_toggle_thread_scheduling(1);
     return 0;
   }
 
-  uint64_t waiting = (uint64_t) __kpr_list_pop(&lock->waitingList);
+  uint64_t waiting = (uint64_t) kpr_list_pop(&lock->waitingList);
   klee_wake_up_thread(waiting);
 
-  if (__kpr_list_size(&lock->waitingList) == 0) {
+  if (kpr_list_size(&lock->waitingList) == 0) {
     lock->waitingMutex = NULL;
   }
 

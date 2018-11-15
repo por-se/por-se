@@ -10,46 +10,46 @@
 #include "pthread_impl.h"
 #include "utils.h"
 
-static __kpr_list openSemaphores = __KPR_LIST_INITIALIZER;
+static kpr_list openSemaphores = KPR_LIST_INITIALIZER;
 
-static __kpr_semaphore* __obtain_semaphore(sem_t *sem) {
-  return *((__kpr_semaphore**)sem);
+static kpr_semaphore* kpr_obtain_semaphore(sem_t *sem) {
+  return *((kpr_semaphore**)sem);
 }
 
-static __kpr_semaphore* __sem_create(sem_t *__sem, unsigned int __value) {
-  __kpr_semaphore* sem = malloc(sizeof(__kpr_semaphore));
-  memset(sem, 0, sizeof(__kpr_semaphore));
+static kpr_semaphore* kpr_sem_create(sem_t *kpr_sem, unsigned int kpr_value) {
+  kpr_semaphore* sem = malloc(sizeof(kpr_semaphore));
+  memset(sem, 0, sizeof(kpr_semaphore));
 
-  __kpr_list_create(&sem->waiting);
-  sem->value = __value;
+  kpr_list_create(&sem->waiting);
+  sem->value = kpr_value;
   sem->name = NULL;
 
-  *((__kpr_semaphore**)__sem) = sem;
+  *((kpr_semaphore**)kpr_sem) = sem;
 
   return sem;
 }
 
-int sem_init (sem_t *__sem, int __pshared, unsigned int __value) {
+int sem_init (sem_t *kpr_sem, int kpr_pshared, unsigned int kpr_value) {
   klee_toggle_thread_scheduling(0);
 
-  if (__value > SEM_VALUE_MAX) {
+  if (kpr_value > SEM_VALUE_MAX) {
     errno = EINVAL;
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  __sem_create(__sem, __value);
+  kpr_sem_create(kpr_sem, kpr_value);
 
   klee_toggle_thread_scheduling(1);
   return 0;
 }
 
 /* Free resources associated with semaphore object SEM.  */
-int sem_destroy (sem_t *__sem) {
+int sem_destroy (sem_t *kpr_sem) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
-  if (__kpr_list_size(&sem->waiting) != 0) {
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
+  if (kpr_list_size(&sem->waiting) != 0) {
     klee_toggle_thread_scheduling(1);
 
     return -1;
@@ -65,12 +65,12 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
   va_list ap;
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = NULL;
+  kpr_semaphore* sem = NULL;
   sem_t* retSem = NULL;
 
-  __kpr_list_iterator it = __kpr_list_iterate(&openSemaphores);
-  for (; __kpr_list_iterator_valid(it); __kpr_list_iterator_next(&it)) {
-    __kpr_semaphore* s = __kpr_list_iterator_value(it);
+  kpr_list_iterator it = kpr_list_iterate(&openSemaphores);
+  for (; kpr_list_iterator_valid(it); kpr_list_iterator_next(&it)) {
+    kpr_semaphore* s = kpr_list_iterator_value(it);
 
     if (s->name == NULL) {
       continue;
@@ -106,7 +106,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
     }
 
     retSem = malloc(sizeof(sem));
-    sem = __sem_create(retSem, value);
+    sem = kpr_sem_create(retSem, value);
     sem->name = __name;
   } else {
     if (createSet && exclSet) {
@@ -117,7 +117,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
     }
 
     retSem = malloc(sizeof(sem));
-    *((__kpr_semaphore**)retSem) = sem;
+    *((kpr_semaphore**)retSem) = sem;
   }
 
   klee_toggle_thread_scheduling(1);
@@ -125,19 +125,19 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
 }
 
 /* Close descriptor for named semaphore SEM.  */
-int sem_close (sem_t *__sem) {
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
+int sem_close (sem_t *kpr_sem) {
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
   sem_unlink(sem->name);
   return 0;
 }
 
 /* Remove named semaphore NAME.  */
 int sem_unlink (__const char *__name) {
-  __kpr_semaphore* sem = NULL;
+  kpr_semaphore* sem = NULL;
 
-  __kpr_list_iterator it = __kpr_list_iterate(&openSemaphores);
-  for (; __kpr_list_iterator_valid(it); __kpr_list_iterator_next(&it)) {
-    __kpr_semaphore* s = __kpr_list_iterator_value(it);
+  kpr_list_iterator it = kpr_list_iterate(&openSemaphores);
+  for (; kpr_list_iterator_valid(it); kpr_list_iterator_next(&it)) {
+    kpr_semaphore* s = kpr_list_iterator_value(it);
 
     if (s->name == NULL) {
       continue;
@@ -150,7 +150,7 @@ int sem_unlink (__const char *__name) {
     sem = s;
 
     // If we found it then we should no longer allow to open the semaphore
-    __kpr_list_erase(&openSemaphores, &it);
+    kpr_list_erase(&openSemaphores, &it);
 
     break;
   }
@@ -163,7 +163,7 @@ int sem_unlink (__const char *__name) {
   return 0;
 }
 
-static int __kpr_sem_trywait(__kpr_semaphore* sem) {
+static int kpr_sem_trywait(kpr_semaphore* sem) {
   if (sem->value <= 0) {
     return EAGAIN;
   }
@@ -173,17 +173,17 @@ static int __kpr_sem_trywait(__kpr_semaphore* sem) {
 }
 
 /* Wait for SEM being posted.  */
-int sem_wait (sem_t *__sem) {
+int sem_wait (sem_t *kpr_sem) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
 
   int result = 0;
   while (1) {
-    result = __kpr_sem_trywait(sem);
+    result = kpr_sem_trywait(sem);
 
     if (result == EAGAIN) {
-      __kpr_list_push(&sem->waiting, (void*) klee_get_thread_id());
+      kpr_list_push(&sem->waiting, (void*) klee_get_thread_id());
       // klee_toggle_thread_scheduling(1);
       klee_sleep_thread();
       // klee_toggle_thread_scheduling(0);
@@ -198,11 +198,11 @@ int sem_wait (sem_t *__sem) {
 }
 
 /* Test whether SEM is posted.  */
-int sem_trywait (sem_t *__sem) {
+int sem_trywait (sem_t *kpr_sem) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
-  int result = __kpr_sem_trywait(sem);
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
+  int result = kpr_sem_trywait(sem);
 
   klee_toggle_thread_scheduling(1);
 
@@ -215,10 +215,10 @@ int sem_trywait (sem_t *__sem) {
 }
 
 /* Post SEM.  */
-int sem_post (sem_t *__sem) {
+int sem_post (sem_t *kpr_sem) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
   if (sem->value == SEM_VALUE_MAX) {
     klee_toggle_thread_scheduling(1);
     errno = EOVERFLOW;
@@ -228,7 +228,7 @@ int sem_post (sem_t *__sem) {
   sem->value++;
   if (sem->value > 0) {
     // We can wake up all threads since our wait impl will rewait
-    __notify_threads(&sem->waiting);
+    kpr_notify_threads(&sem->waiting);
     klee_toggle_thread_scheduling(1);
 
     klee_preempt_thread();
@@ -240,11 +240,11 @@ int sem_post (sem_t *__sem) {
 }
 
 /* Get current value of SEM and store it in *SVAL.  */
-int sem_getvalue (sem_t *__sem, int * __sval) {
+int sem_getvalue (sem_t *kpr_sem, int * kpr_sval) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_semaphore* sem = __obtain_semaphore(__sem);
-  *__sval = sem->value;
+  kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
+  *kpr_sval = sem->value;
 
   klee_toggle_thread_scheduling(1);
 

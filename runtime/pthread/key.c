@@ -13,13 +13,13 @@
 
 static unsigned int keyCount = 0;
 static unsigned int keySpace = 0;
-static __pthread_key* keys = NULL;
+static kpr_key* keys = NULL;
 
-static __pthread_key* __create_new_key(pthread_key_t *k) {
+static kpr_key* kpr_create_new_key(pthread_key_t *k) {
   if (keyCount >= keySpace) {
     // That means we have to enlarge it; default is to add 4
     keySpace += 4;
-    __pthread_key* newKeys = realloc(keys, sizeof(__pthread_key) * keySpace);
+    kpr_key* newKeys = realloc(keys, sizeof(kpr_key) * keySpace);
     if (newKeys == NULL) {
       return NULL;
     }
@@ -33,7 +33,7 @@ static __pthread_key* __create_new_key(pthread_key_t *k) {
   return &keys[*k];
 }
 
-static __pthread_key* __obtain_pthread_key(pthread_key_t* b) {
+static kpr_key* kpr_obtain_pthread_key(pthread_key_t* b) {
   unsigned int* index = (unsigned int*) b;
   return &keys[*index];
 }
@@ -41,44 +41,44 @@ static __pthread_key* __obtain_pthread_key(pthread_key_t* b) {
 int pthread_key_create(pthread_key_t *k, void (*destructor) (void*)) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_key* key = __create_new_key(k);
+  kpr_key* key = kpr_create_new_key(k);
   if (key == NULL) {
     klee_toggle_thread_scheduling(1);
     return ENOMEM;
   }
 
-  memset(key, 0, sizeof(__pthread_key));
+  memset(key, 0, sizeof(kpr_key));
 
   key->destructor = destructor;
-  __kpr_list_create(&key->values);
+  kpr_list_create(&key->values);
 
   klee_toggle_thread_scheduling(1);
 
   return 0;
 }
 
-static __pthread_key_data* __get_data(pthread_key_t k) {
+static kpr_key_data* kpr_get_data(pthread_key_t k) {
   uint64_t tid = klee_get_thread_id();
 
-  __pthread_key* key = __obtain_pthread_key(&k);
+  kpr_key* key = kpr_obtain_pthread_key(&k);
 
-  __kpr_list_iterator it = __kpr_list_iterate(&key->values);
-  while(__kpr_list_iterator_valid(it)) {
-    __pthread_key_data* d = __kpr_list_iterator_value(it);
+  kpr_list_iterator it = kpr_list_iterate(&key->values);
+  while(kpr_list_iterator_valid(it)) {
+    kpr_key_data* d = kpr_list_iterator_value(it);
 
     if (d->thread == tid) {
       return d;
     }
 
-    __kpr_list_iterator_next(&it);
+    kpr_list_iterator_next(&it);
   }
 
-  __pthread_key_data* d = (__pthread_key_data*) malloc(sizeof(__pthread_key_data));
-  memset(d, 0, sizeof(__pthread_key_data));
+  kpr_key_data* d = (kpr_key_data*) malloc(sizeof(kpr_key_data));
+  memset(d, 0, sizeof(kpr_key_data));
   d->thread = tid;
   d->value = NULL;
 
-  __kpr_list_push(&key->values, d);
+  kpr_list_push(&key->values, d);
 
   return d;
 }
@@ -86,10 +86,10 @@ static __pthread_key_data* __get_data(pthread_key_t k) {
 int pthread_key_delete(pthread_key_t k) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_key* key = __obtain_pthread_key(&k);
-  __kpr_list_clear(&key->values);
+  kpr_key* key = kpr_obtain_pthread_key(&k);
+  kpr_list_clear(&key->values);
 
-  memset(key, 0, sizeof(__pthread_key));
+  memset(key, 0, sizeof(kpr_key));
 
   klee_toggle_thread_scheduling(1);
   return 0;
@@ -98,7 +98,7 @@ int pthread_key_delete(pthread_key_t k) {
 void *pthread_getspecific(pthread_key_t k) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_key_data* data = __get_data(k);
+  kpr_key_data* data = kpr_get_data(k);
   void* val = data->value;
 
   klee_toggle_thread_scheduling(1);
@@ -108,7 +108,7 @@ void *pthread_getspecific(pthread_key_t k) {
 int pthread_setspecific(pthread_key_t k, const void *val) {
   klee_toggle_thread_scheduling(0);
 
-  __pthread_key_data* data = __get_data(k);
+  kpr_key_data* data = kpr_get_data(k);
   data->value = (void*)val;
 
   klee_toggle_thread_scheduling(1);
@@ -117,19 +117,19 @@ int pthread_setspecific(pthread_key_t k, const void *val) {
 
 // this is an internal method for the runtime to invoke all destructors that are associated with the
 // keys that this thread created/used
-void __pthread_key_clear_data_of_thread(uint64_t tid) {
+void kpr_key_clear_data_of_thread(uint64_t tid) {
   unsigned i = 0;
   for (; i < keyCount; i++) {
-    __pthread_key* key = &keys[i];
+    kpr_key* key = &keys[i];
 
     if (key->destructor == NULL) {
       continue;
     }
 
     // So we have a destructor that we may have to invoke
-    __kpr_list_iterator it = __kpr_list_iterate(&key->values);
-    for (; __kpr_list_iterator_valid(it); __kpr_list_iterator_next(&it)) {
-      __pthread_key_data* d = __kpr_list_iterator_value(it);
+    kpr_list_iterator it = kpr_list_iterate(&key->values);
+    for (; kpr_list_iterator_valid(it); kpr_list_iterator_next(&it)) {
+      kpr_key_data* d = kpr_list_iterator_value(it);
 
       if (d->thread != tid) {
         continue;

@@ -5,8 +5,8 @@
 #include <string.h>
 #include <errno.h>
 
-static __kpr_barrier* __obtain_pthread_barrier(pthread_barrier_t* b) {
-  return *((__kpr_barrier**)b);
+static kpr_barrier* kpr_obtain_pthread_barrier(pthread_barrier_t* b) {
+  return *((kpr_barrier**)b);
 }
 
 int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr, unsigned count) {
@@ -16,19 +16,19 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
 
   klee_toggle_thread_scheduling(0);
 
-  __kpr_barrier* barrier = malloc(sizeof(__kpr_barrier));
+  kpr_barrier* barrier = malloc(sizeof(kpr_barrier));
   if (barrier == NULL) {
     klee_toggle_thread_scheduling(1);
     return ENOMEM;
   }
 
-  memset(barrier, 0, sizeof(__kpr_barrier));
+  memset(barrier, 0, sizeof(kpr_barrier));
 
   barrier->count = count;
   barrier->currentCount = 0;
-  __kpr_list_create(&barrier->waitingThreads);
+  kpr_list_create(&barrier->waitingThreads);
 
-  *((__kpr_barrier**)b) = barrier;
+  *((kpr_barrier**)b) = barrier;
 
   klee_toggle_thread_scheduling(1);
 
@@ -38,7 +38,7 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
 int pthread_barrier_destroy(pthread_barrier_t *b) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_barrier* barrier = __obtain_pthread_barrier(b);
+  kpr_barrier* barrier = kpr_obtain_pthread_barrier(b);
 
   if (barrier->currentCount > 0) {
     klee_toggle_thread_scheduling(1);
@@ -54,12 +54,12 @@ int pthread_barrier_destroy(pthread_barrier_t *b) {
 int pthread_barrier_wait(pthread_barrier_t *b) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_barrier* barrier = __obtain_pthread_barrier(b);
+  kpr_barrier* barrier = kpr_obtain_pthread_barrier(b);
   barrier->currentCount++;
 
   if (barrier->currentCount < barrier->count) {
     uint64_t tid = klee_get_thread_id();
-    __kpr_list_push(&barrier->waitingThreads, (void*) tid);
+    kpr_list_push(&barrier->waitingThreads, (void*) tid);
 
     klee_sleep_thread();
 
@@ -67,7 +67,7 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
     return 0;
   } else if (barrier->currentCount == barrier->count) {
     barrier->currentCount = 0;
-    __notify_threads(&barrier->waitingThreads);
+    kpr_notify_threads(&barrier->waitingThreads);
 
     klee_toggle_thread_scheduling(1);
     klee_preempt_thread();

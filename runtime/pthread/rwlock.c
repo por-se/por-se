@@ -10,55 +10,55 @@
 
 static pthread_rwlock_t rwlockDefault = PTHREAD_RWLOCK_INITIALIZER;
 
-static int __create_new_rwlock(__kpr_rwlock **rw) {
-  __kpr_rwlock* lock = malloc(sizeof(__kpr_rwlock));
+static int kpr_create_new_rwlock(kpr_rwlock **rw) {
+  kpr_rwlock* lock = malloc(sizeof(kpr_rwlock));
   if (lock == NULL) {
     return -1;
   }
 
-  memset(lock, 0, sizeof(__kpr_rwlock));
+  memset(lock, 0, sizeof(kpr_rwlock));
 
   lock->acquiredWriter = NO_WRITER_ACQUIRED;
 
   lock->waitingReaderCount = 0;
   lock->waitingWriterCount = 0;
 
-  __kpr_list_create(&lock->waitingList);
-  __kpr_list_create(&lock->acquiredReaderLocks);
+  kpr_list_create(&lock->waitingList);
+  kpr_list_create(&lock->acquiredReaderLocks);
 
   *rw = lock;
   return 0;
 }
 
-static int __obtain_rwlock(pthread_rwlock_t *rwlock, __kpr_rwlock **dest) {
+static int kpr_obtain_rwlock(pthread_rwlock_t *rwlock, kpr_rwlock **dest) {
   // So first we have to check if we are any of the default static rwlock types
-  if (__checkIfSame((char*) rwlock, (char*) &rwlockDefault)) {
-    return __create_new_rwlock(dest);
+  if (kpr_checkIfSame((char*) rwlock, (char*) &rwlockDefault)) {
+    return kpr_create_new_rwlock(dest);
   }
 
-  *dest = *((__kpr_rwlock**) rwlock);
+  *dest = *((kpr_rwlock**) rwlock);
 
   return 0;
 }
 
-static __kpr_list_iterator __get_reader_lock(__kpr_rwlock *lock, uint64_t t) {
-  __kpr_list_iterator it = __kpr_list_iterate(&lock->acquiredReaderLocks);
+static kpr_list_iterator kpr_get_reader_lock(kpr_rwlock *lock, uint64_t t) {
+  kpr_list_iterator it = kpr_list_iterate(&lock->acquiredReaderLocks);
 
-  while (__kpr_list_iterator_valid(it)) {
-    uint64_t tid = (uint64_t) __kpr_list_iterator_value(it);
+  while (kpr_list_iterator_valid(it)) {
+    uint64_t tid = (uint64_t) kpr_list_iterator_value(it);
 
     if (tid == t) {
       return it;
     }
 
-    __kpr_list_iterator_next(&it);
+    kpr_list_iterator_next(&it);
   }
 
   // At this point, this should be an invalid iterator
   return it;
 }
 
-static int rwlock_tryrdlock(__kpr_rwlock* lock) {
+static int rwlock_tryrdlock(kpr_rwlock* lock) {
   uint64_t tid = klee_get_thread_id();
 
   if (lock->acquiredWriter != NO_WRITER_ACQUIRED) {
@@ -70,9 +70,9 @@ static int rwlock_tryrdlock(__kpr_rwlock* lock) {
   }
 
   // So check if this is a multiple lock
-  __kpr_list_iterator it = __get_reader_lock(lock, tid);
-  if (__kpr_list_iterator_valid(it)) {
-    __kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
+  kpr_list_iterator it = kpr_get_reader_lock(lock, tid);
+  if (kpr_list_iterator_valid(it)) {
+    kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
     return 0;
   }
 
@@ -81,12 +81,12 @@ static int rwlock_tryrdlock(__kpr_rwlock* lock) {
     return EBUSY;
   } else {
     // No writers are locked so we can go ahead and try to lock this one as well
-    __kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
+    kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
     return 0;
   }
 }
 
-static int rwlock_trywrlock(__kpr_rwlock* lock) {
+static int rwlock_trywrlock(kpr_rwlock* lock) {
   uint64_t tid = klee_get_thread_id();
 
   if (lock->acquiredWriter != NO_WRITER_ACQUIRED) {
@@ -97,7 +97,7 @@ static int rwlock_trywrlock(__kpr_rwlock* lock) {
     }
   }
 
-  if (__kpr_list_size(&lock->acquiredReaderLocks) > 0) {
+  if (kpr_list_size(&lock->acquiredReaderLocks) > 0) {
     return EBUSY;
   }
 
@@ -110,23 +110,23 @@ static int rwlock_trywrlock(__kpr_rwlock* lock) {
 int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_rwlock* lock = malloc(sizeof(__kpr_rwlock));
+  kpr_rwlock* lock = malloc(sizeof(kpr_rwlock));
   if (lock == NULL) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  memset(lock, 0, sizeof(__kpr_rwlock));
+  memset(lock, 0, sizeof(kpr_rwlock));
 
-  *((__kpr_rwlock**)l) = lock;
+  *((kpr_rwlock**)l) = lock;
 
   lock->acquiredWriter = NO_WRITER_ACQUIRED;
 
   lock->waitingReaderCount = 0;
   lock->waitingWriterCount = 0;
 
-  __kpr_list_create(&lock->waitingList);
-  __kpr_list_create(&lock->acquiredReaderLocks);
+  kpr_list_create(&lock->waitingList);
+  kpr_list_create(&lock->acquiredReaderLocks);
 
   klee_toggle_thread_scheduling(1);
 
@@ -135,14 +135,14 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
 
 int pthread_rwlock_destroy(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
-  __kpr_rwlock* lock;
+  kpr_rwlock* lock;
 
-  if (__obtain_rwlock(l, &lock) != 0) {
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
 
-  if (__kpr_list_size(&lock->acquiredReaderLocks) != 0 || lock->acquiredWriter != NO_WRITER_ACQUIRED) {
+  if (kpr_list_size(&lock->acquiredReaderLocks) != 0 || lock->acquiredWriter != NO_WRITER_ACQUIRED) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -156,8 +156,8 @@ int pthread_rwlock_destroy(pthread_rwlock_t *l) {
 int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_rwlock* lock;
-  if (__obtain_rwlock(l, &lock) != 0) {
+  kpr_rwlock* lock;
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -165,7 +165,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
   int result = rwlock_tryrdlock(lock);
   while (result != 0) {
     uint64_t tid = klee_get_thread_id();
-    __kpr_list_push(&lock->waitingList, (void*) tid);
+    kpr_list_push(&lock->waitingList, (void*) tid);
     lock->waitingReaderCount++;
 
     klee_sleep_thread();
@@ -182,8 +182,8 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_rwlock* lock;
-  if (__obtain_rwlock(l, &lock) != 0) {
+  kpr_rwlock* lock;
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -195,13 +195,13 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *l) {
   return result;
 }
 
-//int pthread_rwlock_timedrdlock(pthread_rwlock_t *__restrict, const struct timespec *__restrict);
+//int pthread_rwlock_timedrdlock(pthread_rwlock_t *kpr_restrict, const struct timespec *kpr_restrict);
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_rwlock* lock;
-  if (__obtain_rwlock(l, &lock) != 0) {
+  kpr_rwlock* lock;
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -209,7 +209,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
   int result = rwlock_trywrlock(lock);
   while (result != 0) {
     uint64_t tid = klee_get_thread_id();
-    __kpr_list_push(&lock->waitingList, (void*) tid);
+    kpr_list_push(&lock->waitingList, (void*) tid);
     lock->waitingWriterCount++;
 
     klee_sleep_thread();
@@ -226,8 +226,8 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
 int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
 
-  __kpr_rwlock* lock;
-  if (__obtain_rwlock(l, &lock) != 0) {
+  kpr_rwlock* lock;
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -239,13 +239,13 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *l) {
   return result;
 }
 
-//int pthread_rwlock_timedwrlock(pthread_rwlock_t *__restrict, const struct timespec *__restrict);
+//int pthread_rwlock_timedwrlock(pthread_rwlock_t *kpr_restrict, const struct timespec *kpr_restrict);
 
 int pthread_rwlock_unlock(pthread_rwlock_t *l) {
   klee_toggle_thread_scheduling(0);
-  __kpr_rwlock* lock;
+  kpr_rwlock* lock;
 
-  if (__obtain_rwlock(l, &lock) != 0) {
+  if (kpr_obtain_rwlock(l, &lock) != 0) {
     klee_toggle_thread_scheduling(1);
     return -1;
   }
@@ -258,23 +258,23 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
     lock->acquiredWriter = NO_WRITER_ACQUIRED;
     unlockAll = true;
     validUnlock = true;
-  } else if (__kpr_list_size(&lock->acquiredReaderLocks) > 0) {
+  } else if (kpr_list_size(&lock->acquiredReaderLocks) > 0) {
     // Now we have to remove one lock from ourself, if we can actually remove it
-    __kpr_list_iterator it = __get_reader_lock(lock, klee_get_thread_id());
+    kpr_list_iterator it = kpr_get_reader_lock(lock, klee_get_thread_id());
 
-    if (__kpr_list_iterator_valid(it)) {
+    if (kpr_list_iterator_valid(it)) {
       // Then remove the iterator and check the size
-      __kpr_list_erase(&lock->acquiredReaderLocks, &it);
+      kpr_list_erase(&lock->acquiredReaderLocks, &it);
 
       validUnlock = true;
 
       // We can unlock all only if there are no locks left
-      unlockAll = __kpr_list_size(&lock->acquiredReaderLocks) == 0;
+      unlockAll = kpr_list_size(&lock->acquiredReaderLocks) == 0;
     }
   }
 
   if (unlockAll) {
-    __notify_threads(&lock->waitingList);
+    kpr_notify_threads(&lock->waitingList);
     lock->waitingReaderCount = 0;
     lock->waitingWriterCount = 0;
   }
