@@ -111,6 +111,22 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread
 
   *v = epoch;
 
+  // Two threads can also synchronize through a third one
+  for (uint64_t i = 0; i < knownThreads.size(); i++) {
+    if (i == tid1 || i == tid2) {
+      // We want to find a third thread, therefore we can ignore these
+      continue;
+    }
+
+    // Get the reference values
+    uint64_t s = *getThreadSyncValueTo(tid2, i);
+    uint64_t* ref = getThreadSyncValueTo(tid1, i);
+
+    if (s >= *ref && s < epoch) {
+      *ref = s;
+    }
+  }
+
   // TODO: try to use this info in order to prune old memory accesses, that we no longer need to keep
 }
 
