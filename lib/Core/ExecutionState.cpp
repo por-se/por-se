@@ -326,6 +326,9 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
     access.atomicMemoryAccess = atomicPhase;
     access.safeMemoryAccess = !threadSchedulingEnabled || atomicPhase;
 
+    // Using the prevPc here since the instruction will already be iterated
+    access.instruction = getCurrentThreadReference().prevPc;
+
     memAccessTracker->trackMemoryAccess(mo->getId(), access);
   }
 }

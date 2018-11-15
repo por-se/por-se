@@ -28,6 +28,7 @@
 #include "llvm/ADT/Twine.h"
 
 #include "../Expr/ArrayExprOptimizer.h"
+#include "MemoryAccessTracker.h"
 
 #include <chrono>
 #include <map>
@@ -516,8 +517,7 @@ private:
 
   void exitWithDeadlock(ExecutionState &state);
 
-  void exitWithUnsafeMemAccess(ExecutionState &state,
-                               const MemoryObject* mo);
+  void exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction);
 
   bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
                            ref<Expr> offset, uint8_t type);

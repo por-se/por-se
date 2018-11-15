@@ -3,6 +3,7 @@
 
 #include "klee/Expr.h"
 #include "klee/Thread.h"
+#include "klee/Internal/Module/KInstruction.h"
 
 #include <vector>
 #include <map>
@@ -15,6 +16,7 @@ namespace klee {
 
     bool atomicMemoryAccess = false;
     bool safeMemoryAccess = false;
+    KInstruction* instruction = nullptr;
 
     MemoryAccess() = default;
     MemoryAccess(const MemoryAccess &a) = default;
@@ -22,6 +24,7 @@ namespace klee {
 
   struct MemAccessSafetyResult {
     bool wasSafe = false;
+    MemoryAccess racingAccess;
 
     std::vector<MemoryAccess> possibleCandidates;
     std::map<Thread::ThreadId, uint64_t> dataDependencies;

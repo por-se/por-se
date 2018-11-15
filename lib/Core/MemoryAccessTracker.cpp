@@ -76,6 +76,9 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
     if (accessIt.safeMemoryAccess != access.safeMemoryAccess) {
       continue;
     }
+    if (accessIt.atomicMemoryAccess != access.atomicMemoryAccess) {
+      continue;
+    }
 
     // Every free or alloc call is stronger as any other access type and does not require
     // offset checks, so this is one of the simpler merges
@@ -83,6 +86,7 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
       accessIt.type = access.type;
       // alloc and free do not track the offset
       accessIt.offset = nullptr;
+      accessIt.instruction = access.instruction;
       return;
     }
 
@@ -91,13 +95,13 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
     // Needs the same offsets to be correct
     if (newIsWrite && (accessIt.type & READ_ACCESS) && access.offset == accessIt.offset){
       accessIt.type = WRITE_ACCESS;
+      accessIt.instruction = access.instruction;
       return;
     }
   }
 
-  MemoryAccess newAccess (access);
   // Make sure that we always use the same epoch number
-  accesses.emplace_back(newAccess);
+  accesses.emplace_back(access);
 }
 
 void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch) {
@@ -201,6 +205,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       if (isFree || (a.type & FREE_ACCESS)) {
         if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
+          result.racingAccess = a;
           return;
         }
 
@@ -216,6 +221,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       if (isAlloc || (a.type & ALLOC_ACCESS)) {
         if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
+          result.racingAccess = a;
           return;
         }
 
@@ -236,6 +242,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       if (a.offset == access.offset) {
         if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
           result.wasSafe = false;
+          result.racingAccess = a;
           return;
         }
 

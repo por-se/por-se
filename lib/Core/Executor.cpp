@@ -4759,10 +4759,14 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   access.safeMemoryAccess = false;
   access.atomicMemoryAccess = state.atomicPhase;
 
+  KInstruction* racingInstruction = nullptr;
   MemAccessSafetyResult result = state.memAccessTracker->testIfUnsafeMemoryAccess(mo->getId(), access);
 
   if (result.possibleCandidates.empty()) {
     access.safeMemoryAccess = result.wasSafe;
+    if (!result.wasSafe) {
+      racingInstruction = result.racingAccess.instruction;
+    }
   } else {
     // First build one big expression to test if one of them matches
     ref<Expr> query = ConstantExpr::create(1, Expr::Bool);
@@ -4808,6 +4812,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
           // Extract all important info in order to generate a proper report we should
           // probably be showing info about which thread was causing the race
           access.safeMemoryAccess = false;
+          racingInstruction = candidateIt.instruction;
 
           break;
         }
@@ -4844,7 +4849,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   }
 
   if (!access.safeMemoryAccess) {
-    exitWithUnsafeMemAccess(state, mo);
+    exitWithUnsafeMemAccess(state, mo, racingInstruction);
   } else {
     if (!access.atomicMemoryAccess) {
       Thread::ThreadId tid = state.getCurrentThreadReference().getThreadId();
@@ -4863,7 +4868,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   return access.safeMemoryAccess;
 }
 
-void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject* mo) {
+void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction) {
   std::string TmpStr;
   llvm::raw_string_ostream os(TmpStr);
   os << "Unsafe access to memory from multiple threads\nAffected memory: ";
@@ -4871,6 +4876,10 @@ void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject
   std::string memInfo;
   mo->getAllocInfo(memInfo);
   os << memInfo << "\n";
+
+  const InstructionInfo &ii = *racingInstruction->info;
+  if (ii.file != "")
+    os << "Racing instruction: " << ii.file << ":" << ii.line << "\n";
 
   terminateStateOnError(state, "thread unsafe memory access",
                         UnsafeMemoryAccess, nullptr, os.str());
