@@ -9,7 +9,7 @@ MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryA
   owner = ac.owner;
   tid = ac.tid;
   accesses = ac.accesses;
-  preThreadAccesses = ac.preThreadAccesses;
+  preThreadAccessIndex = ac.preThreadAccessIndex;
   scheduleIndex = ac.scheduleIndex;
 }
 
@@ -49,9 +49,7 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   }
 
   uint64_t exec = lastExecutions[tid];
-  if (exec != NOT_EXECUTED) {
-    ema->preThreadAccesses = accessLists[exec];
-  }
+  ema->preThreadAccessIndex = exec;
 
   lastExecutions[tid] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
@@ -127,7 +125,28 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread
     }
   }
 
-  // TODO: try to use this info in order to prune old memory accesses, that we no longer need to keep
+  // As we have added a new relation, it is possible that certain memory accesses no longer need to
+  // be tracked
+  uint64_t keepAllAfter = accessLists.size();
+
+  for (uint64_t i = 0; i < knownThreads.size(); i++) {
+    for (uint64_t j = 0; j < knownThreads.size(); j++) {
+      if (i == j) {
+        continue;
+      }
+
+      uint64_t rel = *getThreadSyncValueTo(i, j);
+      if (rel < keepAllAfter) {
+        keepAllAfter = rel;
+      }
+    }
+  }
+
+  if (keepAllAfter < accessLists.size()) {
+    for (uint64_t i = 0; i <= keepAllAfter; i++) {
+      accessLists[i] = nullptr;
+    }
+  }
 }
 
 uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
@@ -167,8 +186,11 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
 
     auto objAccesses = ema->accesses.find(id);
     if (objAccesses == ema->accesses.end()) {
-      // There was no access to that object in this schedule phase
-      ema = ema->preThreadAccesses;
+      // There was no access to that object in this schedule phase, move to the next
+      if (ema->preThreadAccessIndex == NOT_EXECUTED) {
+        break;
+      }
+      ema = accessLists[ema->preThreadAccessIndex];
       continue;
     }
 
@@ -237,7 +259,10 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
       }
     }
 
-    ema = ema->preThreadAccesses;
+    if (ema->preThreadAccessIndex == NOT_EXECUTED) {
+      break;
+    }
+    ema = accessLists[ema->preThreadAccessIndex];
   }
 }
 

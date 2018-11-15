@@ -43,7 +43,7 @@ namespace klee {
         Thread::ThreadId tid;
         uint64_t scheduleIndex;
 
-        std::shared_ptr<EpochMemoryAccesses> preThreadAccesses;
+        uint64_t preThreadAccessIndex;
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
 
         EpochMemoryAccesses() = default;
