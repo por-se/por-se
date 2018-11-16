@@ -52,7 +52,7 @@ private:
     std::size_t bytes = 0;
   } memoryFunction;
 
-  static size_t externalFunctionCallCounter;
+  static std::size_t externalFunctionCallCounter;
 
   static KModule *kmodule;
   static std::vector<llvm::Function *> outputFunctionsWhitelist;
@@ -126,13 +126,13 @@ public:
     return !disableMemoryState;
   }
 
-  size_t getFunctionListsLength() const {
+  std::size_t getFunctionListsLength() const {
     return MemoryState::outputFunctionsWhitelist.size()
         + MemoryState::libraryFunctionsList.size()
         + MemoryState::memoryFunctionsList.size();
   }
 
-  size_t getFunctionListsCapacity() const {
+  std::size_t getFunctionListsCapacity() const {
     return MemoryState::outputFunctionsWhitelist.capacity()
         + MemoryState::libraryFunctionsList.capacity()
         + MemoryState::memoryFunctionsList.capacity();

@@ -18,7 +18,6 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 
 #include <cmath>
@@ -27,7 +26,7 @@
 
 namespace klee {
 
-size_t MemoryState::externalFunctionCallCounter = 0;
+std::size_t MemoryState::externalFunctionCallCounter = 0;
 KModule *MemoryState::kmodule = nullptr;
 std::vector<llvm::Function *> MemoryState::outputFunctionsWhitelist;
 std::vector<llvm::Function *> MemoryState::libraryFunctionsList;
