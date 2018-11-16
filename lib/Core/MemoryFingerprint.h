@@ -1,15 +1,15 @@
 #ifndef KLEE_MEMORYFINGERPRINT_H
 #define KLEE_MEMORYFINGERPRINT_H
 
-#include "klee/Expr.h"
 #include "klee/Config/config.h"
+#include "klee/Expr.h"
 
 #ifndef __cpp_rtti
 // stub for typeid to use CryptoPP without RTTI
-template<typename T> const std::type_info& FakeTypeID(void) {
-    assert(0 && "CryptoPP tries to use typeid()");
+template <typename T> const std::type_info &FakeTypeID(void) {
+  assert(0 && "CryptoPP tries to use typeid()");
 }
-#define typeid(a) FakeTypeID<a>()
+#define typeid(a) FakeTypeID < a > ()
 #endif
 #include <cryptopp/blake2.h>
 #ifndef __cpp_rtti
@@ -40,35 +40,32 @@ class MemoryFingerprint_Dummy;
 // Set default implementation
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
 
-template<typename Derived, size_t hashSize>
-class MemoryFingerprintT {
+template <typename Derived, size_t hashSize> class MemoryFingerprintT {
 
 protected:
   using hash_t = std::array<std::uint8_t, hashSize>;
   using dummy_t = std::set<std::string>;
 
 public:
-  typedef typename std::conditional<hashSize == 0, dummy_t, hash_t>::type
-      value_t;
+  typedef
+      typename std::conditional<hashSize == 0, dummy_t, hash_t>::type value_t;
 
 private:
-  Derived& getDerived() {
-    return *(static_cast<Derived*>(this));
-  }
+  Derived &getDerived() { return *(static_cast<Derived *>(this)); }
 
   value_t fingerprintValue{};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 
-  template<typename T,
-    typename std::enable_if<std::is_same<T, hash_t>::value, int>::type = 0>
+  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
+                                                int>::type = 0>
   inline void executeXOR(T &dst, const T &src) {
     for (std::size_t i = 0; i < hashSize; ++i) {
       dst[i] ^= src[i];
     }
   }
 
-  template<typename T,
-    typename std::enable_if<std::is_same<T, dummy_t>::value, int>::type = 0>
+  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
+                                                int>::type = 0>
   inline void executeXOR(T &dst, const T &src) {
     for (auto &elem : src) {
       auto pos = dst.find(elem);
@@ -153,10 +150,10 @@ public:
                               const KInstruction *caller);
 };
 
+class MemoryFingerprint_CryptoPP_BLAKE2b
+    : public MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32> {
+  friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
 
-class MemoryFingerprint_CryptoPP_BLAKE2b :
-public MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32> {
-friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
 private:
   CryptoPP::BLAKE2b blake2b = CryptoPP::BLAKE2b(false, 32);
   void generateHash();
@@ -168,10 +165,10 @@ public:
   void updateExpr_impl(ref<Expr> expr);
 };
 
+class MemoryFingerprint_Dummy
+    : public MemoryFingerprintT<MemoryFingerprint_Dummy, 0> {
+  friend class MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
 
-class MemoryFingerprint_Dummy :
-public MemoryFingerprintT<MemoryFingerprint_Dummy, 0> {
-friend class MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
 private:
   std::string current;
   bool first = true;
