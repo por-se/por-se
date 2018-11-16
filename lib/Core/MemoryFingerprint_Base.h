@@ -206,11 +206,29 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
       if (symbolicReferences.count(s.first) &&
           symbolicReferences[s.first] != 0) {
         constraintsMap[s.first].insert(expr);
+        arraysReferenced.insert(s.first);
+        exprToArray[expr].insert(s.first);
       }
     }
   }
 
-  // TODO: transitive closure
+  // transitive closure
+  std::set<const Array *> newReferences = arraysReferenced;
+
+  do {
+    std::set<const Array *> tmp;
+    std::swap(newReferences, tmp);
+    for (auto *a : tmp) {
+      for (ref<Expr> c : constraintsMap[a]) {
+        for (auto *b : exprToArray[c]) {
+          if (!arraysReferenced.count(b)) {
+            newReferences.insert(b);
+            arraysReferenced.insert(b);
+          }
+        }
+      }
+    }
+  } while (!newReferences.empty());
 
   if (!constraintsMap.empty()) {
     getDerived().updateUint8(10);
