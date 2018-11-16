@@ -39,10 +39,7 @@ namespace klee {
     MemoryObject *varargs;
 
     // changes w.r.t. this stack frame
-    MemoryFingerprint::fingerprint_t fingerprintDelta;
-
-    // reference counting for symbolic variables in fingerprintDelta
-    std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
+    MemoryFingerprintDelta fingerprintDelta;
 
     StackFrame(KInstIterator caller, KFunction *kf);
     StackFrame(const StackFrame &s);

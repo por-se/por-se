@@ -10,6 +10,32 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
 
+namespace {
+
+template <typename T>
+class MemoryFingerprint_ostream : public llvm::raw_ostream {
+private:
+  T &hash;
+  std::uint64_t pos = 0;
+
+public:
+  explicit MemoryFingerprint_ostream(T &_hash) : hash(_hash) {}
+  void write_impl(const char *ptr, std::size_t size) override;
+  uint64_t current_pos() const override { return pos; }
+  ~MemoryFingerprint_ostream() override { flush(); }
+};
+
+/* MemoryFingerprint_ostream<CryptoPP::BLAKE2b> */
+
+template <>
+void MemoryFingerprint_ostream<CryptoPP::BLAKE2b>::write_impl(
+    const char *ptr, std::size_t size) {
+  hash.Update(reinterpret_cast<const CryptoPP::byte *>(ptr), size);
+  pos += size;
+}
+
+} // namespace
+
 namespace klee {
 
 /* MemoryFingerprint_CryptoPP_BLAKE2b */
@@ -24,7 +50,7 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(const std::uint64_t value)
   blake2b.Update(reinterpret_cast<const std::uint8_t*>(&value), 8);
 }
 
-void MemoryFingerprint_CryptoPP_BLAKE2b::updateExpr(ref<Expr> expr) {
+void MemoryFingerprint_CryptoPP_BLAKE2b::updateExpr_impl(ref<Expr> expr) {
   MemoryFingerprint_ostream<CryptoPP::BLAKE2b> OS(blake2b);
   ExprPPrinter::printSingleExpr(OS, expr);
 }
@@ -37,16 +63,6 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::clearHash() {
   // not really necessary as Final() already calls this internally
   blake2b.Restart();
 }
-
-/* MemoryFingerprint_ostream<CryptoPP::BLAKE2b> */
-
-template<>
-void MemoryFingerprint_ostream<CryptoPP::BLAKE2b>::write_impl(const char *ptr,
-                                                              std::size_t size) {
-  hash.Update(reinterpret_cast<const CryptoPP::byte*>(ptr), size);
-  pos += size;
-}
-
 
 /* MemoryFingerprint_Dummy */
 
@@ -68,7 +84,7 @@ void MemoryFingerprint_Dummy::updateUint64(const std::uint64_t value) {
   current += std::to_string(value);
 }
 
-void MemoryFingerprint_Dummy::updateExpr(ref<Expr> expr) {
+void MemoryFingerprint_Dummy::updateExpr_impl(ref<Expr> expr) {
   if (first) {
     first = false;
   } else {
@@ -89,7 +105,7 @@ void MemoryFingerprint_Dummy::clearHash() {
   first = true;
 }
 
-std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t fingerprint) {
+std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
   std::string result_str;
   llvm::raw_string_ostream result(result_str);
   size_t writes = 0;
@@ -99,7 +115,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
 
   result << "{";
 
-  for (auto it = fingerprint.begin(); it != fingerprint.end(); ++it) {
+  for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
     std::istringstream item(*it);
     int id;
     item >> id;
@@ -278,7 +294,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
         result << "]";
         output = true;
     }
-    if (std::next(it) != fingerprint.end() && output) {
+    if (std::next(it) != fingerprintValue.end() && output) {
       result << ", ";
     }
   }
@@ -292,4 +308,4 @@ std::string MemoryFingerprint_Dummy::toString_impl(MemoryFingerprintT::dummy_t f
   return result.str();
 }
 
-}
+} // namespace klee

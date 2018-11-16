@@ -137,7 +137,7 @@ private:
   TimingSolver *solver;
   MemoryManager *memory;
   std::set<ExecutionState*> states;
-  std::set<MemoryFingerprint::fingerprint_t> fingerprints;
+  std::set<MemoryFingerprint::value_t> fingerprints;
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;

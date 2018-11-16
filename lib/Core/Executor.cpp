@@ -1576,7 +1576,7 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
       if ((dst->getSinglePredecessor() == nullptr) ||
           InfiniteLoopDetectionDisableTwoPredecessorOpt) {
         // more than one predecessor
-        MemoryFingerprint::fingerprint_t fingerprint = state.memoryState.getFingerprint();
+        MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
         std::string str = MemoryFingerprint::toString(fingerprint);
         if (fingerprints.count(fingerprint) != 0) {
           std::string warning = "same state found! (" + str + ") @ " + src->getName().str() + " -> " + dst->getName().str();

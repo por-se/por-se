@@ -20,9 +20,19 @@ template<typename T> const std::type_info& FakeTypeID(void) {
 #include <iomanip>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <unordered_set>
 
+namespace llvm {
+class BasicBlock;
+class Instruction;
+} // namespace llvm
+
 namespace klee {
+class KFunction;
+class KInstruction;
+
+class MemoryFingerprintDelta;
 
 class MemoryFingerprint_CryptoPP_BLAKE2b;
 class MemoryFingerprint_Dummy;
@@ -39,16 +49,15 @@ protected:
 
 public:
   typedef typename std::conditional<hashSize == 0, dummy_t, hash_t>::type
-    fingerprint_t;
+      value_t;
 
 private:
   Derived& getDerived() {
     return *(static_cast<Derived*>(this));
   }
 
-  fingerprint_t fingerprint = {};
-  fingerprint_t fingerprintStackFrameDelta = {};
-  fingerprint_t fingerprintTemporaryDelta = {};
+  value_t fingerprintValue{};
+  std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 
   template<typename T,
     typename std::enable_if<std::is_same<T, hash_t>::value, int>::type = 0>
@@ -73,117 +82,75 @@ private:
 
 protected:
   // buffer that holds current hash after calling generateHash()
-  fingerprint_t buffer = {};
+  value_t buffer = {};
 
+private:
+  // information on what went into buffer
+  bool bufferContainsSymbolic = false;
+  std::unordered_map<const Array *, std::uint64_t> bufferSymbolicReferences;
+
+  void resetBufferRefCount() {
+    bufferContainsSymbolic = false;
+    bufferSymbolicReferences.clear();
+  }
 
 public:
   MemoryFingerprintT() = default;
   MemoryFingerprintT(const MemoryFingerprintT &) = default;
 
-  void applyToFingerprint() {
-    getDerived().generateHash();
-    executeXOR(fingerprint, buffer);
-    getDerived().clearHash();
-  }
+  void addToFingerprint();
+  void removeFromFingerprint();
 
-  void applyToFingerprintStackFrameDelta() {
-    applyToFingerprintStackFrameDelta(fingerprintStackFrameDelta);
-  }
+  void addToFingerprintAndDelta(MemoryFingerprintDelta &delta);
+  void removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
+  void addToDeltaOnly(MemoryFingerprintDelta &delta);
+  void removeFromDeltaOnly(MemoryFingerprintDelta &delta);
+  void addDelta(MemoryFingerprintDelta &delta);
+  void removeDelta(MemoryFingerprintDelta &delta);
 
-  void applyToFingerprintStackFrameDelta(fingerprint_t &deltaDst) {
-    getDerived().generateHash();
-    executeXOR(deltaDst, buffer);
-    // All changes that are applied to stack frame deltas are also applied to
-    // fingerprint immediately, since we need to be able to remove just the
-    // changes of a single stack frame in a simple manner.
-    executeXOR(fingerprint, buffer);
-    getDerived().clearHash();
-  }
+  value_t getFingerprint(std::vector<ref<Expr>> &expressions);
 
-  void applyToTemporaryDelta() {
-    getDerived().generateHash();
-    executeXOR(fingerprintTemporaryDelta, buffer);
-    getDerived().clearHash();
-  }
+  value_t getFingerprintWithDelta(std::vector<ref<Expr>> &expressions,
+                                  MemoryFingerprintDelta &delta);
 
-  fingerprint_t getFingerprint() {
-    // temporarily include temporary delta
-    auto result = fingerprint;
-    executeXOR(result, fingerprintTemporaryDelta);
-    return result;
-  }
+  void updateExpr(const ref<Expr> expr);
 
-  fingerprint_t getStackFrameDelta() {
-    return fingerprintStackFrameDelta;
-  }
+  void updateConstantExpr(const ConstantExpr &expr);
 
-  void applyAndResetStackFrameDelta() {
-    // This is trivial as changes made in fingerprintStackFrameDelta are already
-    // applied to fingerprint. Thus, we just need to do the reset part.
-    fingerprintStackFrameDelta = {};
-  }
-
-  // WARNING: This function can only be used with a stackFrameDelta that has
-  // been created and modified using the current instance of MemoryFingerprint,
-  // as it assumes that every change recorded in stackFrameDelta has also been
-  // applied to fingerprint.
-  void setStackFrameDeltaToPreviousValue(fingerprint_t stackFrameDelta) {
-    // TODO: write separate dummy method that actually checks this assumption?
-    fingerprintStackFrameDelta = stackFrameDelta;
-  }
-
-  void discardStackFrameDelta() {
-    executeXOR(fingerprint, fingerprintStackFrameDelta);
-    fingerprintStackFrameDelta = {};
-  }
-
-  void discardTemporaryDelta() {
-    fingerprintTemporaryDelta = {};
-  }
-
-  void discardEverything() {
-    fingerprintStackFrameDelta = {};
-    fingerprintTemporaryDelta = {};
-    fingerprint = {};
-  }
-
-  void updateConstantExpr(const ConstantExpr &expr) {
-    if (expr.getWidth() <= 64) {
-      std::uint64_t constantValue = expr.getZExtValue(64);
-      getDerived().updateUint64(constantValue);
-    } else {
-      const llvm::APInt &value = expr.getAPValue();
-      for (std::size_t i = 0; i != value.getNumWords(); i++) {
-        std::uint64_t word = value.getRawData()[i];
-        getDerived().updateUint64(word);
-      }
-    }
-  }
-
-  template<typename T,
-    typename std::enable_if<std::is_same<T, hash_t>::value, int>::type = 0>
-  static std::string toString(const T &fingerprint) {
+  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
+                                                int>::type = 0>
+  static std::string toString(const T &fingerprintValue) {
     std::stringstream result;
-    for (auto iter = fingerprint.cbegin(); iter != fingerprint.cend(); ++iter) {
+    for (const auto byte : fingerprintValue) {
       result << std::hex << std::setfill('0') << std::setw(2);
-      result << static_cast<unsigned int>(*iter);
+      result << static_cast<unsigned int>(byte);
     }
     return result.str();
   }
 
-  template<typename T,
-    typename std::enable_if<std::is_same<T, dummy_t>::value, int>::type = 0>
-  static std::string toString(const T &fingerprint) {
-    return Derived::toString_impl(fingerprint);
+  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
+                                                int>::type = 0>
+  static std::string toString(const T &fingerprintValue) {
+    return Derived::toString_impl(fingerprintValue);
   }
 
   std::string getFingerprintAsString() {
-    return toString(getFingerprint());
+    // FIXME: this has to be with referenced expressions
+    return toString(fingerprintValue);
   }
 
-  std::string getStackFrameDeltaAsString() {
-    return toString(fingerprintStackFrameDelta);
-  }
+  bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
+  bool updateLocalFragment(std::uint64_t threadID,
+                           std::uint64_t stackFrameIndex,
+                           const llvm::Instruction *inst, ref<Expr> value);
+  bool updateArgumentFragment(std::uint64_t threadID, std::uint64_t sfIndex,
+                              const KFunction *kf, std::uint64_t argumentIndex,
+                              ref<Expr> value);
+  bool updateBasicBlockFragment(std::uint64_t threadID, std::uint64_t sfIndex,
+                                const llvm::BasicBlock *bb);
+  bool updateFunctionFragment(std::uint64_t threadID, std::uint64_t sfIndex,
+                              const KFunction *callee,
+                              const KInstruction *caller);
 };
 
 
@@ -198,21 +165,7 @@ private:
 public:
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
-  void updateExpr(ref<Expr> expr);
-};
-
-
-template <typename T>
-class MemoryFingerprint_ostream : public llvm::raw_ostream {
-private:
-  T &hash;
-  std::uint64_t pos = 0;
-
-public:
-  explicit MemoryFingerprint_ostream(T &_hash) : hash(_hash) {}
-  void write_impl(const char *ptr, std::size_t size) override;
-  uint64_t current_pos() const override { return pos; }
-  ~MemoryFingerprint_ostream() override { flush(); }
+  void updateExpr_impl(ref<Expr> expr);
 };
 
 
@@ -224,15 +177,54 @@ private:
   bool first = true;
   void generateHash();
   void clearHash();
-  static std::string toString_impl(MemoryFingerprintT::dummy_t fingerprint);
+  static std::string toString_impl(dummy_t fingerprintValue);
 
 public:
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
-  void updateExpr(ref<Expr> expr);
+  void updateExpr_impl(ref<Expr> expr);
 };
 
+// NOTE: MemoryFingerprint needs to be a complete type
+class MemoryFingerprintDelta {
+private:
+  friend class MemoryState;
 
-}
+  template <typename Derived, std::size_t hashSize>
+  friend void MemoryFingerprintT<Derived, hashSize>::addToFingerprintAndDelta(
+      MemoryFingerprintDelta &delta);
+
+  template <typename Derived, std::size_t hashSize>
+  friend void
+  MemoryFingerprintT<Derived, hashSize>::removeFromFingerprintAndDelta(
+      MemoryFingerprintDelta &delta);
+
+  template <typename Derived, std::size_t hashSize>
+  friend void MemoryFingerprintT<Derived, hashSize>::addToDeltaOnly(
+      MemoryFingerprintDelta &delta);
+
+  template <typename Derived, std::size_t hashSize>
+  friend void MemoryFingerprintT<Derived, hashSize>::removeFromDeltaOnly(
+      MemoryFingerprintDelta &delta);
+
+  template <typename Derived, std::size_t hashSize>
+  friend void MemoryFingerprintT<Derived, hashSize>::addDelta(
+      MemoryFingerprintDelta &delta);
+
+  template <typename Derived, std::size_t hashSize>
+  friend void MemoryFingerprintT<Derived, hashSize>::removeDelta(
+      MemoryFingerprintDelta &delta);
+
+  MemoryFingerprint::value_t fingerprintValue{};
+  std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
+};
+
+} // namespace klee
+
+// NOTE: MemoryFingerprintDelta needs to be a complete type
+#define INCLUDE_MEMORYFINGERPRINT_BASE_H
+// include definitions of MemoryFingerprintT member methods
+#include "MemoryFingerprint_Base.h"
+#undef INCLUDE_MEMORYFINGERPRINT_BASE_H
 
 #endif
