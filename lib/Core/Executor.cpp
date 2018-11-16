@@ -1408,7 +1408,7 @@ void Executor::executeCall(ExecutionState &state,
   } else {
     // Check if maximum stack size was reached.
     // We currently only count the number of stack frames
-    if (RuntimeMaxStackFrames && state.stack.size() > RuntimeMaxStackFrames) {
+    if (RuntimeMaxStackFrames && thread.stack.size() > RuntimeMaxStackFrames) {
       terminateStateEarly(state, "Maximum stack size reached.");
       klee_warning("Maximum stack size reached.");
       return;

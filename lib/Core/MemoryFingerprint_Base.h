@@ -196,6 +196,9 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
               }
             });
 
+  std::set<const Array *> arraysReferenced;
+  std::map<ref<Expr>, std::set<const Array *>> exprToArray;
+
   // map all expressions to arrays that they constrain
   std::unordered_map<const Array *, std::set<ref<Expr>>> constraintsMap;
   for (auto expr : expressions) {
