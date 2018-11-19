@@ -107,7 +107,7 @@ void MemoryFingerprint_Dummy::clearHash() {
 std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
   std::string result_str;
   llvm::raw_string_ostream result(result_str);
-  size_t writes = 0;
+  std::size_t writes = 0;
 
   // show individual memory operations in detail: writes (per byte)
   bool showMemoryOperations = false;

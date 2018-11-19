@@ -200,7 +200,7 @@ void LiveRegisterPass::propagatePhiUseToLiveSet(const Function &F) {
 }
 
 void LiveRegisterPass::generateInstructionInfo(const Function &F) {
-  size_t numInstructions = 0;
+  std::size_t numInstructions = 0;
   // iterate over all basic blocks
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
     const BasicBlock &bb = *it;
