@@ -20,6 +20,7 @@ namespace klee {
 
   class ExprPPrinter {
   protected:
+    std::set<const Array *> usedArrays;
     ExprPPrinter() {}
     
   public:
@@ -44,6 +45,10 @@ namespace klee {
     void scan(InputIterator it, InputIterator end) {
       for (; it!=end; ++it)
         scan(*it);
+    }
+
+    const std::set<const Array *> &getUsedArrays() {
+      return usedArrays;
     }
 
     /// printOne - Pretty print a single expression prefixed by a

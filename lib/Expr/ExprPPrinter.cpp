@@ -38,8 +38,6 @@ namespace {
 }
 
 class PPrinter : public ExprPPrinter {
-public:
-  std::set<const Array*> usedArrays;
 private:
   std::map<ref<Expr>, unsigned> bindings;
   std::map<const UpdateNode*, unsigned> updateBindings;
