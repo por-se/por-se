@@ -1,5 +1,8 @@
 /asan
 /debug
 /release
+/build
+/cmake-*
 
 .vscode
+.idea

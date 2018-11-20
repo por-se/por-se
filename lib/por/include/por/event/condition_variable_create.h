@@ -7,15 +7,15 @@
 #include <memory>
 
 namespace por::event {
-	class local final : public event {
+	class condition_variable_create final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
 	protected:
-		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-			: event(event_kind::local, tid)
-			, _predecessors{::std::move(thread_predecessor)}
+		condition_variable_create(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
+			: event(event_kind::condition_variable_create, tid)
+			, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
@@ -25,8 +25,8 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<local> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
-			return std::make_shared<local>(local{tid, ::std::move(thread_predecessor)});
+		static std::shared_ptr<condition_variable_create> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
+			return std::make_shared<condition_variable_create>(condition_variable_create{tid, std::move(thread_predecessor)});
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {

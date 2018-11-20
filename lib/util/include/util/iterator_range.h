@@ -9,9 +9,9 @@ namespace util {
 		std::decay_t<T> _begin, _end;
 
 	public:
-		iterator_range(T begin, T end)
-		: _begin(begin)
-		, _end(end)
+		iterator_range(T begin, T end) noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, T&&>)
+		: _begin(std::move(begin))
+		, _end(std::move(end))
 		{ }
 
 		std::decay_t<T> const& begin() noexcept {
@@ -24,7 +24,7 @@ namespace util {
 	};
 
 	template<typename T>
-	auto make_iterator_range(T begin, T end) {
+	auto make_iterator_range(T begin, T end) noexcept(std::is_nothrow_constructible_v<std::decay_t<T>, T&&>) {
 		return iterator_range<std::decay_t<T>>(std::move(begin), std::move(end));
 	}
 }

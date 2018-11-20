@@ -3,6 +3,10 @@
 #include "base.h"
 #include "thread_exit.h"
 
+#include <cassert>
+#include <array>
+#include <memory>
+
 namespace por::event {
 	class thread_join final : public event {
 		// predecessors:
@@ -12,8 +16,8 @@ namespace por::event {
 
 	protected:
 		thread_join(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& joined_thread)
-		: event(event_kind::thread_join, tid)
-		, _predecessors{std::move(thread_predecessor), std::move(joined_thread)}
+			: event(event_kind::thread_join, tid)
+			, _predecessors{std::move(thread_predecessor), std::move(joined_thread)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
@@ -36,6 +40,7 @@ namespace por::event {
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
-		std::shared_ptr<thread_exit> joined_thread() const noexcept { return std::static_pointer_cast<thread_exit>(_predecessors[1]); }
+		std::shared_ptr<event>      & joined_thread()       noexcept { return _predecessors[1]; }
+		std::shared_ptr<event> const& joined_thread() const noexcept { return _predecessors[1]; }
 	};
 }

@@ -3,6 +3,8 @@
 #include "base.h"
 
 #include <cassert>
+#include <array>
+#include <memory>
 
 namespace por::event {
 	class lock_create final : public event {
@@ -12,8 +14,8 @@ namespace por::event {
 
 	protected:
 		lock_create(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-		: event(event_kind::lock_create, tid)
-		, _predecessors{std::move(thread_predecessor)}
+			: event(event_kind::lock_create, tid)
+			, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);

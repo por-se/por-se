@@ -2,6 +2,10 @@
 
 #include "base.h"
 
+#include <cassert>
+#include <array>
+#include <memory>
+
 namespace por::event {
 	class thread_init final : public event {
 		// predecessors:
@@ -10,8 +14,8 @@ namespace por::event {
 
 	protected:
 		thread_init(thread_id_t tid, std::shared_ptr<event>&& creator)
-		: event(event_kind::thread_init, tid)
-		, _predecessors{std::move(creator)}
+			: event(event_kind::thread_init, tid)
+			, _predecessors{std::move(creator)}
 		{
 			assert(this->thread_creation_predecessor());
 			assert(

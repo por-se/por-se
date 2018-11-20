@@ -3,6 +3,8 @@
 #include "base.h"
 
 #include <cassert>
+#include <array>
+#include <memory>
 
 namespace por::event {
 	class lock_acquire final : public event {
@@ -13,14 +15,15 @@ namespace por::event {
 
 	protected:
 		lock_acquire(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& lock_predecessor)
-		: event(event_kind::lock_acquire, tid)
-		, _predecessors{std::move(thread_predecessor), std::move(lock_predecessor)}
+			: event(event_kind::lock_acquire, tid)
+			, _predecessors{std::move(thread_predecessor), std::move(lock_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
+			assert(this->lock_predecessor());
 			assert(
 				this->lock_predecessor()->kind() == event_kind::lock_create
 				|| this->lock_predecessor()->kind() == event_kind::lock_release

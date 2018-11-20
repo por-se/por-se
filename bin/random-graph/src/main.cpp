@@ -7,6 +7,8 @@
 #include <iostream>
 #include <iomanip>
 
+#include <util/sso_array.h>
+
 namespace {
 	por::event::thread_id_t choose_thread(por::program const& program, std::mt19937_64& gen) {
 		std::uniform_int_distribution<std::size_t> dis(1, program.active_threads());

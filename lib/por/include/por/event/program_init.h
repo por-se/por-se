@@ -2,13 +2,15 @@
 
 #include "base.h"
 
+#include <memory>
+
 namespace por::event {
 	class program_init final : public event {
 		// program init has no predecessors
 
 	protected:
 		program_init()
-		: event(event_kind::program_init, 0)
+			: event(event_kind::program_init, static_cast<thread_id_t>(0))
 		{ }
 
 	public:

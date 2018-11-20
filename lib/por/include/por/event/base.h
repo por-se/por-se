@@ -3,7 +3,6 @@
 #include <util/iterator_range.h>
 
 #include <cstdint>
-#include <array>
 #include <memory>
 
 namespace por::event {
@@ -11,16 +10,22 @@ namespace por::event {
 	using lock_id_t = std::uint64_t;
 
 	enum class event_kind : std::uint8_t {
-		local = 0,
-		program_init = 1,
-		thread_create = 2,
-		thread_join = 3,
-		thread_init = 4,
-		thread_exit = 5,
-		lock_create = 6,
-		lock_destroy = 7,
-		lock_acquire = 8,
-		lock_release = 9,
+		local,
+		program_init,
+		thread_create,
+		thread_join,
+		thread_init,
+		thread_exit,
+		lock_create,
+		lock_destroy,
+		lock_acquire,
+		lock_release,
+		condition_variable_create,
+		condition_variable_destroy,
+		wait1,
+		wait2,
+		signal,
+		broadcast,
 	};
 
 	class event : public std::enable_shared_from_this<event> {
