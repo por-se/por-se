@@ -275,11 +275,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       break;
     }
     case 10: {
-      std::uint64_t tid;
-      item >> tid;
-
-      result << "[T" << tid << ']';
-      result << "Path Constraint:";
+      result << "[G]Path Constraint:";
 
       for (std::string line; std::getline(item, line);) {
         result << line;
