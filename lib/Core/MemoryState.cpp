@@ -291,7 +291,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
                  << ExprString(base) << "\n";
   }
 
-  applyWriteFragment(address, mo, os, bytes, true);
+  applyWriteFragment(address, mo, os, bytes, false);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << " [fingerprint: "
@@ -313,7 +313,7 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                  << ExprString(base) << "\n";
   }
 
-  applyWriteFragment(address, mo, os, bytes, false);
+  applyWriteFragment(address, mo, os, bytes, true);
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << " [fingerprint: "
