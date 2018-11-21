@@ -206,7 +206,9 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       result << kf->function->getName() << "(";
       for (std::size_t i = 0; i < total; ++i) {
         if (argumentIndex == i) {
-          result << item.str();
+          for (std::string line; std::getline(item, line);) {
+            result << line;
+          }
         } else {
           result << "?";
         }
@@ -279,13 +281,15 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       result << "[T" << tid << ']';
       result << "Path Constraint:";
 
-      result << item.str();
+      for (std::string line; std::getline(item, line);) {
+        result << line;
+      }
       output = true;
       break;
     }
     default:
       result << "[UNKNOWN:";
-      result << item.str();
+      result << *it;
       result << "]";
       output = true;
     }
