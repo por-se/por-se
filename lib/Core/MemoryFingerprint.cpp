@@ -108,6 +108,8 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
   std::string result_str;
   llvm::raw_string_ostream result(result_str);
   std::size_t writes = 0;
+  bool containsSymbolicValue = false;
+  bool hasPathConstraint = false;
 
   // show individual memory operations in detail: writes (per byte)
   bool showMemoryOperations = false;
@@ -120,8 +122,10 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
     item >> id;
     bool output = false;
     switch (id) {
-    case 1:
     case 2:
+      containsSymbolicValue = true;
+      // fallthrough
+    case 1:
       if (showMemoryOperations) {
         std::uint64_t addr;
         item >> addr;
@@ -144,8 +148,10 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       }
       writes++;
       break;
-    case 3:
-    case 4: {
+    case 4:
+      containsSymbolicValue = true;
+      // fallthrough
+    case 3: {
       std::uint64_t tid;
       std::uint64_t sfid;
       std::uintptr_t ptr;
@@ -187,8 +193,10 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       output = true;
       break;
     }
-    case 5:
-    case 6: {
+    case 6:
+      containsSymbolicValue = true;
+      // fallthrough
+    case 5: {
       std::uint64_t tid;
       std::uint64_t sfid;
       std::uintptr_t ptr;
@@ -279,6 +287,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
 
       for (std::string line; std::getline(item, line);) {
         result << line;
+        hasPathConstraint = true;
       }
       output = true;
       break;
@@ -299,6 +308,8 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
   } else {
     result << "}";
   }
+
+  assert(!hasPathConstraint || (hasPathConstraint && containsSymbolicValue));
 
   return result.str();
 }
