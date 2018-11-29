@@ -504,8 +504,6 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
 
   Thread &thread = executionState->getCurrentThreadReference();
 
-
-
   if (thread.stack.size() > 0) {
     // remove changes only accessible to stack frame that is to be left
     StackFrame &sf = thread.stack.back();
@@ -516,9 +514,6 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     }
   }
 }
-
-
-
 
 MemoryFingerprint::value_t MemoryState::getFingerprint() {
   MemoryFingerprintDelta temporary;

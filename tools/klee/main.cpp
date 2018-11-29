@@ -648,26 +648,6 @@ static void parseArguments(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv, " klee\n");
 }
 
-static int enableInfiniteLoopDetection(Module *mainModule) {
-  Function *mainFn = mainModule->getFunction(EntryPoint);
-  if (!mainFn) {
-    klee_error("Entry function '%s' not found in module.", EntryPoint.c_str());
-  }
-
-  Instruction *firstInst = &*(mainFn->begin()->begin());
-  LLVMContext &ctx = mainModule->getContext();
-
-  Function *enableMemoryStateFn = Function::Create(
-    FunctionType::get(Type::getVoidTy(ctx), false),
-    GlobalValue::ExternalLinkage,
-    "klee_enable_memory_state",
-    mainModule);
-
-  CallInst::Create(enableMemoryStateFn, "", firstInst);
-
-  return 0;
-}
-
 static void
 preparePOSIX(std::vector<std::unique_ptr<llvm::Module>> &loadedModules,
              llvm::StringRef libCPrefix) {
@@ -1207,14 +1187,6 @@ int main(int argc, char **argv, char **envp) {
   llvm::Module *mainModule = M.get();
   // Push the module as the first entry
   loadedModules.emplace_back(std::move(M));
-
-  if (DetectInfiniteLoops) {
-    // inject before everything else, so that functions (such as runtime or libc
-    // initialization) inserted before the EntryPoint are not checked
-    int r = enableInfiniteLoopDetection(mainModule);
-    if (r != 0)
-      return r;
-  }
 
   std::string LibraryDir = KleeHandler::getRunTimeLibraryPath(argv[0]);
   Interpreter::ModuleOptions Opts(LibraryDir.c_str(), EntryPoint,
