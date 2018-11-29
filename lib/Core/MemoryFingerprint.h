@@ -149,11 +149,6 @@ public:
     return Derived::toString_impl(fingerprintValue);
   }
 
-  std::string getFingerprintAsString() {
-    // FIXME: this has to be with referenced expressions
-    return toString(fingerprintValue);
-  }
-
   bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
   bool updateLocalFragment(std::uint64_t threadID,
                            std::uint64_t stackFrameIndex,

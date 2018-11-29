@@ -292,11 +292,6 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
   }
 
   applyWriteFragment(address, mo, os, bytes, false);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << " [fingerprint: "
-                 << fingerprint.getFingerprintAsString() << "]\n";
-  }
 }
 
 void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
@@ -314,11 +309,6 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
   }
 
   applyWriteFragment(address, mo, os, bytes, true);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << " [fingerprint: "
-                 << fingerprint.getFingerprintAsString() << "]\n";
-  }
 }
 
 void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
@@ -409,9 +399,7 @@ void MemoryState::registerArgument(std::uint64_t threadID,
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
                  << reinterpret_cast<std::uintptr_t>(kf) << ": "
-                 << ExprString(value) << "\n"
-                 << " [fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "]\n";
+                 << ExprString(value) << "\n";
   }
 }
 
@@ -503,11 +491,6 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   // register stack frame
   fingerprint.updateFunctionFragment(threadID, sfIndex, callee, caller);
   fingerprint.addToFingerprintAndDelta(delta);
-
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "Fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "\n";
-  }
 }
 
 void MemoryState::registerPopFrame(std::uint64_t threadID,
@@ -516,36 +499,20 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
   // IMPORTANT: has to be called prior to state.popFrame()
 
   if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-    llvm::errs() << "MemoryState: POPFRAME\n"
-                 << "Fingerprint: " << fingerprint.getFingerprintAsString()
-                 << "\n";
+    llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
   Thread &thread = executionState->getCurrentThreadReference();
 
 
-  if (thread.stack.size() > 0) {
-    std::string previousDelta;
-/* FIXME
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-        previousDelta = sf.fingerprintDelta.getFingerprintValueAsString();
-    }
-*/
 
+  if (thread.stack.size() > 0) {
     // remove changes only accessible to stack frame that is to be left
     StackFrame &sf = thread.stack.back();
     fingerprint.removeDelta(sf.fingerprintDelta);
-
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "removing stack frame delta: " << previousDelta
-                   << "\nFingerprint: " << fingerprint.getFingerprintAsString()
-                   << "\n";
-    }
   } else {
-    // no stackframe left to pop
-
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "no stackframe left in trace\n";
+      llvm::errs() << "MemoryState: no stackframe left in trace\n";
     }
   }
 }
