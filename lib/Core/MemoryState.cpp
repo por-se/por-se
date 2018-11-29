@@ -375,12 +375,12 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
     if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
       llvm::errs() << "[+" << i << "] ";
       if (isSymbolic) {
+        llvm::errs() << ExprString(valExpr);
+      } else {
         ConstantExpr *constant = cast<ConstantExpr>(valExpr);
         std::uint8_t value = constant->getZExtValue(8);
         llvm::errs() << "0x";
         llvm::errs().write_hex((int)value);
-      } else {
-        llvm::errs() << ExprString(valExpr);
       }
 
       if (i % 10 == 9) {

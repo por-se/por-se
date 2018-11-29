@@ -256,7 +256,7 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       result << "[T" << tid << ':' << sfid << ']';
       result << "Stack Frame: ";
       result << callee->function->getName();
-      result << "( called from ";
+      result << " (called from ";
       result << caller->inst;
       result << ")";
 
