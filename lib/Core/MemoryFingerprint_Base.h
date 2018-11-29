@@ -74,7 +74,7 @@ void MemoryFingerprintT<D, S>::updateConstantExpr(const ConstantExpr &expr) {
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::addToFingerprint() {
   getDerived().generateHash();
-  executeXOR(fingerprintValue, buffer);
+  executeAdd(fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -88,7 +88,7 @@ void MemoryFingerprintT<D, S>::addToFingerprint() {
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::removeFromFingerprint() {
   getDerived().generateHash();
-  executeXOR(fingerprintValue, buffer);
+  executeRemove(fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -103,8 +103,8 @@ template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::addToFingerprintAndDelta(
     MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
-  executeXOR(delta.fingerprintValue, buffer);
-  executeXOR(fingerprintValue, buffer);
+  executeAdd(delta.fingerprintValue, buffer);
+  executeAdd(fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -120,8 +120,8 @@ template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::removeFromFingerprintAndDelta(
     MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
-  executeXOR(delta.fingerprintValue, buffer);
-  executeXOR(fingerprintValue, buffer);
+  executeRemove(delta.fingerprintValue, buffer);
+  executeRemove(fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -136,7 +136,7 @@ void MemoryFingerprintT<D, S>::removeFromFingerprintAndDelta(
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::addToDeltaOnly(MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
-  executeXOR(delta.fingerprintValue, buffer);
+  executeAdd(delta.fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -151,7 +151,7 @@ template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::removeFromDeltaOnly(
     MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
-  executeXOR(delta.fingerprintValue, buffer);
+  executeRemove(delta.fingerprintValue, buffer);
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
@@ -164,7 +164,7 @@ void MemoryFingerprintT<D, S>::removeFromDeltaOnly(
 
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::addDelta(MemoryFingerprintDelta &delta) {
-  executeXOR(fingerprintValue, delta.fingerprintValue);
+  executeAdd(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
     symbolicReferences[s.first] += s.second;

@@ -58,22 +58,40 @@ private:
 
   template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
                                                 int>::type = 0>
-  inline void executeXOR(T &dst, const T &src) {
+  void executeXOR(T &dst, const T &src) {
     for (std::size_t i = 0; i < hashSize; ++i) {
       dst[i] ^= src[i];
     }
   }
 
+  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
+                                                int>::type = 0>
+  void executeAdd(T &dst, const T &src) {
+    executeXOR(dst, src);
+  }
+
+  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
+                                                int>::type = 0>
+  void executeRemove(T &dst, const T &src) {
+    executeXOR(dst, src);
+  }
+
   template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
                                                 int>::type = 0>
-  inline void executeXOR(T &dst, const T &src) {
+  void executeAdd(T &dst, const T &src) {
+    for (auto &elem : src) {
+      assert(dst.find(elem) == dst.end() && "fragment already in fingerprint");
+      dst.insert(elem);
+    }
+  }
+
+  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
+                                                int>::type = 0>
+  void executeRemove(T &dst, const T &src) {
     for (auto &elem : src) {
       auto pos = dst.find(elem);
-      if (pos == dst.end()) {
-        dst.insert(elem);
-      } else {
-        dst.erase(pos);
-      }
+      assert(pos != dst.end() && "fragment not in fingerprint");
+      dst.erase(pos);
     }
   }
 
