@@ -481,6 +481,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   }
 
   Thread &thread = executionState->getCurrentThreadReference();
+  MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
 
   // second but last stack frame
   std::size_t oldIndex = thread.stack.size() - 2;
@@ -496,11 +497,10 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
 
     auto tid = thread.getThreadId();
     fingerprint.updateLocalFragment(tid, oldIndex, ki->inst, value);
-    fingerprint.addToFingerprintAndDelta(oldsf.fingerprintDelta);
+    fingerprint.addToFingerprintAndDelta(delta);
   }
 
   // register stack frame
-  MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
   fingerprint.updateFunctionFragment(threadID, sfIndex, callee, caller);
   fingerprint.addToFingerprintAndDelta(delta);
 
