@@ -2,7 +2,6 @@
 
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
-#include "klee/util/ExprPPrinter.h"
 
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DebugLoc.h"
@@ -10,33 +9,16 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
 
-namespace {
+namespace klee {
 
-template <typename T>
-class MemoryFingerprint_ostream : public llvm::raw_ostream {
-private:
-  T &hash;
-  std::uint64_t pos = 0;
-
-public:
-  explicit MemoryFingerprint_ostream(T &_hash) : hash(_hash) {}
-  void write_impl(const char *ptr, std::size_t size) override;
-  uint64_t current_pos() const override { return pos; }
-  ~MemoryFingerprint_ostream() override { flush(); }
-};
-
-/* MemoryFingerprint_ostream<CryptoPP::BLAKE2b> */
+/* MemoryFingerprintOstream<CryptoPP::BLAKE2b> */
 
 template <>
-void MemoryFingerprint_ostream<CryptoPP::BLAKE2b>::write_impl(
+void MemoryFingerprintOstream<CryptoPP::BLAKE2b>::write_impl(
     const char *ptr, std::size_t size) {
   hash.Update(reinterpret_cast<const CryptoPP::byte *>(ptr), size);
   pos += size;
 }
-
-} // namespace
-
-namespace klee {
 
 /* MemoryFingerprint_CryptoPP_BLAKE2b */
 
@@ -51,9 +33,8 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(
   blake2b.Update(reinterpret_cast<const std::uint8_t *>(&value), 8);
 }
 
-void MemoryFingerprint_CryptoPP_BLAKE2b::updateExpr_impl(ref<Expr> expr) {
-  MemoryFingerprint_ostream<CryptoPP::BLAKE2b> OS(blake2b);
-  ExprPPrinter::printSingleExpr(OS, expr);
+llvm::raw_ostream &MemoryFingerprint_CryptoPP_BLAKE2b::updateOstream() {
+  return ostream;
 }
 
 void MemoryFingerprint_CryptoPP_BLAKE2b::generateHash() {
@@ -85,15 +66,13 @@ void MemoryFingerprint_Dummy::updateUint64(const std::uint64_t value) {
   current += std::to_string(value);
 }
 
-void MemoryFingerprint_Dummy::updateExpr_impl(ref<Expr> expr) {
+llvm::raw_ostream &MemoryFingerprint_Dummy::updateOstream() {
   if (first) {
     first = false;
   } else {
     current += " ";
   }
-  llvm::raw_string_ostream ostream(current);
-  ExprPPrinter::printSingleExpr(ostream, expr);
-  ostream.flush();
+  return ostream;
 }
 
 void MemoryFingerprint_Dummy::generateHash() { buffer.insert(current); }

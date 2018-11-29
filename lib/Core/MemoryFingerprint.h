@@ -168,36 +168,66 @@ public:
                               const KInstruction *caller);
 };
 
+template <typename T>
+class MemoryFingerprintOstream : public llvm::raw_ostream {
+private:
+  T &hash;
+  std::uint64_t pos = 0;
+
+public:
+  explicit MemoryFingerprintOstream(T &_hash) : hash(_hash) {}
+  void write_impl(const char *ptr, std::size_t size) override;
+  uint64_t current_pos() const override { return pos; }
+  ~MemoryFingerprintOstream() override { assert(GetNumBytesInBuffer() == 0); }
+};
+
 class MemoryFingerprint_CryptoPP_BLAKE2b
     : public MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32> {
   friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
+  using Base = MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
 
 private:
-  CryptoPP::BLAKE2b blake2b = CryptoPP::BLAKE2b(false, 32);
+  CryptoPP::BLAKE2b blake2b{false, 32};
+  MemoryFingerprintOstream<CryptoPP::BLAKE2b> ostream{blake2b};
   void generateHash();
   void clearHash();
 
 public:
+  MemoryFingerprint_CryptoPP_BLAKE2b() = default;
+  MemoryFingerprint_CryptoPP_BLAKE2b(const MemoryFingerprint_CryptoPP_BLAKE2b &other) : Base(other) { }
+  MemoryFingerprint_CryptoPP_BLAKE2b(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
+  MemoryFingerprint_CryptoPP_BLAKE2b& operator=(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
+  ~MemoryFingerprint_CryptoPP_BLAKE2b() = default;
+
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
-  void updateExpr_impl(ref<Expr> expr);
+  llvm::raw_ostream &updateOstream();
 };
 
 class MemoryFingerprint_Dummy
     : public MemoryFingerprintT<MemoryFingerprint_Dummy, 0> {
   friend class MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
+  using Base = MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
 
 private:
   std::string current;
   bool first = true;
+  llvm::raw_string_ostream ostream{current};
+
   void generateHash();
   void clearHash();
   static std::string toString_impl(dummy_t fingerprintValue);
 
 public:
+  MemoryFingerprint_Dummy() = default;
+  MemoryFingerprint_Dummy(const MemoryFingerprint_Dummy &other) : Base(other) { }
+  MemoryFingerprint_Dummy(MemoryFingerprint_Dummy &&) = delete;
+  MemoryFingerprint_Dummy& operator=(MemoryFingerprint_Dummy &&) = delete;
+  ~MemoryFingerprint_Dummy() = default;
+
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
-  void updateExpr_impl(ref<Expr> expr);
+  llvm::raw_ostream &updateOstream();
 };
 
 // NOTE: MemoryFingerprint needs to be a complete type

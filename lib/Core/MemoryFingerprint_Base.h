@@ -5,55 +5,22 @@
 static_assert(0, "DO NOT include this file directly!");
 #endif
 
-#include "klee/util/ExprVisitor.h"
-
-namespace {
-class ExprArrayCounter : public klee::ExprVisitor {
-public:
-  std::unordered_map<const klee::Array *, std::uint64_t> references;
-
-public:
-  ExprArrayCounter() = default;
-
-  Action visitRead(const klee::ReadExpr &e) {
-    // this actually counts the number of bytes referenced,
-    // as each ReadExpr represents a one byte read
-
-    // root array
-    const klee::Array *arr = e.updates.root;
-    ++references[arr];
-
-    // symbolic index
-    if (!isa<klee::ConstantExpr>(e.index))
-      visit(e.index);
-
-    // update list
-    auto update = e.updates.head;
-    for (; update != nullptr; update = update->next) {
-      if (!isa<klee::ConstantExpr>(update->index))
-        visit(update->index);
-      if (!isa<klee::ConstantExpr>(update->value))
-        visit(update->value);
-    }
-
-    // only child node is index, which is already handled
-    return Action::skipChildren();
-  }
-};
-
-} // namespace
+#include "klee/util/ExprHashMap.h"
+#include "klee/util/ExprPPrinter.h"
 
 namespace klee {
 
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::updateExpr(const ref<Expr> expr) {
-  bufferContainsSymbolic = true;
-  getDerived().updateExpr_impl(expr);
+  llvm::raw_ostream &os = getDerived().updateOstream();
+  std::unique_ptr<ExprPPrinter> p(ExprPPrinter::create(os));
+  p->scan(expr);
+  p->print(expr);
+  os.flush();
 
-  ExprArrayCounter visitor;
-  visitor.visit(expr);
-  for (auto v : visitor.references) {
-    bufferSymbolicReferences[v.first] += v.second;
+  bufferContainsSymbolic = true;
+  for (auto v : p->getUsedArrays()) {
+    bufferSymbolicReferences[v] += 1;
   }
 }
 
@@ -173,17 +140,27 @@ void MemoryFingerprintT<D, S>::addDelta(MemoryFingerprintDelta &delta) {
 
 template <typename D, std::size_t S>
 void MemoryFingerprintT<D, S>::removeDelta(MemoryFingerprintDelta &delta) {
-  executeXOR(fingerprintValue, delta.fingerprintValue);
+  executeRemove(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
-    symbolicReferences[s.first] -= s.second;
+    // FIXME: make sure to only remove fragments that were previously added
+assert(symbolicReferences[s.first] >= s.second);
+    if (symbolicReferences[s.first] >= s.second)
+      symbolicReferences[s.first] -= s.second;
   }
 }
 
 template <typename D, std::size_t S>
 typename MemoryFingerprintT<D, S>::value_t
 MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
-  MemoryFingerprintDelta temp;
+  std::set<const Array *> arraysReferenced;
+  for (auto s : symbolicReferences) {
+    if (s.second > 0)
+      arraysReferenced.insert(s.first);
+  }
+
+  if (arraysReferenced.empty())
+    return fingerprintValue;
 
   std::sort(expressions.begin(), expressions.end(),
             [](ref<Expr> a, ref<Expr> b) {
@@ -196,22 +173,20 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
               }
             });
 
-  std::set<const Array *> arraysReferenced;
-  std::map<ref<Expr>, std::set<const Array *>> exprToArray;
+  // just needed to count array references using ExprPPrinter
+  std::string dummyString;
+  llvm::raw_string_ostream dummyOS(dummyString);
 
-  // map all expressions to arrays that they constrain
-  std::unordered_map<const Array *, std::set<ref<Expr>>> constraintsMap;
+  // bidirectional mapping of expressions and arrays
+  std::unordered_map<const Array *, ExprHashSet> constraintsMap;
+  ExprHashMap<std::set<const Array *>> exprToArray;
   for (auto expr : expressions) {
-    ExprArrayCounter counter;
-    counter.visit(expr);
-    for (auto s : counter.references) {
-      // exclude all arrays that have reference count 0
-      if (symbolicReferences.count(s.first) &&
-          symbolicReferences[s.first] != 0) {
-        constraintsMap[s.first].insert(expr);
-        arraysReferenced.insert(s.first);
-        exprToArray[expr].insert(s.first);
-      }
+    std::unique_ptr<ExprPPrinter> p(ExprPPrinter::create(dummyOS));
+    p->scan(expr);
+
+    for (auto s : p->getUsedArrays()) {
+      constraintsMap[s].insert(expr);
+      exprToArray[expr].insert(s);
     }
   }
 
@@ -221,6 +196,7 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   do {
     std::set<const Array *> tmp;
     std::swap(newReferences, tmp);
+    assert(newReferences.empty());
     for (auto *a : tmp) {
       for (ref<Expr> c : constraintsMap[a]) {
         for (auto *b : exprToArray[c]) {
@@ -233,11 +209,15 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
     }
   } while (!newReferences.empty());
 
-  if (!constraintsMap.empty()) {
+  // add path constraint to temporary delta
+  MemoryFingerprintDelta temp;
+  if (!arraysReferenced.empty()) {
     getDerived().updateUint8(10);
-    for (auto v : constraintsMap) {
-      for (ref<Expr> expr : v.second) {
-        getDerived().updateExpr_impl(expr);
+    for (auto v : arraysReferenced) {
+      for (ref<Expr> expr : constraintsMap[v]) {
+        llvm::raw_ostream &os = getDerived().updateOstream();
+        ExprPPrinter::printSingleExpr(os, expr);
+        os.flush();
       }
     }
     addToDeltaOnly(temp);
@@ -246,6 +226,7 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   addDelta(temp);
   auto result = fingerprintValue;
   removeDelta(temp);
+
   return result;
 }
 
