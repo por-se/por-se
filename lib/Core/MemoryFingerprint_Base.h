@@ -60,6 +60,7 @@ void MemoryFingerprintT<D, S>::removeFromFingerprint() {
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
+      assert(symbolicReferences[s.first] >= s.second);
       symbolicReferences[s.first] -= s.second;
     }
     resetBufferRefCount();
@@ -93,6 +94,8 @@ void MemoryFingerprintT<D, S>::removeFromFingerprintAndDelta(
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
+      assert(symbolicReferences[s.first] >= s.second);
+      assert(delta.symbolicReferences[s.first] >= s.second);
       symbolicReferences[s.first] -= s.second;
       delta.symbolicReferences[s.first] -= s.second;
     }
@@ -123,6 +126,7 @@ void MemoryFingerprintT<D, S>::removeFromDeltaOnly(
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
+      assert(delta.symbolicReferences[s.first] >= s.second);
       delta.symbolicReferences[s.first] -= s.second;
     }
     resetBufferRefCount();
@@ -143,10 +147,8 @@ void MemoryFingerprintT<D, S>::removeDelta(MemoryFingerprintDelta &delta) {
   executeRemove(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
-    // FIXME: make sure to only remove fragments that were previously added
-assert(symbolicReferences[s.first] >= s.second);
-    if (symbolicReferences[s.first] >= s.second)
-      symbolicReferences[s.first] -= s.second;
+    assert(symbolicReferences[s.first] >= s.second);
+    symbolicReferences[s.first] -= s.second;
   }
 }
 
