@@ -553,6 +553,12 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
     for (i=0; i<size; i++)
       os->write8(offset+i, (uint8_t) 0);
+    if (DetectInfiniteLoops) {
+      const MemoryObject *mo = os->getObject();
+      ref<ConstantExpr> address = mo->getBaseExpr();
+      address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
+      state.memoryState.registerWrite(address, *mo, *os, size);
+    }
   } else if (const ConstantArray *ca = dyn_cast<ConstantArray>(c)) {
     unsigned elementSize =
       targetData->getTypeStoreSize(ca->getType()->getElementType());
@@ -582,6 +588,12 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
       C = C->ZExt(StoreBits);
 
     os->write(offset, C);
+    if (DetectInfiniteLoops) {
+      const MemoryObject *mo = os->getObject();
+      ref<ConstantExpr> address = mo->getBaseExpr();
+      address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
+      state.memoryState.registerWrite(address, *mo, *os, StoreBits / 8);
+    }
   }
 }
 
@@ -592,9 +604,13 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
                                   size, nullptr, thread.stack.size()-1);
   ObjectState *os = bindObjectInState(state, mo, false);
-  for(unsigned i = 0; i < size; i++)
+  for (unsigned i = 0; i < size; i++) {
     os->write8(i, ((uint8_t*)addr)[i]);
-  if(isReadOnly)
+  }
+  if (DetectInfiniteLoops) {
+    state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, size);
+  }
+  if (isReadOnly)
     os->setReadOnly(true);  
   return mo;
 }
