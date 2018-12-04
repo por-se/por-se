@@ -554,6 +554,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
       ref<Expr> bv = otherOS->read8(i);
       wos->write(i, SelectExpr::create(inA, av, bv));
     }
+    if (DetectInfiniteLoops) {
+      memoryState.registerWrite(*mo, *wos);
+    }
   }
 
   constraints = ConstraintManager();

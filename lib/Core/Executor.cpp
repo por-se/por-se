@@ -608,6 +608,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
     os->write8(i, ((uint8_t*)addr)[i]);
   }
   if (DetectInfiniteLoops) {
+    // NOTE: this assumes addExternalObject is only called for initialization
     state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, size);
   }
   if (isReadOnly)
@@ -741,8 +742,12 @@ void Executor::initializeGlobals(ExecutionState &state) {
           klee_error("unable to load symbol(%s) while initializing globals.", 
                      i->getName().data());
 
-        for (unsigned offset=0; offset<mo->size; offset++)
+        for (unsigned offset=0; offset<mo->size; offset++) {
           os->write8(offset, ((unsigned char*)addr)[offset]);
+        }
+        if (DetectInfiniteLoops) {
+          state.memoryState.registerWrite(*mo, *os);
+        }
       }
     } else {
       Type *ty = i->getType()->getElementType();
@@ -757,8 +762,12 @@ void Executor::initializeGlobals(ExecutionState &state) {
       globalObjects.insert(std::make_pair(v, mo));
       globalAddresses.insert(std::make_pair(v, mo->getBaseExpr()));
 
-      if (!i->hasInitializer())
-          os->initializeToRandom();
+      if (!i->hasInitializer()) {
+        os->initializeToRandom();
+        if (DetectInfiniteLoops) {
+          state.memoryState.registerWrite(*mo, *os);
+        }
+      }
     }
   }
   
@@ -1546,6 +1555,9 @@ void Executor::executeCall(ExecutionState &state,
             offset += llvm::RoundUpToAlignment(argWidth, WordSize) / 8;
 #endif
           }
+        }
+        if (DetectInfiniteLoops) {
+          state.memoryState.registerWrite(*mo, *os);
         }
       }
     }
@@ -3713,7 +3725,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  if (!state.addressSpace.copyInConcretes()) {
+  if (!state.addressSpace.copyInConcretes(state)) {
     terminateStateOnError(state, "external modified read-only object",
                           External);
     return;
@@ -3722,7 +3734,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(result.first, result.second,
+  state.addressSpace.copyInConcrete(state, result.first, result.second,
                                     (uint64_t)&error);
 #endif
 
@@ -3820,15 +3832,20 @@ void Executor::executeAlloc(ExecutionState &state,
       }
 
       if (DetectInfiniteLoops) {
-        state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os);
+        state.memoryState.registerWrite(*mo, *os);
       }
       bindLocal(target, state, mo->getBaseExpr());
       
       if (reallocFrom) {
         unsigned count = std::min(reallocFrom->size, os->size);
-        for (unsigned i=0; i<count; i++)
+        for (unsigned i=0; i<count; i++) {
           os->write(i, reallocFrom->read8(i));
+        }
         const MemoryObject *reallocatedObject = reallocFrom->getObject();
+        if (DetectInfiniteLoops) {
+          state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, count);
+          state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
+        }
         state.addressSpace.unbindObject(reallocatedObject);
       }
     }
@@ -4199,6 +4216,9 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     }
   } else {
     ObjectState *os = bindObjectInState(state, mo, false);
+    if (DetectInfiniteLoops) {
+      state.memoryState.unregisterWrite(*mo, *os);
+    }
     if (replayPosition >= replayKTest->numObjects) {
       terminateStateOnError(state, "replay count mismatch", User);
     } else {
@@ -4206,8 +4226,12 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       if (obj->numBytes != mo->size) {
         terminateStateOnError(state, "replay size mismatch", User);
       } else {
-        for (unsigned i=0; i<mo->size; i++)
+        for (unsigned i=0; i<mo->size; i++) {
           os->write8(i, obj->bytes[i]);
+        }
+        if (DetectInfiniteLoops) {
+          state.memoryState.registerWrite(*mo, *os);
+        }
       }
     }
   }
@@ -4227,7 +4251,7 @@ void Executor::runFunctionAsMain(Function *f,
   srand(1);
   srandom(1);
   
-  MemoryObject *argvMO = 0;
+  MemoryObject *argvMO = nullptr;
 
   // In order to make uclibc happy and be closer to what the system is
   // doing we lay out the environments at the end of the argv array
@@ -4309,6 +4333,9 @@ void Executor::runFunctionAsMain(Function *f,
         // Write pointer to newly allocated and initialised argv/envp c-string
         argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
       }
+    }
+    if (DetectInfiniteLoops) {
+      state->memoryState.registerWrite(*argvMO, *argvOS);
     }
   }
   

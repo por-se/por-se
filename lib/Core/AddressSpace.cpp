@@ -9,9 +9,11 @@
 
 #include "AddressSpace.h"
 #include "CoreStats.h"
+#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "TimingSolver.h"
 
+#include "klee/ExecutionState.h"
 #include "klee/Expr.h"
 #include "klee/TimerStatIncrementer.h"
 
@@ -297,7 +299,7 @@ void AddressSpace::copyOutConcretes() {
   }
 }
 
-bool AddressSpace::copyInConcretes() {
+bool AddressSpace::copyInConcretes(ExecutionState &state) {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end(); 
        it != ie; ++it) {
     const MemoryObject *mo = it->first;
@@ -305,7 +307,7 @@ bool AddressSpace::copyInConcretes() {
     if (!mo->isUserSpecified) {
       const ObjectState *os = it->second;
 
-      if (!copyInConcrete(mo, os, mo->address))
+      if (!copyInConcrete(state, mo, os, mo->address))
         return false;
     }
   }
@@ -313,15 +315,21 @@ bool AddressSpace::copyInConcretes() {
   return true;
 }
 
-bool AddressSpace::copyInConcrete(const MemoryObject *mo, const ObjectState *os,
-                                  uint64_t src_address) {
+bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
+                                  const ObjectState *os, uint64_t src_address) {
   auto address = reinterpret_cast<std::uint8_t*>(src_address);
   if (memcmp(address, os->concreteStore, mo->size) != 0) {
     if (os->readOnly) {
       return false;
     } else {
+      if (DetectInfiniteLoops) {
+        state.memoryState.unregisterWrite(*mo, *os);
+      }
       ObjectState *wos = getWriteable(mo, os);
       memcpy(wos->concreteStore, address, mo->size);
+      if (DetectInfiniteLoops) {
+        state.memoryState.registerWrite(*mo, *wos);
+      }
     }
   }
   return true;

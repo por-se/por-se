@@ -147,6 +147,9 @@ public:
                      const ObjectState &os) {
     registerWrite(address, mo, os, os.size);
   }
+  void registerWrite(const MemoryObject &mo, const ObjectState &os) {
+    registerWrite(mo.getBaseExpr(), mo, os, os.size);
+  }
   void unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                        const ObjectState &os, std::size_t bytes);
   void unregisterWrite(ref<Expr> address, const MemoryObject &mo,
