@@ -3805,7 +3805,8 @@ void Executor::executeAlloc(ExecutionState &state,
                             bool isLocal,
                             KInstruction *target,
                             bool zeroMemory,
-                            const ObjectState *reallocFrom) {
+                            const ObjectState *reallocFrom,
+                            size_t allocationAlignment) {
   // TODO: Here we should assign the ownership over the memory region to the
   //       current thread
   Thread& thread = state.getCurrentThreadReference();
@@ -3813,7 +3814,9 @@ void Executor::executeAlloc(ExecutionState &state,
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
     const llvm::Value *allocSite = thread.prevPc->inst;
-    size_t allocationAlignment = getAllocationAlignment(allocSite);
+    if (allocationAlignment == 0) {
+      allocationAlignment = getAllocationAlignment(allocSite);
+    }
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
                          allocSite, thread.stack.size()-1, allocationAlignment);
