@@ -479,6 +479,10 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   // these will be automatically removed when the stack frame is popped
   assert(caller->info->getLiveLocals() != nullptr);
   for (const KInstruction *ki : *caller->info->getLiveLocals()) {
+    // NOTE: It is ok here to only consider locals that are live after the
+    //       caller instruction, as the only locals that might be dead in
+    //       comparison to the previous instruction are the ones passed as
+    //       arguments to callee.
     ref<Expr> value = oldsf.locals[ki->dest].value;
     if (value.isNull())
       continue;
@@ -519,14 +523,37 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
   MemoryFingerprintDelta temporary;
 
   // include live locals in current stack frames of all (non-exited) threads
-  for (auto it : executionState->threads) {
+  for (auto &it : executionState->threads) {
     auto threadID = it.first;
     const Thread &thread = it.second;
-    if (thread.state == Thread::ThreadState::EXITED)
+    if (thread.state == Thread::ThreadState::EXITED || !thread.liveSetPc)
       continue;
 
-    assert(thread.pc->info->getLiveLocals() != nullptr);
-    for (const KInstruction *ki : *thread.pc->info->getLiveLocals()) {
+    llvm::Instruction *liveInst = thread.liveSetPc->inst;
+
+    // first instruction of function (on call)
+    auto &entryBasicBlockInst = liveInst->getFunction()->front().front();
+    bool isFirstOfEntryBB = (&entryBasicBlockInst == liveInst);
+
+    if (isFirstOfEntryBB)
+      continue;
+
+    // basic block with PHI node
+    bool isPhiNode = isa<llvm::PHINode>(liveInst);
+
+    // last instruction of previous BB
+    bool isTermInst = isa<llvm::TerminatorInst>(liveInst);
+
+    if (isPhiNode) {
+      assert(liveInst == thread.prevPc->inst);
+    } else if (!isTermInst && !isFirstOfEntryBB) {
+      KInstIterator tmp = thread.liveSetPc;
+      ++tmp;
+      assert(tmp->inst == thread.prevPc->inst);
+    }
+
+    assert(thread.liveSetPc->info->getLiveLocals() != nullptr);
+    for (const KInstruction *ki : *thread.liveSetPc->info->getLiveLocals()) {
       ref<Expr> value = thread.stack.back().locals[ki->dest].value;
       if (value.isNull())
         continue;

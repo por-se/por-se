@@ -1345,6 +1345,7 @@ void Executor::stepInstruction(ExecutionState &state) {
 
   ++stats::instructions;
   ++state.steppedInstructions;
+  thread.liveSetPc = thread.prevPc;
   thread.prevPc = thread.pc;
   ++thread.pc;
 
@@ -1446,6 +1447,7 @@ void Executor::executeCall(ExecutionState &state,
     KFunction *kf = kmodule->functionMap[f];
     thread.pushFrame(thread.prevPc, kf);
     thread.pc = kf->instructions;
+    thread.liveSetPc = kf->instructions;
     if (DetectInfiniteLoops) {
       state.memoryState.registerPushFrame(thread.tid, thread.stack.size() - 1,
                                           kf, thread.prevPc);
@@ -1566,10 +1568,15 @@ void Executor::executeCall(ExecutionState &state,
     for (unsigned i=0; i<numFormals; ++i) 
       bindArgument(kf, i, state, arguments[i]);
 
+    const llvm::BasicBlock *dst = thread.pc->inst->getParent();
+
+    // including arguments and va_args
+    phiNodeProcessingCompleted(dst, nullptr, state);
+
     if (DetectInfiniteLoops) {
       state.memoryState.enterBasicBlock(thread.tid,
                                         thread.stack.size() - 1,
-                                        thread.pc->inst->getParent());
+                                        dst);
     }
   }
 }
@@ -1604,11 +1611,16 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
     thread.incomingBBIndex = first->getBasicBlockIndex(src);
   } else {
+    if (dst->getParent() == src->getParent()) {
+      // within same function
+      thread.liveSetPc = thread.prevPc;
+    }
     phiNodeProcessingCompleted(dst, src, state);
   }
 }
 
-void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
+void Executor::phiNodeProcessingCompleted(const BasicBlock *dst,
+                                          const BasicBlock *src,
                                           ExecutionState &state) {
   if (DetectInfiniteLoops) {
     // phiNodeProcessingCompleted updates live register information, thus we
@@ -1619,9 +1631,15 @@ void Executor::phiNodeProcessingCompleted(BasicBlock *dst, BasicBlock *src,
           InfiniteLoopDetectionDisableTwoPredecessorOpt) {
         // more than one predecessor
         MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
-        std::string str = MemoryFingerprint::toString(fingerprint);
+
         if (fingerprints.count(fingerprint) != 0) {
-          std::string warning = "same state found! (" + str + ") @ " + src->getName().str() + " -> " + dst->getName().str();
+          std::string str = MemoryFingerprint::toString(fingerprint);
+          std::string warning = "same state found! (" + str + ") @ ";
+          if (src != nullptr) {
+            warning += src->getName().str() + " -> " + dst->getName().str();
+          } else {
+            warning += dst->getName().str();
+          }
           klee_warning("%s", warning.c_str());
 
           // We can only remove a state if this state was not removed before
@@ -1763,6 +1781,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
         thread.pc = kcaller;
+        thread.liveSetPc = kcaller;
         ++thread.pc;
       }
 
@@ -2144,9 +2163,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> result = eval(ki, thread.incomingBBIndex, state).value;
     bindLocal(ki, state, result);
     assert(ki == thread.prevPc && "executing instruction different from thread.prevPc");
-    if (i->getNextNode()->getOpcode() != Instruction::PHI) {
+    if (thread.pc->inst->getOpcode() != Instruction::PHI) {
       // no more PHI nodes coming
       BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread.incomingBBIndex);
+      thread.liveSetPc = thread.prevPc;
       phiNodeProcessingCompleted(i->getParent(), src, state);
     }
     break;

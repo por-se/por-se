@@ -79,6 +79,9 @@ namespace klee {
       /// @brief Pointer to instruction which is currently executed
       KInstIterator prevPc;
 
+      /// @brief Pointer to instruction which was last executed
+      KInstIterator liveSetPc;
+
       /// @brief Stack representing the current instruction stream
       stack_ty stack;
 
