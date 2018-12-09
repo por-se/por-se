@@ -548,6 +548,9 @@ bool ExecutionState::merge(const ExecutionState &b) {
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
+    if (DetectInfiniteLoops) {
+      memoryState.unregisterWrite(*mo, *os);
+    }
     ObjectState *wos = addressSpace.getWriteable(mo, os);
     for (unsigned i=0; i<mo->size; i++) {
       ref<Expr> av = wos->read8(i);
