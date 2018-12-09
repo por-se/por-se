@@ -186,8 +186,12 @@ class MemoryFingerprint_CryptoPP_BLAKE2b
 private:
   CryptoPP::BLAKE2b blake2b{false, 32};
   MemoryFingerprintOstream<CryptoPP::BLAKE2b> ostream{blake2b};
+
   void generateHash();
   void clearHash();
+  void updateUint8(const std::uint8_t value);
+  void updateUint64(const std::uint64_t value);
+  llvm::raw_ostream &updateOstream();
 
 public:
   MemoryFingerprint_CryptoPP_BLAKE2b() = default;
@@ -195,10 +199,6 @@ public:
   MemoryFingerprint_CryptoPP_BLAKE2b(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
   MemoryFingerprint_CryptoPP_BLAKE2b& operator=(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
   ~MemoryFingerprint_CryptoPP_BLAKE2b() = default;
-
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  llvm::raw_ostream &updateOstream();
 };
 
 class MemoryFingerprint_Dummy
@@ -213,6 +213,10 @@ private:
 
   void generateHash();
   void clearHash();
+  void updateUint8(const std::uint8_t value);
+  void updateUint64(const std::uint64_t value);
+  llvm::raw_ostream &updateOstream();
+
   static std::string toString_impl(dummy_t fingerprintValue);
 
 public:
@@ -231,10 +235,6 @@ public:
   static DecodedFragment decodeAndPrintFragment(llvm::raw_ostream &os,
                                                 std::string fragment,
                                                 bool showMemoryOperations);
-
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  llvm::raw_ostream &updateOstream();
 };
 
 // NOTE: MemoryFingerprint needs to be a complete type
