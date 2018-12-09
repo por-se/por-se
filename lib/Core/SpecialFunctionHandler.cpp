@@ -807,8 +807,10 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
   MemoryObject *mo = executor.memory->allocateFixed(address, size,
                                                     thread.prevPc->inst,
                                                     thread.stack.size()-1);
-  executor.bindObjectInState(state, mo, false);
+  ObjectState *os = executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
+  if (DetectInfiniteLoops)
+    state.memoryState.registerWrite(*mo, *os);
 }
 
 void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
