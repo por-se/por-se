@@ -162,6 +162,7 @@ public:
   bool updateFunctionFragment(std::uint64_t threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);
+  bool updateExternalCallFragment(std::uint64_t externalFunctionCallCounter);
 };
 
 template <typename T>

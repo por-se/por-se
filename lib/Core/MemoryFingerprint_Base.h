@@ -331,4 +331,12 @@ bool MemoryFingerprintT<Derived, hashSize>::updateFunctionFragment(
   return false;
 }
 
+template <typename Derived, std::size_t hashSize>
+bool MemoryFingerprintT<Derived, hashSize>::updateExternalCallFragment(
+    std::uint64_t externalFunctionCallCounter) {
+  getDerived().updateUint8(9);
+  getDerived().updateUint64(externalFunctionCallCounter);
+  return false;
+}
+
 } // namespace klee

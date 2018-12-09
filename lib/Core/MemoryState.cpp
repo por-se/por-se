@@ -270,8 +270,7 @@ void MemoryState::registerExternalFunctionCall() {
   // we cannot make any assumptions about the state after this call
 
   // mask fingerprint with global counter
-  fingerprint.updateUint8(9);
-  fingerprint.updateUint64(externalFunctionCallCounter++);
+  fingerprint.updateExternalCallFragment(externalFunctionCallCounter++);
   fingerprint.addToFingerprint();
 }
 
