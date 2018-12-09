@@ -310,12 +310,12 @@ bool MemoryFingerprintT<Derived, hashSize>::updateArgumentFragment(
 }
 
 template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateBasicBlockFragment(
-    std::uint64_t threadID, std::uint64_t sfIndex, const llvm::BasicBlock *bb) {
+bool MemoryFingerprintT<Derived, hashSize>::updateProgramCounterFragment(
+    std::uint64_t threadID, std::uint64_t sfIndex, const llvm::Instruction *i) {
   getDerived().updateUint8(7);
   getDerived().updateUint64(threadID);
   getDerived().updateUint64(sfIndex);
-  getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(bb));
+  getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(i));
   return false;
 }
 

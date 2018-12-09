@@ -1572,12 +1572,6 @@ void Executor::executeCall(ExecutionState &state,
 
     // including arguments and va_args
     phiNodeProcessingCompleted(dst, nullptr, state);
-
-    if (DetectInfiniteLoops) {
-      state.memoryState.enterBasicBlock(thread.tid,
-                                        thread.stack.size() - 1,
-                                        dst);
-    }
   }
 }
 
@@ -1601,12 +1595,6 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   KFunction *kf = thread.stack.back().kf;
   unsigned entry = kf->basicBlockEntry[dst];
   thread.pc = &kf->instructions[entry];
-  if (DetectInfiniteLoops) {
-    // enterBasicBlock updates live register information, thus we need to call
-    // it on every BasicBlock change, not only on ones to a BasicBlock with more
-    // than one predecessor
-    state.memoryState.enterBasicBlock(thread.tid, thread.stack.size() - 1, dst, src);
-  }
   if (thread.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
     thread.incomingBBIndex = first->getBasicBlockIndex(src);

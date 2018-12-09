@@ -207,13 +207,13 @@ MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
       item >> tid;
       item >> sfid;
       item >> ptr;
-      llvm::BasicBlock *bb = reinterpret_cast<llvm::BasicBlock *>(ptr);
+      llvm::Instruction *i = reinterpret_cast<llvm::Instruction *>(ptr);
 
       os << "[T" << tid << ':' << sfid << ']';
       os << "Program Counter: ";
-      os << bb->getName();
+      os << i->getName();
       os << " in ";
-      os << bb->getParent()->getName();
+      os << i->getFunction()->getName();
 
       result.output = true;
       break;

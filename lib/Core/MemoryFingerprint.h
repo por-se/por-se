@@ -156,8 +156,9 @@ public:
   bool updateArgumentFragment(std::uint64_t threadID, std::uint64_t sfIndex,
                               const KFunction *kf, std::uint64_t argumentIndex,
                               ref<Expr> value);
-  bool updateBasicBlockFragment(std::uint64_t threadID, std::uint64_t sfIndex,
-                                const llvm::BasicBlock *bb);
+  bool updateProgramCounterFragment(std::uint64_t threadID,
+                                    std::uint64_t sfIndex,
+                                    const llvm::Instruction *i);
   bool updateFunctionFragment(std::uint64_t threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);

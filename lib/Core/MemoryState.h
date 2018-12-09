@@ -167,11 +167,6 @@ public:
 
   void registerExternalFunctionCall();
 
-  void enterBasicBlock(std::uint64_t threadID,
-                       std::size_t stackFrameIndex,
-                       const llvm::BasicBlock *dst,
-                       const llvm::BasicBlock *src = nullptr);
-
   void registerPushFrame(std::uint64_t threadID, std::size_t stackFrameIndex,
                          const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(std::uint64_t threadID,

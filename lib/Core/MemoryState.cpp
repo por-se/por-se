@@ -403,41 +403,6 @@ void MemoryState::registerArgument(std::uint64_t threadID,
   }
 }
 
-void MemoryState::enterBasicBlock(std::uint64_t threadID,
-                                  std::size_t stackFrameIndex,
-                                  const llvm::BasicBlock *dst,
-                                  const llvm::BasicBlock *src) {
-
-  if (disableMemoryState) {
-    return;
-  }
-
-  Thread &thread = executionState->getCurrentThreadReference();
-  MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
-
-  if (src == nullptr) {
-    assert(&(dst->getParent()->getEntryBlock()) == dst &&
-           "dst is not an entry basic block");
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Entering BasicBlock " << dst->getName()
-                   << "\n";
-    }
-  } else {
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
-      llvm::errs() << "MemoryState: Entering BasicBlock " << dst->getName()
-                   << " (incoming edge: " << src->getName() << ")\n";
-    }
-
-    // unregister previous
-    fingerprint.updateBasicBlockFragment(threadID, stackFrameIndex, src);
-    fingerprint.removeFromFingerprintAndDelta(delta);
-  }
-
-  // register new basic block (program counter)
-  fingerprint.updateBasicBlockFragment(threadID, stackFrameIndex, dst);
-  fingerprint.addToFingerprintAndDelta(delta);
-}
-
 bool MemoryState::enterListedFunction(llvm::Function *f) {
   if (listedFunction.entered) {
     // we can only enter one listed function at a time
@@ -528,6 +493,11 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
     const Thread &thread = it.second;
     if (thread.state == Thread::ThreadState::EXITED || !thread.liveSetPc)
       continue;
+
+    fingerprint.updateProgramCounterFragment(threadID,
+                                             thread.stack.size() - 1,
+                                             thread.prevPc->inst);
+    fingerprint.addToDeltaOnly(temporary);
 
     llvm::Instruction *liveInst = thread.liveSetPc->inst;
 
