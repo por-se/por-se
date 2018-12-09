@@ -4175,10 +4175,11 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                                    const MemoryObject *mo,
                                    const ObjectState *os,
                                    const std::string &name) {
+  if (DetectInfiniteLoops)
+    state.memoryState.unregisterWrite(*mo, *os);
+
   // Create a new object state for the memory object (instead of a copy).
   if (!replayKTest) {
-    if (DetectInfiniteLoops)
-      state.memoryState.unregisterWrite(address, *mo, *os);
 
     // Find a unique name for this array.  First try the original name,
     // or if that fails try adding a unique identifier.
@@ -4190,9 +4191,6 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
     os = bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
-
-    if (DetectInfiniteLoops)
-      state.memoryState.registerWrite(address, *mo, *os);
     
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
       seedMap.find(&state);
@@ -4239,9 +4237,6 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
     }
   } else {
     ObjectState *os = bindObjectInState(state, mo, false);
-    if (DetectInfiniteLoops) {
-      state.memoryState.unregisterWrite(*mo, *os);
-    }
     if (replayPosition >= replayKTest->numObjects) {
       terminateStateOnError(state, "replay count mismatch", User);
     } else {
@@ -4252,12 +4247,11 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
         for (unsigned i=0; i<mo->size; i++) {
           os->write8(i, obj->bytes[i]);
         }
-        if (DetectInfiniteLoops) {
-          state.memoryState.registerWrite(*mo, *os);
-        }
       }
     }
   }
+  if (DetectInfiniteLoops)
+    state.memoryState.registerWrite(*mo, *os);
 }
 
 
