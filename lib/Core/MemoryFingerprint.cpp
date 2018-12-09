@@ -83,52 +83,44 @@ void MemoryFingerprint_Dummy::clearHash() {
   first = true;
 }
 
-std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
-  std::string result_str;
-  llvm::raw_string_ostream result(result_str);
-  std::size_t writes = 0;
-  bool containsSymbolicValue = false;
-  bool hasPathConstraint = false;
+MemoryFingerprint_Dummy::DecodedFragment
+MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
+                                                std::string fragment,
+                                                bool showMemoryOperations) {
+  DecodedFragment result;
 
-  // show individual memory operations in detail: writes (per byte)
-  bool showMemoryOperations = false;
-
-  result << "{";
-
-  for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
-    std::istringstream item(*it);
+    std::istringstream item(fragment);
     int id;
     item >> id;
-    bool output = false;
     switch (id) {
     case 2:
-      containsSymbolicValue = true;
+      result.containsSymbolicValue = true;
       // fallthrough
     case 1:
       if (showMemoryOperations) {
         std::uint64_t addr;
         item >> addr;
 
-        result << "[G]Write: ";
-        result << addr;
-        result << " =";
+        os << "[G]Write: ";
+        os << addr;
+        os << " =";
 
         if (id == 2) {
           std::string value;
           for (std::string line; std::getline(item, line);) {
-            result << line;
+            os << line;
           }
         } else {
           unsigned value;
           item >> value;
-          result << " " << value;
+          os << " " << value;
         }
-        output = true;
+        result.output = true;
       }
-      writes++;
+      result.writes++;
       break;
     case 4:
-      containsSymbolicValue = true;
+      result.containsSymbolicValue = true;
       // fallthrough
     case 3: {
       std::uint64_t tid;
@@ -140,10 +132,10 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       item >> ptr;
       llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
 
-      result << "[T" << tid << ':' << sfid << ']';
-      result << "Local: %";
+      os << "[T" << tid << ':' << sfid << ']';
+      os << "Local: %";
       if (inst->hasName()) {
-        result << inst->getName();
+        os << inst->getName();
       } else {
         // extract slot number
         std::string line;
@@ -152,28 +144,28 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
         sos.flush();
         std::size_t start = line.find("%") + 1;
         std::size_t end = line.find(" ", start);
-        result << line.substr(start, end - start);
+        os << line.substr(start, end - start);
       }
 
       const llvm::DebugLoc &dl = inst->getDebugLoc();
       if (dl) {
         auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
         if (scope) {
-          result << " (" << scope->getFilename();
-          result << ":" << dl.getLine();
-          result << ")";
+          os << " (" << scope->getFilename();
+          os << ":" << dl.getLine();
+          os << ")";
         }
       }
-      result << " =";
+      os << " =";
 
       for (std::string line; std::getline(item, line);) {
-        result << line;
+        os << line;
       }
-      output = true;
+      result.output = true;
       break;
     }
     case 6:
-      containsSymbolicValue = true;
+      result.containsSymbolicValue = true;
       // fallthrough
     case 5: {
       std::uint64_t tid;
@@ -188,23 +180,23 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       item >> argumentIndex;
       std::size_t total = kf->function->arg_size();
 
-      result << "[T" << tid << ':' << sfid << ']';
-      result << "Argument: ";
-      result << kf->function->getName() << "(";
+      os << "[T" << tid << ':' << sfid << ']';
+      os << "Argument: ";
+      os << kf->function->getName() << "(";
       for (std::size_t i = 0; i < total; ++i) {
         if (argumentIndex == i) {
           for (std::string line; std::getline(item, line);) {
-            result << line;
+            os << line;
           }
         } else {
-          result << "?";
+          os << "?";
         }
         if (i != total - 1) {
-          result << ", ";
+          os << ", ";
         }
       }
-      result << ")";
-      output = true;
+      os << ")";
+      result.output = true;
       break;
     }
     case 7: {
@@ -217,13 +209,13 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       item >> ptr;
       llvm::BasicBlock *bb = reinterpret_cast<llvm::BasicBlock *>(ptr);
 
-      result << "[T" << tid << ':' << sfid << ']';
-      result << "Program Counter: ";
-      result << bb->getName();
-      result << " in ";
-      result << bb->getParent()->getName();
+      os << "[T" << tid << ':' << sfid << ']';
+      os << "Program Counter: ";
+      os << bb->getName();
+      os << " in ";
+      os << bb->getParent()->getName();
 
-      output = true;
+      result.output = true;
       break;
     }
     case 8: {
@@ -240,14 +232,14 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
       KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
       KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
 
-      result << "[T" << tid << ':' << sfid << ']';
-      result << "Stack Frame: ";
-      result << callee->function->getName();
-      result << " (called from ";
-      result << caller->inst;
-      result << ")";
+      os << "[T" << tid << ':' << sfid << ']';
+      os << "Stack Frame: ";
+      os << callee->function->getName();
+      os << " (called from ";
+      os << caller->inst;
+      os << ")";
 
-      output = true;
+      result.output = true;
       break;
     }
     case 9: {
@@ -255,29 +247,55 @@ std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
 
       item >> externalCallNum;
 
-      result << "[G]External Function Call: ";
-      result << externalCallNum;
+      os << "[G]External Function Call: ";
+      os << externalCallNum;
 
-      output = true;
+      result.output = true;
       break;
     }
     case 10: {
-      result << "[G]Path Constraint:";
+      os << "[G]Path Constraint:";
 
       for (std::string line; std::getline(item, line);) {
-        result << line;
-        hasPathConstraint = true;
+        os << line;
+        result.hasPathConstraint = true;
       }
-      output = true;
+      result.output = true;
       break;
     }
     default:
-      result << "[UNKNOWN:";
-      result << *it;
-      result << "]";
-      output = true;
+      os << "[UNKNOWN:";
+      os << fragment;
+      os << "]";
+      result.output = true;
     }
-    if (std::next(it) != fingerprintValue.end() && output) {
+
+  return result;
+}
+
+std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
+  std::string result_str;
+  llvm::raw_string_ostream result(result_str);
+  std::size_t writes = 0;
+  bool containsSymbolicValue = false;
+  bool hasPathConstraint = false;
+
+  // show individual memory operations in detail: writes (per byte)
+  bool showMemoryOperations = false;
+
+  result << "{";
+
+  for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
+    auto res = decodeAndPrintFragment(result, *it, showMemoryOperations);
+    writes += res.writes;
+
+    if (res.containsSymbolicValue)
+      containsSymbolicValue = true;
+
+    if (res.hasPathConstraint)
+      hasPathConstraint = true;
+
+    if (std::next(it) != fingerprintValue.end() && res.output) {
       result << ", ";
     }
   }

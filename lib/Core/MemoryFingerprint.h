@@ -220,6 +220,16 @@ public:
   MemoryFingerprint_Dummy& operator=(MemoryFingerprint_Dummy &&) = delete;
   ~MemoryFingerprint_Dummy() = default;
 
+  struct DecodedFragment {
+    std::size_t writes = 0;
+    bool containsSymbolicValue = false;
+    bool hasPathConstraint = false;
+    bool output = false;
+  };
+  static DecodedFragment decodeAndPrintFragment(llvm::raw_ostream &os,
+                                                std::string fragment,
+                                                bool showMemoryOperations);
+
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
