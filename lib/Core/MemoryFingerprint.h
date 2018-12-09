@@ -80,7 +80,19 @@ private:
                                                 int>::type = 0>
   void executeAdd(T &dst, const T &src) {
     for (auto &elem : src) {
-      assert(dst.find(elem) == dst.end() && "fragment already in fingerprint");
+      if (elem.empty())
+        continue;
+
+      if (dst.find(elem) != dst.end()) {
+        std::string debug_str;
+        llvm::raw_string_ostream debug(debug_str);
+        llvm::errs() << "FAILED: \n";
+        getDerived().decodeAndPrintFragment(debug, elem, true);
+        llvm::errs() << debug.str() << "\n";
+        llvm::errs() << "DST: " << toString(dst) << "\n";
+        llvm::errs().flush();
+        assert(0 && "fragment already in fingerprint");
+      }
       dst.insert(elem);
     }
   }
@@ -89,8 +101,20 @@ private:
                                                 int>::type = 0>
   void executeRemove(T &dst, const T &src) {
     for (auto &elem : src) {
+      if (elem.empty())
+        continue;
+
       auto pos = dst.find(elem);
-      assert(pos != dst.end() && "fragment not in fingerprint");
+      if (pos == dst.end()) {
+        std::string debug_str;
+        llvm::raw_string_ostream debug(debug_str);
+        llvm::errs() << "FAILED: \n";
+        getDerived().decodeAndPrintFragment(debug, elem, true);
+        llvm::errs() << debug.str() << "\n";
+        llvm::errs() << "DST: " << toString(dst) << "\n";
+        llvm::errs().flush();
+        assert(0 && "fragment not in fingerprint");
+      }
       dst.erase(pos);
     }
   }
