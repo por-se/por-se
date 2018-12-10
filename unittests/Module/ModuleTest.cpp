@@ -127,7 +127,7 @@ TEST_F(LiveRegisterPassTest, GetLiveSet) {
     for (auto &i : bb) {
       auto liveSet = lrp.getLiveSet(&i);
       bool shouldBeValid = (i.getOpcode() != Instruction::PHI);
-      auto nextIt = std::next(i->getIterator());
+      auto nextIt = std::next(i.getIterator());
       if (nextIt == bb.end())
         shouldBeValid = true;
       else
