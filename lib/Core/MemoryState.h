@@ -1,9 +1,9 @@
 #ifndef KLEE_MEMORYSTATE_H
 #define KLEE_MEMORYSTATE_H
 
-#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "MemoryFingerprint.h"
+#include "klee/StatePruningCmdLine.h"
 
 #include <cstdint>
 #include <vector>
@@ -85,7 +85,7 @@ private:
   void updateDisableMemoryState() {
     disableMemoryState = listedFunction.entered || libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
 
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    if (DebugStatePruning) {
       llvm::errs() << "MemoryState: updating disableMemoryState: "
                    << "(listedFunction: " << listedFunction.entered << " || "
                    << "libraryFunction: " << libraryFunction.entered << " || "

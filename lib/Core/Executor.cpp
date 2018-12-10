@@ -12,7 +12,6 @@
 #include "CoreStats.h"
 #include "ExternalDispatcher.h"
 #include "ImpliedValue.h"
-#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "MemoryManager.h"
 #include "MemoryState.h"
@@ -140,6 +139,18 @@ namespace {
   cl::opt<bool> DebugCompressInstructions(
       "debug-compress-instructions", cl::init(false),
       cl::desc("Compress the logged instructions in gzip format."));
+#endif
+
+  cl::opt<bool> LogStateJSON(
+      "log-state-json-files",
+      cl::desc("Creates two files (states.json, states_fork.json) in output directory that record relevant information about states (default=false)"),
+      cl::init(false));
+
+#ifdef HAVE_ZLIB_H
+  cl::opt<bool> CompressLogStateJSON(
+      "compress-log-state-json-files",
+      cl::desc("Compress the files created by -log-state-json-files in gzip format."),
+      cl::init(false));
 #endif
 
   cl::opt<bool>
@@ -393,7 +404,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     }
   }
 
-  if (InfiniteLoopLogStateJSON) {
+  if (LogStateJSON) {
     size_t stateLoggingOverhead = util::GetTotalMallocUsage();
 
     std::string states_file_name =
@@ -401,7 +412,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
 
     std::string error;
 #ifdef HAVE_ZLIB_H
-    if (!InfiniteLoopCompressLogStateJSON) {
+    if (!CompressLogStateJSON) {
 #endif
       statesJSONFile = klee_open_output_file(states_file_name, error);
 #ifdef HAVE_ZLIB_H
@@ -430,7 +441,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     error = "";
 
 #ifdef HAVE_ZLIB_H
-    if (!InfiniteLoopCompressLogStateJSON) {
+    if (!CompressLogStateJSON) {
 #endif
       forkJSONFile = klee_open_output_file(fork_file_name, error);
 #ifdef HAVE_ZLIB_H
@@ -553,7 +564,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
     for (i=0; i<size; i++)
       os->write8(offset+i, (uint8_t) 0);
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -588,7 +599,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
       C = C->ZExt(StoreBits);
 
     os->write(offset, C);
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -600,7 +611,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     for (std::size_t i = 0; i < num; ++i)
       os->write8(offset + i, 0xAB); // like ObjectState::initializeToRandom()
 
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -619,7 +630,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
   for (unsigned i = 0; i < size; i++) {
     os->write8(i, ((uint8_t*)addr)[i]);
   }
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     // NOTE: this assumes addExternalObject is only called for initialization
     state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, size);
   }
@@ -757,7 +768,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
         for (unsigned offset=0; offset<mo->size; offset++) {
           os->write8(offset, ((unsigned char*)addr)[offset]);
         }
-        if (DetectInfiniteLoops) {
+        if (PruneStates) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -776,7 +787,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       if (!i->hasInitializer()) {
         os->initializeToRandom();
-        if (DetectInfiniteLoops) {
+        if (PruneStates) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -1203,7 +1214,7 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
                             ExecutionState &state, ref<Expr> value) {
   assert(getArgumentCell(state, kf, index).value.isNull() &&
          "argument has previouly been set!");
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     // no need to unregister argument (can only be set once within the same stack frame)
     Thread &thread = state.getCurrentThreadReference();
     state.memoryState.registerArgument(thread.tid, thread.stack.size() - 1, kf, index, value);
@@ -1369,7 +1380,7 @@ void Executor::executeCall(ExecutionState &state,
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     state.memoryState.registerFunctionCall(f, arguments);
   }
 
@@ -1460,7 +1471,7 @@ void Executor::executeCall(ExecutionState &state,
     thread.pushFrame(thread.prevPc, kf);
     thread.pc = kf->instructions;
     thread.liveSetPc = kf->instructions;
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       state.memoryState.registerPushFrame(thread.tid, thread.stack.size() - 1,
                                           kf, thread.prevPc);
     }
@@ -1570,7 +1581,7 @@ void Executor::executeCall(ExecutionState &state,
 #endif
           }
         }
-        if (DetectInfiniteLoops) {
+        if (PruneStates) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -1622,37 +1633,30 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
 void Executor::phiNodeProcessingCompleted(const BasicBlock *dst,
                                           const BasicBlock *src,
                                           ExecutionState &state) {
-  if (DetectInfiniteLoops) {
-    // phiNodeProcessingCompleted updates live register information, thus we
-    // need to call it on every BasicBlock change (even if it does not contain
-    // any PHI nodes).
-    if (state.memoryState.isEnabled()) {
-      if ((dst->getSinglePredecessor() == nullptr) ||
-          InfiniteLoopDetectionDisableTwoPredecessorOpt) {
-        // more than one predecessor
-        MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
+  if (PruneStates && state.memoryState.isEnabled()) {
+    MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
 
-        if (fingerprints.count(fingerprint) != 0) {
-          std::string str = MemoryFingerprint::toString(fingerprint);
-          std::string warning = "same state found! (" + str + ") @ ";
-          if (src != nullptr) {
-            warning += src->getName().str() + " -> " + dst->getName().str();
-          } else {
-            warning += dst->getName().str();
-          }
-          klee_warning("%s", warning.c_str());
-
-          // We can only remove a state if this state was not removed before
-          auto it = std::find(removedStates.begin(), removedStates.end(), &state);
-          if (it == removedStates.end()) {
-            interpreterHandler->incPathsPruned();
-            // silently terminate state
-            terminateState(state);
-          }
+    if (fingerprints.count(fingerprint) != 0) {
+      if (DebugStatePruning) {
+        std::string str = MemoryFingerprint::toString(fingerprint);
+        std::string warning = "same state found! (" + str + ") @ ";
+        if (src != nullptr) {
+          warning += src->getName().str() + " -> " + dst->getName().str();
         } else {
-          fingerprints.insert(fingerprint);
+          warning += dst->getName().str();
         }
+        klee_warning("%s", warning.c_str());
       }
+
+      // we can only remove a state if this state was not removed before
+      auto it = std::find(removedStates.begin(), removedStates.end(), &state);
+      if (it == removedStates.end()) {
+        interpreterHandler->incStatesPruned();
+        // silently terminate state
+        terminateState(state);
+      }
+    } else {
+      fingerprints.insert(fingerprint);
     }
   }
 }
@@ -1742,7 +1746,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
 
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       Function *callee = sf.kf->function;
       state.memoryState.registerFunctionRet(callee);
     }
@@ -1756,7 +1760,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       state.exitThread(thread.getThreadId());
       scheduleThreads(state);
     } else {
-      if (DetectInfiniteLoops) {
+      if (PruneStates) {
         const llvm::BasicBlock *returningBB = ki->inst->getParent();
         const llvm::BasicBlock *callerBB = caller->getParent();
         // has to be called before state.popFrame() to update live register
@@ -3651,7 +3655,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     state.memoryState.registerExternalFunctionCall();
   }
 
@@ -3758,7 +3762,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   // there is no new stack frame for external functions and thus no return
   // hence we have to immediately leave any function that is external call
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     state.memoryState.registerFunctionRet(function);
   }
 
@@ -3852,7 +3856,7 @@ void Executor::executeAlloc(ExecutionState &state,
         os->initializeToRandom();
       }
 
-      if (DetectInfiniteLoops) {
+      if (PruneStates) {
         state.memoryState.registerWrite(*mo, *os);
       }
       bindLocal(target, state, mo->getBaseExpr());
@@ -3863,7 +3867,7 @@ void Executor::executeAlloc(ExecutionState &state,
           os->write(i, reallocFrom->read8(i));
         }
         const MemoryObject *reallocatedObject = reallocFrom->getObject();
-        if (DetectInfiniteLoops) {
+        if (PruneStates) {
           state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, count);
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
@@ -4078,12 +4082,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 ReadOnly);
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-          if (DetectInfiniteLoops) {
+          if (PruneStates) {
             // unregister previous value to avoid cancellation
             state.memoryState.unregisterWrite(address, *mo, *wos, bytes);
           }
           wos->write(offset, value);
-          if (DetectInfiniteLoops) {
+          if (PruneStates) {
             state.memoryState.registerWrite(address, *mo, *wos, bytes);
           }
           processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
@@ -4132,13 +4136,13 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                 ReadOnly);
         } else {
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
-          if (DetectInfiniteLoops) {
+          if (PruneStates) {
             // unregister previous value to avoid cancellation
             bound->memoryState.unregisterWrite(address, *mo, *wos, bytes);
           }
           ref<Expr> offset = mo->getOffsetExpr(address);
           wos->write(offset, value);
-          if (DetectInfiniteLoops) {
+          if (PruneStates) {
             bound->memoryState.registerWrite(address, *mo, *wos, bytes);
           }
           processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
@@ -4173,7 +4177,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                                    const MemoryObject *mo,
                                    const ObjectState *os,
                                    const std::string &name) {
-  if (DetectInfiniteLoops)
+  if (PruneStates)
     state.memoryState.unregisterWrite(*mo, *os);
 
   // Create a new object state for the memory object (instead of a copy).
@@ -4248,7 +4252,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       }
     }
   }
-  if (DetectInfiniteLoops)
+  if (PruneStates)
     state.memoryState.registerWrite(*mo, *os);
 }
 
@@ -4349,7 +4353,7 @@ void Executor::runFunctionAsMain(Function *f,
         argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
       }
     }
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       state->memoryState.registerWrite(*argvMO, *argvOS);
     }
   }

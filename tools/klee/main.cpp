@@ -235,7 +235,7 @@ private:
   unsigned m_numTotalTests;     // Number of tests received from the interpreter
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsExplored; // number of paths explored so far
-  unsigned m_pathsPruned; // number of paths pruned
+  unsigned m_statesPruned; // number of states pruned
 
   // used for writing .ktest files
   int m_argc;
@@ -250,8 +250,8 @@ public:
   unsigned getNumTestCases() { return m_numGeneratedTests; }
   unsigned getNumPathsExplored() { return m_pathsExplored; }
   void incPathsExplored() { m_pathsExplored++; }
-  unsigned getNumPathsPruned() { return m_pathsPruned; }
-  void incPathsPruned() { m_pathsPruned++; }
+  unsigned getNumStatesPruned() { return m_statesPruned; }
+  void incStatesPruned() override { m_statesPruned++; }
 
   void setInterpreter(Interpreter *i);
 
@@ -277,7 +277,7 @@ public:
 KleeHandler::KleeHandler(int argc, char **argv)
     : m_interpreter(0), m_pathWriter(0), m_symPathWriter(0),
       m_outputDirectory(), m_numTotalTests(0), m_numGeneratedTests(0),
-      m_pathsExplored(0), m_pathsPruned(0), m_argc(argc), m_argv(argv) {
+      m_pathsExplored(0), m_statesPruned(0), m_argc(argc), m_argv(argv) {
 
   // create output directory (OutputDir or "klee-out-<i>")
   bool dir_given = OutputDir != "";
@@ -1474,8 +1474,6 @@ int main(int argc, char **argv, char **envp) {
 
   handler->getInfoStream()
     << "KLEE: done: explored paths = " << 1 + forks << "\n";
-  handler->getInfoStream()
-    << "KLEE: done: pruned paths = " << handler->getNumPathsPruned() << "\n";
 
   // Write some extra information in the info file which users won't
   // necessarily care about or understand.
@@ -1495,8 +1493,8 @@ int main(int argc, char **argv, char **envp) {
         << instructions << "\n";
   stats << "KLEE: done: completed paths = "
         << handler->getNumPathsExplored() << "\n";
-  stats << "KLEE: done: pruned paths = "
-        << handler->getNumPathsPruned() << "\n";
+  stats << "KLEE: done: pruned states = "
+        << handler->getNumStatesPruned() << "\n";
   stats << "KLEE: done: generated tests = "
         << handler->getNumTestCases() << "\n";
 

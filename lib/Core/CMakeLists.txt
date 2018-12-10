@@ -18,7 +18,6 @@ klee_add_component(kleeCore
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
   ImpliedValue.cpp
-  InfiniteLoopDetectionFlags.cpp
   Memory.cpp
   MemoryFingerprint.cpp
   MemoryManager.cpp

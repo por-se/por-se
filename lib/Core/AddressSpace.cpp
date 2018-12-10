@@ -9,12 +9,12 @@
 
 #include "AddressSpace.h"
 #include "CoreStats.h"
-#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "TimingSolver.h"
 
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
+#include "klee/StatePruningCmdLine.h"
 #include "klee/TimerStatIncrementer.h"
 
 using namespace klee;
@@ -322,12 +322,12 @@ bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
     if (os->readOnly) {
       return false;
     } else {
-      if (DetectInfiniteLoops) {
+      if (PruneStates) {
         state.memoryState.unregisterWrite(*mo, *os);
       }
       ObjectState *wos = getWriteable(mo, os);
       memcpy(wos->concreteStore, address, mo->size);
-      if (DetectInfiniteLoops) {
+      if (PruneStates) {
         state.memoryState.registerWrite(*mo, *wos);
       }
     }

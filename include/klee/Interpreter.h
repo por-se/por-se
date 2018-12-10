@@ -41,7 +41,7 @@ public:
   virtual std::unique_ptr<llvm::raw_fd_ostream> openOutputFile(const std::string &filename) = 0;
 
   virtual void incPathsExplored() = 0;
-  virtual void incPathsPruned() = 0;
+  virtual void incStatesPruned() = 0;
 
   virtual std::string processTestCase(const ExecutionState &state,
                                       const char *err,

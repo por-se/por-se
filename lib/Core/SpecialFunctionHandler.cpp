@@ -7,7 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 #include "SpecialFunctionHandler.h"
 #include "TimingSolver.h"
@@ -25,6 +24,7 @@
 #include "MemoryManager.h"
 
 #include "klee/SolverCmdLine.h"
+#include "klee/StatePruningCmdLine.h"
 
 #include "llvm/IR/Module.h"
 #include "llvm/ADT/Twine.h"
@@ -765,7 +765,7 @@ void SpecialFunctionHandler::handleDisableMemoryState(ExecutionState &state,
                                                           KInstruction *target,
                                                           std::vector<ref<Expr>>
                                                             &arguments) {
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     state.memoryState.disable();
     klee_warning_once(target, "disabling memory state of infinite loop detection");
   }
@@ -775,7 +775,7 @@ void SpecialFunctionHandler::handleEnableMemoryState(ExecutionState &state,
                                                           KInstruction *target,
                                                           std::vector<ref<Expr>>
                                                             &arguments) {
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     state.memoryState.enable();
     klee_warning_once(target, "enabling memory state of infinite loop detection");
   }
@@ -809,7 +809,7 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
                                                     thread.stack.size()-1);
   ObjectState *os = executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
-  if (DetectInfiniteLoops)
+  if (PruneStates)
     state.memoryState.registerWrite(*mo, *os);
 }
 

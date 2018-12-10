@@ -11,12 +11,11 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
-#include "../Core/InfiniteLoopDetectionFlags.h"
-
 #include "Passes.h"
 
 #include "klee/Config/Version.h"
 #include "klee/Interpreter.h"
+#include "klee/StatePruningCmdLine.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
@@ -345,7 +344,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
     llvm::errs() << "]\n";
   }
 
-  if (DetectInfiniteLoops) {
+  if (PruneStates) {
     LiveRegisterPass lrp;
     for (auto &kf : functions) {
       lrp.runOnFunction(*kf->function);

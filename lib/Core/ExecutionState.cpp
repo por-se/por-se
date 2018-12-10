@@ -548,7 +548,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
            "objects mutated but not writable in merging state");
     assert(otherOS);
 
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       memoryState.unregisterWrite(*mo, *os);
     }
     ObjectState *wos = addressSpace.getWriteable(mo, os);
@@ -557,7 +557,7 @@ bool ExecutionState::merge(const ExecutionState &b) {
       ref<Expr> bv = otherOS->read8(i);
       wos->write(i, SelectExpr::create(inA, av, bv));
     }
-    if (DetectInfiniteLoops) {
+    if (PruneStates) {
       memoryState.registerWrite(*mo, *wos);
     }
   }

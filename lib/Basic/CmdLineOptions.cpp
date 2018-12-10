@@ -133,6 +133,14 @@ void KCommandLine::HideUnrelatedOptions(
     HideUnrelatedOptions(*i);
 }
 
+cl::opt<bool> PruneStates("state-pruning",
+                          cl::desc("Enable pruning of states (default=on)"),
+                          cl::init(true));
+
+cl::opt<bool> DebugStatePruning("debug-state-pruning",
+                                cl::desc("Log state pruning debug info to stderr (default=off)"),
+                                cl::init(false));
+
 #ifdef ENABLE_METASMT
 
 #ifdef METASMT_DEFAULT_BACKEND_IS_BTOR

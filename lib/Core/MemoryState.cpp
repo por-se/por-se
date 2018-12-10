@@ -1,11 +1,11 @@
 #include "MemoryState.h"
 
 #include "AddressSpace.h"
-#include "InfiniteLoopDetectionFlags.h"
 #include "Memory.h"
 
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
+#include "klee/StatePruningCmdLine.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
@@ -87,12 +87,12 @@ void MemoryState::initializeFunctionList(KModule *_kmodule,
   for (const char *name : functions) {
     llvm::Function *f = _kmodule->module->getFunction(name);
     if (f == nullptr) {
-      if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      if (DebugStatePruning) {
         llvm::errs() << "MemoryState: could not find function in module: "
                      << name << "\n";
       }
     } else {
-      if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+      if (DebugStatePruning) {
         llvm::errs() << "MemoryState: found function in module: "
                      << name << "\n";
       }
@@ -105,7 +105,7 @@ void MemoryState::initializeFunctionList(KModule *_kmodule,
 
 
 void MemoryState::leaveListedFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: leaving listed function: "
                  << listedFunction.function->getName() << "\n";
   }
@@ -121,7 +121,7 @@ bool MemoryState::enterLibraryFunction(llvm::Function *f) {
     return false;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: entering library function: "
                  << f->getName() << "\n";
   }
@@ -135,7 +135,7 @@ bool MemoryState::enterLibraryFunction(llvm::Function *f) {
 }
 
 void MemoryState::leaveLibraryFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: leaving library function: "
                  << libraryFunction.function->getName() << "\n";
   }
@@ -155,7 +155,7 @@ bool MemoryState::enterMemoryFunction(llvm::Function *f,
     return false;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: entering memory function: "
                  << f->getName() << "\n";
   }
@@ -174,7 +174,7 @@ bool MemoryState::enterMemoryFunction(llvm::Function *f,
 }
 
 void MemoryState::leaveMemoryFunction() {
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: leaving memory function: "
                  << memoryFunction.function->getName() << "\n";
   }
@@ -206,7 +206,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
   /*if (std::binary_search(outputFunctionsWhitelist.begin(),
                          outputFunctionsWhitelist.end(),
                          f)) {
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    if (DebugStatePruning) {
       llvm::errs() << "MemoryState: whitelisted output function call to "
                    << f->getName() << "()\n";
     }
@@ -214,7 +214,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
   } else*/ if (std::binary_search(libraryFunctionsList.begin(),
                                 libraryFunctionsList.end(),
                                 f)) {
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    if (DebugStatePruning) {
       llvm::errs() << "MemoryState: library function call to "
                    << f->getName() << "()\n";
     }
@@ -262,7 +262,7 @@ void MemoryState::registerExternalFunctionCall() {
     return;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: external function call\n";
   }
 
@@ -282,7 +282,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     ref<ConstantExpr> base = mo.getBaseExpr();
     llvm::errs() << "MemoryState: registering "
                  << (mo.isLocal ? "local " : "global ")
@@ -299,7 +299,7 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     ref<ConstantExpr> base = mo.getBaseExpr();
     llvm::errs() << "MemoryState: unregistering "
                  << (mo.isLocal ? "local " : "global ")
@@ -361,7 +361,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
       }
     }
 
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    if (DebugStatePruning) {
       llvm::errs() << "[+" << i << "] ";
       if (isSymbolic) {
         llvm::errs() << ExprString(valExpr);
@@ -395,7 +395,7 @@ void MemoryState::registerArgument(std::uint64_t threadID,
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
   fingerprint.addToFingerprintAndDelta(delta);
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
                  << reinterpret_cast<std::uintptr_t>(kf) << ": "
                  << ExprString(value) << "\n";
@@ -410,7 +410,7 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
     return false;
   }
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: entering listed function: "
                  << f->getName() << "\n";
   }
@@ -428,7 +428,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
                                     const KFunction *callee,
                                     const KInstruction *caller) {
   // IMPORTANT: has to be called after state.pushFrame()
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
@@ -466,7 +466,7 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
                                    const llvm::BasicBlock *callerBB) {
   // IMPORTANT: has to be called prior to state.popFrame()
 
-  if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+  if (DebugStatePruning) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
@@ -477,7 +477,7 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     StackFrame &sf = thread.stack.back();
     fingerprint.removeDelta(sf.fingerprintDelta);
   } else {
-    if (DebugInfiniteLoopDetection.isSet(STDERR_STATE)) {
+    if (DebugStatePruning) {
       llvm::errs() << "MemoryState: no stackframe left in trace\n";
     }
   }
