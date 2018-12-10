@@ -594,6 +594,18 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
       state.memoryState.registerWrite(address, *mo, *os, StoreBits / 8);
     }
+  } else {
+    assert(isa<UndefValue>(c));
+    std::size_t num = getWidthForLLVMType(c->getType()) / 8;
+    for (std::size_t i = 0; i < num; ++i)
+      os->write8(offset + i, 0xAB); // like ObjectState::initializeToRandom()
+
+    if (DetectInfiniteLoops) {
+      const MemoryObject *mo = os->getObject();
+      ref<ConstantExpr> address = mo->getBaseExpr();
+      address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
+      state.memoryState.registerWrite(address, *mo, *os, num);
+    }
   }
 }
 
