@@ -3627,15 +3627,9 @@ void Executor::callExternalFunction(ExecutionState &state,
                                     KInstruction *target,
                                     Function *function,
                                     std::vector< ref<Expr> > &arguments) {
-
-
   // check if specialFunctionHandler wants it
   if (specialFunctionHandler->handle(state, function, target, arguments))
     return;
-
-  if (DetectInfiniteLoops) {
-    state.memoryState.registerExternalFunctionCall();
-  }
 
   if (ExternalCalls == ExternalCallPolicy::None
       && !okExternals.count(function->getName())) {
@@ -3643,6 +3637,10 @@ void Executor::callExternalFunction(ExecutionState &state,
                function->getName().str().c_str());
     terminateStateOnError(state, "external calls disallowed", User);
     return;
+  }
+
+  if (DetectInfiniteLoops) {
+    state.memoryState.registerExternalFunctionCall();
   }
 
   // normal external function handling path
