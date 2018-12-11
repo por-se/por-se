@@ -495,7 +495,7 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
 
     fingerprint.updateProgramCounterFragment(threadID,
                                              thread.stack.size() - 1,
-                                             thread.prevPc->inst);
+                                             thread.pc->inst);
     fingerprint.addToDeltaOnly(temporary);
 
     llvm::Instruction *liveInst = thread.liveSetPc->inst;
