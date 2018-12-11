@@ -202,8 +202,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
     return;
   }
 
-  // XXX: prototype same-state detection
-  /*if (std::binary_search(outputFunctionsWhitelist.begin(),
+  if (std::binary_search(outputFunctionsWhitelist.begin(),
                          outputFunctionsWhitelist.end(),
                          f)) {
     if (DebugStatePruning) {
@@ -211,7 +210,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
                    << f->getName() << "()\n";
     }
     enterListedFunction(f);
-  } else*/ if (std::binary_search(libraryFunctionsList.begin(),
+  } else if (std::binary_search(libraryFunctionsList.begin(),
                                 libraryFunctionsList.end(),
                                 f)) {
     if (DebugStatePruning) {

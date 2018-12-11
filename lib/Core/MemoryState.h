@@ -83,12 +83,11 @@ private:
   void leaveMemoryFunction();
 
   void updateDisableMemoryState() {
-    disableMemoryState = listedFunction.entered || libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
+    disableMemoryState = libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
 
     if (DebugStatePruning) {
       llvm::errs() << "MemoryState: updating disableMemoryState: "
-                   << "(listedFunction: " << listedFunction.entered << " || "
-                   << "libraryFunction: " << libraryFunction.entered << " || "
+                   << "(libraryFunction: " << libraryFunction.entered << " || "
                    << "memoryFunction: " << memoryFunction.entered << " || "
                    << "globalDisable: " << globalDisableMemoryState << ") "
                    << "= " << disableMemoryState << "\n";
