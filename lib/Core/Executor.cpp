@@ -630,7 +630,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
   for (unsigned i = 0; i < size; i++) {
     os->write8(i, ((uint8_t*)addr)[i]);
   }
-  if (PruneStates) {
+  if (PruneStates && !isReadOnly) {
     // NOTE: this assumes addExternalObject is only called for initialization
     state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, size);
   }
