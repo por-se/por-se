@@ -1,6 +1,6 @@
 // RUN: %llvmgcc %s -emit-llvm -g -c -o %t2.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --exit-on-error --write-cov %t2.bc
+// RUN: %klee --output-dir=%t.klee-out --state-pruning=0 --exit-on-error --write-cov %t2.bc
 // RUN: grep -c WriteCov.c:16  %t.klee-out/test000001.cov %t.klee-out/test000002.cov  >%t3.txt
 // RUN: grep -c WriteCov.c:18  %t.klee-out/test000001.cov %t.klee-out/test000002.cov >>%t3.txt
 // RUN: grep %t.klee-out/test000001.cov:0 %t3.txt
