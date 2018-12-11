@@ -3901,8 +3901,6 @@ void Executor::executeAlloc(ExecutionState &state,
                             bool zeroMemory,
                             const ObjectState *reallocFrom,
                             size_t allocationAlignment) {
-  // TODO: Here we should assign the ownership over the memory region to the
-  //       current thread
   Thread& thread = state.getCurrentThreadReference();
 
   size = toUnique(state, size);
@@ -3918,7 +3916,6 @@ void Executor::executeAlloc(ExecutionState &state,
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
-      // A free operation should be tracked as well
       processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::ALLOC_ACCESS);
 
       ObjectState *os = bindObjectInState(state, mo, isLocal);
@@ -3943,6 +3940,9 @@ void Executor::executeAlloc(ExecutionState &state,
           state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, count);
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
+
+        // The old object is implicitly freed
+        processMemoryAccess(state, reallocatedObject, nullptr, MemoryAccessTracker::FREE_ACCESS);
         state.addressSpace.unbindObject(reallocatedObject);
       }
     }
