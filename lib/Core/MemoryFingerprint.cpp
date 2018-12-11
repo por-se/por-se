@@ -211,7 +211,7 @@ MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
 
       os << "[T" << tid << ':' << sfid << ']';
       os << "Program Counter: ";
-      os << i->getName();
+      os << i;
       os << " in ";
       os << i->getFunction()->getName();
 

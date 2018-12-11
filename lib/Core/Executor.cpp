@@ -1656,6 +1656,10 @@ void Executor::phiNodeProcessingCompleted(const BasicBlock *dst,
         terminateState(state);
       }
     } else {
+      if (DebugStatePruning) {
+        std::string str = MemoryFingerprint::toString(fingerprint);
+        klee_warning("inserting new fingerprint: %s", str.c_str());
+      }
       fingerprints.insert(fingerprint);
     }
   }
