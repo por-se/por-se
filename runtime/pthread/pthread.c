@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 static kpr_pthread* kpr_obtain_pthread_data(pthread_t pthread) {
   return ((kpr_pthread*)pthread);
@@ -38,8 +39,8 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
   thread->startArg = arg;
   thread->returnValue = NULL;
   thread->state = 0;
-  thread->mode = 0;
-  thread->joinState = 0;
+  thread->mode = KPR_THREAD_MODE_JOIN;
+  thread->joinState = KPR_THREAD_JSTATE_JOINABLE;
   thread->cancelState = PTHREAD_CANCEL_ENABLE;
 
   kpr_list_create(&thread->cleanUpStack);
@@ -49,7 +50,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
     pthread_attr_getdetachstate(attr, &ds);
 
     if (ds == PTHREAD_CREATE_DETACHED) {
-      thread->mode = 1;
+      thread->mode = KPR_THREAD_MODE_DETACH;
     }
   }
 
@@ -69,12 +70,18 @@ int pthread_detach(pthread_t pthread) {
   klee_toggle_thread_scheduling(0);
 
   kpr_pthread* thread = kpr_obtain_pthread_data(pthread);
-  if (thread->mode == 1) {
+  if (thread->mode == KPR_THREAD_MODE_DETACH) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
-  thread->mode = 1;
+  // Last check: it can also be the case that this thread is detached after it already
+  //             terminated. In that case we want to ensure that we wake the thread again
+  if (thread->joinState == KPR_THREAD_WAIT_FOR_JOIN) {
+    klee_wake_up_thread(thread->tid);
+  }
+
+  thread->mode = KPR_THREAD_MODE_DETACH;
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -89,20 +96,24 @@ void pthread_exit(void* arg) {
   if (tid != 0) {
     kpr_pthread* thread = (kpr_pthread*) klee_get_thread_start_argument();
 
-    if (thread->mode == 1) {
+    if (thread->mode == KPR_THREAD_MODE_DETACH) {
       klee_toggle_thread_scheduling(1);
       kpr_key_clear_data_of_thread(tid);
       klee_exit_thread();
     }
 
+    assert(thread->joinState != KPR_THREAD_JSTATE_WAIT_FOR_JOIN && "Thread cannot have called exit twice");
+
     thread->returnValue = arg;
     thread->state = 1;
 
-    if (thread->joinState == 0) {
+    if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
+      thread->joinState = KPR_THREAD_WAIT_FOR_JOIN;
+
       // klee_toggle_thread_scheduling(1);
       klee_sleep_thread();
       // klee_toggle_thread_scheduling(0);
-      thread->joinState = 1;
+      thread->joinState = KPR_THREAD_JSTATE_JOINED;
     } else {
       klee_wake_up_thread(thread->joinedThread);
     }
@@ -117,27 +128,26 @@ int pthread_join(pthread_t pthread, void **ret) {
   klee_toggle_thread_scheduling(0);
   kpr_pthread* thread = kpr_obtain_pthread_data(pthread);
 
-  if (thread->mode == 1) { // detached state
+  if (thread->mode == KPR_THREAD_MODE_DETACH) { // detached state
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
   uint64_t ownThread = klee_get_thread_id();
-  if (ownThread == (uint64_t) pthread) { // We refer to our onw thread
+  if (ownThread == (uint64_t) pthread) { // We refer to our own thread
     klee_toggle_thread_scheduling(1);
     return EDEADLK;
   }
 
-  if (thread->joinState == 1) {
+  if (thread->joinState == KPR_THREAD_JSTATE_JOINED) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
   // Could also be that this thread is already finished, but there must be
   // at least one call to join to free the resources
-  thread->joinState = 1;
-
-  int needToSleep = thread->state != 1 ? 1 : 0;
+  int needToSleep = thread->joinState != KPR_THREAD_WAIT_FOR_JOIN ? 1 : 0;
+  thread->joinState = KPR_THREAD_JSTATE_JOINED;
 
   if (needToSleep == 1) {
     thread->joinedThread = ownThread;
@@ -228,6 +238,8 @@ void pthread_testcancel() {
 }
 
 int pthread_cancel(pthread_t tid) {
+  klee_warning_once("pthread_cancel is not correctly supported");
+
   klee_toggle_thread_scheduling(0);
   kpr_pthread* thread = (kpr_pthread*) tid;
   thread->cancelSignalReceived = 1;
@@ -270,6 +282,7 @@ int pthread_setconcurrency(int n) {
     return EINVAL;
   }
 
+  klee_warning_once("pthread_setconcurrency is ignored");
   kpr_concurrency = n;
 
   return 0;

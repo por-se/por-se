@@ -16,6 +16,16 @@ typedef void* pthread_barrier_t;
 typedef void* pthread_spinlock_t;
 #endif /* __APPLE_ */
 
+#define KPR_THREAD_MODE_JOIN (0)
+#define KPR_THREAD_MODE_DETACH (1)
+
+#define KPR_THREAD_JSTATE_JOINABLE (0)
+#define KPR_THREAD_JSTATE_WAIT_FOR_JOIN (1)
+#define KPR_THREAD_JSTATE_JOINED (2)
+
+#define KPR_THREAD_JOINED (1)
+#define KPR_THREAD_WAIT_FOR_JOIN (4)
+
 typedef struct {
   int acquired;
   int type;
@@ -56,6 +66,9 @@ typedef struct {
   void* (*startRoutine) (void* arg);
 
   void* returnValue;
+
+  uint8_t joinDetachState;
+
   uint8_t joinState;
   uint64_t joinedThread;
 
