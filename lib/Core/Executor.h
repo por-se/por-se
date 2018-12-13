@@ -28,7 +28,6 @@
 #include "llvm/ADT/Twine.h"
 
 #include "../Expr/ArrayExprOptimizer.h"
-#include "MemoryAccessTracker.h"
 
 #include <chrono>
 #include <map>
