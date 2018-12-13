@@ -5,13 +5,7 @@ using namespace klee;
 
 static const uint64_t NOT_EXECUTED = ~((uint64_t) 0);
 
-MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryAccesses& ac) {
-  owner = ac.owner;
-  tid = ac.tid;
-  accesses = ac.accesses;
-  preThreadAccessIndex = ac.preThreadAccessIndex;
-  scheduleIndex = ac.scheduleIndex;
-}
+MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryAccesses& ac) = default;
 
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
@@ -19,12 +13,12 @@ void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   }
 
   auto last = accessLists.back();
-  if (last->owner == this) {
+  if (last->cowOwner == this) {
     return;
   }
 
   std::shared_ptr<EpochMemoryAccesses> ema = std::make_shared<EpochMemoryAccesses>(*last);
-  ema->owner = this;
+  ema->cowOwner = this;
 
   accessLists[accessLists.size() - 1] = ema;
 }
@@ -35,12 +29,12 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
 
   // But first of all we want to release our ownership over the last epoch if
   // we are the owner
-  if (!accessLists.empty() && accessLists.back()->owner == this) {
-    accessLists.back()->owner = nullptr;
+  if (!accessLists.empty() && accessLists.back()->cowOwner == this) {
+    accessLists.back()->cowOwner = nullptr;
   }
 
   std::shared_ptr<EpochMemoryAccesses> ema = std::make_shared<EpochMemoryAccesses>();
-  ema->owner = this;
+  ema->cowOwner = this;
   ema->tid = tid;
   ema->scheduleIndex = accessLists.size();
 
@@ -104,8 +98,9 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
   accesses.emplace_back(access);
 }
 
-void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch) {
-  uint64_t* v = getThreadSyncValueTo(tid1, tid2);
+void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, uint64_t epoch) {
+  // Tries to register the following ordering: predTid > targetTid
+  uint64_t* v = getThreadSyncValueTo(targetTid, predTid);
 
   if (*v >= epoch) {
     return;
@@ -114,23 +109,28 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId tid1, Thread
   *v = epoch;
 
   // Two threads can also synchronize through a third one
-  for (uint64_t i = 0; i < knownThreads.size(); i++) {
-    if (i == tid1 || i == tid2) {
+  for (uint64_t thirdTid = 0; thirdTid < knownThreads.size(); thirdTid++) {
+    if (thirdTid == targetTid || thirdTid == predTid) {
       // We want to find a third thread, therefore we can ignore these
       continue;
     }
 
     // Get the reference values
-    uint64_t s = *getThreadSyncValueTo(tid2, i);
-    uint64_t* ref = getThreadSyncValueTo(tid1, i);
+    // value of: thirdTid < predTid
+    uint64_t transitiveRef = *getThreadSyncValueTo(predTid, thirdTid);
+    // value of: thirdTid < targetTid
+    uint64_t* currentRef = getThreadSyncValueTo(targetTid, thirdTid);
 
-    if (s >= *ref && s < epoch) {
-      *ref = s;
+    // Check whether the transitive is actually better and whether the transitive can be applied
+    if (transitiveRef > *currentRef && transitiveRef < epoch) {
+      *currentRef = transitiveRef;
     }
   }
 
   // As we have added a new relation, it is possible that certain memory accesses no longer need to
-  // be tracked
+  // be tracked.
+  // We calculate the earliest epoch in which there exists a dependency between any two threads.
+  // Everything before that is basically no longer needed and can be unreferenced.
   uint64_t keepAllAfter = accessLists.size();
 
   for (uint64_t i = 0; i < knownThreads.size(); i++) {
@@ -157,6 +157,7 @@ uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread
   assert(tid != reference && "ThreadIds have to be unequal");
   uint64_t max = std::max(tid, reference);
 
+  // Skip the combination of reference == tid by offsetting the indexes by 1 correspondingly
   if (max + 1 > threadSyncs.size()) {
     threadSyncs.resize(max + 1);
 

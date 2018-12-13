@@ -42,10 +42,15 @@ namespace klee {
 
     private:
       struct EpochMemoryAccesses {
-        void* owner;
+        /// @brief a reference to the entity that is allowed to write to this possibly shared object
+        // Note: in the case that the epoch is finished (therefore finished -> write protected), this becomes nullptr
+        void* cowOwner;
         Thread::ThreadId tid;
         uint64_t scheduleIndex;
 
+        /// @brief index in the scheduling history that this epoch was executed the last time
+        // Note: this is not a pointer to the previous one since that might keep around this fragment
+        //       later if it is no longer needed as it will be part of a chain
         uint64_t preThreadAccessIndex;
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
 
@@ -62,6 +67,7 @@ namespace klee {
 
       void forkCurrentEpochWhenNeeded();
 
+      /// @brief returns the latest epoch of the `reference` thread that `tid` thread has a dependency to
       uint64_t* getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference);
 
       void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
@@ -75,7 +81,7 @@ namespace klee {
 
       void trackMemoryAccess(uint64_t id, MemoryAccess access);
 
-      void registerThreadDependency(Thread::ThreadId tid1, Thread::ThreadId tid2, uint64_t epoch);
+      void registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, uint64_t epoch);
 
       MemAccessSafetyResult testIfUnsafeMemoryAccess(uint64_t id, const MemoryAccess &access);
   };
