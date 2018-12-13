@@ -103,7 +103,7 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
   return pthread_mutex_lock(m);
 }
 
-// int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m, const struct timespec *kpr_restrict);
+// int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m, const struct timespec *__restrict);
 
 int pthread_cond_broadcast(pthread_cond_t *c) {
   klee_toggle_thread_scheduling(0);
