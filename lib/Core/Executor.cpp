@@ -743,6 +743,9 @@ void Executor::initializeGlobals(ExecutionState &state) {
       addExternalObject(state, (void *)errno_addr, sizeof *errno_addr, false);
   // Copy values from and to program space explicitly
   errnoObj->isUserSpecified = true;
+
+  // Should be the main thread
+  state.getCurrentThreadReference().threadErrno = errnoObj;
 #endif
 
   // Disabled, we don't want to promote use of live externals.
@@ -3772,13 +3775,12 @@ void Executor::callExternalFunction(ExecutionState &state,
   state.addressSpace.copyOutConcretes();
 #ifndef WINDOWS
   // Update external errno state with local state value
+  Thread& curThread = state.getCurrentThreadReference();
   int *errno_addr = getErrnoLocation(state);
-  ObjectPair result;
-  bool resolved = state.addressSpace.resolveOne(
-      ConstantExpr::create((uint64_t)errno_addr, Expr::Int64), result);
-  if (!resolved)
-    klee_error("Could not resolve memory object for errno");
-  ref<Expr> errValueExpr = result.second->read(0, sizeof(*errno_addr) * 8);
+
+  const ObjectState* errnoOs = state.addressSpace.findObject(curThread.threadErrno);
+
+  ref<Expr> errValueExpr = errnoOs->read(0, sizeof(*errno_addr) * 8);
   ConstantExpr *errnoValue = dyn_cast<ConstantExpr>(errValueExpr);
   if (!errnoValue) {
     terminateStateOnExecError(state,
@@ -3827,7 +3829,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(state, result.first, result.second,
+  state.addressSpace.copyInConcrete(state, curThread.threadErrno, errnoOs,
                                     (uint64_t)&error);
 #endif
 
@@ -4695,8 +4697,21 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
   threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
   threadStartFrame->locals[kf->getArgRegister(1)].value = ConstantExpr::create(thread->getThreadId(), Expr::Int64);
 
-  // Start with an errno of 0 per thread
-  thread->threadErrno = ConstantExpr::create(0, sizeof(int) * 8);
+  // If we create a thread, then we also have to create the TLS objects
+
+  // Errno is one of the tls objects
+  uint64_t alignment = getAllocationAlignment(thread->prevPc->inst);
+  uint64_t size = sizeof(*getErrnoLocation(state));
+
+  MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
+  assert(thErrno != nullptr && "Should be able to allocate memory");
+  thread->threadErrno = thErrno;
+
+  // And initialize with zero
+  ObjectState *os = bindObjectInState(state, thErrno, false);
+  for (unsigned i = 0; i < size; i++) {
+    os->write8(i, 0);
+  }
 
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), nullptr);

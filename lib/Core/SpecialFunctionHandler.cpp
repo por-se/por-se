@@ -640,13 +640,12 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
 #endif
 
   // Retrieve the memory object of the errno variable
-  ObjectPair result;
-  bool resolved = state.addressSpace.resolveOne(
-      ConstantExpr::create((uint64_t)errno_addr, Expr::Int64), result);
-  if (!resolved)
-    executor.terminateStateOnError(state, "Could not resolve address for errno",
-                                   Executor::User);
-  executor.bindLocal(target, state, result.second->read(0, Expr::Int32));
+  const MemoryObject* thErrno = state.getCurrentThreadReference().threadErrno;
+  const ObjectState* errValue = state.addressSpace.findObject(thErrno);
+
+  assert(errValue != nullptr && "errno should be created for every thread");
+
+  executor.bindLocal(target, state, errValue->read(0, sizeof(*errno_addr) * 8));
 }
 
 void SpecialFunctionHandler::handleErrnoLocation(
@@ -656,15 +655,11 @@ void SpecialFunctionHandler::handleErrnoLocation(
   assert(arguments.size() == 0 &&
          "invalid number of arguments to __errno_location/__error");
 
-#ifndef WINDOWS
-  int *errno_addr = executor.getErrnoLocation(state);
-#else
-  int *errno_addr = nullptr;
-#endif
+  const MemoryObject* thErrno = state.getCurrentThreadReference().threadErrno;
 
   executor.bindLocal(
       target, state,
-      ConstantExpr::create((uint64_t)errno_addr,
+      ConstantExpr::create(thErrno->address,
                            executor.kmodule->targetData->getTypeSizeInBits(
                                target->inst->getType())));
 }
