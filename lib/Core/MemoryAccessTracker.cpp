@@ -5,8 +5,6 @@ using namespace klee;
 
 static const uint64_t NOT_EXECUTED = ~((uint64_t) 0);
 
-MemoryAccessTracker::EpochMemoryAccesses::EpochMemoryAccesses(const EpochMemoryAccesses& ac) = default;
-
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
     return;

@@ -55,7 +55,7 @@ namespace klee {
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
 
         EpochMemoryAccesses() = default;
-        EpochMemoryAccesses(const EpochMemoryAccesses& ac);
+        EpochMemoryAccesses(const EpochMemoryAccesses& ac) = default;
       };
 
       std::vector<std::shared_ptr<EpochMemoryAccesses>> accessLists;
