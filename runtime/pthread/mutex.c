@@ -166,7 +166,7 @@ int pthread_mutex_trylock(pthread_mutex_t *m) {
   return result;
 }
 
-//int pthread_mutex_timedlock(pthread_mutex_t *kpr_restrict, const struct timespec *kpr_restrict);
+//int pthread_mutex_timedlock(pthread_mutex_t *__restrict, const struct timespec *__restrict);
 
 int pthread_mutex_destroy(pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
@@ -191,5 +191,5 @@ int pthread_mutex_destroy(pthread_mutex_t *m) {
 
 //int pthread_mutex_consistent(pthread_mutex_t *);
 //
-//int pthread_mutex_getprioceiling(const pthread_mutex_t *kpr_restrict, int *kpr_restrict);
-//int pthread_mutex_setprioceiling(pthread_mutex_t *kpr_restrict, int, int *kpr_restrict);
+//int pthread_mutex_getprioceiling(const pthread_mutex_t *__restrict, int *__restrict);
+//int pthread_mutex_setprioceiling(pthread_mutex_t *__restrict, int, int *__restrict);
