@@ -525,6 +525,8 @@ private:
   void registerFork(ExecutionState &state, ExecutionState* fork);
   ExecutionState* forkToNewState(ExecutionState &state);
 
+  void scheduleNextThread(ExecutionState &state, Thread::ThreadId tid);
+
   void scheduleThreads(ExecutionState &state);
 
   void forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount);

@@ -4695,6 +4695,9 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
   threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
   threadStartFrame->locals[kf->getArgRegister(1)].value = ConstantExpr::create(thread->getThreadId(), Expr::Int64);
 
+  // Start with an errno of 0 per thread
+  thread->threadErrno = ConstantExpr::create(0, sizeof(int) * 8);
+
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), nullptr);
 }
@@ -4725,6 +4728,14 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
 bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
   if (state.memAccessTracker == nullptr) {
     // If we do not have a memory access tracker, then just assume the access is valid
+    return true;
+  }
+
+  // Kind of hacky way to do this, but basically the errno object is thread local
+  // and should be ignored for the memory access tracking
+  // In the case that thread local storage support lands, this can be changed
+  int* errnoAddress = getErrnoLocation(state);
+  if (mo->address == (uint64_t)errnoAddress) {
     return true;
   }
 
@@ -4888,6 +4899,30 @@ ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   return ns;
 }
 
+void Executor::scheduleNextThread(ExecutionState &state, Thread::ThreadId tid) {
+  // if we schedule threads, we want to save the errno per thread and restore the old value
+
+  // Get the errno object
+  int *errno_addr = getErrnoLocation(state);
+  ObjectPair result;
+  ref<ConstantExpr> address = ConstantExpr::create((uint64_t)errno_addr, Expr::Int64);
+  bool resolved = state.addressSpace.resolveOne(address, result);
+  if (!resolved) {
+    klee_error("Thread Scheduling: Could not resolve memory object for errno");
+  }
+
+  // Save in the current thread the current errno
+  Thread& curThread = state.getCurrentThreadReference();
+  curThread.threadErrno = result.second->read(0, sizeof(*errno_addr) * 8);
+
+  state.scheduleNextThread(tid);
+
+  // And now reset it to the err value of the scheduled thread
+  Thread& newScheduledThread = state.getCurrentThreadReference();
+  ObjectState* asWriteable = state.addressSpace.getWriteable(result.first, result.second);
+  asWriteable->write(0, newScheduledThread.threadErrno);
+}
+
 void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
   assert(newForkCount < state.runnableThreads.size());
 
@@ -4917,7 +4952,7 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
     }
     newStates.push_back(st);
 
-    st->scheduleNextThread(*rIt);
+    scheduleNextThread(*st, *rIt);
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
     st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
   }
@@ -4939,7 +4974,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       // but make sure that the thread is marked as RUNNABLE
       curThread.state = Thread::ThreadState::RUNNABLE;
       Thread::ThreadId tid = curThread.getThreadId();
-      state.scheduleNextThread(tid);
+      scheduleNextThread(state, tid);
       return;
     }
 

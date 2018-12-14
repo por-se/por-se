@@ -97,6 +97,10 @@ namespace klee {
       /// @brief the argument with which the thread was started
       ref<Expr> startArg;
 
+      /// @brief the errno of the thread
+      // Note: only has a valid reference if the thread is currently not scheduled
+      ref<Expr> threadErrno;
+
       /// @brief if the thread scheduling was disabled when this thread was going sleeping
       bool threadSchedulingWasDisabled;
 
