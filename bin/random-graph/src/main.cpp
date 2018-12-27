@@ -1,4 +1,4 @@
-#include <por/program.h>
+#include <por/configuration.h>
 
 #include <cassert>
 #include <cstddef>

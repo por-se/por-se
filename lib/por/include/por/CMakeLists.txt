@@ -17,5 +17,5 @@ target_sources(libpor INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_exit.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait1.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait2.h"
-	"${CMAKE_CURRENT_LIST_DIR}/program.h"
+	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
 )
