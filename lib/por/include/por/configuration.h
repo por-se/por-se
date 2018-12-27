@@ -49,11 +49,13 @@ namespace por {
 		configuration(program_builder&& builder)
 			: _thread_heads(std::move(builder._thread_heads))
 			, _next_thread(std::move(builder._next_thread))
+			, _active_threads(_thread_heads.size())
 			, _lock_heads(std::move(builder._lock_heads))
 			, _next_lock(std::move(builder._next_lock))
 		{
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 			assert(_next_thread > 0);
+			assert(_active_threads > 0);
 			assert(_next_lock > 0);
 		}
 
