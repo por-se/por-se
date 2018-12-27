@@ -6,10 +6,10 @@
 #include <map>
 
 namespace por {
-	class program;
+	class configuration;
 
 	class program_builder{
-		friend class program;
+		friend class configuration;
 
 		std::shared_ptr<por::event::program_init> _program_init = event::program_init::alloc();
 
@@ -20,7 +20,7 @@ namespace por {
 		por::event::lock_id_t _next_lock = 1;
 
 	public:
-		program construct();
+		configuration construct();
 
 		program_builder& add_thread() {
 			auto const tid = _next_thread++;
@@ -32,7 +32,7 @@ namespace por {
 		}
 	};
 
-	class program {
+	class configuration {
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 		por::event::thread_id_t _next_thread = 1;
 		por::event::thread_id_t _active_threads = 0; // really optimizes for a case we will not care about outside of simulations
@@ -41,18 +41,18 @@ namespace por {
 		por::event::lock_id_t _next_lock = 1;
 
 	public:
-		program() : program(program_builder{}.add_thread().construct()) { }
-		program(program const&) = delete;
-		program& operator=(program const&) = delete;
-		program(program&&) = default;
-		program& operator=(program&&) = default;
-		program(program_builder&& builder)
+		configuration() : configuration(program_builder{}.add_thread().construct()) { }
+		configuration(configuration const&) = delete;
+		configuration& operator=(configuration const&) = delete;
+		configuration(configuration&&) = default;
+		configuration& operator=(configuration&&) = default;
+		configuration(program_builder&& builder)
 			: _thread_heads(std::move(builder._thread_heads))
 			, _next_thread(std::move(builder._next_thread))
 			, _lock_heads(std::move(builder._lock_heads))
 			, _next_lock(std::move(builder._next_lock))
 		{
-			assert(!_thread_heads.empty() && "Cannot create a program without any startup threads");
+			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 			assert(_next_thread > 0);
 			assert(_next_lock > 0);
 		}
@@ -154,5 +154,5 @@ namespace por {
 		}
 	};
 
-	inline program program_builder::construct() { return program(std::move(*this)); }
+	inline configuration program_builder::construct() { return configuration(std::move(*this)); }
 }
