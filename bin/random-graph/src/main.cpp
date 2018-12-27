@@ -42,7 +42,11 @@ int main(int argc, char** argv){
 
 	por::program program; // construct a default program with 1 main thread
 
+#ifdef SEED
+	std::mt19937_64 gen(SEED);
+#else
 	std::mt19937_64 gen(35);
+#endif
 	// "warm up" mersenne twister to deal with weak initialization function
 	for(unsigned i = 0; i < 10'000; ++i) {
 		static_cast<void>(gen());
