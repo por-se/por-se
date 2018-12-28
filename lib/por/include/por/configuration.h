@@ -34,11 +34,11 @@ namespace por {
 
 	class configuration {
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
-		por::event::thread_id_t _next_thread = 1;
-		por::event::thread_id_t _active_threads = 0; // really optimizes for a case we will not care about outside of simulations
+		por::event::thread_id_t _next_thread;
+		por::event::thread_id_t _active_threads; // really optimizes for a case we will not care about outside of simulations
 
 		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
-		por::event::lock_id_t _next_lock = 1;
+		por::event::lock_id_t _next_lock;
 
 	public:
 		configuration() : configuration(program_builder{}.add_thread().construct()) { }
