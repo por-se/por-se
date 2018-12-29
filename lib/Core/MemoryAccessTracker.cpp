@@ -41,7 +41,9 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   }
 
   uint64_t exec = lastExecutions[tid];
-  ema->preThreadAccessIndex = exec;
+  if (exec != NOT_EXECUTED) {
+    ema->preThreadAccess = accessLists[exec];
+  }
 
   lastExecutions[tid] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
@@ -191,6 +193,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
 
   auto objAccesses = ema->accesses.find(mid);
   if (objAccesses == ema->accesses.end()) {
+    // There was no access to that object in this schedule phase, move to the next
     return;
   }
 
@@ -273,21 +276,26 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
   Thread::ThreadId curTid = accessLists.back()->tid;
 
   uint64_t sync = *getThreadSyncValueTo(curTid, tid);
-  auto ema = accessLists[exec];
+  std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[exec];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
     assert(ema->tid == tid);
 
     testIfUnsafeMemAccessByEpoch(result, id, access, ema);
+
     if (!result.wasSafe) {
       // We have found a data race so we can abort the search from here onwards
       return;
     }
 
-    if (ema->preThreadAccessIndex == NOT_EXECUTED) {
-      break;
+    // Otherwise we want to check whether we have a previous epoch to check, so as the first step:
+    // Check if the reference still exists
+    if (ema->preThreadAccess.expired()) {
+      // It can only have expired if the epoch is no longer needed
+      return;
     }
-    ema = accessLists[ema->preThreadAccessIndex];
+
+    ema = ema->preThreadAccess.lock();
   }
 }
 
@@ -300,6 +308,7 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id,
   auto epochIterator = accessLists.rbegin();
   Thread::ThreadId curTid = (*epochIterator)->tid;
 
+  // Loop through all threads to find data races
   for (auto& tid : knownThreads) {
     if (tid == curTid) {
       continue;

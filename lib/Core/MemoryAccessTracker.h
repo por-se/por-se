@@ -51,7 +51,7 @@ namespace klee {
         /// @brief index in the scheduling history that this epoch was executed the last time
         // Note: this is not a pointer to the previous one since that might keep around this fragment
         //       later if it is no longer needed as it will be part of a chain
-        uint64_t preThreadAccessIndex;
+        std::weak_ptr<const EpochMemoryAccesses> preThreadAccess;
         std::map<uint64_t, std::vector<MemoryAccess>> accesses;
 
         EpochMemoryAccesses() = default;
