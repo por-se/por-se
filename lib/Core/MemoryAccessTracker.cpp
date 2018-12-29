@@ -167,6 +167,91 @@ uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread
   return &threadSyncs[tid][reference];
 }
 
+void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result, uint64_t mid,
+                                                       const MemoryAccess &access,
+                                                       const std::shared_ptr<const EpochMemoryAccesses> &ema) {
+  Thread::ThreadId tid = ema->tid;
+
+  bool isRead = (access.type & READ_ACCESS);
+  bool isFree = (access.type & FREE_ACCESS);
+  bool isAlloc = (access.type & ALLOC_ACCESS);
+
+  uint64_t scheduleIndex = ema->scheduleIndex;
+
+  auto objAccesses = ema->accesses.find(mid);
+  if (objAccesses == ema->accesses.end()) {
+    return;
+  }
+
+  const std::vector<MemoryAccess>& accesses = objAccesses->second;
+  for (auto& a : accesses) {
+    // One access pattern that is especially dangerous is an unprotected free
+    // every combination is unsafe (read + free, write + free, ...)
+    if (isFree || (a.type & FREE_ACCESS)) {
+      if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
+        result.wasSafe = false;
+        result.racingAccess = a;
+        return;
+      }
+
+      uint64_t cur = result.dataDependencies[tid];
+      if (cur < scheduleIndex) {
+        result.dataDependencies[tid] = scheduleIndex;
+      }
+      continue;
+    }
+
+    // Another unsafe memory access pattern: the operation is not explicitly
+    // ordered with the other thread and thus can happen in the reverse order
+    if (isAlloc || (a.type & ALLOC_ACCESS)) {
+      if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
+        result.wasSafe = false;
+        result.racingAccess = a;
+        return;
+      }
+
+      uint64_t cur = result.dataDependencies[tid];
+      if (cur < scheduleIndex) {
+        result.dataDependencies[tid] = scheduleIndex;
+      }
+      continue;
+    }
+
+    // There is one safe memory access pattern:
+    // read + read -> so we can skip these
+    bool recIsRead = (a.type & READ_ACCESS);
+    if (isRead && recIsRead) {
+      continue;
+    }
+
+    if (a.offset == access.offset) {
+      if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
+        result.wasSafe = false;
+        result.racingAccess = a;
+        return;
+      }
+
+      uint64_t cur = result.dataDependencies[tid];
+      if (cur < scheduleIndex) {
+        result.dataDependencies[tid] = scheduleIndex;
+      }
+      continue;
+    }
+
+    // So the offset Expr are not the same but we maybe can get
+    // a result that is the same
+    // But: filter out Const + Const pairs
+    if (isa<ConstantExpr>(access.offset) && isa<ConstantExpr>(a.offset)) {
+      continue;
+    }
+
+    // So add it to the ones we want to test
+    if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
+      result.possibleCandidates.push_back(a);
+    }
+  }
+}
+
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
                                                         uint64_t id, const MemoryAccess &access) {
   uint64_t exec = lastExecutions[tid];
@@ -176,93 +261,16 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
 
   Thread::ThreadId curTid = accessLists.back()->tid;
 
-  bool isRead = (access.type & READ_ACCESS);
-  bool isFree = (access.type & FREE_ACCESS);
-  bool isAlloc = (access.type & ALLOC_ACCESS);
-
   uint64_t sync = *getThreadSyncValueTo(curTid, tid);
   auto ema = accessLists[exec];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
     assert(ema->tid == tid);
-    uint64_t scheduleIndex = ema->scheduleIndex;
 
-    auto objAccesses = ema->accesses.find(id);
-    if (objAccesses == ema->accesses.end()) {
-      // There was no access to that object in this schedule phase, move to the next
-      if (ema->preThreadAccessIndex == NOT_EXECUTED) {
-        break;
-      }
-      ema = accessLists[ema->preThreadAccessIndex];
-      continue;
-    }
-
-    std::vector<MemoryAccess>& accesses = objAccesses->second;
-    for (auto& a : accesses) {
-      // One access pattern that is especially dangerous is an unprotected free
-      // every combination is unsafe (read + free, write + free, ...)
-      if (isFree || (a.type & FREE_ACCESS)) {
-        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
-          result.wasSafe = false;
-          result.racingAccess = a;
-          return;
-        }
-
-        uint64_t cur = result.dataDependencies[tid];
-        if (cur < scheduleIndex) {
-          result.dataDependencies[tid] = scheduleIndex;
-        }
-        continue;
-      }
-
-      // Another unsafe memory access pattern: the operation is not explicitly
-      // ordered with the other thread and thus can happen in the reverse order
-      if (isAlloc || (a.type & ALLOC_ACCESS)) {
-        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
-          result.wasSafe = false;
-          result.racingAccess = a;
-          return;
-        }
-
-        uint64_t cur = result.dataDependencies[tid];
-        if (cur < scheduleIndex) {
-          result.dataDependencies[tid] = scheduleIndex;
-        }
-        continue;
-      }
-
-      // There is one safe memory access pattern:
-      // read + read -> so we can skip these
-      bool recIsRead = (a.type & READ_ACCESS);
-      if (isRead && recIsRead) {
-        continue;
-      }
-
-      if (a.offset == access.offset) {
-        if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
-          result.wasSafe = false;
-          result.racingAccess = a;
-          return;
-        }
-
-        uint64_t cur = result.dataDependencies[tid];
-        if (cur < scheduleIndex) {
-          result.dataDependencies[tid] = scheduleIndex;
-        }
-        continue;
-      }
-
-      // So the offset Expr are not the same but we maybe can get
-      // a result that is the same
-      // But: filter out Const + Const pairs
-      if (isa<ConstantExpr>(access.offset) && isa<ConstantExpr>(a.offset)) {
-        continue;
-      }
-
-      // So add it to the ones we want to test
-      if (!a.safeMemoryAccess || (a.atomicMemoryAccess ^ access.atomicMemoryAccess)) {
-        result.possibleCandidates.push_back(a);
-      }
+    testIfUnsafeMemAccessByEpoch(result, id, access, ema);
+    if (!result.wasSafe) {
+      // We have found a data race so we can abort the search from here onwards
+      return;
     }
 
     if (ema->preThreadAccessIndex == NOT_EXECUTED) {

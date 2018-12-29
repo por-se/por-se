@@ -70,6 +70,10 @@ namespace klee {
       /// @brief returns the latest epoch of the `reference` thread that `tid` thread has a dependency to
       uint64_t* getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference);
 
+      void testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result,
+                                        uint64_t mid, const MemoryAccess &access,
+                                        const std::shared_ptr<const EpochMemoryAccesses> &ema);
+
       void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
                                          uint64_t id, const MemoryAccess &access);
 
