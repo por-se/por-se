@@ -65,6 +65,8 @@ namespace klee {
       std::set<Thread::ThreadId> knownThreads;
       std::vector<std::uint64_t> lastExecutions;
 
+      std::uint64_t globalTrackingMinimum = 0;
+
       void forkCurrentEpochWhenNeeded();
 
       /// @brief returns the latest epoch of the `reference` thread that `tid` thread has a dependency to

@@ -117,6 +117,7 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
     return;
   }
 
+  bool checkIfNewMinimum = *v == globalTrackingMinimum;
   *v = epoch;
 
   // Two threads can also synchronize through a third one
@@ -134,8 +135,15 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
 
     // Check whether the transitive is actually better and whether the transitive can be applied
     if (transitiveRef > *currentRef && transitiveRef < epoch) {
+      checkIfNewMinimum |= *currentRef == globalTrackingMinimum;
       *currentRef = transitiveRef;
     }
+  }
+
+  if (!checkIfNewMinimum) {
+    // We did not update the old minimum
+    // Checking all for a better one is wasted time, because the old minimum still exists
+    return;
   }
 
   // As we have added a new relation, it is possible that certain memory accesses no longer need to
@@ -158,6 +166,8 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   }
 
   if (keepAllAfter < accessLists.size()) {
+    globalTrackingMinimum = keepAllAfter;
+
     for (std::uint64_t i = 0; i <= keepAllAfter; i++) {
       accessLists[i] = nullptr;
     }
