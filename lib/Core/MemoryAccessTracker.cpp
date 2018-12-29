@@ -57,6 +57,7 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
   std::shared_ptr<EpochMemoryAccesses>& ema = accessLists.back();
   std::vector<MemoryAccess>& accesses = ema->accesses[id];
 
+  bool newIsRead = access.type & READ_ACCESS;
   bool newIsWrite = access.type & WRITE_ACCESS;
   bool newIsFree = access.type & FREE_ACCESS;
   bool newIsAlloc = access.type & ALLOC_ACCESS;
@@ -74,6 +75,12 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
 
     // Every free or alloc call is stronger as any other access type and does not require
     // offset checks, so this is one of the simpler merges
+    // Test if whether the new is one or if we already have one of these
+    if ((accessIt.type & FREE_ACCESS) || (accessIt.type & ALLOC_ACCESS)) {
+      // Nothing to save as we already have one in the list
+      return;
+    }
+
     if (newIsAlloc || newIsFree) {
       accessIt.type = access.type;
       // alloc and free do not track the offset
@@ -85,6 +92,10 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
     // One special case where we can merge two entries: the previous one is a read
     // and now a write is done to the same offset (write is stronger)
     // Needs the same offsets to be correct
+    if (newIsRead && (accessIt.type & WRITE_ACCESS) && access.offset == accessIt.offset) {
+      // Nothing to save as we already have one in the list
+      return;
+    }
     if (newIsWrite && (accessIt.type & READ_ACCESS) && access.offset == accessIt.offset){
       accessIt.type = WRITE_ACCESS;
       accessIt.instruction = access.instruction;
