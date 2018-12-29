@@ -4700,8 +4700,8 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
   // If we create a thread, then we also have to create the TLS objects
 
   // Errno is one of the tls objects
-  uint64_t alignment = getAllocationAlignment(thread->prevPc->inst);
-  uint64_t size = sizeof(*getErrnoLocation(state));
+  std::uint64_t alignment = getAllocationAlignment(thread->prevPc->inst);
+  std::uint64_t size = sizeof(*getErrnoLocation(state));
 
   MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
   assert(thErrno != nullptr && "Should be able to allocate memory");
@@ -4709,7 +4709,7 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
 
   // And initialize with zero
   ObjectState *os = bindObjectInState(state, thErrno, false);
-  for (unsigned i = 0; i < size; i++) {
+  for (std::uint64_t i = 0; i < size; i++) {
     os->write8(i, 0);
   }
 
@@ -4743,14 +4743,6 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
 bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
   if (state.memAccessTracker == nullptr) {
     // If we do not have a memory access tracker, then just assume the access is valid
-    return true;
-  }
-
-  // Kind of hacky way to do this, but basically the errno object is thread local
-  // and should be ignored for the memory access tracking
-  // In the case that thread local storage support lands, this can be changed
-  int* errnoAddress = getErrnoLocation(state);
-  if (mo->address == (uint64_t)errnoAddress) {
     return true;
   }
 
