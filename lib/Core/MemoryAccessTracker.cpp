@@ -3,7 +3,7 @@
 
 using namespace klee;
 
-static const uint64_t NOT_EXECUTED = ~((uint64_t) 0);
+static const std::uint64_t NOT_EXECUTED = ~((std::uint64_t) 0);
 
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
@@ -40,7 +40,7 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
     lastExecutions.resize(tid + 1, NOT_EXECUTED);
   }
 
-  uint64_t exec = lastExecutions[tid];
+  std::uint64_t exec = lastExecutions[tid];
   if (exec != NOT_EXECUTED) {
     ema->preThreadAccess = accessLists[exec];
   }
@@ -51,7 +51,7 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   knownThreads.insert(tid);
 }
 
-void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
+void MemoryAccessTracker::trackMemoryAccess(std::uint64_t id, MemoryAccess access) {
   assert(!accessLists.empty() && "A scheduled thread should be");
 
   forkCurrentEpochWhenNeeded();
@@ -109,9 +109,9 @@ void MemoryAccessTracker::trackMemoryAccess(uint64_t id, MemoryAccess access) {
   accesses.emplace_back(access);
 }
 
-void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, uint64_t epoch) {
+void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, std::uint64_t epoch) {
   // Tries to register the following ordering: predTid > targetTid
-  uint64_t* v = getThreadSyncValueTo(targetTid, predTid);
+  std::uint64_t* v = getThreadSyncValueTo(targetTid, predTid);
 
   if (*v >= epoch) {
     return;
@@ -120,7 +120,7 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   *v = epoch;
 
   // Two threads can also synchronize through a third one
-  for (uint64_t thirdTid = 0; thirdTid < knownThreads.size(); thirdTid++) {
+  for (std::uint64_t thirdTid = 0; thirdTid < knownThreads.size(); thirdTid++) {
     if (thirdTid == targetTid || thirdTid == predTid) {
       // We want to find a third thread, therefore we can ignore these
       continue;
@@ -128,9 +128,9 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
 
     // Get the reference values
     // value of: thirdTid < predTid
-    uint64_t transitiveRef = *getThreadSyncValueTo(predTid, thirdTid);
+    std::uint64_t transitiveRef = *getThreadSyncValueTo(predTid, thirdTid);
     // value of: thirdTid < targetTid
-    uint64_t* currentRef = getThreadSyncValueTo(targetTid, thirdTid);
+    std::uint64_t* currentRef = getThreadSyncValueTo(targetTid, thirdTid);
 
     // Check whether the transitive is actually better and whether the transitive can be applied
     if (transitiveRef > *currentRef && transitiveRef < epoch) {
@@ -142,15 +142,15 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   // be tracked.
   // We calculate the earliest epoch in which there exists a dependency between any two threads.
   // Everything before that is basically no longer needed and can be unreferenced.
-  uint64_t keepAllAfter = accessLists.size();
+  std::uint64_t keepAllAfter = accessLists.size();
 
-  for (uint64_t i = 0; i < knownThreads.size(); i++) {
-    for (uint64_t j = 0; j < knownThreads.size(); j++) {
+  for (std::uint64_t i = 0; i < knownThreads.size(); i++) {
+    for (std::uint64_t j = 0; j < knownThreads.size(); j++) {
       if (i == j) {
         continue;
       }
 
-      uint64_t rel = *getThreadSyncValueTo(i, j);
+      std::uint64_t rel = *getThreadSyncValueTo(i, j);
       if (rel < keepAllAfter) {
         keepAllAfter = rel;
       }
@@ -158,15 +158,15 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   }
 
   if (keepAllAfter < accessLists.size()) {
-    for (uint64_t i = 0; i <= keepAllAfter; i++) {
+    for (std::uint64_t i = 0; i <= keepAllAfter; i++) {
       accessLists[i] = nullptr;
     }
   }
 }
 
-uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
+std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
   assert(tid != reference && "ThreadIds have to be unequal");
-  uint64_t max = std::max(tid, reference);
+  std::uint64_t max = std::max(tid, reference);
 
   // Skip the combination of reference == tid by offsetting the indexes by 1 correspondingly
   if (max + 1 > threadSyncs.size()) {
@@ -180,7 +180,7 @@ uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread
   return &threadSyncs[tid][reference];
 }
 
-void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result, uint64_t mid,
+void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result, std::uint64_t mid,
                                                        const MemoryAccess &access,
                                                        const std::shared_ptr<const EpochMemoryAccesses> &ema) {
   Thread::ThreadId tid = ema->tid;
@@ -189,7 +189,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
   bool isFree = (access.type & FREE_ACCESS);
   bool isAlloc = (access.type & ALLOC_ACCESS);
 
-  uint64_t scheduleIndex = ema->scheduleIndex;
+  std::uint64_t scheduleIndex = ema->scheduleIndex;
 
   auto objAccesses = ema->accesses.find(mid);
   if (objAccesses == ema->accesses.end()) {
@@ -208,7 +208,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
         return;
       }
 
-      uint64_t cur = result.dataDependencies[tid];
+      std::uint64_t cur = result.dataDependencies[tid];
       if (cur < scheduleIndex) {
         result.dataDependencies[tid] = scheduleIndex;
       }
@@ -224,7 +224,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
         return;
       }
 
-      uint64_t cur = result.dataDependencies[tid];
+      std::uint64_t cur = result.dataDependencies[tid];
       if (cur < scheduleIndex) {
         result.dataDependencies[tid] = scheduleIndex;
       }
@@ -245,7 +245,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
         return;
       }
 
-      uint64_t cur = result.dataDependencies[tid];
+      std::uint64_t cur = result.dataDependencies[tid];
       if (cur < scheduleIndex) {
         result.dataDependencies[tid] = scheduleIndex;
       }
@@ -267,15 +267,15 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
 }
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
-                                                        uint64_t id, const MemoryAccess &access) {
-  uint64_t exec = lastExecutions[tid];
+                                                        std::uint64_t id, const MemoryAccess &access) {
+  std::uint64_t exec = lastExecutions[tid];
   if (exec == NOT_EXECUTED) {
     return;
   }
 
   Thread::ThreadId curTid = accessLists.back()->tid;
 
-  uint64_t sync = *getThreadSyncValueTo(curTid, tid);
+  std::uint64_t sync = *getThreadSyncValueTo(curTid, tid);
   std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[exec];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
@@ -299,7 +299,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &r
   }
 }
 
-MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(uint64_t id, const MemoryAccess &access) {
+MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(std::uint64_t id, const MemoryAccess &access) {
   assert(!accessLists.empty() && "There should be at least one scheduling phase");
 
   MemAccessSafetyResult result;
