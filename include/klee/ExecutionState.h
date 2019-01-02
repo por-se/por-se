@@ -73,8 +73,6 @@ private:
 public:
   // Execution - Control Flow specific
 
-  uint64_t completedScheduleCount;
-
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
 
