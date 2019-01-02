@@ -53,10 +53,6 @@ public:
   typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
-  struct ScheduleEpoch {
-    Thread::ThreadId tid;
-  };
-
 private:
   ExecutionState() = delete;
   ExecutionState &operator=(const ExecutionState &) = delete;
@@ -85,7 +81,7 @@ public:
   threads_ty threads;
 
     /// @brief the history of scheduling up until now
-  std::vector<ScheduleEpoch> schedulingHistory;
+  std::vector<Thread::ThreadId> schedulingHistory;
 
   /// @brief set of all threads that could in theory be executed
   std::set<Thread::ThreadId> runnableThreads;

@@ -225,9 +225,7 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
   assert(threadIt->second.state == Thread::RUNNABLE && "Trying to schedule a non runnable thread");
 
-  ScheduleEpoch ep {};
-  ep.tid = tid;
-  schedulingHistory.push_back(ep);
+  schedulingHistory.push_back(tid);
 
   if (memAccessTracker != nullptr) {
     memAccessTracker->scheduledNewThread(tid);

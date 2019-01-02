@@ -524,8 +524,8 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
     }
 
     auto fSchedules = openTestFile("tschedules", id);
-    for (auto& sd : state.schedulingHistory) {
-      *fSchedules << sd.tid << "\n";
+    for (auto& tid : state.schedulingHistory) {
+      *fSchedules << tid << "\n";
     }
 
     if (m_pathWriter) {
