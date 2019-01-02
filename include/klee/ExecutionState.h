@@ -60,7 +60,19 @@ private:
   std::map<std::string, std::string> fnAliases;
 
   /// @brief Pointer to the thread that is currently executed
-  threads_ty::iterator currentThreadIterator;
+  Thread *_currentThread = nullptr;
+
+  Thread &currentThread(Thread &thread) {
+    _currentThread = &thread;
+    return *_currentThread;
+  }
+
+  Thread &currentThread(Thread::ThreadId tid) {
+    auto it = threads.find(tid);
+    assert(it != threads.end() && "Invalid thread ID");
+    _currentThread = &it->second;
+    return *_currentThread;
+  }
 
   /// @brief The sync point where we wait for the threads
   uint64_t currentSchedulingIndex;
@@ -173,10 +185,14 @@ public:
   ExecutionState *branch();
 
   /// @brief returns a reference to the current thread (only valid for one 'klee instruction')
-  Thread &currentThread() const;
+  Thread &currentThread() const {
+    return *_currentThread;
+  }
 
   /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
-  Thread::ThreadId currentThreadId() const;
+  Thread::ThreadId currentThreadId() const {
+    return _currentThread->tid;
+  }
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState

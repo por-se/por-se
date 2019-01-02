@@ -65,7 +65,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
                                   std::forward_as_tuple(0),
                                   std::forward_as_tuple(0, kf));
     assert(result.second);
-    currentThreadIterator = result.first;
+    currentThread(result.first->second);
     currentThread().state = Thread::ThreadState::RUNNABLE;
     runnableThreads.insert(0);
     scheduleNextThread(0);
@@ -134,7 +134,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     steppedInstructions(state.steppedInstructions)
 {
   // Since we copied the threads, we can use the thread id to look it up
-  currentThreadIterator = threads.find(state.currentThreadId());
+  currentThread(state.currentThreadId());
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
@@ -154,14 +154,6 @@ ExecutionState *ExecutionState::branch() {
   falseState->weight -= weight;
 
   return falseState;
-}
-
-Thread &ExecutionState::currentThread() const {
-  return currentThreadIterator->second;
-}
-
-Thread::ThreadId ExecutionState::currentThreadId() const {
-  return currentThreadIterator->first;
 }
 
 void ExecutionState::popFrameOfThread(Thread* thread) {
@@ -203,11 +195,9 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
 }
 
 void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
-  auto threadIt = threads.find(tid);
-  assert(threadIt != threads.end() && "Could not find thread");
-  currentThreadIterator = threadIt;
+  Thread &thread = currentThread(tid);
 
-  assert(threadIt->second.state == Thread::RUNNABLE && "Trying to schedule a non runnable thread");
+  assert(thread.state == Thread::RUNNABLE && "Cannot schedule non-runnable thread");
 
   schedulingHistory.push_back(tid);
 
