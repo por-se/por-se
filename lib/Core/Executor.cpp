@@ -4748,11 +4748,6 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
 }
 
 bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  if (state.memAccessTracker == nullptr) {
-    // If we do not have a memory access tracker, then just assume the access is valid
-    return true;
-  }
-
   MemoryAccess access;
   access.offset = offset;
   access.type = type;
@@ -4760,8 +4755,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   access.atomicMemoryAccess = state.atomicPhase;
 
   KInstruction* racingInstruction = nullptr;
-  MemAccessSafetyResult result = state.memAccessTracker->testIfUnsafeMemoryAccess(mo->getId(), access);
-
+  MemAccessSafetyResult result = state.memAccessTracker.testIfUnsafeMemoryAccess(mo->getId(), access);
   if (result.possibleCandidates.empty()) {
     access.safeMemoryAccess = result.wasSafe;
     if (!result.wasSafe) {
@@ -4858,7 +4852,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
         uint64_t scheduleIndex = dep.second;
         uint64_t dTid = dep.first;
 
-        state.memAccessTracker->registerThreadDependency(tid, dTid, scheduleIndex);
+        state.memAccessTracker.registerThreadDependency(tid, dTid, scheduleIndex);
       }
     }
 

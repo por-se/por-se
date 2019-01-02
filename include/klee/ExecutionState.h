@@ -19,6 +19,7 @@
 
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
+#include "../../lib/Core/MemoryAccessTracker.h"
 #include "../../lib/Core/MemoryState.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
@@ -35,7 +36,6 @@ struct KInstruction;
 class MemoryObject;
 class PTreeNode;
 struct InstructionInfo;
-class MemoryAccessTracker;
 class Executor;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
@@ -68,9 +68,7 @@ private:
   bool onlyOneThreadRunnableSinceEpochStart;
 
   /// @brief the tracker that will keep all memory access
-  // This is a little bit of a hack: we do not want to expose the tracker to the 'public' api so
-  // we use a pointer here even if the tracker is 'owned' by this state
-  MemoryAccessTracker* memAccessTracker = nullptr;
+  MemoryAccessTracker memAccessTracker;
 
 public:
   // Execution - Control Flow specific

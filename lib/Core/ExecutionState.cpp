@@ -59,10 +59,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
     forkDisabled(false),
     ptreeNode(0),
     memoryState(this),
-    steppedInstructions(0) {
-
-    memAccessTracker = new MemoryAccessTracker();
-
+    steppedInstructions(0)
+{
     // Thread 0 is reserved for program's main thread (executing kf)
     auto result = threads.emplace(std::piecewise_construct,
                                   std::forward_as_tuple(0),
@@ -72,12 +70,12 @@ ExecutionState::ExecutionState(KFunction *kf) :
     currentThread().state = Thread::ThreadState::RUNNABLE;
     runnableThreads.insert(0);
     scheduleNextThread(0);
-  }
+}
 
 
 ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
-    : id(next_id++), memAccessTracker(nullptr), constraints(assumptions),
-      ptreeNode(0), memoryState(this) {}
+    : id(next_id++), constraints(assumptions), ptreeNode(nullptr),
+      memoryState(this) {}
 
 ExecutionState::~ExecutionState() {
   for (unsigned int i=0; i<symbolics.size(); i++)
@@ -92,10 +90,6 @@ ExecutionState::~ExecutionState() {
   for (auto cur_mergehandler: openMergeStack){
     cur_mergehandler->removeOpenState(this);
   }
-
-  // Since we are the owner of the memory access tracker we can safely delete it
-  delete memAccessTracker;
-  memAccessTracker = nullptr;
 
   // We have to clean up all stack frames of all threads
   for (auto& it : threads) {
@@ -113,6 +107,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     currentSchedulingIndex(state.currentSchedulingIndex),
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     completedScheduleCount(state.completedScheduleCount),
+    memAccessTracker(state.memAccessTracker),
     threads(state.threads),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
@@ -140,13 +135,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions)
 {
-  // So make sure that we also make a correct copy of the mem access tracker
-  if (state.memAccessTracker != nullptr) {
-    memAccessTracker = new MemoryAccessTracker(*state.memAccessTracker);
-  } else {
-    memAccessTracker = nullptr;
-  }
-
   // Since we copied the threads, we can use the thread id to look it up
   currentThreadIterator = threads.find(state.currentThreadId());
 
@@ -209,11 +197,9 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
 
   // We cannot sync the current thread with the others since we cannot
   // infer any knowledge from them
-  if (memAccessTracker != nullptr) {
-    memAccessTracker->registerThreadDependency(tid,
-                                               currentThreadId(),
-                                               currentSchedulingIndex);
-  }
+  memAccessTracker.registerThreadDependency(tid,
+                                            currentThreadId(),
+                                            currentSchedulingIndex);
 
   return newThread;
 }
@@ -227,14 +213,12 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
   schedulingHistory.push_back(tid);
 
-  if (memAccessTracker != nullptr) {
-    memAccessTracker->scheduledNewThread(tid);
-  }
+  memAccessTracker.scheduledNewThread(tid);
 
   // So it can happen that this is the first execution of the thread since it was going to sleep
   // so we might have to disable thread scheduling again
-  if (threadIt->second.threadSchedulingWasDisabled) {
-    threadIt->second.threadSchedulingWasDisabled = false;
+  if (thread.threadSchedulingWasDisabled) {
+    thread.threadSchedulingWasDisabled = false;
     threadSchedulingEnabled = false;
   }
 
@@ -279,11 +263,9 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
-    if (memAccessTracker != nullptr) {
-      memAccessTracker->registerThreadDependency(tid,
-                                                 currentThreadId(),
-                                                 currentSchedulingIndex);
-    }
+    memAccessTracker.registerThreadDependency(tid,
+                                              currentThreadId(),
+                                              currentSchedulingIndex);
   }
 }
 
@@ -295,10 +277,10 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   thread->state = thread->EXITED;
   runnableThreads.erase(thread->getThreadId());
 
-  if (currentThreadId() != thread->getThreadId() && memAccessTracker != nullptr) {
-    memAccessTracker->registerThreadDependency(tid,
-                                               currentThreadId(),
-                                               currentSchedulingIndex);
+  if (currentThreadId() != thread->getThreadId()) {
+    memAccessTracker.registerThreadDependency(tid,
+                                              currentThreadId(),
+                                              currentSchedulingIndex);
   }
 
    // Now remove all stack frames except the last one, because otherwise the stats tracker may fail
@@ -309,7 +291,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
 
 void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
   // We do not need to track the memory access for now
-  if (!onlyOneThreadRunnableSinceEpochStart && memAccessTracker != nullptr) {
+  if (!onlyOneThreadRunnableSinceEpochStart) {
     MemoryAccess access;
     access.type = type;
     access.offset = offset;
@@ -319,7 +301,7 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
     // Using the prevPc here since the instruction will already be iterated
     access.instruction = currentThread().prevPc;
 
-    memAccessTracker->trackMemoryAccess(mo->getId(), access);
+    memAccessTracker.trackMemoryAccess(mo->getId(), access);
   }
 }
 
