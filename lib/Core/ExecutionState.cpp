@@ -63,9 +63,10 @@ ExecutionState::ExecutionState(KFunction *kf) :
 
     memAccessTracker = new MemoryAccessTracker();
 
-    // Thread 0 is always the main function thread
-    Thread thread = Thread(0, kf);
-    auto result = threads.insert(std::make_pair(thread.getThreadId(), thread));
+    // Thread 0 is reserved for program's main thread (executing kf)
+    auto result = threads.emplace(std::piecewise_construct,
+                                  std::forward_as_tuple(0),
+                                  std::forward_as_tuple(0, kf));
     assert(result.second);
     currentThreadIterator = result.first;
     currentThread().state = Thread::ThreadState::RUNNABLE;
@@ -194,18 +195,19 @@ void ExecutionState::popFrameOfCurrentThread() {
 
 Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
   Thread::ThreadId tid = threads.size();
-  Thread thread = Thread(tid, kf);
-  auto result = threads.insert(std::make_pair(tid, thread));
+  auto result = threads.emplace(std::piecewise_construct,
+                                std::forward_as_tuple(tid),
+                                std::forward_as_tuple(tid, kf));
   assert(result.second);
 
   Thread* newThread = &result.first->second;
   newThread->startArg = arg;
 
   // New threads are by default directly runnable
-  runnableThreads.insert(newThread->getThreadId());
+  runnableThreads.insert(tid);
   newThread->state = Thread::RUNNABLE;
 
-  // We cannot sync the current thread with the others as the others since we can not
+  // We cannot sync the current thread with the others since we cannot
   // infer any knowledge from them
   if (memAccessTracker != nullptr) {
     memAccessTracker->registerThreadDependency(tid,
@@ -325,7 +327,7 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
   mo->refCount++;
-  symbolics.push_back(std::make_pair(mo, array));
+  symbolics.emplace_back(mo, array);
 }
 ///
 

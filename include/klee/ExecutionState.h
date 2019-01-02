@@ -58,8 +58,8 @@ public:
   };
 
 private:
-  // unsupported, use copy constructor
-  ExecutionState &operator=(const ExecutionState &);
+  ExecutionState() = delete;
+  ExecutionState &operator=(const ExecutionState &) = delete;
 
   std::map<std::string, std::string> fnAliases;
 
@@ -74,7 +74,7 @@ private:
   /// @brief the tracker that will keep all memory access
   // This is a little bit of a hack: we do not want to expose the tracker to the 'public' api so
   // we use a pointer here even if the tracker is 'owned' by this state
-  MemoryAccessTracker* memAccessTracker;
+  MemoryAccessTracker* memAccessTracker = nullptr;
 
 public:
   // Execution - Control Flow specific
@@ -138,7 +138,7 @@ public:
   std::map<const std::string *, std::set<unsigned> > coveredLines;
 
   /// @brief Pointer to the process tree of the current state
-  PTreeNode *ptreeNode;
+  PTreeNode *ptreeNode = nullptr;
 
   /// @brief Ordered list of symbolics: used to generate test cases.
   //
@@ -159,9 +159,6 @@ public:
   std::uint64_t steppedInstructions;
 
 private:
-  ExecutionState() : id(next_id++), ptreeNode(0),
-                     memoryState(memoryState, this) {}
-
   void popFrameOfThread(Thread* thread);
 
   bool hasSameThreadState(const ExecutionState &b, Thread::ThreadId tid);

@@ -1336,8 +1336,8 @@ Executor::toConstant(ExecutionState &state,
   llvm::raw_string_ostream os(str);
 
   os << "silently concretizing (reason: " << reason << ") expression " << e
-     << " to value " << value << " (" << (*(thread.pc)).info->file << ":"
-     << (*(thread.pc)).info->line << ")";
+     << " to value " << value << " (" << thread.pc->info->file << ":"
+     << thread.pc->info->line << ")";
 
   if (AllExternalWarnings)
     klee_warning("%s", os.str().c_str());

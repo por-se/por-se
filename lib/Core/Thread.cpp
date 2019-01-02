@@ -41,11 +41,10 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
 
   assert(threadStartRoutine && "A thread has to start somewhere");
 
-  // First stack frame is basically always the start routine of the thread
-  // for the main thread this should be probably the main function
-  this->stack.push_back(StackFrame(nullptr, threadStartRoutine));
+  // in case of main thread, this is the program's entry point, e.g. main()
+  this->stack.emplace_back(nullptr, threadStartRoutine);
 
-  // Short circuit the program counters
+  // initialize program counters
   this->prevPc = threadStartRoutine->instructions;
   this->pc = this->prevPc;
 }
@@ -75,5 +74,5 @@ void Thread::popStackFrame() {
 }
 
 void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
-  stack.push_back(StackFrame(caller, kf));
+  stack.emplace_back(caller, kf);
 }
