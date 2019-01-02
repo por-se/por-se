@@ -183,11 +183,11 @@ public:
 
   ExecutionState *branch();
 
-  /// @brief returns the reference to the current thread (only valid for one 'klee instruction')
-  Thread & getCurrentThreadReference() const;
+  /// @brief returns a reference to the current thread (only valid for one 'klee instruction')
+  Thread &currentThread() const;
 
-    /// @brief returns the reference to the thread with the given tid (only valid for one 'klee instruction')
-  Thread* getThreadReferenceById(Thread::ThreadId tid);
+  /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
+  Thread::ThreadId currentThreadId() const;
 
   // The method below is a bit 'unstable' with regards to the thread id
   // -> probably at a later state the thread id will be created by the ExecutionState

@@ -197,7 +197,7 @@ ExecutionState &WeightedRandomSearcher::selectState() {
 }
 
 double WeightedRandomSearcher::getWeight(ExecutionState *es) {
-  Thread& thread = es->getCurrentThreadReference();
+  Thread &thread = es->currentThread();
 
   switch(type) {
   default:

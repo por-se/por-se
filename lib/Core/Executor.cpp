@@ -690,7 +690,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
 MemoryObject * Executor::addExternalObject(ExecutionState &state, 
                                            void *addr, unsigned size, 
                                            bool isReadOnly) {
-  Thread &thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
                                   size, nullptr, thread.stack.size()-1);
   ObjectState *os = bindObjectInState(state, mo, false);
@@ -710,7 +710,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
 extern void *__dso_handle __attribute__ ((__weak__));
 
 void Executor::initializeGlobals(ExecutionState &state) {
-  Thread &thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
   Module *m = kmodule->module.get();
 
   if (m->getModuleInlineAsm() != "")
@@ -746,7 +746,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   errnoObj->isUserSpecified = true;
 
   // Should be the main thread
-  state.getCurrentThreadReference().errnoMo = errnoObj;
+  state.currentThread().errnoMo = errnoObj;
 #endif
 
   // Disabled, we don't want to promote use of live externals.
@@ -991,7 +991,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     StatisticManager &sm = *theStatisticManager;
 
     // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
-    Thread& thread = current.getCurrentThreadReference();
+    Thread &thread = current.currentThread();
     CallPathNode *cpn = thread.stack.back().callPathNode;
 
     if ((MaxStaticForkPct<1. &&
@@ -1023,7 +1023,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   solver->setTimeout(time::Span());
   if (!success) {
     // Since we were unsuccessful, restore the previous program counter for the current thread
-    Thread& thread = current.getCurrentThreadReference();
+    Thread &thread = current.currentThread();
     thread.pc = thread.prevPc;
 
     terminateStateEarly(current, "Query timed out (fork).");
@@ -1264,7 +1264,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     return kmodule->constantTable[index];
   } else {
     unsigned index = vnumber;
-    Thread& thread = state.getCurrentThreadReference();
+    Thread &thread = state.currentThread();
     StackFrame &sf = thread.stack.back();
 
     if (sf.locals[index].value.get() == nullptr) {
@@ -1287,7 +1287,7 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
          "argument has previouly been set!");
   if (PruneStates) {
     // no need to unregister argument (can only be set once within the same stack frame)
-    Thread &thread = state.getCurrentThreadReference();
+    Thread &thread = state.currentThread();
     state.memoryState.registerArgument(thread.tid, thread.stack.size() - 1, kf, index, value);
   }
   getArgumentCell(state, kf, index).value = value;
@@ -1330,7 +1330,7 @@ Executor::toConstant(ExecutionState &state,
   assert(success && "FIXME: Unhandled solver failure");
   (void) success;
 
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   std::string str;
   llvm::raw_string_ostream os(str);
@@ -1407,7 +1407,7 @@ void Executor::printDebugInstructions(ExecutionState &state) {
   else
     stream = &debugLogBuffer;
 
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   if (!DebugPrintInstructions.isSet(STDERR_COMPACT) &&
       !DebugPrintInstructions.isSet(FILE_COMPACT)) {
@@ -1435,7 +1435,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   ++stats::instructions;
   ++state.steppedInstructions;
@@ -1456,7 +1456,7 @@ void Executor::executeCall(ExecutionState &state,
   }
 
   Instruction *i = nullptr;
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   if (ki)
     i = ki->inst;
@@ -1683,7 +1683,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // With that done we simply set an index in the state so that PHI
   // instructions know which argument to eval, set the pc, and continue.
 
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   // XXX this lookup has to go ?
   KFunction *kf = thread.stack.back().kf;
@@ -1809,7 +1809,7 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   switch (i->getOpcode()) {
     // Control flow
@@ -3296,7 +3296,7 @@ void Executor::run(ExecutionState &initialState) {
       lastState = it->first;
       unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
-      Thread& thread = state.getCurrentThreadReference();
+      Thread &thread = state.currentThread();
       KInstruction *ki = thread.pc;
       stepInstruction(state);
 
@@ -3353,7 +3353,7 @@ void Executor::run(ExecutionState &initialState) {
 
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
-    Thread& thread = state.getCurrentThreadReference();
+    Thread &thread = state.currentThread();
     KInstruction *ki = thread.pc;
 
     // we will execute a new instruction and therefore we have to reset the flag
@@ -3538,7 +3538,7 @@ void Executor::terminateStateSilently(ExecutionState &state) {
   auto it = std::find(addedStates.begin(), addedStates.end(), &state);
 
   if (it == addedStates.end()) {
-    Thread& thread = state.getCurrentThreadReference();
+    Thread &thread = state.currentThread();
     thread.pc = thread.prevPc;
 
     assert(!isInVector(removedStates, &state) && "May not add a state double times");
@@ -3591,7 +3591,7 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
 
 const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const ExecutionState &state,
     Instruction ** lastInstruction) {
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
 
   // unroll the stack of the applications state and find
   // the last instruction which is not inside a KLEE internal function
@@ -3776,7 +3776,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   state.addressSpace.copyOutConcretes();
 #ifndef WINDOWS
   // Update external errno state with local state value
-  Thread& curThread = state.getCurrentThreadReference();
+  Thread& curThread = state.currentThread();
   const ObjectState* errnoOs = state.addressSpace.findObject(curThread.errnoMo);
 
   ref<Expr> errValueExpr = errnoOs->read(0, curThread.errnoMo->size * 8);
@@ -3803,8 +3803,7 @@ void Executor::callExternalFunction(ExecutionState &state,
         os << ", ";
     }
 
-    Thread& thread = state.getCurrentThreadReference();
-    os << ") at " << thread.pc->getSourceLocation();
+    os << ") at " << state.currentThread().pc->getSourceLocation();
     
     if (AllExternalWarnings)
       klee_warning("%s", os.str().c_str());
@@ -3887,8 +3886,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // matter because all we use this list for is to unbind the object
   // on function return.
   if (isLocal) {
-    Thread& thread = state.getCurrentThreadReference();
-    thread.stack.back().allocas.push_back(mo);
+    state.currentThread().stack.back().allocas.push_back(mo);
   }
 
   return os;
@@ -3901,7 +3899,9 @@ void Executor::executeAlloc(ExecutionState &state,
                             bool zeroMemory,
                             const ObjectState *reallocFrom,
                             size_t allocationAlignment) {
-  Thread& thread = state.getCurrentThreadReference();
+  // TODO: Here we should assign the ownership over the memory region to the
+  //       current thread
+  Thread &thread = state.currentThread();
 
   size = toUnique(state, size);
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(size)) {
@@ -4101,7 +4101,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
 
-  Thread& thread = state.getCurrentThreadReference();
+  Thread &thread = state.currentThread();
   Expr::Width type = (isWrite ? value->getWidth() : 
                      getWidthForLLVMType(target->inst->getType()));
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -4387,7 +4387,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
   // By default the state should create the main thread
-  Thread& thread = state->getCurrentThreadReference();
+  Thread &thread = state->currentThread();
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4734,12 +4734,12 @@ void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
 }
 
 void Executor::preemptThread(ExecutionState &state) {
-  state.preemptThread(state.getCurrentThreadReference().getThreadId());
+  state.preemptThread(state.currentThreadId());
   scheduleThreads(state);
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  state.exitThread(state.getCurrentThreadReference().getThreadId());
+  state.exitThread(state.currentThreadId());
   scheduleThreads(state);
 }
 
@@ -4852,7 +4852,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     exitWithUnsafeMemAccess(state, mo, racingInstruction);
   } else {
     if (!access.atomicMemoryAccess) {
-      Thread::ThreadId tid = state.getCurrentThreadReference().getThreadId();
+      Thread::ThreadId tid = state.currentThreadId();
 
       for (auto dep : result.dataDependencies) {
         uint64_t scheduleIndex = dep.second;
@@ -4964,7 +4964,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // So now we have to check if the current thread may be scheduled
     // or if we have a deadlock
 
-    Thread& curThread = state.getCurrentThreadReference();
+    Thread &curThread = state.currentThread();
     if (curThread.state == Thread::ThreadState::SLEEPING) {
       exitWithDeadlock(state);
       return;

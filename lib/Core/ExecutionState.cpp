@@ -68,13 +68,9 @@ ExecutionState::ExecutionState(KFunction *kf) :
     auto result = threads.insert(std::make_pair(thread.getThreadId(), thread));
     assert(result.second);
     currentThreadIterator = result.first;
-
-    Thread& curThread = getCurrentThreadReference();
-    curThread.state = Thread::ThreadState::RUNNABLE;
-    curThread.tid = 0;
-    runnableThreads.insert(curThread.getThreadId());
-
-    scheduleNextThread(curThread.getThreadId());
+    currentThread().state = Thread::ThreadState::RUNNABLE;
+    runnableThreads.insert(0);
+    scheduleNextThread(0);
   }
 
 
@@ -151,8 +147,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
   }
 
   // Since we copied the threads, we can use the thread id to look it up
-  Thread& curStateThread = state.getCurrentThreadReference();
-  currentThreadIterator = threads.find(curStateThread.getThreadId());
+  currentThreadIterator = threads.find(state.currentThreadId());
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
@@ -174,17 +169,12 @@ ExecutionState *ExecutionState::branch() {
   return falseState;
 }
 
-Thread & ExecutionState::getCurrentThreadReference() const {
+Thread &ExecutionState::currentThread() const {
   return currentThreadIterator->second;
 }
 
-Thread* ExecutionState::getThreadReferenceById(Thread::ThreadId tid) {
-  auto threadIt = threads.find(tid);
-  if (threadIt == threads.end()) {
-    return nullptr;
-  }
-
-  return &(threadIt->second);
+Thread::ThreadId ExecutionState::currentThreadId() const {
+  return currentThreadIterator->first;
 }
 
 void ExecutionState::popFrameOfThread(Thread* thread) {
@@ -199,8 +189,7 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
 }
 
 void ExecutionState::popFrameOfCurrentThread() {
-  Thread& thread = getCurrentThreadReference();
-  popFrameOfThread(&thread);
+  popFrameOfThread(&currentThread());
 }
 
 Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
@@ -218,9 +207,10 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
 
   // We cannot sync the current thread with the others as the others since we can not
   // infer any knowledge from them
-  Thread::ThreadId curTid = getCurrentThreadReference().getThreadId();
   if (memAccessTracker != nullptr) {
-    memAccessTracker->registerThreadDependency(tid, curTid, currentSchedulingIndex);
+    memAccessTracker->registerThreadDependency(tid,
+                                               currentThreadId(),
+                                               currentSchedulingIndex);
   }
 
   return newThread;
@@ -253,7 +243,7 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 }
 
 void ExecutionState::sleepCurrentThread() {
-  Thread& thread = getCurrentThreadReference();
+  Thread &thread = currentThread();
   thread.state = Thread::ThreadState::SLEEPING;
 
   // If a thread goes to sleep when it had deactivated thread scheduling,
@@ -280,7 +270,6 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  Thread& currentThread = getCurrentThreadReference();
 
   runnableThreads.insert(thread->getThreadId());
 
@@ -288,12 +277,12 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   if (thread->state == Thread::ThreadState::SLEEPING) {
     thread->state = Thread::RUNNABLE;
 
-    Thread::ThreadId curThreadId = currentThread.getThreadId();
-
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
     if (memAccessTracker != nullptr) {
-      memAccessTracker->registerThreadDependency(tid, curThreadId, currentSchedulingIndex);
+      memAccessTracker->registerThreadDependency(tid,
+                                                 currentThreadId(),
+                                                 currentSchedulingIndex);
     }
   }
 }
@@ -306,9 +295,10 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   thread->state = thread->EXITED;
   runnableThreads.erase(thread->getThreadId());
 
-  Thread& currentThread = getCurrentThreadReference();
-  if (currentThread.getThreadId() != thread->getThreadId() && memAccessTracker != nullptr) {
-    memAccessTracker->registerThreadDependency(tid, currentThread.tid, currentSchedulingIndex);
+  if (currentThreadId() != thread->getThreadId() && memAccessTracker != nullptr) {
+    memAccessTracker->registerThreadDependency(tid,
+                                               currentThreadId(),
+                                               currentSchedulingIndex);
   }
 
    // Now remove all stack frames except the last one, because otherwise the stats tracker may fail
@@ -327,7 +317,7 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
     access.safeMemoryAccess = !threadSchedulingEnabled || atomicPhase;
 
     // Using the prevPc here since the instruction will already be iterated
-    access.instruction = getCurrentThreadReference().prevPc;
+    access.instruction = currentThread().prevPc;
 
     memAccessTracker->trackMemoryAccess(mo->getId(), access);
   }
@@ -630,8 +620,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
 }
 
 void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
-  const Thread& thread = getCurrentThreadReference();
-  dumpStackOfThread(out, &thread);
+  dumpStackOfThread(out, &currentThread());
 }
 
 void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {

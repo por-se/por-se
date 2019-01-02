@@ -396,15 +396,13 @@ private:
                         KFunction *kf,
                         unsigned index) {
     // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
-    Thread& thread = state.getCurrentThreadReference();
-    return thread.stack.back().locals[kf->getArgRegister(index)];
+    return state.currentThread().stack.back().locals[kf->getArgRegister(index)];
   }
 
   Cell& getDestCell(ExecutionState &state,
                     KInstruction *target) {
     // FIXME: Just assume that we the call should return the current thread, but what is the correct behavior
-    Thread& thread = state.getCurrentThreadReference();
-    return thread.stack.back().locals[target->dest];
+    return state.currentThread().stack.back().locals[target->dest];
   }
 
   void bindLocal(KInstruction *target, 

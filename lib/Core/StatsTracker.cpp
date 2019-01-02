@@ -302,7 +302,7 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
       }
     }
 
-    Thread& thread = es.getCurrentThreadReference();
+    Thread &thread = es.currentThread();
 
     Instruction *inst = thread.pc->inst;
     const InstructionInfo &ii = *thread.pc->info;
@@ -459,7 +459,7 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
   for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
          ie = executor.states.end(); it != ie; ++it) {
     ExecutionState &state = **it;
-    Thread& thread = state.getCurrentThreadReference();
+    Thread &thread = state.currentThread();
     const InstructionInfo &ii = *thread.pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
     if (UseCallPaths) {
@@ -891,7 +891,7 @@ void StatsTracker::computeReachableUncovered() {
   for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
          ie = executor.states.end(); it != ie; ++it) {
     ExecutionState *es = *it;
-    Thread& thread = es->getCurrentThreadReference();
+    Thread &thread = es->currentThread();
 
     uint64_t currentFrameMinDist = 0;
     for (ExecutionState::stack_ty::iterator sfIt = thread.stack.begin(),

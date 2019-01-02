@@ -128,7 +128,7 @@ void Executor::processTimers(ExecutionState *current,
         for (ExecutionState *es : states) {
           *os << "(" << es << ",";
           *os << "[";
-          Thread& thread = es->getCurrentThreadReference();
+          Thread &thread = es->currentThread();
           auto next = thread.stack.begin();
           ++next;
           for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end();

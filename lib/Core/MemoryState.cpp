@@ -325,7 +325,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
 
   MemoryFingerprintDelta *delta = nullptr;
   if (mo.isLocal) {
-    Thread &thread = executionState->getCurrentThreadReference();
+    Thread &thread = executionState->currentThread();
     std::size_t index = mo.getStackframeIndex();
     delta = &thread.stack.at(index).fingerprintDelta;
   }
@@ -389,7 +389,7 @@ void MemoryState::registerArgument(std::uint64_t threadID,
     return;
   }
 
-  Thread &thread = executionState->getCurrentThreadReference();
+  Thread &thread = executionState->currentThread();
   MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
   fingerprint.addToFingerprintAndDelta(delta);
@@ -431,7 +431,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
-  Thread &thread = executionState->getCurrentThreadReference();
+  Thread &thread = executionState->currentThread();
   MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
 
   // second but last stack frame
@@ -469,7 +469,7 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
-  Thread &thread = executionState->getCurrentThreadReference();
+  Thread &thread = executionState->currentThread();
 
   if (thread.stack.size() > 0) {
     // remove changes only accessible to stack frame that is to be left
