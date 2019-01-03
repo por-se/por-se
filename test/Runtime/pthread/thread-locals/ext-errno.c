@@ -1,6 +1,6 @@
-// RUN: %llvmgcc %s -emit-llvm %O0opt -g -c -DTDIR=%T -o %t2.bc
+// RUN: %llvmgcc %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --pthread-runtime --exit-on-error %t2.bc
+// RUN: %klee --output-dir=%t.klee-out --pthread-runtime --exit-on-error %t.bc
 
 #include <math.h>
 #include <assert.h>
@@ -10,6 +10,8 @@
 pthread_barrier_t barrier;
 
 static void* threadFunc(void* arg) {
+  errno = 0;
+
   log(1);
   assert(errno == 0);
 
@@ -22,6 +24,8 @@ static void* threadFunc(void* arg) {
 }
 
 int main(void) {
+  assert(errno == 0);
+
   pthread_barrier_init(&barrier, NULL, 2);
 
   pthread_t thread;
