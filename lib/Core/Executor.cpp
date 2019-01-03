@@ -4184,6 +4184,8 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
   if (PruneStates)
     state.memoryState.unregisterWrite(*mo, *os);
 
+  ObjectState *newOs;
+
   // Create a new object state for the memory object (instead of a copy).
   if (!replayKTest) {
 
@@ -4195,7 +4197,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       uniqueName = name + "_" + llvm::utostr(++id);
     }
     const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
-    os = bindObjectInState(state, mo, false, array);
+    newOs = bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
     
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
@@ -4214,7 +4216,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
           } else if (!AllowSeedExtension) {
             terminateStateOnError(state, "ran out of inputs during seeding",
                                   User);
-            break;
+            return;
           }
         } else {
           if (obj->numBytes != mo->size &&
@@ -4228,7 +4230,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
 		<< " in test\n";
 
             terminateStateOnError(state, msg.str(), User);
-            break;
+            return;
           } else {
             std::vector<unsigned char> &values = si.assignment.bindings[array];
             values.insert(values.begin(), obj->bytes, 
@@ -4242,22 +4244,24 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       }
     }
   } else {
-    ObjectState *os = bindObjectInState(state, mo, false);
+    newOs = bindObjectInState(state, mo, false);
     if (replayPosition >= replayKTest->numObjects) {
       terminateStateOnError(state, "replay count mismatch", User);
+      return;
     } else {
       KTestObject *obj = &replayKTest->objects[replayPosition++];
       if (obj->numBytes != mo->size) {
         terminateStateOnError(state, "replay size mismatch", User);
+        return;
       } else {
         for (unsigned i=0; i<mo->size; i++) {
-          os->write8(i, obj->bytes[i]);
+          newOs->write8(i, obj->bytes[i]);
         }
       }
     }
   }
   if (PruneStates)
-    state.memoryState.registerWrite(*mo, *os);
+    state.memoryState.registerWrite(*mo, *newOs);
 }
 
 
