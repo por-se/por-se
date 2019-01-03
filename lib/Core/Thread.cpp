@@ -49,18 +49,6 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
   this->pc = this->prevPc;
 }
 
-Thread::Thread(const Thread &t)
-        : pc(t.pc),
-          prevPc(t.prevPc),
-          stack(t.stack),
-          tid(t.tid),
-          incomingBBIndex(t.incomingBBIndex),
-          state(t.state),
-          startArg(t.startArg),
-          errnoMo(t.errnoMo),
-          threadSchedulingWasDisabled(t.threadSchedulingWasDisabled) {
-}
-
 Thread::ThreadId Thread::getThreadId() const {
   return tid;
 }

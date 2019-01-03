@@ -105,7 +105,6 @@ namespace klee {
 
     public:
       Thread(ThreadId tid, KFunction* threadStartRoutine);
-      Thread(const Thread &s);
 
       ThreadId getThreadId() const;
       ref<Expr> getStartArgument() const;
