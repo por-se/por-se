@@ -11,7 +11,7 @@ static pthread_attr_thread* get_thread_attr(const pthread_attr_t* a) {
 }
 
 int pthread_attr_init(pthread_attr_t *a) {
-  pthread_attr_thread* attr = (pthread_attr_thread*) malloc(sizeof(pthread_attr_t));
+  pthread_attr_thread* attr = (pthread_attr_thread*) malloc(sizeof(pthread_attr_thread));
   if (attr == NULL) {
     return ENOMEM;
   }

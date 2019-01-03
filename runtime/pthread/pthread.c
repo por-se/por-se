@@ -29,7 +29,7 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
     klee_toggle_thread_scheduling(1);
     return EAGAIN;
   }
-  memset(thread, 0, sizeof(__kpr_mutex));
+  memset(thread, 0, sizeof(__kpr_pthread));
 
   *((__kpr_pthread**)pthread) = thread;
 
