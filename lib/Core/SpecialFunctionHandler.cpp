@@ -120,7 +120,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
-  add("klee_get_thread_start_argument", handleGetThreadStartArgument, true),
+  add("klee_get_thread_runtime_struct_ptr", handleGetThreadRuntimeStructPtr, true),
   addDNR("klee_exit_thread", handleExitThread),
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
@@ -966,12 +966,12 @@ void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &
   executor.toggleThreadScheduling(state, cast<ConstantExpr>(tid)->getZExtValue() != 0);
 }
 
-void SpecialFunctionHandler::handleGetThreadStartArgument(klee::ExecutionState &state,
-                                                          klee::KInstruction *target,
-                                                          std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_start_argument");
+void SpecialFunctionHandler::handleGetThreadRuntimeStructPtr(klee::ExecutionState &state,
+                                                             klee::KInstruction *target,
+                                                             std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_runtime_struct_ptr");
 
-  ref<Expr> arg = state.currentThread().getStartArgument();
+  ref<Expr> arg = state.currentThread().getRuntimeStructPtr();
   executor.bindLocal(target, state, arg);
 }
 

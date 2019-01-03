@@ -94,7 +94,7 @@ void pthread_exit(void* arg) {
   uint64_t tid = klee_get_thread_id();
 
   if (tid != 0) {
-    kpr_pthread* thread = (kpr_pthread*) klee_get_thread_start_argument();
+    kpr_pthread* thread = (kpr_pthread*) klee_get_thread_runtime_struct_ptr();
 
     if (thread->mode == KPR_THREAD_MODE_DETACH) {
       klee_toggle_thread_scheduling(1);
@@ -181,7 +181,7 @@ pthread_t pthread_self(void) {
     return 0;
   }
 
-  return (pthread_t) klee_get_thread_start_argument();
+  return (pthread_t) klee_get_thread_runtime_struct_ptr();
 }
 
 int pthread_equal(pthread_t t1, pthread_t t2) {
@@ -203,7 +203,7 @@ int pthread_setcancelstate(int state, int *oldState) {
 
   uint64_t tid = klee_get_thread_id();
   if (tid != 0) {
-    kpr_pthread* thread = (kpr_pthread*) klee_get_thread_start_argument;
+    kpr_pthread* thread = (kpr_pthread*) klee_get_thread_runtime_struct_ptr();
     *oldState = thread->cancelState;
     thread->cancelState = state;
   }
@@ -223,7 +223,7 @@ void pthread_testcancel() {
 
   klee_toggle_thread_scheduling(0);
 
-  kpr_pthread* thread = (kpr_pthread*) klee_get_thread_start_argument;
+  kpr_pthread* thread = (kpr_pthread*) klee_get_thread_runtime_struct_ptr();
   if (thread->cancelState == PTHREAD_CANCEL_DISABLE) {
     klee_toggle_thread_scheduling(1);
     return;
@@ -290,7 +290,7 @@ int pthread_setconcurrency(int n) {
 
 #ifndef pthread_cleanup_pop
 void pthread_cleanup_pop(int execute) {
-  kpr_thread thread* = (kpr_thread*) klee_get_thread_start_argument();
+  kpr_thread thread* = (kpr_thread*) klee_get_thread_runtime_struct_ptr();
   size_t stackSize = kpr_list_size(&thread->cleanUpStack);
 
   klee_warning_once("Argument not passed for pthread_cleanup");
@@ -312,7 +312,7 @@ void pthread_cleanup_pop(int execute) {
 
 #ifndef pthread_cleanup_push
 void pthread_cleanup_push(void (*routine)(void*), void *arg) {
-  kpr_thread thread* = (kpr_thread*) klee_get_thread_start_argument();
+  kpr_thread thread* = (kpr_thread*) klee_get_thread_runtime_struct_ptr();
   kpr_list_pop(&thread->cleanUpStack, routine);
   klee_warning_once("Argument not passed for pthread_cleanup");
 }

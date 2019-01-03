@@ -596,7 +596,9 @@ public:
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
 
-  void createThread(ExecutionState &state, ref <Expr> startRoutine, ref <Expr> arg);
+  void createThread(ExecutionState &state,
+                    ref<Expr> startRoutine,
+                    ref<Expr> runtimeStructPtr);
   void sleepThread(ExecutionState &state);
   void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);
   void preemptThread(ExecutionState &state);

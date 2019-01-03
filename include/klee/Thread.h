@@ -94,8 +94,8 @@ namespace klee {
       /// @brief the state this thread is in
       ThreadState state;
 
-      /// @brief the argument with which the thread was started
-      ref<Expr> startArg;
+      /// @brief value of the pthread_t pointer the thread was created with
+      ref<Expr> runtimeStructPtr;
 
       /// @brief the errno of the thread
       const MemoryObject* errnoMo;
@@ -107,7 +107,7 @@ namespace klee {
       Thread(ThreadId tid, KFunction* threadStartRoutine);
 
       ThreadId getThreadId() const;
-      ref<Expr> getStartArgument() const;
+      ref<Expr> getRuntimeStructPtr() const;
 
     private:
       void popStackFrame();

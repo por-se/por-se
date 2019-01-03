@@ -4686,17 +4686,19 @@ KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
   return nullptr;
 }
 
-void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<Expr> arg) {
+void Executor::createThread(ExecutionState &state,
+                            ref<Expr> startRoutine,
+                            ref<Expr> runtimeStructPtr) {
   KFunction *kf = obtainFunctionFromExpression(startRoutine);
   if (!kf) {
     terminateStateOnError(state, "could not obtain the start routine", User);
     return;
   }
 
-  Thread* thread = state.createThread(kf, arg);
+  Thread* thread = state.createThread(kf, runtimeStructPtr);
   StackFrame* threadStartFrame = &thread->stack.back();
 
-  threadStartFrame->locals[kf->getArgRegister(0)].value = arg;
+  threadStartFrame->locals[kf->getArgRegister(0)].value = runtimeStructPtr;
   threadStartFrame->locals[kf->getArgRegister(1)].value = ConstantExpr::create(thread->getThreadId(), Expr::Int64);
 
   // If we create a thread, then we also have to create the TLS objects

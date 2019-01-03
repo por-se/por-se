@@ -171,7 +171,7 @@ void ExecutionState::popFrameOfCurrentThread() {
   popFrameOfThread(&currentThread());
 }
 
-Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
+Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
   Thread::ThreadId tid = threads.size();
   auto result = threads.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(tid),
@@ -179,7 +179,7 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> arg) {
   assert(result.second);
 
   Thread* newThread = &result.first->second;
-  newThread->startArg = arg;
+  newThread->runtimeStructPtr = runtimeStructPtr;
 
   // New threads are by default directly runnable
   runnableThreads.insert(tid);

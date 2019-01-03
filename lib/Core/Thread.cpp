@@ -53,8 +53,8 @@ Thread::ThreadId Thread::getThreadId() const {
   return tid;
 }
 
-ref<Expr> Thread::getStartArgument() const {
-  return startArg;
+ref<Expr> Thread::getRuntimeStructPtr() const {
+  return runtimeStructPtr;
 }
 
 void Thread::popStackFrame() {

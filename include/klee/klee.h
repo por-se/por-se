@@ -165,7 +165,7 @@ extern "C" {
 
   uint64_t klee_get_thread_id(void);
 
-  void* klee_get_thread_start_argument(void);
+  void* klee_get_thread_runtime_struct_ptr(void);
 
   void klee_preempt_thread(void);
 
