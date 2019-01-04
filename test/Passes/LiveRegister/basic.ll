@@ -1,4 +1,4 @@
-; RUN: opt -load %kleelibdir/LiveRegister.so -live-register -analyze %s 2>&1 | FileCheck %s
+; RUN: %opt -load %kleelibdir/LiveRegister.so -live-register -analyze %s 2>&1 | FileCheck %s
 
 define void @test() {
 entry:
