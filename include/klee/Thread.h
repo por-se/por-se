@@ -46,6 +46,12 @@ namespace klee {
     ~StackFrame();
   };
 
+  enum class ThreadState {
+    Sleeping,
+    Runnable,
+    Exited
+  };
+
   // Threads do only store their own stack
   // the actual memory will always be saved in the ExecutionState
   class Thread {
@@ -62,13 +68,6 @@ namespace klee {
 
       /// @brief Type for all thread ids
       typedef uint64_t ThreadId;
-
-    public:
-      enum ThreadState {
-        SLEEPING = 0,
-        RUNNABLE = 1,
-        EXITED = 2,
-      };
 
     private:
       /// @brief Pointer to instruction to be executed after the current
@@ -91,8 +90,8 @@ namespace klee {
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;
 
-      /// @brief the state this thread is in
-      ThreadState state;
+      /// @brief life cycle state of this thread, Runnable by default
+      ThreadState state = ThreadState::Runnable;
 
       /// @brief value of the pthread_t pointer the thread was created with
       ref<Expr> runtimeStructPtr;
@@ -101,9 +100,10 @@ namespace klee {
       const MemoryObject* errnoMo;
 
       /// @brief if the thread scheduling was disabled when this thread was going sleeping
-      bool threadSchedulingWasDisabled;
+      bool threadSchedulingWasDisabled = false;
 
     public:
+      Thread() = delete;
       Thread(ThreadId tid, KFunction* threadStartRoutine);
 
       ThreadId getThreadId() const;

@@ -4961,15 +4961,12 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // or if we have a deadlock
 
     Thread &curThread = state.currentThread();
-    if (curThread.state == Thread::ThreadState::SLEEPING) {
+    if (curThread.state == ThreadState::Sleeping) {
       exitWithDeadlock(state);
       return;
-    } else if (curThread.state != Thread::ThreadState::EXITED) {
-      // So we can actually reschedule the current thread
-      // but make sure that the thread is marked as RUNNABLE
-      curThread.state = Thread::ThreadState::RUNNABLE;
-      Thread::ThreadId tid = curThread.getThreadId();
-      state.scheduleNextThread(tid);
+    } else if (curThread.state != ThreadState::Exited) {
+      assert(curThread.state == ThreadState::Runnable);
+      state.scheduleNextThread(curThread.getThreadId());
       return;
     }
 
@@ -4986,7 +4983,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     bool allExited = true;
 
     for (auto& threadIt : state.threads) {
-      if (threadIt.second.state != Thread::ThreadState::EXITED) {
+      if (threadIt.second.state != ThreadState::Exited) {
         allExited = false;
       }
     }

@@ -66,7 +66,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
                                   std::forward_as_tuple(0, kf));
     assert(result.second);
     currentThread(result.first->second);
-    currentThread().state = Thread::ThreadState::RUNNABLE;
     runnableThreads.insert(0);
     scheduleNextThread(0);
 }
@@ -183,7 +182,6 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
 
   // New threads are by default directly runnable
   runnableThreads.insert(tid);
-  newThread->state = Thread::RUNNABLE;
 
   // We cannot sync the current thread with the others since we cannot
   // infer any knowledge from them
@@ -197,7 +195,7 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
 void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   Thread &thread = currentThread(tid);
 
-  assert(thread.state == Thread::RUNNABLE && "Cannot schedule non-runnable thread");
+  assert(thread.state == ThreadState::Runnable && "Cannot schedule non-runnable thread");
 
   schedulingHistory.push_back(tid);
 
@@ -216,7 +214,7 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
 
 void ExecutionState::sleepCurrentThread() {
   Thread &thread = currentThread();
-  thread.state = Thread::ThreadState::SLEEPING;
+  thread.state = ThreadState::Sleeping;
 
   // If a thread goes to sleep when it had deactivated thread scheduling,
   // then we will safe this and will reenable thread scheduling for as long as this thread
@@ -232,7 +230,7 @@ void ExecutionState::preemptThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  thread->state = Thread::RUNNABLE;
+  thread->state = ThreadState::Runnable;
 
   runnableThreads.insert(tid);
 }
@@ -246,8 +244,8 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   runnableThreads.insert(thread->getThreadId());
 
   // We should only wake up threads that are actually sleeping
-  if (thread->state == Thread::ThreadState::SLEEPING) {
-    thread->state = Thread::RUNNABLE;
+  if (thread->state == ThreadState::Sleeping) {
+    thread->state = ThreadState::Runnable;
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
@@ -262,7 +260,7 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
   assert(pair != threads.end() && "Could not find thread by id");
 
   Thread* thread = &pair->second;
-  thread->state = thread->EXITED;
+  thread->state = ThreadState::Exited;
   runnableThreads.erase(thread->getThreadId());
 
   if (currentThreadId() != thread->getThreadId()) {
@@ -540,14 +538,15 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
     const Thread* thread = &threadId.second;
 
     std::string stateName;
-    if (thread->state == Thread::ThreadState::SLEEPING) {
+    if (thread->state == ThreadState::Sleeping) {
       stateName = "sleeping";
-    } else if (thread->state == Thread::ThreadState::RUNNABLE) {
+    } else if (thread->state == ThreadState::Runnable) {
       stateName = "runnable";
-    } else if (thread->state == Thread::ThreadState::EXITED) {
+    } else if (thread->state == ThreadState::Exited) {
       stateName = "exited";
     } else {
       stateName = "unknown";
+      assert(0 && "ThreadState value not defined!");
     }
 
     out << "Tid: " << thread->tid << " in state: " << stateName << "\n";

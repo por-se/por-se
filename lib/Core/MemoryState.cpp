@@ -489,7 +489,7 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
   for (auto &it : executionState->threads) {
     auto threadID = it.first;
     const Thread &thread = it.second;
-    if (thread.state == Thread::ThreadState::EXITED || !thread.liveSetPc)
+    if (thread.state == ThreadState::Exited || !thread.liveSetPc)
       continue;
 
     fingerprint.updateProgramCounterFragment(threadID,

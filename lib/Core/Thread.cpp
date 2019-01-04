@@ -35,10 +35,7 @@ StackFrame::~StackFrame() {
 
 /***/
 
-Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) {
-  this->tid = tid;
-  this->threadSchedulingWasDisabled = false;
-
+Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(tid) {
   assert(threadStartRoutine && "A thread has to start somewhere");
 
   // in case of main thread, this is the program's entry point, e.g. main()
