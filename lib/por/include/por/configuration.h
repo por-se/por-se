@@ -8,7 +8,7 @@
 namespace por {
 	class configuration;
 
-	class program_builder{
+	class configuration_builder{
 		friend class configuration;
 
 		std::shared_ptr<por::event::program_init> _program_init = event::program_init::alloc();
@@ -22,7 +22,7 @@ namespace por {
 	public:
 		configuration construct();
 
-		program_builder& add_thread() {
+		configuration_builder& add_thread() {
 			auto const tid = _next_thread++;
 			assert(tid > 0);
 
@@ -41,12 +41,12 @@ namespace por {
 		por::event::lock_id_t _next_lock;
 
 	public:
-		configuration() : configuration(program_builder{}.add_thread().construct()) { }
+		configuration() : configuration(configuration_builder{}.add_thread().construct()) { }
 		configuration(configuration const&) = delete;
 		configuration& operator=(configuration const&) = delete;
 		configuration(configuration&&) = default;
 		configuration& operator=(configuration&&) = default;
-		configuration(program_builder&& builder)
+		configuration(configuration_builder&& builder)
 			: _thread_heads(std::move(builder._thread_heads))
 			, _next_thread(std::move(builder._next_thread))
 			, _active_threads(_thread_heads.size())
@@ -156,5 +156,5 @@ namespace por {
 		}
 	};
 
-	inline configuration program_builder::construct() { return configuration(std::move(*this)); }
+	inline configuration configuration_builder::construct() { return configuration(std::move(*this)); }
 }
