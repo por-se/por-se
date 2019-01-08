@@ -98,7 +98,7 @@ namespace klee {
       ref<Expr> startArg;
 
       /// @brief the errno of the thread
-      const MemoryObject* threadErrno;
+      const MemoryObject* errnoMo;
 
       /// @brief if the thread scheduling was disabled when this thread was going sleeping
       bool threadSchedulingWasDisabled;

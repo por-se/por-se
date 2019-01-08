@@ -640,7 +640,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
 #endif
 
   // Retrieve the memory object of the errno variable
-  const MemoryObject* thErrno = state.getCurrentThreadReference().threadErrno;
+  const MemoryObject* thErrno = state.getCurrentThreadReference().errnoMo;
   const ObjectState* errValue = state.addressSpace.findObject(thErrno);
 
   assert(errValue != nullptr && "errno should be created for every thread");
@@ -655,13 +655,9 @@ void SpecialFunctionHandler::handleErrnoLocation(
   assert(arguments.size() == 0 &&
          "invalid number of arguments to __errno_location/__error");
 
-  const MemoryObject* thErrno = state.getCurrentThreadReference().threadErrno;
+  const MemoryObject* thErrno = state.getCurrentThreadReference().errnoMo;
 
-  executor.bindLocal(
-      target, state,
-      ConstantExpr::create(thErrno->address,
-                           executor.kmodule->targetData->getTypeSizeInBits(
-                               target->inst->getType())));
+  executor.bindLocal(target, state, thErrno->getBaseExpr());
 }
 void SpecialFunctionHandler::handleCalloc(ExecutionState &state,
                             KInstruction *target,

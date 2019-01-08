@@ -745,7 +745,14 @@ void Executor::initializeGlobals(ExecutionState &state) {
   errnoObj->isUserSpecified = true;
 
   // Should be the main thread
-  state.getCurrentThreadReference().threadErrno = errnoObj;
+  state.getCurrentThreadReference().errnoMo = errnoObj;
+  ObjectState* errnoOs = state.addressSpace.getWriteable(errnoObj, state.addressSpace.findObject(errnoObj));
+  for (std::uint64_t i = 0; i < errnoObj->size; i++) {
+    errnoOs->write8(i, 0);
+  }
+  if (PruneStates) {
+    state.memoryState.registerWrite(*errnoObj, *errnoOs);
+  }
 #endif
 
   // Disabled, we don't want to promote use of live externals.
@@ -3776,11 +3783,9 @@ void Executor::callExternalFunction(ExecutionState &state,
 #ifndef WINDOWS
   // Update external errno state with local state value
   Thread& curThread = state.getCurrentThreadReference();
-  int *errno_addr = getErrnoLocation(state);
+  const ObjectState* errnoOs = state.addressSpace.findObject(curThread.errnoMo);
 
-  const ObjectState* errnoOs = state.addressSpace.findObject(curThread.threadErrno);
-
-  ref<Expr> errValueExpr = errnoOs->read(0, sizeof(*errno_addr) * 8);
+  ref<Expr> errValueExpr = errnoOs->read(0, curThread.errnoMo->size * 8);
   ConstantExpr *errnoValue = dyn_cast<ConstantExpr>(errValueExpr);
   if (!errnoValue) {
     terminateStateOnExecError(state,
@@ -3790,7 +3795,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   }
 
   externalDispatcher->setLastErrno(
-      errnoValue->getZExtValue(sizeof(*errno_addr) * 8));
+      errnoValue->getZExtValue(curThread.errnoMo->size * 8));
 #endif
 
   if (!SuppressExternalWarnings) {
@@ -3829,7 +3834,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(state, curThread.threadErrno, errnoOs,
+  state.addressSpace.copyInConcrete(state, curThread.errnoMo, errnoOs,
                                     (uint64_t)&error);
 #endif
 
@@ -4689,7 +4694,10 @@ KFunction* Executor::obtainFunctionFromExpression(ref<Expr> address) {
 
 void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<Expr> arg) {
   KFunction *kf = obtainFunctionFromExpression(startRoutine);
-  assert(kf && "could not obtain the start routine");
+  if (!kf) {
+    terminateStateOnError(state, "could not obtain the start routine", User);
+    return;
+  }
 
   Thread* thread = state.createThread(kf, arg);
   StackFrame* threadStartFrame = &thread->stack.back();
@@ -4704,13 +4712,19 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
   MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
-  assert(thErrno != nullptr && "Should be able to allocate memory");
-  thread->threadErrno = thErrno;
+  if (thErrno == nullptr) {
+    terminateStateOnError(state, "Could not allocate memory for thread local objects", Assert);
+    return;
+  }
 
-  // And initialize with zero
+  thread->errnoMo = thErrno;
+
+  // And initialize the errno
   ObjectState *os = bindObjectInState(state, thErrno, false);
-  for (std::uint64_t i = 0; i < size; i++) {
-    os->write8(i, 0);
+  os->initializeToRandom();
+
+  if (PruneStates) {
+    state.memoryState.registerWrite(*thErrno, *os);
   }
 
   if (statsTracker)

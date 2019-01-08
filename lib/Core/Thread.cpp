@@ -58,7 +58,7 @@ Thread::Thread(const Thread &t)
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
           startArg(t.startArg),
-          threadErrno(t.threadErrno),
+          errnoMo(t.errnoMo),
           threadSchedulingWasDisabled(t.threadSchedulingWasDisabled) {
 }
 
