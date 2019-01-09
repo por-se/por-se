@@ -73,134 +73,195 @@ namespace {
   cl::opt<std::string>
   InputFile(cl::desc("<input bytecode>"), cl::Positional, cl::init("-"));
 
-  cl::opt<std::string>
-  EntryPoint("entry-point",
-               cl::desc("Consider the function with the given name as the entrypoint"),
-               cl::init("main"));
-
-  cl::opt<std::string>
-  RunInDir("run-in", cl::desc("Change to the given directory prior to executing"));
-
-  cl::opt<std::string>
-  Environ("environ", cl::desc("Parse environ from given file (in \"env\" format)"));
-
   cl::list<std::string>
   InputArgv(cl::ConsumeAfter,
             cl::desc("<program arguments>..."));
 
-  cl::opt<bool>
-  NoOutput("no-output",
-           cl::desc("Don't generate test files"));
 
-  cl::opt<bool>
-  WarnAllExternals("warn-all-externals",
-                   cl::desc("Give initial warning for all externals."));
+  /*** Test case options ***/
+
+  cl::OptionCategory TestCaseCat("Test case options",
+                                 "These options select the files to generate for each test case.");
 
   cl::opt<bool>
   WriteCVCs("write-cvcs",
-            cl::desc("Write .cvc files for each test case"));
+            cl::desc("Write .cvc files for each test case (default=false)"),
+            cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WriteKQueries("write-kqueries",
-            cl::desc("Write .kquery files for each test case"));
+                cl::desc("Write .kquery files for each test case (default=false)"),
+                cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WriteSMT2s("write-smt2s",
-            cl::desc("Write .smt2 (SMT-LIBv2) files for each test case"));
+             cl::desc("Write .smt2 (SMT-LIBv2) files for each test case (default=false)"),
+             cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WriteCov("write-cov",
-           cl::desc("Write coverage information for each test case"));
+           cl::desc("Write coverage information for each test case (default=false)"),
+           cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WriteTestInfo("write-test-info",
-                cl::desc("Write additional test case information"));
+                cl::desc("Write additional test case information (default=false)"),
+                cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WritePaths("write-paths",
-                cl::desc("Write .path files for each test case"));
+             cl::desc("Write .path files for each test case (default=false)"),
+             cl::cat(TestCaseCat));
 
   cl::opt<bool>
   WriteSymPaths("write-sym-paths",
-                cl::desc("Write .sym.path files for each test case"));
+                cl::desc("Write .sym.path files for each test case (default=false)"),
+                cl::cat(TestCaseCat));
 
-  cl::opt<bool>
-  OptExitOnError("exit-on-error",
-              cl::desc("Exit if errors occur"));
 
-  enum class LibcType { FreeStandingLibc, KleeLibc, UcLibc };
+  /*** Starting options ***/
 
-  cl::opt<LibcType> Libc(
-      "libc", cl::desc("Choose libc version (none by default)."),
-      cl::values(
-          clEnumValN(
-              LibcType::FreeStandingLibc, "none",
-              "Don't link in a libc (only provide freestanding environment)"),
-          clEnumValN(LibcType::KleeLibc, "klee", "Link in klee libc"),
-          clEnumValN(LibcType::UcLibc, "uclibc",
-                     "Link in uclibc (adapted for klee)") KLEE_LLVM_CL_VAL_END),
-      cl::init(LibcType::FreeStandingLibc));
+  cl::OptionCategory StartCat("Starting options",
+                              "These options affect how execution is started.");
 
-  cl::opt<bool>
-  WithPOSIXRuntime("posix-runtime",
-		cl::desc("Link with POSIX runtime.  Options that can be passed as arguments to the programs are: --sym-arg <max-len>  --sym-args <min-argvs> <max-argvs> <max-len> + file model options"),
-		cl::init(false));
+  cl::opt<std::string>
+  EntryPoint("entry-point",
+             cl::desc("Function in which to start execution (default=main)"),
+             cl::init("main"),
+             cl::cat(StartCat));
 
-  cl::opt<bool>
-  WithPThreadRuntime("pthread-runtime",
-    cl::desc("Link with pthread runtime."),
-    cl::init(false));
+  cl::opt<std::string>
+  RunInDir("run-in-dir",
+           cl::desc("Change to the given directory before starting execution (default=location of tested file)."),
+           cl::cat(StartCat));
+  
+  cl::opt<std::string>
+  OutputDir("output-dir",
+            cl::desc("Directory in which to write results (default=klee-out-<N>)"),
+            cl::init(""),
+            cl::cat(StartCat));
+
+  cl::opt<std::string>
+  Environ("env-file",
+          cl::desc("Parse environment from the given file (in \"env\" format)"),
+          cl::cat(StartCat));
 
   cl::opt<bool>
   OptimizeModule("optimize",
-                 cl::desc("Optimize before execution"),
-		 cl::init(false));
+                 cl::desc("Optimize the code before execution (default=false)."),
+		 cl::init(false),
+                 cl::cat(StartCat));
+  
+
+  /*** Linking options ***/
+
+  cl::OptionCategory LinkCat("Linking options",
+                             "These options control the libraries being linked.");
+
+  enum class LibcType { FreeStandingLibc, KleeLibc, UcLibc };
+
+  cl::opt<LibcType>
+  Libc("libc",
+       cl::desc("Choose libc version (none by default)."),
+       cl::values(
+                  clEnumValN(LibcType::FreeStandingLibc,
+                             "none",
+                             "Don't link in a libc (only provide freestanding environment)"),
+                  clEnumValN(LibcType::KleeLibc,
+                             "klee",
+                             "Link in KLEE's libc"),
+                  clEnumValN(LibcType::UcLibc, "uclibc",
+                             "Link in uclibc (adapted for KLEE)")
+                  KLEE_LLVM_CL_VAL_END),
+       cl::init(LibcType::FreeStandingLibc),
+       cl::cat(LinkCat));
+
+  cl::list<std::string>
+  LinkLibraries("link-llvm-lib",
+		cl::desc("Link the given library before execution. Can be used multiple times."),
+		cl::value_desc("library file"),
+                cl::cat(LinkCat));
+
+  cl::opt<bool>
+  WithPOSIXRuntime("posix-runtime",
+                   cl::desc("Link with POSIX runtime. Options that can be passed as arguments to the programs are: --sym-arg <max-len>  --sym-args <min-argvs> <max-argvs> <max-len> + file model options (default=false)."),
+                   cl::init(false),
+                   cl::cat(LinkCat));
+
+  cl::opt<bool>
+  WithPThreadRuntime("pthread-runtime",
+                     cl::desc("Link with pthread runtime."),
+                     cl::init(false),
+                     cl::cat(LinkCat));
+
+  /*** Checks options ***/
+
+  cl::OptionCategory ChecksCat("Checks options",
+                               "These options control some of the checks being done by KLEE.");
 
   cl::opt<bool>
   CheckDivZero("check-div-zero",
-               cl::desc("Inject checks for division-by-zero"),
-               cl::init(true));
+               cl::desc("Inject checks for division-by-zero (default=true)"),
+               cl::init(true),
+               cl::cat(ChecksCat));
 
   cl::opt<bool>
   CheckOvershift("check-overshift",
-               cl::desc("Inject checks for overshift"),
-               cl::init(true));
+                 cl::desc("Inject checks for overshift (default=true)"),
+                 cl::init(true),
+                 cl::cat(ChecksCat));
 
-  cl::opt<std::string>
-  OutputDir("output-dir",
-            cl::desc("Directory to write results in (defaults to klee-out-N)"),
-            cl::init(""));
+ 
 
+  cl::opt<bool>
+  NoOutput("no-output",
+           cl::desc("Don't generate test files (default=false)."));
+
+  cl::opt<bool>
+  WarnAllExternals("warn-all-externals",
+                   cl::desc("Give initial warning for all externals (default=false)."));
+
+  cl::opt<bool>
+  OptExitOnError("exit-on-error",
+              cl::desc("Exit KLEE if an error in the tested application has been found (default=false)."));
+
+
+  /*** Replaying options ***/
+  
+  cl::OptionCategory ReplayCat("Replaying options",
+                               "These options impact replaying of test cases.");
+  
   cl::opt<bool>
   ReplayKeepSymbolic("replay-keep-symbolic",
                      cl::desc("Replay the test cases only by asserting "
-                              "the bytes, not necessarily making them concrete."));
+                              "the bytes, not necessarily making them concrete."),
+                     cl::cat(ReplayCat));
 
   cl::list<std::string>
-      ReplayKTestFile("replay-ktest-file",
-                      cl::desc("Specify a ktest file to use for replay"),
-                      cl::value_desc("ktest file"));
+  ReplayKTestFile("replay-ktest-file",
+                  cl::desc("Specify a ktest file to use for replay"),
+                  cl::value_desc("ktest file"),
+                  cl::cat(ReplayCat));
 
   cl::list<std::string>
-      ReplayKTestDir("replay-ktest-dir",
-                   cl::desc("Specify a directory to replay ktest files from"),
-                   cl::value_desc("output directory"));
+  ReplayKTestDir("replay-ktest-dir",
+                 cl::desc("Specify a directory to replay ktest files from"),
+                 cl::value_desc("output directory"),
+                 cl::cat(ReplayCat));
 
   cl::opt<std::string>
   ReplayPathFile("replay-path",
                  cl::desc("Specify a path file to replay"),
-                 cl::value_desc("path file"));
+                 cl::value_desc("path file"),
+                 cl::cat(ReplayCat));
+
+
 
   cl::list<std::string>
   SeedOutFile("seed-out");
 
   cl::list<std::string>
   SeedOutDir("seed-out-dir");
-
-  cl::list<std::string>
-  LinkLibraries("link-llvm-lib",
-		cl::desc("Link the given libraries before execution"),
-		cl::value_desc("library file"));
 
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic",
@@ -210,9 +271,9 @@ namespace {
                        cl::init(0));
 
   cl::opt<unsigned>
-  StopAfterNTests("stop-after-n-tests",
-	     cl::desc("Stop execution after generating the given number of tests.  Extra tests corresponding to partially explored paths will also be dumped."),
-	     cl::init(0));
+  MaxTests("max-tests",
+           cl::desc("Stop execution after generating the given number of tests. Extra tests corresponding to partially explored paths will also be dumped (default=0 (off))."),
+           cl::init(0));
 
   cl::opt<bool>
   Watchdog("watchdog",
@@ -530,7 +591,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
       }
     }
 
-    if (m_numGeneratedTests == StopAfterNTests)
+    if (m_numGeneratedTests == MaxTests)
       m_interpreter->setHaltExecution(true);
 
     if (WriteTestInfo) {
