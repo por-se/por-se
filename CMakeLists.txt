@@ -24,3 +24,7 @@ set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address,undefined"
 
 add_subdirectory(lib)
 add_subdirectory(bin)
+
+export(TARGETS libpor libutil
+	FILE libpor-targets.cmake
+)
