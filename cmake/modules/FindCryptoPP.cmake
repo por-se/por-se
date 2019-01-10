@@ -29,23 +29,25 @@ else()
   message(STATUS "Could not find CryptoPP include path")
 endif()
 
-cmake_push_check_state()
-set(CMAKE_REQUIRED_INCLUDES "${CRYPTOPP_INCLUDE_DIRS}")
-check_cxx_source_compiles("
-  #include <cryptopp/config.h>
-  #include <cstdint>
-  int main() {
-    static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t), \"Invalid byte size of CryptoPP\");
-    return 0;
-  }"
-  HAVE_CRYPTOPP_BYTE
-)
-cmake_pop_check_state()
+if (CRYPTOPP_LIBRARIES AND CRYPTOPP_INCLUDE_DIRS)
+  cmake_push_check_state()
+  set(CMAKE_REQUIRED_INCLUDES "${CRYPTOPP_INCLUDE_DIRS}")
+  check_cxx_source_compiles("
+    #include <cryptopp/config.h>
+    #include <cstdint>
+    int main() {
+      static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t), \"Invalid byte size of CryptoPP\");
+      return 0;
+    }"
+    HAVE_CRYPTOPP_BYTE
+  )
+  cmake_pop_check_state()
 
-if (HAVE_CRYPTOPP_BYTE)
-  # Handle QUIET and REQUIRED and check the necessary variables were set and if so
-  # set ``CRYPTOPP_FOUND``
-  find_package_handle_standard_args(CRYPTOPP DEFAULT_MSG CRYPTOPP_INCLUDE_DIRS CRYPTOPP_LIBRARIES)
-else()
-  message(STATUS "Please use at least CryptoPP version 6.0")
+  if (HAVE_CRYPTOPP_BYTE)
+    # Handle QUIET and REQUIRED and check the necessary variables were set and if so
+    # set ``CRYPTOPP_FOUND``
+    find_package_handle_standard_args(CRYPTOPP DEFAULT_MSG CRYPTOPP_INCLUDE_DIRS CRYPTOPP_LIBRARIES)
+  else()
+    message(STATUS "Please use at least CryptoPP version 6.0")
+  endif()
 endif()
