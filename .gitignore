@@ -1,6 +1,7 @@
-/asan
 /debug
 /release
+/sanitized
+/profile
 /build
 /cmake-*
 
