@@ -1,11 +1,13 @@
 #include <por/configuration.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
 #include <random>
 #include <iostream>
 #include <iomanip>
+#include <set>
 
 #include <util/sso_array.h>
 
@@ -143,4 +145,146 @@ int main(int argc, char** argv){
 			std::abort();
 		}
 	}
+
+	std::set<por::event::event*> visited;
+	std::vector<por::event::event*> open;
+	std::map<por::event::thread_id_t, std::vector<por::event::event*>> threads;
+	std::vector<std::pair<por::event::event*, por::event::event*>> inter_thread_dependencies;
+	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event*, por::event::event*>>> intra_thread_dependencies;
+	std::size_t opened = 0;
+	for(auto& t : configuration.thread_heads()) {
+		open.push_back(t.second.get());
+		++opened;
+	}
+	while(!open.empty()) {
+		por::event::event* event = open.back();
+		open.pop_back();
+		if (!visited.insert(event).second) {
+			// already visited
+			continue;
+		}
+		por::event::thread_id_t tid = event->tid();
+		threads[tid].push_back(event);
+		bool first = true;
+		for(auto& p : event->predecessors()) {
+			por::event::event* predecessor = p.get();
+			if(visited.count(predecessor) == 0) {
+				open.push_back(predecessor);
+				++opened;
+			}
+			if(tid != predecessor->tid()) {
+				inter_thread_dependencies.emplace_back(std::make_pair(event, predecessor));
+			} else if(first) {
+				intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
+				first = false; // only insert thread_predecessor, not lock or cond predecessor on same thread
+			}
+		}
+	}
+
+	std::cout << "\n\n";
+	std::cout << "digraph {\n"
+	          << "  rankdir=LR;\n"
+	          << "  nodesep=0.8;\n"
+	          << "  ranksep=1.6;\n";
+
+	std::size_t event_id = 1;
+	std::map<por::event::event const*, std::size_t> events;
+	for(auto const& t : threads) {
+		por::event::thread_id_t tid = t.first;
+		if (tid == 0) {
+			std::cout << "  subgraph cluster_T" << tid << " {\n"
+			          << "    graph[style=invis]\n"
+			          << "    node[shape=box style=dashed fixedsize=false width=1 label=\"\"]\n"
+			          << "    {\n";
+
+		} else {
+			std::cout << "  subgraph cluster_T" << tid << " {\n"
+			          << "    graph[label=\"Thread " << tid << "\"]\n"
+			          << "    node[shape=box fixedsize=false width=1 label=\"\"]\n"
+			          << "    edge[color=grey arrowhead=none]\n"
+			          << "    {\n"
+			          << "      rank=same;\n";
+		}
+
+		// topological sort of thread's events
+		auto const& relation = intra_thread_dependencies[tid];
+		std::vector<por::event::event const*> thread_events;
+		auto _init = std::find_if(threads[tid].begin(), threads[tid].end(), [](por::event::event* e) {
+			return e->kind() == por::event::event_kind::thread_init || e->kind() == por::event::event_kind::program_init;
+		});
+		assert(_init != threads[tid].end() && "each thread should have an init event");
+		auto head = *_init;
+		while(head != nullptr) {
+			thread_events.push_back(head);
+			auto it = std::find_if(relation.begin(), relation.end(), [&](auto const& edge) {
+				return edge.second == head;
+			});
+			head = (it != relation.end()) ? it->first : nullptr;
+		}
+
+		std::size_t first_id = event_id;
+		for(auto* e : thread_events) {
+			events[e] = event_id;
+			std::cout << "      e" << event_id << " [label=\"";
+			switch(e->kind()) {
+				case por::event::event_kind::program_init:
+					std::cout << "init";
+					break;
+				case por::event::event_kind::local:
+					std::cout << "loc";
+					break;
+				case por::event::event_kind::thread_init:
+					std::cout << "+T";
+					break;
+				case por::event::event_kind::thread_exit:
+					std::cout << "-T";
+					break;
+				case por::event::event_kind::thread_create:
+					std::cout << "create";
+					break;
+				case por::event::event_kind::lock_create:
+					std::cout << "+L";
+					break;
+				case por::event::event_kind::lock_destroy:
+					std::cout << "-L";
+					break;
+				case por::event::event_kind::lock_acquire:
+					std::cout << "acq";
+					break;
+				case por::event::event_kind::lock_release:
+					std::cout << "rel";
+					break;
+			}
+
+			std::cout << "\"]\n";
+			++event_id;
+		}
+		std::cout << "    }\n";
+
+		// print thread relation: e{event_id - 1} -> ... -> e{first_id}
+		if ((first_id + 1) != event_id) {
+			std::cout << "      e" << event_id - 1 << " -> ";
+			for (std::size_t i = event_id - 2; i >= first_id; --i) {
+				std::cout << "e" << i;
+				if (i != first_id) {
+					std::cout << " -> ";
+				}
+			}
+		}
+		std::cout << "\n"
+		          << "  }\n";
+	}
+	std::cout << "  edge[arrowhead=vee constraint=false dir=back]\n"
+	          << "\n";
+
+	for(auto &r : inter_thread_dependencies) {
+		std::cout << "  e" << events[r.second] << " -> e" << events[r.first];
+		if(r.first->kind() == por::event::event_kind::thread_init) {
+			//assert(r.second->kind() == por::event::thread_create);
+			std::cout << " [constraint=true]";
+		}
+		std::cout << "\n";
+	}
+
+	std::cout << "}\n";
 }
