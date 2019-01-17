@@ -739,6 +739,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
 #ifndef WINDOWS
   int *errno_addr = getErrnoLocation(state);
+  *errno_addr = 0;
   MemoryObject *errnoObj =
       addExternalObject(state, (void *)errno_addr, sizeof *errno_addr, false);
   // Copy values from and to program space explicitly
@@ -746,13 +747,6 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
   // Should be the main thread
   state.getCurrentThreadReference().errnoMo = errnoObj;
-  ObjectState* errnoOs = state.addressSpace.getWriteable(errnoObj, state.addressSpace.findObject(errnoObj));
-  for (std::uint64_t i = 0; i < errnoObj->size; i++) {
-    errnoOs->write8(i, 0);
-  }
-  if (PruneStates) {
-    state.memoryState.registerWrite(*errnoObj, *errnoOs);
-  }
 #endif
 
   // Disabled, we don't want to promote use of live externals.
