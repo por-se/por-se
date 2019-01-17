@@ -4920,30 +4920,6 @@ ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   return ns;
 }
 
-void Executor::scheduleNextThread(ExecutionState &state, Thread::ThreadId tid) {
-  // if we schedule threads, we want to save the errno per thread and restore the old value
-
-  // Get the errno object
-  int *errno_addr = getErrnoLocation(state);
-  ObjectPair result;
-  ref<ConstantExpr> address = ConstantExpr::create((uint64_t)errno_addr, Expr::Int64);
-  bool resolved = state.addressSpace.resolveOne(address, result);
-  if (!resolved) {
-    klee_error("Thread Scheduling: Could not resolve memory object for errno");
-  }
-
-  // Save in the current thread the current errno
-  Thread& curThread = state.getCurrentThreadReference();
-  curThread.threadErrno = result.second->read(0, sizeof(*errno_addr) * 8);
-
-  state.scheduleNextThread(tid);
-
-  // And now reset it to the err value of the scheduled thread
-  Thread& newScheduledThread = state.getCurrentThreadReference();
-  ObjectState* asWriteable = state.addressSpace.getWriteable(result.first, result.second);
-  asWriteable->write(0, newScheduledThread.threadErrno);
-}
-
 void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
   assert(newForkCount < state.runnableThreads.size());
 
@@ -4973,7 +4949,7 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
     }
     newStates.push_back(st);
 
-    scheduleNextThread(*st, *rIt);
+    st->scheduleNextThread(*rIt);
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
     st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
   }
@@ -4995,7 +4971,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       // but make sure that the thread is marked as RUNNABLE
       curThread.state = Thread::ThreadState::RUNNABLE;
       Thread::ThreadId tid = curThread.getThreadId();
-      scheduleNextThread(state, tid);
+      state.scheduleNextThread(tid);
       return;
     }
 
