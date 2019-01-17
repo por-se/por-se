@@ -4713,8 +4713,7 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
 
   MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
   if (thErrno == nullptr) {
-    terminateStateOnError(state, "Could not allocate memory for thread local objects", Assert);
-    return;
+    klee_error("Could not allocate memory for thread local objects");
   }
 
   thread->errnoMo = thErrno;
