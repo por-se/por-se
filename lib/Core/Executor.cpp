@@ -4708,7 +4708,7 @@ void Executor::createThread(ExecutionState &state, ref<Expr> startRoutine, ref<E
   // If we create a thread, then we also have to create the TLS objects
 
   // Errno is one of the tls objects
-  std::uint64_t alignment = getAllocationAlignment(thread->prevPc->inst);
+  std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
   MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
