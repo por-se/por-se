@@ -633,11 +633,6 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
   // XXX should type check args
   assert(arguments.size()==0 &&
          "invalid number of arguments to klee_get_errno");
-#ifndef WINDOWS
-  int *errno_addr = executor.getErrnoLocation(state);
-#else
-  int *errno_addr = nullptr;
-#endif
 
   // Retrieve the memory object of the errno variable
   const MemoryObject* thErrno = state.getCurrentThreadReference().errnoMo;
@@ -645,7 +640,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
 
   assert(errValue != nullptr && "errno should be created for every thread");
 
-  executor.bindLocal(target, state, errValue->read(0, sizeof(*errno_addr) * 8));
+  executor.bindLocal(target, state, errValue->read(0, thErrno->size));
 }
 
 void SpecialFunctionHandler::handleErrnoLocation(
