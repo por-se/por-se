@@ -640,7 +640,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
 
   assert(errValue != nullptr && "errno should be created for every thread");
 
-  executor.bindLocal(target, state, errValue->read(0, thErrno->size));
+  executor.bindLocal(target, state, errValue->read(0, thErrno->size * 8));
 }
 
 void SpecialFunctionHandler::handleErrnoLocation(
