@@ -510,8 +510,6 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
-  KFunction* obtainFunctionFromExpression(ref<Expr> address);
-
   void exitWithDeadlock(ExecutionState &state);
 
   void exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction);
@@ -597,7 +595,7 @@ public:
   int *getErrnoLocation(const ExecutionState &state) const;
 
   void createThread(ExecutionState &state,
-                    ref<Expr> startRoutine,
+                    KFunction *startRoutine,
                     ref<Expr> runtimeStructPtr);
   void sleepThread(ExecutionState &state);
   void wakeUpThread(ExecutionState &state, Thread::ThreadId tid);

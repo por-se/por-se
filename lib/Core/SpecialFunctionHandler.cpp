@@ -905,7 +905,24 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
                                                 std::vector<ref<Expr> > &arguments) {
   assert(arguments.size() == 2 && "invalid number of arguments to klee_create_thread");
 
-  executor.createThread(state, arguments[0], arguments[1]);
+  // We only handle const function pointers
+  if (!isa<ConstantExpr>(arguments[0])) {
+    executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
+    return;
+  }
+
+  auto funcAddress = cast<ConstantExpr>(arguments[0])->getZExtValue();
+
+  // The addresses of the function in the program are equal to the addresses
+  // of the llvm functions
+  llvm::Function* funcPointer = reinterpret_cast<llvm::Function*>(funcAddress);
+  auto kfuncPair = executor.kmodule->functionMap.find(funcPointer);
+  if (kfuncPair == executor.kmodule->functionMap.end()) {
+    executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
+    return;
+  }
+
+  executor.createThread(state, kfuncPair->second, arguments[1]);
 }
 
 void SpecialFunctionHandler::handleSleepThread(ExecutionState &state,
