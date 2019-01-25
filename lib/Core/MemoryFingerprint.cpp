@@ -14,8 +14,7 @@ namespace klee {
 /* MemoryFingerprintOstream<CryptoPP::BLAKE2b> */
 
 template <>
-void MemoryFingerprintOstream<CryptoPP::BLAKE2b>::write_impl(
-    const char *ptr, std::size_t size) {
+void MemoryFingerprintOstream<CryptoPP::BLAKE2b>::write_impl(const char *ptr, std::size_t size) {
   hash.Update(reinterpret_cast<const CryptoPP::byte *>(ptr), size);
   pos += size;
 }
@@ -27,8 +26,7 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint8(const std::uint8_t value) {
   blake2b.Update(&value, 1);
 }
 
-void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(
-    const std::uint64_t value) {
+void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(const std::uint64_t value) {
   static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
   blake2b.Update(reinterpret_cast<const std::uint8_t *>(&value), 8);
 }
@@ -312,7 +310,7 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
   return result;
 }
 
-std::string MemoryFingerprint_StringSet::toString_impl(value_t fingerprintValue) {
+std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprintValue) {
   std::string result_str;
   llvm::raw_string_ostream result(result_str);
   std::size_t writes = 0;

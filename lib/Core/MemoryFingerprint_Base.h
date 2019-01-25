@@ -176,14 +176,14 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
             });
 
   // just needed to count array references using ExprPPrinter
-  std::string dummyString;
-  llvm::raw_string_ostream dummyOS(dummyString);
+  std::string tmpString;
+  llvm::raw_string_ostream tmpOS(tmpString);
 
   // bidirectional mapping of expressions and arrays
   std::unordered_map<const Array *, ExprHashSet> constraintsMap;
   ExprHashMap<std::set<const Array *>> exprToArray;
   for (auto expr : expressions) {
-    std::unique_ptr<ExprPPrinter> p(ExprPPrinter::create(dummyOS));
+    std::unique_ptr<ExprPPrinter> p(ExprPPrinter::create(tmpOS));
     p->scan(expr);
 
     for (auto s : p->getUsedArrays()) {
@@ -333,9 +333,9 @@ bool MemoryFingerprintT<Derived, hashSize>::updateFunctionFragment(
 
 template <typename Derived, std::size_t hashSize>
 bool MemoryFingerprintT<Derived, hashSize>::updateExternalCallFragment(
-    std::uint64_t externalFunctionCallCounter) {
+    std::uint64_t externalCallCounter) {
   getDerived().updateUint8(9);
-  getDerived().updateUint64(externalFunctionCallCounter);
+  getDerived().updateUint64(externalCallCounter);
   return false;
 }
 

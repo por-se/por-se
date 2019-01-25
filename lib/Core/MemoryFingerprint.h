@@ -1,8 +1,9 @@
 #ifndef KLEE_MEMORYFINGERPRINT_H
 #define KLEE_MEMORYFINGERPRINT_H
 
-#include "klee/Config/config.h"
 #include "klee/Expr.h"
+
+#include "llvm/Support/raw_ostream.h"
 
 #ifndef __cpp_rtti
 // stub for typeid to use CryptoPP without RTTI
@@ -17,14 +18,16 @@ template <typename T> const std::type_info &FakeTypeID(void) {
 #endif
 
 #include <array>
+#include <cstddef>
 #include <iomanip>
+#include <set>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 namespace llvm {
-class BasicBlock;
 class Instruction;
 } // namespace llvm
 
@@ -145,12 +148,11 @@ public:
   bool updateFunctionFragment(std::uint64_t threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);
-  bool updateExternalCallFragment(std::uint64_t externalFunctionCallCounter);
+  bool updateExternalCallFragment(std::uint64_t externalCallCounter);
 };
 
 template <typename T>
 class MemoryFingerprintOstream : public llvm::raw_ostream {
-private:
   T &hash;
   std::uint64_t pos = 0;
 
@@ -166,7 +168,6 @@ class MemoryFingerprint_CryptoPP_BLAKE2b
   friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
   using Base = MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
 
-private:
   CryptoPP::BLAKE2b blake2b{false, 32};
   MemoryFingerprintOstream<CryptoPP::BLAKE2b> ostream{blake2b};
 
@@ -189,7 +190,6 @@ class MemoryFingerprint_StringSet
   friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
   using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
 
-private:
   std::string current;
   bool first = true;
   llvm::raw_string_ostream ostream{current};
@@ -203,7 +203,7 @@ private:
   static void executeAdd(value_t &dst, const value_t &src);
   static void executeRemove(value_t &dst, const value_t &src);
 
-  static std::string toString_impl(value_t fingerprintValue);
+  static std::string toString_impl(const value_t &fingerprintValue);
 
 public:
   MemoryFingerprint_StringSet() = default;
@@ -225,33 +225,25 @@ public:
 
 // NOTE: MemoryFingerprint needs to be a complete type
 class MemoryFingerprintDelta {
-private:
   friend class MemoryState;
 
   template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addToFingerprintAndDelta(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize>
-  friend void
-  MemoryFingerprintT<Derived, hashSize>::removeFromFingerprintAndDelta(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addToDeltaOnly(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::addToDeltaOnly(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::removeFromDeltaOnly(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::removeFromDeltaOnly(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addDelta(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::addDelta(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::removeDelta(
-      MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize>::removeDelta(MemoryFingerprintDelta &delta);
 
   MemoryFingerprint::value_t fingerprintValue{};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
