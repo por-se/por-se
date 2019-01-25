@@ -83,6 +83,45 @@ void MemoryFingerprint_Dummy::clearHash() {
   first = true;
 }
 
+void MemoryFingerprint_Dummy::executeAdd(value_t &dst, const value_t &src) {
+  for (auto &elem : src) {
+    if (elem.empty())
+      continue;
+
+    if (dst.find(elem) != dst.end()) {
+      std::string debugStr;
+      llvm::raw_string_ostream debug(debugStr);
+      llvm::errs() << "FAILED: \n";
+      decodeAndPrintFragment(debug, elem, true);
+      llvm::errs() << debug.str() << "\n";
+      llvm::errs() << "DST: " << toString(dst) << "\n";
+      llvm::errs().flush();
+      assert(0 && "fragment already in fingerprint");
+    }
+    dst.insert(elem);
+  }
+}
+
+void MemoryFingerprint_Dummy::executeRemove(value_t &dst, const value_t &src) {
+  for (auto &elem : src) {
+    if (elem.empty())
+      continue;
+
+    auto pos = dst.find(elem);
+    if (pos == dst.end()) {
+      std::string debugStr;
+      llvm::raw_string_ostream debug(debugStr);
+      llvm::errs() << "FAILED: \n";
+      decodeAndPrintFragment(debug, elem, true);
+      llvm::errs() << debug.str() << "\n";
+      llvm::errs() << "DST: " << toString(dst) << "\n";
+      llvm::errs().flush();
+      assert(0 && "fragment not in fingerprint");
+    }
+    dst.erase(pos);
+  }
+}
+
 MemoryFingerprint_Dummy::DecodedFragment
 MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
                                                 std::string fragment,

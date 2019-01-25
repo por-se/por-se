@@ -45,10 +45,9 @@ template <typename Derived, std::size_t hashSize> class MemoryFingerprintT {
 protected:
   using hash_t = std::array<std::uint8_t, hashSize>;
   using dummy_t = std::set<std::string>;
-
 public:
   typedef
-      typename std::conditional<hashSize == 0, dummy_t, hash_t>::type value_t;
+      typename std::conditional_t<hashSize == 0, dummy_t, hash_t> value_t;
 
 private:
   Derived &getDerived() { return *(static_cast<Derived *>(this)); }
@@ -56,66 +55,28 @@ private:
   value_t fingerprintValue{};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 
-  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
-                                                int>::type = 0>
-  void executeXOR(T &dst, const T &src) {
+  template <typename T>
+  static void executeXOR(T &dst, const T &src) {
     for (std::size_t i = 0; i < hashSize; ++i) {
       dst[i] ^= src[i];
     }
   }
 
-  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
-                                                int>::type = 0>
-  void executeAdd(T &dst, const T &src) {
-    executeXOR(dst, src);
-  }
-
-  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
-                                                int>::type = 0>
-  void executeRemove(T &dst, const T &src) {
-    executeXOR(dst, src);
-  }
-
-  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
-                                                int>::type = 0>
-  void executeAdd(T &dst, const T &src) {
-    for (auto &elem : src) {
-      if (elem.empty())
-        continue;
-
-      if (dst.find(elem) != dst.end()) {
-        std::string debug_str;
-        llvm::raw_string_ostream debug(debug_str);
-        llvm::errs() << "FAILED: \n";
-        getDerived().decodeAndPrintFragment(debug, elem, true);
-        llvm::errs() << debug.str() << "\n";
-        llvm::errs() << "DST: " << toString(dst) << "\n";
-        llvm::errs().flush();
-        assert(0 && "fragment already in fingerprint");
-      }
-      dst.insert(elem);
+  template <typename T>
+  static void executeAdd(T &dst, const T &src) {
+    if constexpr (hashSize > 0) {
+      executeXOR(dst, src);
+    } else {
+      Derived::executeAdd(dst, src);
     }
   }
 
-  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
-                                                int>::type = 0>
-  void executeRemove(T &dst, const T &src) {
-    for (auto &elem : src) {
-      if (elem.empty())
-        continue;
-
-      auto pos = dst.find(elem);
-      if (pos == dst.end()) {
-        std::string debug_str;
-        llvm::raw_string_ostream debug(debug_str);
-        llvm::errs() << "FAILED: \n";
-        getDerived().decodeAndPrintFragment(debug, elem, true);
-        llvm::errs() << debug.str() << "\n";
-        llvm::errs() << "DST: " << toString(dst) << "\n";
-        llvm::errs().flush();
-        assert(0 && "fragment not in fingerprint");
-      }
-      dst.erase(pos);
+  template <typename T>
+  static void executeRemove(T &dst, const T &src) {
+    if constexpr (hashSize > 0) {
+      executeXOR(dst, src);
+    } else {
+      Derived::executeRemove(dst, src);
     }
   }
 
@@ -156,21 +117,18 @@ public:
 
   void updateConstantExpr(const ConstantExpr &expr);
 
-  template <typename T, typename std::enable_if<std::is_same<T, hash_t>::value,
-                                                int>::type = 0>
+  template <typename T>
   static std::string toString(const T &fingerprintValue) {
-    std::stringstream result;
-    for (const auto byte : fingerprintValue) {
-      result << std::hex << std::setfill('0') << std::setw(2);
-      result << static_cast<unsigned int>(byte);
+    if constexpr (hashSize > 0) {
+      std::stringstream result;
+      for (const auto byte : fingerprintValue) {
+        result << std::hex << std::setfill('0') << std::setw(2);
+        result << static_cast<unsigned int>(byte);
+      }
+      return result.str();
+    } else {
+      return Derived::toString_impl(fingerprintValue);
     }
-    return result.str();
-  }
-
-  template <typename T, typename std::enable_if<std::is_same<T, dummy_t>::value,
-                                                int>::type = 0>
-  static std::string toString(const T &fingerprintValue) {
-    return Derived::toString_impl(fingerprintValue);
   }
 
   bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
@@ -240,6 +198,9 @@ private:
   void updateUint8(const std::uint8_t value);
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
+
+  static void executeAdd(dummy_t &dst, const dummy_t &src);
+  static void executeRemove(dummy_t &dst, const dummy_t &src);
 
   static std::string toString_impl(dummy_t fingerprintValue);
 
