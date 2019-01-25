@@ -591,7 +591,8 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
   Context::initialize(TD->isLittleEndian(),
                       (Expr::Width)TD->getPointerSizeInBits());
 
-  MemoryState::setKModule(kmodule.get());
+  if (PruneStates)
+    MemoryState::setKModule(kmodule.get());
 
   return kmodule->module.get();
 }
@@ -4052,7 +4053,8 @@ void Executor::executeFree(ExecutionState &state,
                               getAddressInfo(*it->second, address));
       } else {
 
-        it->second->memoryState.unregisterWrite(*mo, *os);
+        if (PruneStates)
+          it->second->memoryState.unregisterWrite(*mo, *os);
 
         // A free operation should be tracked as well
         processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
