@@ -35,7 +35,7 @@ class KInstruction;
 class MemoryFingerprintDelta;
 
 class MemoryFingerprint_CryptoPP_BLAKE2b;
-class MemoryFingerprint_Dummy;
+class MemoryFingerprint_StringSet;
 
 // Set default implementation
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
@@ -44,10 +44,11 @@ template <typename Derived, std::size_t hashSize> class MemoryFingerprintT {
 
 protected:
   using hash_t = std::array<std::uint8_t, hashSize>;
-  using dummy_t = std::set<std::string>;
+  using stringset_t = std::set<std::string>;
+
 public:
   typedef
-      typename std::conditional_t<hashSize == 0, dummy_t, hash_t> value_t;
+      typename std::conditional_t<hashSize == 0, stringset_t, hash_t> value_t;
 
 private:
   Derived &getDerived() { return *(static_cast<Derived *>(this)); }
@@ -183,10 +184,10 @@ public:
   ~MemoryFingerprint_CryptoPP_BLAKE2b() = default;
 };
 
-class MemoryFingerprint_Dummy
-    : public MemoryFingerprintT<MemoryFingerprint_Dummy, 0> {
-  friend class MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
-  using Base = MemoryFingerprintT<MemoryFingerprint_Dummy, 0>;
+class MemoryFingerprint_StringSet
+    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0> {
+  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
+  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
 
 private:
   std::string current;
@@ -199,17 +200,17 @@ private:
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
 
-  static void executeAdd(dummy_t &dst, const dummy_t &src);
-  static void executeRemove(dummy_t &dst, const dummy_t &src);
+  static void executeAdd(value_t &dst, const value_t &src);
+  static void executeRemove(value_t &dst, const value_t &src);
 
-  static std::string toString_impl(dummy_t fingerprintValue);
+  static std::string toString_impl(value_t fingerprintValue);
 
 public:
-  MemoryFingerprint_Dummy() = default;
-  MemoryFingerprint_Dummy(const MemoryFingerprint_Dummy &other) : Base(other) { }
-  MemoryFingerprint_Dummy(MemoryFingerprint_Dummy &&) = delete;
-  MemoryFingerprint_Dummy& operator=(MemoryFingerprint_Dummy &&) = delete;
-  ~MemoryFingerprint_Dummy() = default;
+  MemoryFingerprint_StringSet() = default;
+  MemoryFingerprint_StringSet(const MemoryFingerprint_StringSet &other) : Base(other) { }
+  MemoryFingerprint_StringSet(MemoryFingerprint_StringSet &&) = delete;
+  MemoryFingerprint_StringSet& operator=(MemoryFingerprint_StringSet &&) = delete;
+  ~MemoryFingerprint_StringSet() = default;
 
   struct DecodedFragment {
     std::size_t writes = 0;

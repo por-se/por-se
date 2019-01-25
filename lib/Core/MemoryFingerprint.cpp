@@ -46,9 +46,9 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::clearHash() {
   blake2b.Restart();
 }
 
-/* MemoryFingerprint_Dummy */
+/* MemoryFingerprint_StringSet */
 
-void MemoryFingerprint_Dummy::updateUint8(const std::uint8_t value) {
+void MemoryFingerprint_StringSet::updateUint8(const std::uint8_t value) {
   if (first) {
     first = false;
   } else {
@@ -57,7 +57,7 @@ void MemoryFingerprint_Dummy::updateUint8(const std::uint8_t value) {
   current += std::to_string(static_cast<unsigned>(value));
 }
 
-void MemoryFingerprint_Dummy::updateUint64(const std::uint64_t value) {
+void MemoryFingerprint_StringSet::updateUint64(const std::uint64_t value) {
   if (first) {
     first = false;
   } else {
@@ -66,7 +66,7 @@ void MemoryFingerprint_Dummy::updateUint64(const std::uint64_t value) {
   current += std::to_string(value);
 }
 
-llvm::raw_ostream &MemoryFingerprint_Dummy::updateOstream() {
+llvm::raw_ostream &MemoryFingerprint_StringSet::updateOstream() {
   if (first) {
     first = false;
   } else {
@@ -75,15 +75,15 @@ llvm::raw_ostream &MemoryFingerprint_Dummy::updateOstream() {
   return ostream;
 }
 
-void MemoryFingerprint_Dummy::generateHash() { buffer.insert(current); }
+void MemoryFingerprint_StringSet::generateHash() { buffer.insert(current); }
 
-void MemoryFingerprint_Dummy::clearHash() {
+void MemoryFingerprint_StringSet::clearHash() {
   current = "";
   buffer.clear();
   first = true;
 }
 
-void MemoryFingerprint_Dummy::executeAdd(value_t &dst, const value_t &src) {
+void MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
   for (auto &elem : src) {
     if (elem.empty())
       continue;
@@ -102,7 +102,7 @@ void MemoryFingerprint_Dummy::executeAdd(value_t &dst, const value_t &src) {
   }
 }
 
-void MemoryFingerprint_Dummy::executeRemove(value_t &dst, const value_t &src) {
+void MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src) {
   for (auto &elem : src) {
     if (elem.empty())
       continue;
@@ -122,10 +122,10 @@ void MemoryFingerprint_Dummy::executeRemove(value_t &dst, const value_t &src) {
   }
 }
 
-MemoryFingerprint_Dummy::DecodedFragment
-MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
-                                                std::string fragment,
-                                                bool showMemoryOperations) {
+MemoryFingerprint_StringSet::DecodedFragment
+MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
+                                                    std::string fragment,
+                                                    bool showMemoryOperations) {
   DecodedFragment result;
 
     std::istringstream item(fragment);
@@ -312,7 +312,7 @@ MemoryFingerprint_Dummy::decodeAndPrintFragment(llvm::raw_ostream &os,
   return result;
 }
 
-std::string MemoryFingerprint_Dummy::toString_impl(dummy_t fingerprintValue) {
+std::string MemoryFingerprint_StringSet::toString_impl(value_t fingerprintValue) {
   std::string result_str;
   llvm::raw_string_ostream result(result_str);
   std::size_t writes = 0;
