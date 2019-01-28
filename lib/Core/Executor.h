@@ -596,8 +596,8 @@ public:
   void createThread(ExecutionState &state,
                     KFunction *startRoutine,
                     ref<Expr> runtimeStructPtr);
-  void threadWaitOn(ExecutionState &state, uint64_t lid);
-  void threadWakeUpWaiting(ExecutionState &state, uint64_t lid, bool onlyOne);
+  void threadWaitOn(ExecutionState &state, std::uint64_t lid);
+  void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne);
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);

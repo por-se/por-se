@@ -200,7 +200,7 @@ public:
   Thread* createThread(KFunction *kf, ref<Expr> arg);
 
   //// @brief
-  void threadWaitOn(uint64_t lid);
+  void threadWaitOn(std::uint64_t lid);
 
   /// @brief wakes a specific thread up
   void wakeUpThread(Thread::ThreadId tid);

@@ -4715,12 +4715,12 @@ void Executor::createThread(ExecutionState &state,
     statsTracker->framePushed(&thread->stack.back(), nullptr);
 }
 
-void Executor::threadWaitOn(ExecutionState &state, uint64_t lid) {
+void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
   state.threadWaitOn(lid);
   scheduleThreads(state);
 }
 
-void Executor::threadWakeUpWaiting(ExecutionState &state, uint64_t lid, bool onlyOne) {
+void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne) {
   if (!onlyOne) {
     for (auto th : state.threads) {
       if (th.second.waitingHandle == lid) {

@@ -217,7 +217,7 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   onlyOneThreadRunnableSinceEpochStart = runnableThreads.size() == 1;
 }
 
-void ExecutionState::threadWaitOn(uint64_t lid) {
+void ExecutionState::threadWaitOn(std::uint64_t lid) {
   Thread &thread = currentThread();
   assert(thread.waitingHandle == 0 && "Thread should not be waiting on another resource");
 
