@@ -47,7 +47,7 @@ namespace klee {
   };
 
   enum class ThreadState {
-    Sleeping,
+    Waiting,
     Runnable,
     Exited
   };
@@ -93,13 +93,15 @@ namespace klee {
       /// @brief life cycle state of this thread, Runnable by default
       ThreadState state = ThreadState::Runnable;
 
+      uint64_t waitingHandle = 0;
+
       /// @brief value of the pthread_t pointer the thread was created with
       ref<Expr> runtimeStructPtr;
 
       /// @brief the errno of the thread
       const MemoryObject* errnoMo;
 
-      /// @brief if the thread scheduling was disabled when this thread was going sleeping
+      /// @brief if the thread scheduling was disabled when this thread was going into the waiting state
       bool threadSchedulingWasDisabled = false;
 
     public:

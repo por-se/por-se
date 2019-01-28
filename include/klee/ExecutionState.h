@@ -199,8 +199,8 @@ public:
   /// @brief will create a new thread with the given thread id
   Thread* createThread(KFunction *kf, ref<Expr> arg);
 
-  //// @brief will put the current thread into sleep mode
-  void sleepCurrentThread();
+  //// @brief
+  void threadWaitOn(uint64_t lid);
 
   /// @brief wakes a specific thread up
   void wakeUpThread(Thread::ThreadId tid);

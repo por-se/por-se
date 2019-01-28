@@ -162,10 +162,6 @@ extern "C" {
 
   void klee_create_thread(void *(*start_routine)(void*, uint64_t), void *arg);
 
-  void klee_sleep_thread(void);
-
-  void klee_wake_up_thread(uint64_t tid);
-
   uint64_t klee_get_thread_id(void);
 
   void* klee_get_thread_runtime_struct_ptr(void);
@@ -175,6 +171,12 @@ extern "C" {
   void klee_exit_thread(void) __attribute__ ((__noreturn__));
 
   void klee_toggle_thread_scheduling(int enabled);
+
+  void klee_wait_on(void* address);
+
+#define KLEE_RELEASE_SINGLE (1 << 0)
+#define KLEE_RELEASE_ALL (0 << 0)
+  void klee_release_waiting(void* address, uint64_t mode);
 #ifdef __cplusplus
 }
 #endif

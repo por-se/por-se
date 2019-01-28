@@ -149,13 +149,13 @@ namespace klee {
     HANDLER(handlePuts);
 
     HANDLER(handleCreateThread);
-    HANDLER(handleSleepThread);
-    HANDLER(handleWakeUpThread);
     HANDLER(handleGetThreadId);
     HANDLER(handlePreemptThread);
     HANDLER(handleExitThread);
     HANDLER(handleToggleThreadScheduling);
     HANDLER(handleGetThreadRuntimeStructPtr);
+    HANDLER(handleWaitOn);
+    HANDLER(handleWakeUpWaiting);
 #undef HANDLER
   };
 } // End klee namespace

@@ -116,13 +116,13 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_create_thread", handleCreateThread, false),
-  add("klee_sleep_thread", handleSleepThread, false),
-  add("klee_wake_up_thread", handleWakeUpThread, false),
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
   add("klee_get_thread_runtime_struct_ptr", handleGetThreadRuntimeStructPtr, true),
   addDNR("klee_exit_thread", handleExitThread),
+  add("klee_wait_on", handleWaitOn, false),
+  add("klee_release_waiting", handleWakeUpWaiting, false),
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
@@ -934,27 +934,6 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   executor.createThread(state, kfuncPair->second, arguments[1]);
 }
 
-void SpecialFunctionHandler::handleSleepThread(ExecutionState &state,
-                                               KInstruction *target,
-                                               std::vector<ref<Expr> > &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_sleep_thread");
-  executor.sleepThread(state);
-}
-
-void SpecialFunctionHandler::handleWakeUpThread(ExecutionState &state,
-                                                KInstruction *target,
-                                                std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 1 && "invalid number of arguments to klee_wake_up_thread");
-  ref<Expr> tid = executor.toUnique(state, arguments[0]);
-
-  if (!isa<ConstantExpr>(tid)) {
-    executor.terminateStateOnError(state, "klee_wake_up_thread", Executor::User);
-    return;
-  }
-
-  executor.wakeUpThread(state, cast<ConstantExpr>(tid)->getZExtValue());
-}
-
 void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,
                                                klee::KInstruction *target,
                                                std::vector<klee::ref<klee::Expr>> &arguments) {
@@ -999,6 +978,40 @@ void SpecialFunctionHandler::handleGetThreadRuntimeStructPtr(klee::ExecutionStat
 
   ref<Expr> arg = state.currentThread().getRuntimeStructPtr();
   executor.bindLocal(target, state, arg);
+}
+
+void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
+                                          KInstruction *target,
+                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_wait_on");
+  ref<Expr> lid = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(lid)) {
+    executor.terminateStateOnError(state, "klee_wait_on", Executor::User);
+    return;
+  }
+
+  executor.threadWaitOn(state, cast<ConstantExpr>(lid)->getZExtValue());
+}
+
+void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
+                                                 KInstruction *target,
+                                                 std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_release_waiting");
+  ref<Expr> lid = executor.toUnique(state, arguments[0]);
+  ref<Expr> mode = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(lid) || !isa<ConstantExpr>(mode)) {
+    executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
+    return;
+  }
+
+  // mode == 0 -> KLEE_RELEASE_ALL
+  // mode == 1 -> KLEE_RELEASE_SINGLE
+  executor.threadWakeUpWaiting(state,
+          cast<ConstantExpr>(lid)->getZExtValue(),
+          cast<ConstantExpr>(mode)->getZExtValue() == 1
+          );
 }
 
 void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,

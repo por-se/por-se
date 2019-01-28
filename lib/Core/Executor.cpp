@@ -4715,13 +4715,57 @@ void Executor::createThread(ExecutionState &state,
     statsTracker->framePushed(&thread->stack.back(), nullptr);
 }
 
-void Executor::sleepThread(ExecutionState &state) {
-  state.sleepCurrentThread();
+void Executor::threadWaitOn(ExecutionState &state, uint64_t lid) {
+  state.threadWaitOn(lid);
   scheduleThreads(state);
 }
 
-void Executor::wakeUpThread(ExecutionState &state, Thread::ThreadId tid) {
-  state.wakeUpThread(tid);
+void Executor::threadWakeUpWaiting(ExecutionState &state, uint64_t lid, bool onlyOne) {
+  if (!onlyOne) {
+    for (auto th : state.threads) {
+      if (th.second.waitingHandle == lid) {
+        state.wakeUpThread(th.first);
+      }
+    }
+
+    return;
+  }
+
+  std::vector<Thread::ThreadId> choices;
+  for (auto th : state.threads) {
+    if (th.second.waitingHandle == lid) {
+      choices.push_back(th.first);
+    }
+  }
+
+  if (choices.empty()) {
+    return;
+  }
+
+  size_t allowedChoices = choices.size();
+
+  // Before we actually fork the states, make sure we honor MaxForks
+  if (MaxForks != ~0u && stats::forks + allowedChoices > MaxForks) {
+    allowedChoices = (MaxForks - stats::forks) + 1;
+  }
+
+  // So we are not able to fork for new states when we should not
+  if (atMemoryLimit || inhibitForking) {
+    allowedChoices = 1;
+  }
+
+  for (size_t i = 0; i < allowedChoices; ++i) {
+    // we want to reuse the current state when that is possible
+    ExecutionState* st;
+    if (i == allowedChoices - 1) {
+      st = &state;
+    } else {
+      st = forkToNewState(state);
+      addedStates.push_back(st);
+    }
+
+    st->wakeUpThread(choices[i]);
+  }
 }
 
 void Executor::preemptThread(ExecutionState &state) {
@@ -4879,7 +4923,7 @@ void Executor::exitWithDeadlock(ExecutionState &state) {
   os << "Traces:\n";
   state.dumpAllThreadStacks(os);
 
-  terminateStateOnError(state, "all non-exited threads are sleeping",
+  terminateStateOnError(state, "all non-exited threads are waiting on resources",
                         Deadlock, nullptr, os.str());
 }
 
@@ -4950,7 +4994,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // or if we have a deadlock
 
     Thread &curThread = state.currentThread();
-    if (curThread.state == ThreadState::Sleeping) {
+    if (curThread.state == ThreadState::Waiting) {
       exitWithDeadlock(state);
       return;
     } else if (curThread.state != ThreadState::Exited) {

@@ -200,12 +200,13 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   Thread &thread = currentThread(tid);
 
   assert(thread.state == ThreadState::Runnable && "Cannot schedule non-runnable thread");
+  assert(thread.waitingHandle == 0 && "Thread may not be waiting on a resource");
 
   schedulingHistory.push_back(tid);
 
   memAccessTracker.scheduledNewThread(tid);
 
-  // So it can happen that this is the first execution of the thread since it was going to sleep
+  // So it can happen that this is the first execution of the thread since it was waiting
   // so we might have to disable thread scheduling again
   if (thread.threadSchedulingWasDisabled) {
     thread.threadSchedulingWasDisabled = false;
@@ -216,17 +217,21 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   onlyOneThreadRunnableSinceEpochStart = runnableThreads.size() == 1;
 }
 
-void ExecutionState::sleepCurrentThread() {
+void ExecutionState::threadWaitOn(uint64_t lid) {
   Thread &thread = currentThread();
-  thread.state = ThreadState::Sleeping;
+  assert(thread.waitingHandle == 0 && "Thread should not be waiting on another resource");
 
-  // If a thread goes to sleep when it had deactivated thread scheduling,
+  thread.state = ThreadState::Waiting;
+
+  // If a thread goes into the waiting state when it had deactivated thread scheduling,
   // then we will safe this and will reenable thread scheduling for as long as this thread
   // is not running again
   thread.threadSchedulingWasDisabled = !threadSchedulingEnabled;
   threadSchedulingEnabled = true;
 
   runnableThreads.erase(thread.getThreadId());
+
+  thread.waitingHandle = lid;
 }
 
 void ExecutionState::preemptThread(Thread::ThreadId tid) {
@@ -247,9 +252,11 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
 
   runnableThreads.insert(thread->getThreadId());
 
-  // We should only wake up threads that are actually sleeping
-  if (thread->state == ThreadState::Sleeping) {
+  // We should only wake up threads that are actually waiting
+  if (thread->state == ThreadState::Waiting) {
     thread->state = ThreadState::Runnable;
+
+    thread->waitingHandle = 0;
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
@@ -542,8 +549,8 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
     const Thread* thread = &threadId.second;
 
     std::string stateName;
-    if (thread->state == ThreadState::Sleeping) {
-      stateName = "sleeping";
+    if (thread->state == ThreadState::Waiting) {
+      stateName = "waiting";
     } else if (thread->state == ThreadState::Runnable) {
       stateName = "runnable";
     } else if (thread->state == ThreadState::Exited) {
