@@ -26,7 +26,6 @@ int pthread_barrier_init(pthread_barrier_t *b, const pthread_barrierattr_t *attr
 
   barrier->count = count;
   barrier->currentCount = 0;
-  kpr_list_create(&barrier->waitingThreads);
 
   *((kpr_barrier**)b) = barrier;
 
@@ -58,16 +57,13 @@ int pthread_barrier_wait(pthread_barrier_t *b) {
   barrier->currentCount++;
 
   if (barrier->currentCount < barrier->count) {
-    uint64_t tid = klee_get_thread_id();
-    kpr_list_push(&barrier->waitingThreads, (void*) tid);
-
-    klee_sleep_thread();
+    klee_wait_on(b);
 
     klee_toggle_thread_scheduling(1);
     return 0;
   } else if (barrier->currentCount == barrier->count) {
     barrier->currentCount = 0;
-    kpr_notify_threads(&barrier->waitingThreads);
+    klee_release_waiting(b, KLEE_RELEASE_ALL);
 
     klee_toggle_thread_scheduling(1);
     klee_preempt_thread();

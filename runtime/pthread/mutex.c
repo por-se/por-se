@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <assert.h>
 
 static pthread_mutex_t mutexDefault = PTHREAD_MUTEX_INITIALIZER;
 
@@ -18,7 +19,6 @@ static int kpr_create_new_mutex(kpr_mutex **m) {
 
   mutex->acquired = 0;
   mutex->holdingThread = 0;
-  kpr_list_create(&mutex->waitingThreads);
 
   *m = mutex;
   return 0;
@@ -93,13 +93,11 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
     return -1;
   }
 
-  uint64_t tid = klee_get_thread_id();
   int sleptOnce = 0;
 
   while (kpr_mutex_trylock_internal(mutex) != 0) {
-    kpr_list_push(&mutex->waitingThreads, (void*) tid);
     sleptOnce = 1;
-    klee_sleep_thread();
+    klee_wait_on(m);
   }
 
   klee_toggle_thread_scheduling(1);
@@ -126,13 +124,15 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *m) {
 
   if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
     mutex->acquired--;
-    if (mutex->acquired == 0) {
-      kpr_notify_threads(&mutex->waitingThreads);
+
+    if (mutex->acquired > 0) {
+      return 0;
     }
   } else {
     mutex->acquired = 0;
-    kpr_notify_threads(&mutex->waitingThreads);
   }
+
+  klee_release_waiting(m, KLEE_RELEASE_SINGLE);
 
   return 0;
 }
@@ -142,9 +142,7 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
   int result = kpr_mutex_unlock_internal(m);
   klee_toggle_thread_scheduling(1);
 
-  if (result == 0) {
-    klee_preempt_thread();
-  }
+  klee_preempt_thread();
 
   return result;
 }

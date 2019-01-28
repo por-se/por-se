@@ -40,8 +40,6 @@ void* kpr_list_iterator_value(kpr_list_iterator it);
 
 void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it);
 
-void kpr_notify_threads(kpr_list* stack);
-
 bool kpr_checkIfSame(char* target, char* reference);
 
 #endif //KLEE_PTHREAD_UTILS_H

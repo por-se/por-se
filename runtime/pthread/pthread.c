@@ -34,7 +34,6 @@ int pthread_create(pthread_t *pthread, const pthread_attr_t *attr, void *(*start
 
   *((kpr_pthread**)pthread) = thread;
 
-  thread->tid = 0;
   thread->startRoutine = startRoutine;
   thread->startArg = arg;
   thread->returnValue = NULL;
@@ -78,7 +77,7 @@ int pthread_detach(pthread_t pthread) {
   // Last check: it can also be the case that this thread is detached after it already
   //             terminated. In that case we want to ensure that we wake the thread again
   if (thread->joinState == KPR_THREAD_WAIT_FOR_JOIN) {
-    klee_wake_up_thread(thread->tid);
+    klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
   thread->mode = KPR_THREAD_MODE_DETACH;
@@ -111,11 +110,11 @@ void pthread_exit(void* arg) {
       thread->joinState = KPR_THREAD_WAIT_FOR_JOIN;
 
       // klee_toggle_thread_scheduling(1);
-      klee_sleep_thread();
+      klee_wait_on(thread);
       // klee_toggle_thread_scheduling(0);
       thread->joinState = KPR_THREAD_JSTATE_JOINED;
     } else {
-      klee_wake_up_thread(thread->joinedThread);
+      klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
     }
   }
 
@@ -152,10 +151,10 @@ int pthread_join(pthread_t pthread, void **ret) {
   if (needToSleep == 1) {
     thread->joinedThread = ownThread;
     // klee_toggle_thread_scheduling(1);
-    klee_sleep_thread();
+    klee_wait_on(thread);
     // klee_toggle_thread_scheduling(0);
   } else {
-    klee_wake_up_thread(thread->tid);
+    klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
   if (ret != NULL) {

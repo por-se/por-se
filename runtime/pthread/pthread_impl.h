@@ -30,29 +30,25 @@ typedef struct {
   int acquired;
   int type;
   uint64_t holdingThread;
-  kpr_list waitingThreads;
 } kpr_mutex;
 
 typedef struct {
   unsigned count;
   unsigned currentCount;
-  kpr_list waitingThreads;
 } kpr_barrier;
 
 typedef struct {
   uint64_t acquiredWriter;
-
-  kpr_list acquiredReaderLocks;
+  uint64_t acquiredReaderCount;
 
   size_t waitingWriterCount;
   size_t waitingReaderCount;
 
-  kpr_list waitingList;
 } kpr_rwlock;
 
 typedef struct {
-  kpr_list waitingList;
   pthread_mutex_t* waitingMutex;
+  uint64_t waitingCount;
 } kpr_cond;
 
 typedef struct {

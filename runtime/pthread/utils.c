@@ -166,23 +166,6 @@ void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it) {
  * Here is the stuff that is not directly part of the data structure but rather what is needed as well
  */
 
-void kpr_notify_threads(kpr_list* stack) {
-  size_t size = kpr_list_size(stack);
-  size_t i = 0;
-  for (; i < size; ++i) {
-    uint64_t data = (uint64_t) kpr_list_pop(stack);
-    klee_wake_up_thread(data);
-  }
-}
-
-bool kpr_checkIfSameSize(char* target, char* reference) {
-  // So this method should check if both of these objects have the same contents
-  size_t sizeOfTarget = klee_get_obj_size((void*) target);
-  size_t sizeOfReference = klee_get_obj_size((void*) reference);
-
-  return sizeOfReference == sizeOfTarget;
-}
-
 bool kpr_checkIfSame(char* target, char* reference) {
   // So this method should check if both of these objects have the same contents
   size_t sizeOfTarget = klee_get_obj_size((void*) target);

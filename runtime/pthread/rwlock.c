@@ -23,9 +23,6 @@ static int kpr_create_new_rwlock(kpr_rwlock **rw) {
   lock->waitingReaderCount = 0;
   lock->waitingWriterCount = 0;
 
-  kpr_list_create(&lock->waitingList);
-  kpr_list_create(&lock->acquiredReaderLocks);
-
   *rw = lock;
   return 0;
 }
@@ -41,23 +38,6 @@ static int kpr_obtain_rwlock(pthread_rwlock_t *rwlock, kpr_rwlock **dest) {
   return 0;
 }
 
-static kpr_list_iterator kpr_get_reader_lock(kpr_rwlock *lock, uint64_t t) {
-  kpr_list_iterator it = kpr_list_iterate(&lock->acquiredReaderLocks);
-
-  while (kpr_list_iterator_valid(it)) {
-    uint64_t tid = (uint64_t) kpr_list_iterator_value(it);
-
-    if (tid == t) {
-      return it;
-    }
-
-    kpr_list_iterator_next(&it);
-  }
-
-  // At this point, this should be an invalid iterator
-  return it;
-}
-
 static int rwlock_tryrdlock(kpr_rwlock* lock) {
   uint64_t tid = klee_get_thread_id();
 
@@ -69,19 +49,12 @@ static int rwlock_tryrdlock(kpr_rwlock* lock) {
     }
   }
 
-  // So check if this is a multiple lock
-  kpr_list_iterator it = kpr_get_reader_lock(lock, tid);
-  if (kpr_list_iterator_valid(it)) {
-    kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
-    return 0;
-  }
-
   // So if we have not locked this already than we have to check if any writers are waiting on the lock
   if (lock->waitingWriterCount > 0) {
     return EBUSY;
   } else {
     // No writers are locked so we can go ahead and try to lock this one as well
-    kpr_list_push(&lock->acquiredReaderLocks, (void*) tid);
+    lock->acquiredReaderCount++;
     return 0;
   }
 }
@@ -97,7 +70,7 @@ static int rwlock_trywrlock(kpr_rwlock* lock) {
     }
   }
 
-  if (kpr_list_size(&lock->acquiredReaderLocks) > 0) {
+  if (lock->acquiredReaderCount > 0) {
     return EBUSY;
   }
 
@@ -125,8 +98,7 @@ int pthread_rwlock_init(pthread_rwlock_t *l, const pthread_rwlockattr_t *attr) {
   lock->waitingReaderCount = 0;
   lock->waitingWriterCount = 0;
 
-  kpr_list_create(&lock->waitingList);
-  kpr_list_create(&lock->acquiredReaderLocks);
+  lock->acquiredReaderCount = 0;
 
   klee_toggle_thread_scheduling(1);
 
@@ -142,7 +114,7 @@ int pthread_rwlock_destroy(pthread_rwlock_t *l) {
     return -1;
   }
 
-  if (kpr_list_size(&lock->acquiredReaderLocks) != 0 || lock->acquiredWriter != NO_WRITER_ACQUIRED) {
+  if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != NO_WRITER_ACQUIRED) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -164,11 +136,9 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *l) {
 
   int result = rwlock_tryrdlock(lock);
   while (result != 0) {
-    uint64_t tid = klee_get_thread_id();
-    kpr_list_push(&lock->waitingList, (void*) tid);
     lock->waitingReaderCount++;
 
-    klee_sleep_thread();
+    klee_wait_on(l);
 
     // And try again if we did not succeed
     result = rwlock_tryrdlock(lock);
@@ -208,11 +178,9 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *l) {
 
   int result = rwlock_trywrlock(lock);
   while (result != 0) {
-    uint64_t tid = klee_get_thread_id();
-    kpr_list_push(&lock->waitingList, (void*) tid);
     lock->waitingWriterCount++;
 
-    klee_sleep_thread();
+    klee_wait_on(l);
 
     // And try again if we did not succeed
     result = rwlock_trywrlock(lock);
@@ -258,23 +226,16 @@ int pthread_rwlock_unlock(pthread_rwlock_t *l) {
     lock->acquiredWriter = NO_WRITER_ACQUIRED;
     unlockAll = true;
     validUnlock = true;
-  } else if (kpr_list_size(&lock->acquiredReaderLocks) > 0) {
-    // Now we have to remove one lock from ourself, if we can actually remove it
-    kpr_list_iterator it = kpr_get_reader_lock(lock, klee_get_thread_id());
+  } else if (lock->acquiredReaderCount > 0) {
+    lock->acquiredReaderCount--;
 
-    if (kpr_list_iterator_valid(it)) {
-      // Then remove the iterator and check the size
-      kpr_list_erase(&lock->acquiredReaderLocks, &it);
-
-      validUnlock = true;
-
-      // We can unlock all only if there are no locks left
-      unlockAll = kpr_list_size(&lock->acquiredReaderLocks) == 0;
-    }
+    // We can unlock all only if there are no locks left
+    unlockAll = lock->acquiredReaderCount == 0;
   }
 
   if (unlockAll) {
-    kpr_notify_threads(&lock->waitingList);
+    klee_release_waiting(l, KLEE_RELEASE_ALL);
+
     lock->waitingReaderCount = 0;
     lock->waitingWriterCount = 0;
   }

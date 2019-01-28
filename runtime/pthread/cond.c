@@ -16,8 +16,8 @@ static int kpr_create_new_cond(kpr_cond **c) {
 
   memset(cond, 0, sizeof(kpr_cond));
 
-  kpr_list_create(&cond->waitingList);
   cond->waitingMutex = NULL;
+  cond->waitingCount = 0;
 
   *c = cond;
   return 0;
@@ -43,7 +43,6 @@ int pthread_cond_init(pthread_cond_t *l, const pthread_condattr_t *attr) {
   *((kpr_cond**)l) = lock;
 
   lock->waitingMutex = NULL;
-  kpr_list_create(&lock->waitingList);
 
   klee_toggle_thread_scheduling(1);
 
@@ -60,7 +59,7 @@ int pthread_cond_destroy(pthread_cond_t *l) {
     return -1;
   }
 
-  if (kpr_list_size(&lock->waitingList) != 0) {
+  if (lock->waitingCount != 0) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
@@ -90,16 +89,15 @@ int pthread_cond_wait(pthread_cond_t *c, pthread_mutex_t *m) {
     if (lock->waitingMutex == NULL) {
       lock->waitingMutex = m;
     } else {
-      klee_report_error(__FILE__, __LINE__, "Calling pthread_cond_wait with different mutexes results in undefined behaviour", "undef");
+      klee_report_error(__FILE__, __LINE__,
+              "Calling pthread_cond_wait with different mutexes results in undefined behaviour",
+              "undef");
     }
   }
 
-  uint64_t tid = klee_get_thread_id();
-  kpr_list_push(&lock->waitingList, (void*) tid);
+  lock->waitingCount++;
+  klee_wait_on(c);
 
-  klee_sleep_thread();
-
-  klee_toggle_thread_scheduling(1);
   return pthread_mutex_lock(m);
 }
 
@@ -114,7 +112,11 @@ int pthread_cond_broadcast(pthread_cond_t *c) {
     return -1;
   }
 
-  kpr_notify_threads(&lock->waitingList);
+  // We can actually just use the transfer as we know that all wait on the
+  // same mutex again
+  klee_release_waiting(c, KLEE_RELEASE_ALL);
+
+  lock->waitingCount = 0;
   lock->waitingMutex = NULL;
 
   klee_toggle_thread_scheduling(1);
@@ -131,15 +133,14 @@ int pthread_cond_signal(pthread_cond_t *c) {
     return -1;
   }
 
-  if (kpr_list_size(&lock->waitingList) == 0) {
-    klee_toggle_thread_scheduling(1);
-    return 0;
+  // We can actually just use the transfer as we know that all wait on the
+  // same mutex again
+  klee_release_waiting(c, KLEE_RELEASE_SINGLE);
+  if (lock->waitingCount > 0) {
+    lock->waitingCount--;
   }
 
-  uint64_t waiting = (uint64_t) kpr_list_pop(&lock->waitingList);
-  klee_wake_up_thread(waiting);
-
-  if (kpr_list_size(&lock->waitingList) == 0) {
+  if (lock->waitingCount == 0) {
     lock->waitingMutex = NULL;
   }
 

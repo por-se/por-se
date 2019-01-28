@@ -20,7 +20,6 @@ static kpr_semaphore* kpr_sem_create(sem_t *kpr_sem, unsigned int kpr_value) {
   kpr_semaphore* sem = malloc(sizeof(kpr_semaphore));
   memset(sem, 0, sizeof(kpr_semaphore));
 
-  kpr_list_create(&sem->waiting);
   sem->value = kpr_value;
   sem->name = NULL;
 
@@ -183,10 +182,7 @@ int sem_wait (sem_t *kpr_sem) {
     result = kpr_sem_trywait(sem);
 
     if (result == EAGAIN) {
-      kpr_list_push(&sem->waiting, (void*) klee_get_thread_id());
-      // klee_toggle_thread_scheduling(1);
-      klee_sleep_thread();
-      // klee_toggle_thread_scheduling(0);
+      klee_wait_on(kpr_sem);
     } else {
       break;
     }
@@ -228,9 +224,9 @@ int sem_post (sem_t *kpr_sem) {
   sem->value++;
   if (sem->value > 0) {
     // We can wake up all threads since our wait impl will rewait
-    kpr_notify_threads(&sem->waiting);
-    klee_toggle_thread_scheduling(1);
+    klee_release_waiting(kpr_sem, KLEE_RELEASE_SINGLE);
 
+    klee_toggle_thread_scheduling(1);
     klee_preempt_thread();
   } else {
     klee_toggle_thread_scheduling(1);
