@@ -43,20 +43,12 @@ class MemoryFingerprint_StringSet;
 // Set default implementation
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
 
-template <typename Derived, std::size_t hashSize> class MemoryFingerprintT {
-
-protected:
-  using hash_t = std::array<std::uint8_t, hashSize>;
-  using stringset_t = std::set<std::string>;
-
-public:
-  typedef
-      typename std::conditional_t<hashSize == 0, stringset_t, hash_t> value_t;
-
-private:
+template <typename Derived, std::size_t hashSize, typename valueT = std::array<std::uint8_t, hashSize>>
+class MemoryFingerprintT {
+  template <typename hashT> friend class VerifiedMemoryFingerprint;
   Derived &getDerived() { return *(static_cast<Derived *>(this)); }
 
-  value_t fingerprintValue{};
+  valueT fingerprintValue = {};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 
   template <typename T>
@@ -86,7 +78,7 @@ private:
 
 protected:
   // buffer that holds current hash after calling generateHash()
-  value_t buffer = {};
+  valueT buffer = {};
 
 private:
   // information on what went into buffer
@@ -102,6 +94,8 @@ public:
   MemoryFingerprintT() = default;
   MemoryFingerprintT(const MemoryFingerprintT &) = default;
 
+  using value_t = valueT;
+
   void addToFingerprint();
   void removeFromFingerprint();
 
@@ -112,10 +106,10 @@ public:
   void addDelta(MemoryFingerprintDelta &delta);
   void removeDelta(MemoryFingerprintDelta &delta);
 
-  value_t getFingerprint(std::vector<ref<Expr>> &expressions);
+  valueT getFingerprint(std::vector<ref<Expr>> &expressions);
 
-  value_t getFingerprintWithDelta(std::vector<ref<Expr>> &expressions,
-                                  MemoryFingerprintDelta &delta);
+  valueT getFingerprintWithDelta(std::vector<ref<Expr>> &expressions,
+                                 MemoryFingerprintDelta &delta);
 
   void updateExpr(const ref<Expr> expr);
 
@@ -186,9 +180,9 @@ public:
 };
 
 class MemoryFingerprint_StringSet
-    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0> {
-  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
-  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0>;
+    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>> {
+  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
+  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
 
   std::string current;
   bool first = true;
@@ -227,25 +221,25 @@ public:
 class MemoryFingerprintDelta {
   friend class MemoryState;
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta);
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addToDeltaOnly(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addToDeltaOnly(MemoryFingerprintDelta &delta);
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::removeFromDeltaOnly(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeFromDeltaOnly(MemoryFingerprintDelta &delta);
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::addDelta(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addDelta(MemoryFingerprintDelta &delta);
 
-  template <typename Derived, std::size_t hashSize>
-  friend void MemoryFingerprintT<Derived, hashSize>::removeDelta(MemoryFingerprintDelta &delta);
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeDelta(MemoryFingerprintDelta &delta);
 
-  MemoryFingerprint::value_t fingerprintValue{};
+  MemoryFingerprint::value_t fingerprintValue = {};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
 };
 

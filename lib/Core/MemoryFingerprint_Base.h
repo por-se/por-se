@@ -10,8 +10,8 @@ static_assert(0, "DO NOT include this file directly!");
 
 namespace klee {
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::updateExpr(const ref<Expr> expr) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateExpr(const ref<Expr> expr) {
   llvm::raw_ostream &os = getDerived().updateOstream();
   std::unique_ptr<ExprPPrinter> p(ExprPPrinter::create(os));
   p->scan(expr);
@@ -24,8 +24,8 @@ void MemoryFingerprintT<D, S>::updateExpr(const ref<Expr> expr) {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::updateConstantExpr(const ConstantExpr &expr) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateConstantExpr(const ConstantExpr &expr) {
   if (expr.getWidth() <= 64) {
     std::uint64_t constantValue = expr.getZExtValue(64);
     getDerived().updateUint64(constantValue);
@@ -38,8 +38,8 @@ void MemoryFingerprintT<D, S>::updateConstantExpr(const ConstantExpr &expr) {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::addToFingerprint() {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::addToFingerprint() {
   getDerived().generateHash();
   executeAdd(fingerprintValue, buffer);
   getDerived().clearHash();
@@ -52,8 +52,8 @@ void MemoryFingerprintT<D, S>::addToFingerprint() {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::removeFromFingerprint() {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::removeFromFingerprint() {
   getDerived().generateHash();
   executeRemove(fingerprintValue, buffer);
   getDerived().clearHash();
@@ -67,9 +67,8 @@ void MemoryFingerprintT<D, S>::removeFromFingerprint() {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::addToFingerprintAndDelta(
-    MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
   executeAdd(delta.fingerprintValue, buffer);
   executeAdd(fingerprintValue, buffer);
@@ -84,9 +83,8 @@ void MemoryFingerprintT<D, S>::addToFingerprintAndDelta(
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::removeFromFingerprintAndDelta(
-    MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
   executeRemove(delta.fingerprintValue, buffer);
   executeRemove(fingerprintValue, buffer);
@@ -103,8 +101,8 @@ void MemoryFingerprintT<D, S>::removeFromFingerprintAndDelta(
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::addToDeltaOnly(MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::addToDeltaOnly(MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
   executeAdd(delta.fingerprintValue, buffer);
   getDerived().clearHash();
@@ -117,9 +115,8 @@ void MemoryFingerprintT<D, S>::addToDeltaOnly(MemoryFingerprintDelta &delta) {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::removeFromDeltaOnly(
-    MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::removeFromDeltaOnly(MemoryFingerprintDelta &delta) {
   getDerived().generateHash();
   executeRemove(delta.fingerprintValue, buffer);
   getDerived().clearHash();
@@ -133,8 +130,8 @@ void MemoryFingerprintT<D, S>::removeFromDeltaOnly(
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::addDelta(MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::addDelta(MemoryFingerprintDelta &delta) {
   executeAdd(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
@@ -142,8 +139,8 @@ void MemoryFingerprintT<D, S>::addDelta(MemoryFingerprintDelta &delta) {
   }
 }
 
-template <typename D, std::size_t S>
-void MemoryFingerprintT<D, S>::removeDelta(MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::removeDelta(MemoryFingerprintDelta &delta) {
   executeRemove(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
@@ -152,9 +149,8 @@ void MemoryFingerprintT<D, S>::removeDelta(MemoryFingerprintDelta &delta) {
   }
 }
 
-template <typename D, std::size_t S>
-typename MemoryFingerprintT<D, S>::value_t
-MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
+template <typename D, std::size_t S, typename valueT>
+valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   std::set<const Array *> arraysReferenced;
   for (auto s : symbolicReferences) {
     if (s.second > 0)
@@ -232,19 +228,17 @@ MemoryFingerprintT<D, S>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   return result;
 }
 
-template <typename D, std::size_t S>
-typename MemoryFingerprintT<D, S>::value_t
-MemoryFingerprintT<D, S>::getFingerprintWithDelta(
-    std::vector<ref<Expr>> &expressions, MemoryFingerprintDelta &delta) {
+template <typename D, std::size_t S, typename valueT>
+valueT MemoryFingerprintT<D, S, valueT>::getFingerprintWithDelta(std::vector<ref<Expr>> &expressions, MemoryFingerprintDelta &delta) {
   addDelta(delta);
   auto result = getFingerprint(expressions);
   removeDelta(delta);
   return result;
 }
 
-template <typename D, std::size_t S>
-bool MemoryFingerprintT<D, S>::updateWriteFragment(std::uint64_t address,
-                                                   ref<Expr> value) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateWriteFragment(std::uint64_t address,
+                                                      ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(1);
@@ -261,10 +255,11 @@ bool MemoryFingerprintT<D, S>::updateWriteFragment(std::uint64_t address,
   }
 }
 
-template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateLocalFragment(
-    std::uint64_t threadID, std::uint64_t stackFrameIndex,
-    const llvm::Instruction *inst, ref<Expr> value) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateLocalFragment(std::uint64_t threadID,
+                                                      std::uint64_t stackFrameIndex,
+                                                      const llvm::Instruction *inst,
+                                                      ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(3);
@@ -284,10 +279,12 @@ bool MemoryFingerprintT<Derived, hashSize>::updateLocalFragment(
   }
 }
 
-template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateArgumentFragment(
-    std::uint64_t threadID, std::uint64_t sfIndex, const KFunction *kf,
-    std::uint64_t argumentIndex, ref<Expr> value) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(std::uint64_t threadID,
+                                                         std::uint64_t sfIndex,
+                                                         const KFunction *kf,
+                                                         std::uint64_t argumentIndex,
+                                                         ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(5);
@@ -309,9 +306,10 @@ bool MemoryFingerprintT<Derived, hashSize>::updateArgumentFragment(
   }
 }
 
-template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateProgramCounterFragment(
-    std::uint64_t threadID, std::uint64_t sfIndex, const llvm::Instruction *i) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(std::uint64_t threadID,
+                                                               std::uint64_t sfIndex,
+                                                               const llvm::Instruction *i) {
   getDerived().updateUint8(7);
   getDerived().updateUint64(threadID);
   getDerived().updateUint64(sfIndex);
@@ -319,10 +317,11 @@ bool MemoryFingerprintT<Derived, hashSize>::updateProgramCounterFragment(
   return false;
 }
 
-template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateFunctionFragment(
-    std::uint64_t threadID, std::uint64_t sfIndex, const KFunction *callee,
-    const KInstruction *caller) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateFunctionFragment(std::uint64_t threadID,
+                                                         std::uint64_t sfIndex,
+                                                         const KFunction *callee,
+                                                         const KInstruction *caller) {
   getDerived().updateUint8(8);
   getDerived().updateUint64(threadID);
   getDerived().updateUint64(sfIndex);
@@ -331,9 +330,8 @@ bool MemoryFingerprintT<Derived, hashSize>::updateFunctionFragment(
   return false;
 }
 
-template <typename Derived, std::size_t hashSize>
-bool MemoryFingerprintT<Derived, hashSize>::updateExternalCallFragment(
-    std::uint64_t externalCallCounter) {
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateExternalCallFragment(std::uint64_t externalCallCounter) {
   getDerived().updateUint8(9);
   getDerived().updateUint64(externalCallCounter);
   return false;
