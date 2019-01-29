@@ -1,6 +1,7 @@
 #ifndef KLEE_MEMORYFINGERPRINT_H
 #define KLEE_MEMORYFINGERPRINT_H
 
+#include "klee/Config/config.h"
 #include "klee/Expr.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -40,8 +41,11 @@ class MemoryFingerprintDelta;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
 template <typename hashT> class VerifiedMemoryFingerprint;
 
-// Set default implementation
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+using MemoryFingerprint = VerifiedMemoryFingerprint<MemoryFingerprint_CryptoPP_BLAKE2b>;
+#else
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
+#endif
 
 template <typename Derived, std::size_t hashSize, typename valueT = std::array<std::uint8_t, hashSize>>
 class MemoryFingerprintT {

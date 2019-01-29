@@ -337,6 +337,12 @@ else()
   message(FATAL_ERROR "CryptoPP is required but could not be found")
 endif()
 
+option(VERIFIED_FINGERPRINTS "Enable use of verified fingerprints (hash + set of strings)" Off)
+if (VERIFIED_FINGERPRINTS)
+  set(ENABLE_VERIFIED_FINGERPRINTS 1) # For config.h
+  message(STATUS "Verified fingerprints enabled")
+endif()
+
 ################################################################################
 # Partial Order Reduction Library (from Simulator)
 ################################################################################

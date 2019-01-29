@@ -13,6 +13,9 @@
 /* Using Z3 Solver backend */
 #cmakedefine ENABLE_Z3 @ENABLE_Z3@
 
+/* Using verified fingerprints */
+#cmakedefine ENABLE_VERIFIED_FINGERPRINTS @ENABLE_VERIFIED_FINGERPRINTS@
+
 /* Does the platform use __ctype_b_loc, etc. */
 #cmakedefine HAVE_CTYPE_EXTERNALS @HAVE_CTYPE_EXTERNALS@
 
