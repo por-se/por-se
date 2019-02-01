@@ -3,6 +3,7 @@
 
 #include "Memory.h"
 #include "MemoryFingerprint.h"
+#include "SpecialFunctionHandler.h"
 #include "klee/StatePruningCmdLine.h"
 
 #include <cstdint>
@@ -21,7 +22,8 @@ class KInstruction;
 class KModule;
 
 class MemoryState {
-private:
+  friend void SpecialFunctionHandler::handlePrintFingerprint(ExecutionState &, KInstruction *, std::vector<ref<Expr>> &);
+
   MemoryState(const MemoryState &) = default;
 
   const ExecutionState *executionState = nullptr;

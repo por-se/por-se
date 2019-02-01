@@ -109,6 +109,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_prefer_cex", handlePreferCex, false),
   add("klee_posix_prefer_cex", handlePosixPreferCex, false),
   add("klee_print_expr", handlePrintExpr, false),
+  add("klee_print_fingerprint", handlePrintFingerprint, false),
   add("klee_print_range", handlePrintRange, false),
   add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
@@ -534,6 +535,29 @@ void SpecialFunctionHandler::handlePrintExpr(ExecutionState &state,
   llvm::errs() << msg_str << ":" << arguments[1] << "\n";
 }
 
+void SpecialFunctionHandler::handlePrintFingerprint(ExecutionState &state,
+                                                    KInstruction *target,
+                                                    std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 0 && "invalid number of arguments to klee_print_fingerprint");
+
+  auto current = state.memoryState.getFingerprint();
+  llvm::errs() << "Current Fingerprint: " << MemoryFingerprint::toString(current) << "\n";
+
+  std::vector<ref<Expr>> empty;
+  auto global = state.memoryState.fingerprint.getFingerprint(empty);
+  llvm::errs() << "Global: " << MemoryFingerprint::toString(global) << "\n";
+
+  for (auto &t : state.threads) {
+    Thread &thread = t.second;
+    for (std::size_t i = 0; i < thread.stack.size(); ++i) {
+      auto delta = thread.stack[i].fingerprintDelta;
+      bool isCurrent = (state.currentThreadId() == t.first) && (thread.stack.size() - 1 == i);
+      llvm::errs() << "Thread " << t.first << ":" << i
+                   << (isCurrent ? " (current)" : "")
+                   << " Delta: " << MemoryFingerprint::toString(delta) << "\n";
+    }
+  }
+}
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
                                               KInstruction *target,
                                               std::vector<ref<Expr> > &arguments) {
