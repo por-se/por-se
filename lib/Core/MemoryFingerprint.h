@@ -119,8 +119,7 @@ public:
 
   void updateConstantExpr(const ConstantExpr &expr);
 
-  template <typename T>
-  static std::string toString(const T &fingerprintValue) {
+  static std::string toString(const valueT &fingerprintValue) {
     if constexpr (hashSize > 0) {
       std::stringstream result;
       for (const auto byte : fingerprintValue) {
@@ -132,6 +131,8 @@ public:
       return Derived::toString_impl(fingerprintValue);
     }
   }
+
+  static std::string toString(const MemoryFingerprintDelta &delta);
 
   bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
   bool updateLocalFragment(std::uint64_t threadID,
@@ -316,7 +317,7 @@ class VerifiedMemoryFingerprint
   }
 
   static std::string toString_impl(const typename Base::value_t &fingerprintValue) {
-    return hashT::toString(fingerprintValue.hash);
+    return MemoryFingerprint_StringSet::toString(fingerprintValue.stringSet);
   }
 
   static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {
@@ -340,6 +341,9 @@ public:
 // NOTE: MemoryFingerprint needs to be a complete type
 class MemoryFingerprintDelta {
   friend class MemoryState;
+
+  template <typename Derived, std::size_t hashSize, typename valueT>
+  friend std::string MemoryFingerprintT<Derived, hashSize, valueT>::toString(const MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize, typename valueT>
   friend void MemoryFingerprintT<Derived, hashSize, valueT>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta);

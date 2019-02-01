@@ -39,6 +39,11 @@ void MemoryFingerprintT<D, S, V>::updateConstantExpr(const ConstantExpr &expr) {
 }
 
 template <typename D, std::size_t S, typename V>
+std::string MemoryFingerprintT<D, S, V>::toString(const MemoryFingerprintDelta &delta) {
+  return std::move(toString(delta.fingerprintValue));
+}
+
+template <typename D, std::size_t S, typename V>
 void MemoryFingerprintT<D, S, V>::addToFingerprint() {
   getDerived().generateHash();
   executeAdd(fingerprintValue, buffer);
