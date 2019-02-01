@@ -16,8 +16,10 @@
 
 #include "llvm/ADT/StringExtras.h"
 
-#include <vector>
+#include <cstddef>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace llvm {
   class Value;
@@ -40,8 +42,8 @@ private:
   static uint64_t counter;
   mutable unsigned refCount;
 
-  /// index of stack frame in which this memory object was allocated.
-  size_t stackframeIndex;
+  /// id of thread and index of stack frame in which this memory object was allocated.
+  std::pair<std::size_t, std::size_t> allocationStackFrame{};
 
 public:
   uint64_t id;
@@ -79,7 +81,7 @@ public:
   explicit
   MemoryObject(uint64_t _address) 
     : refCount(0),
-      stackframeIndex(0),
+      allocationStackFrame({}),
       id(counter++), 
       address(_address),
       size(0),
@@ -91,10 +93,10 @@ public:
   MemoryObject(uint64_t _address, unsigned _size, 
                bool _isLocal, bool _isGlobal, bool _isFixed,
                const llvm::Value *_allocSite,
-               size_t _stackframeIndex,
+               std::pair<std::size_t, std::size_t> _allocationStackFrame,
                MemoryManager *_parent)
     : refCount(0),
-      stackframeIndex(_stackframeIndex),
+      allocationStackFrame(_allocationStackFrame),
       id(counter++),
       address(_address),
       size(_size),
@@ -154,8 +156,8 @@ public:
     }
   }
 
-  size_t getStackframeIndex() const {
-    return stackframeIndex;
+  const std::pair<std::size_t, std::size_t> &getAllocationStackFrame() const {
+    return allocationStackFrame;
   }
 };
 

@@ -17,8 +17,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MathExtras.h"
 
-#include <inttypes.h>
 #include <sys/mman.h>
+#include <utility>
 
 using namespace klee;
 
@@ -91,11 +91,13 @@ MemoryManager::~MemoryManager() {
     munmap(deterministicSpace, spaceSize);
 }
 
-MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
+MemoryObject *MemoryManager::allocate(std::uint64_t size,
+                                      bool isLocal,
                                       bool isGlobal,
                                       const llvm::Value *allocSite,
-                                      size_t stackframeIndex,
-                                      size_t alignment) {
+                                      std::size_t threadId,
+                                      std::size_t stackframeIndex,
+                                      std::size_t alignment) {
   if (size > 10 * 1024 * 1024)
     klee_warning_once(0, "Large alloc: %" PRIu64
                          " bytes.  KLEE may run out of memory.",
@@ -147,15 +149,17 @@ MemoryObject *MemoryManager::allocate(uint64_t size, bool isLocal,
     return 0;
 
   ++stats::allocations;
-  MemoryObject *res = new MemoryObject(address, size, isLocal, isGlobal, false,
-                                       allocSite, stackframeIndex, this);
+  MemoryObject *res =
+    new MemoryObject(address, size, isLocal, isGlobal, false, allocSite,
+                     std::make_pair(threadId, stackframeIndex), this);
   objects.insert(res);
   return res;
 }
 
-MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
+MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t size,
                                            const llvm::Value *allocSite,
-                                           size_t stackframeIndex) {
+                                           std::size_t threadId,
+                                           std::size_t stackframeIndex) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;
        ++it) {
@@ -167,8 +171,8 @@ MemoryObject *MemoryManager::allocateFixed(uint64_t address, uint64_t size,
 
   ++stats::allocations;
   MemoryObject *res =
-      new MemoryObject(address, size, false, true, true, allocSite,
-                       stackframeIndex, this);
+    new MemoryObject(address, size, false, true, true, allocSite,
+                     std::make_pair(threadId, stackframeIndex), this);
   objects.insert(res);
   return res;
 }

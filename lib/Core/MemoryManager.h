@@ -12,7 +12,6 @@
 
 #include <cstddef>
 #include <set>
-#include <cstdint>
 
 namespace llvm {
 class Value;
@@ -40,12 +39,13 @@ public:
    * Returns memory object which contains a handle to real virtual process
    * memory.
    */
-  MemoryObject *allocate(uint64_t size, bool isLocal, bool isGlobal,
-                         const llvm::Value *allocSite, size_t stackframeIndex,
-                         size_t alignment);
-  MemoryObject *allocateFixed(uint64_t address, uint64_t size,
+  MemoryObject *allocate(std::uint64_t size, bool isLocal, bool isGlobal,
+                         const llvm::Value *allocSite, std::size_t threadId,
+                         std::size_t stackframeIndex, std::size_t alignment);
+  MemoryObject *allocateFixed(std::uint64_t address, std::uint64_t size,
                               const llvm::Value *allocSite,
-                              size_t stackframeIndex);
+                              std::size_t threadId,
+                              std::size_t stackframeIndex);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }

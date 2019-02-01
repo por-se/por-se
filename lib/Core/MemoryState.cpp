@@ -325,9 +325,10 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
 
   MemoryFingerprintDelta *delta = nullptr;
   if (mo.isLocal) {
-    Thread &thread = executionState->currentThread();
-    std::size_t index = mo.getStackframeIndex();
-    delta = &thread.stack.at(index).fingerprintDelta;
+    std::pair<std::size_t, std::size_t> alloc = mo.getAllocationStackFrame();
+    auto &thread = const_cast<Thread &>(executionState->threads.at(alloc.first));
+    StackFrame &sf = thread.stack.at(alloc.second);
+    delta = &sf.fingerprintDelta;
   }
 
   // optimization for concrete offsets: only hash changed indices

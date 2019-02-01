@@ -693,7 +693,8 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
                                            bool isReadOnly) {
   Thread &thread = state.currentThread();
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
-                                  size, nullptr, thread.stack.size()-1);
+                                  size, nullptr, thread.getThreadId(),
+                                  thread.stack.size() - 1);
   ObjectState *os = bindObjectInState(state, mo, false);
   for (unsigned i = 0; i < size; i++) {
     os->write8(i, ((uint8_t*)addr)[i]);
@@ -818,7 +819,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread.stack.size()-1,
+                                          thread.getThreadId(),
+                                          thread.stack.size() - 1,
                                           /*alignment=*/globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
       globalObjects.insert(std::make_pair(v, mo));
@@ -849,7 +851,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread.stack.size()-1,
+                                          thread.getThreadId(),
+                                          thread.stack.size() - 1,
                                           /*alignment=*/globalObjectAlignment);
       if (!mo)
         llvm::report_fatal_error("out of memory");
@@ -1609,7 +1612,8 @@ void Executor::executeCall(ExecutionState &state,
 
       MemoryObject *mo = sf.varargs =
           memory->allocate(size, true, false, thread.prevPc->inst,
-                           thread.stack.size()-1,
+                           thread.getThreadId(),
+                           thread.stack.size() - 1,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
         terminateStateOnExecError(state, "out of memory (varargs)");
@@ -3912,7 +3916,9 @@ void Executor::executeAlloc(ExecutionState &state,
     }
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
-                         allocSite, thread.stack.size()-1, allocationAlignment);
+                         allocSite, thread.getThreadId(),
+                         thread.stack.size() - 1,
+                         allocationAlignment);
     if (!mo) {
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
@@ -4369,8 +4375,8 @@ void Executor::runFunctionAsMain(Function *f,
       argvMO =
           memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
                            /*isLocal=*/false, /*isGlobal=*/true,
-                           /*allocSite=*/first, 0,
-                           /*alignment=*/8);
+                           /*allocSite=*/first, /*threadId=*/0,
+                           /*stackframeIndex=*/0, /*alignment=*/8);
 
       if (!argvMO)
         klee_error("Could not allocate memory for function arguments");
@@ -4420,7 +4426,9 @@ void Executor::runFunctionAsMain(Function *f,
         MemoryObject *arg =
             memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
                              /*allocSite=*/thread.pc->inst,
-                             thread.stack.size()-1, /*alignment=*/8);
+                             thread.getThreadId(),
+                             thread.stack.size() - 1,
+                             /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
         ObjectState *os = bindObjectInState(*state, arg, false);
@@ -4688,7 +4696,8 @@ void Executor::createThread(ExecutionState &state,
   std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
-  MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst, thread->stack.size() - 1, alignment);
+  MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst,
+    thread->getThreadId(), thread->stack.size() - 1, alignment);
   if (thErrno == nullptr) {
     klee_error("Could not allocate memory for thread local objects");
   }
