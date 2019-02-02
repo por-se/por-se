@@ -174,7 +174,7 @@ public:
                         const llvm::BasicBlock *returningBB,
                         const llvm::BasicBlock *callerBB);
 
-  MemoryFingerprint::value_t getFingerprint();
+  MemoryFingerprint::value_t getFingerprint() const;
 };
 }
 

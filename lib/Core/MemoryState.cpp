@@ -483,8 +483,9 @@ void MemoryState::registerPopFrame(std::uint64_t threadID,
   }
 }
 
-MemoryFingerprint::value_t MemoryState::getFingerprint() {
+MemoryFingerprint::value_t MemoryState::getFingerprint() const {
   MemoryFingerprintDelta temporary;
+  MemoryFingerprint copy = fingerprint;
 
   // include live locals in current stack frames of all (non-exited) threads
   for (auto &it : executionState->threads) {
@@ -493,10 +494,10 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
     if (thread.state == ThreadState::Exited || !thread.liveSetPc)
       continue;
 
-    fingerprint.updateProgramCounterFragment(threadID,
-                                             thread.stack.size() - 1,
-                                             thread.pc->inst);
-    fingerprint.addToDeltaOnly(temporary);
+    copy.updateProgramCounterFragment(threadID,
+                                      thread.stack.size() - 1,
+                                      thread.pc->inst);
+    copy.addToDeltaOnly(temporary);
 
     llvm::Instruction *liveInst = thread.liveSetPc->inst;
 
@@ -527,8 +528,8 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
       if (value.isNull())
         continue;
 
-      fingerprint.updateLocalFragment(threadID, thread.stack.size() - 1, ki->inst, value);
-      fingerprint.addToDeltaOnly(temporary);
+      copy.updateLocalFragment(threadID, thread.stack.size() - 1, ki->inst, value);
+      copy.addToDeltaOnly(temporary);
     }
   }
 
@@ -536,7 +537,7 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() {
   for (auto expr : executionState->constraints) {
     expressions.push_back(expr);
   }
-  return fingerprint.getFingerprintWithDelta(expressions, temporary);
+  return copy.getFingerprintWithDelta(expressions, temporary);
 }
 
 std::string MemoryState::ExprString(ref<Expr> expr) {
