@@ -20,7 +20,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 
-#include <cmath>
 #include <iomanip>
 #include <sstream>
 
@@ -538,6 +537,12 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() const {
     expressions.push_back(expr);
   }
   return copy.getFingerprintWithDelta(expressions, temporary);
+}
+
+MemoryFingerprint::value_t MemoryState::getGlobalFingerprintValue() const {
+  std::vector<ref<Expr>> empty;
+  MemoryFingerprint tmp = fingerprint;
+  return tmp.getFingerprint(empty);
 }
 
 std::string MemoryState::ExprString(ref<Expr> expr) {

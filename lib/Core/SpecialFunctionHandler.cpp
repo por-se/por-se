@@ -540,23 +540,7 @@ void SpecialFunctionHandler::handlePrintFingerprint(ExecutionState &state,
                                                     std::vector<ref<Expr>> &arguments) {
   assert(arguments.size() == 0 && "invalid number of arguments to klee_print_fingerprint");
 
-  auto current = state.memoryState.getFingerprint();
-  llvm::errs() << "Current Fingerprint: " << MemoryFingerprint::toString(current) << "\n";
-
-  std::vector<ref<Expr>> empty;
-  auto global = state.memoryState.fingerprint.getFingerprint(empty);
-  llvm::errs() << "Global: " << MemoryFingerprint::toString(global) << "\n";
-
-  for (auto &t : state.threads) {
-    Thread &thread = t.second;
-    for (std::size_t i = 0; i < thread.stack.size(); ++i) {
-      auto delta = thread.stack[i].fingerprintDelta;
-      bool isCurrent = (state.currentThreadId() == t.first) && (thread.stack.size() - 1 == i);
-      llvm::errs() << "Thread " << t.first << ":" << i
-                   << (isCurrent ? " (current)" : "")
-                   << " Delta: " << MemoryFingerprint::toString(delta) << "\n";
-    }
-  }
+  state.printFingerprint();
 }
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
                                               KInstruction *target,
