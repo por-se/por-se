@@ -8,18 +8,18 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/CommandLine.h"
-
-namespace {
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
+#include "llvm/Support/CommandLine.h"
+#endif
+
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+namespace {
 llvm::cl::opt<bool>ShowMemoryOperations("verified-fingerprints-show-memory",
   llvm::cl::init(false),
   llvm::cl::desc("Show individual (per byte) memory operations in verified fingerprints (default=on)")
 );
-#else
-bool ShowMemoryOperations = false;
-#endif
 } // namespace
+#endif // ENABLE_VERIFIED_FINGERPRINTS
 
 namespace klee {
 
@@ -55,6 +55,8 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::clearHash() {
   // not really necessary as Final() already calls this internally
   blake2b.Restart();
 }
+
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
 
 /* MemoryFingerprint_StringSet */
 
@@ -356,5 +358,7 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
 
   return result.str();
 }
+
+#endif // ENABLE_VERIFIED_FINGERPRINTS
 
 } // namespace klee

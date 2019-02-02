@@ -186,6 +186,8 @@ public:
   ~MemoryFingerprint_CryptoPP_BLAKE2b() = default;
 };
 
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+
 class MemoryFingerprint_StringSet
     : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>> {
   friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
@@ -337,6 +339,8 @@ public:
   VerifiedMemoryFingerprint& operator=(VerifiedMemoryFingerprint &&) = delete;
   ~VerifiedMemoryFingerprint() = default;
 };
+
+#endif // ENABLE_VERIFIED_FINGERPRINTS
 
 // NOTE: MemoryFingerprint needs to be a complete type
 class MemoryFingerprintDelta {
