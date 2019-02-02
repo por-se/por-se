@@ -486,6 +486,10 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() const {
   MemoryFingerprintDelta temporary;
   MemoryFingerprint copy = fingerprint;
 
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+  temporary.fingerprintValue.state = executionState;
+#endif
+
   // include live locals in current stack frames of all (non-exited) threads
   for (auto &it : executionState->threads) {
     auto threadID = it.first;

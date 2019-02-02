@@ -7,7 +7,6 @@
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/CommandLine.h"
 
 namespace {
@@ -54,7 +53,7 @@ void MemoryFingerprint_StringSet::clearHash() {
   first = true;
 }
 
-void MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
+bool MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
   for (auto &elem : src) {
     if (elem.empty())
       continue;
@@ -65,15 +64,14 @@ void MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
       llvm::errs() << "FAILED: \n";
       decodeAndPrintFragment(debug, elem, true);
       llvm::errs() << debug.str() << "\n";
-      llvm::errs() << "DST: " << toString(dst) << "\n";
-      llvm::errs().flush();
-      assert(0 && "fragment already in fingerprint");
+      return false;
     }
     dst.insert(elem);
   }
+  return true;
 }
 
-void MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src) {
+bool MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src) {
   for (auto &elem : src) {
     if (elem.empty())
       continue;
@@ -85,12 +83,11 @@ void MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src
       llvm::errs() << "FAILED: \n";
       decodeAndPrintFragment(debug, elem, true);
       llvm::errs() << debug.str() << "\n";
-      llvm::errs() << "DST: " << toString(dst) << "\n";
-      llvm::errs().flush();
-      assert(0 && "fragment not in fingerprint");
+      return false;
     }
     dst.erase(pos);
   }
+  return true;
 }
 
 MemoryFingerprint_StringSet::DecodedFragment

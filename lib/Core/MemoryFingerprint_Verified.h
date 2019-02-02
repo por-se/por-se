@@ -5,6 +5,7 @@ static_assert(0, "DO NOT include this file directly!");
 #endif
 
 namespace klee {
+class ExecutionState;
 
 template <typename hashT>
 class VerifiedMemoryFingerprintValue {
@@ -15,6 +16,8 @@ class VerifiedMemoryFingerprintValue {
   typename hashT::value_t hash;
 
 public:
+  const ExecutionState *state = nullptr;
+
   bool operator<(const VerifiedMemoryFingerprintValue<hashT> &other) const {
     return std::tie(hash, stringSet) < std::tie(other.hash, other.stringSet);
   }
@@ -71,6 +74,8 @@ class VerifiedMemoryFingerprint
   VerifiedMemoryFingerprintOstream<hashT> ostream{stringSetFingerprint, hashFingerprint};
 
   void generateHash() {
+    Base::buffer.state = state;
+
     stringSetFingerprint.generateHash();
     Base::buffer.stringSet = stringSetFingerprint.buffer;
     hashFingerprint.generateHash();
@@ -101,18 +106,34 @@ class VerifiedMemoryFingerprint
   }
 
   static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {
-    MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
+    dst.state = src.state;
+    bool success = MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
+    if (!success) {
+      assert(src.state != nullptr && "state not correctly propagated");
+      dst.state->printFingerprint();
+      llvm::errs().flush();
+      assert(0 && "fragment already in fingerprint");
+    }
     hashT::executeAdd(dst.hash, src.hash);
   }
 
   static void executeRemove(typename Base::value_t &dst, const typename Base::value_t &src) {
-    MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
+    dst.state = src.state;
+    bool success = MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
+    if (!success) {
+      assert(src.state != nullptr && "state not correctly propagated");
+      dst.state->printFingerprint();
+      llvm::errs().flush();
+      assert(0 && "fragment not in fingerprint");
+    }
     hashT::executeRemove(dst.hash, src.hash);
   }
 
 public:
+  const ExecutionState *state;
+
   VerifiedMemoryFingerprint() = default;
-  VerifiedMemoryFingerprint(const VerifiedMemoryFingerprint &other) : Base(other) { }
+  VerifiedMemoryFingerprint(const VerifiedMemoryFingerprint &other) : Base(other), state(other.state) { }
   VerifiedMemoryFingerprint(VerifiedMemoryFingerprint &&) = delete;
   VerifiedMemoryFingerprint& operator=(VerifiedMemoryFingerprint &&) = delete;
   ~VerifiedMemoryFingerprint() = default;

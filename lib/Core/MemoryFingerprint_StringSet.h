@@ -23,8 +23,8 @@ class MemoryFingerprint_StringSet
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
 
-  static void executeAdd(value_t &dst, const value_t &src);
-  static void executeRemove(value_t &dst, const value_t &src);
+  static bool executeAdd(value_t &dst, const value_t &src);
+  static bool executeRemove(value_t &dst, const value_t &src);
 
   static std::string toString_impl(const value_t &fingerprintValue);
 
