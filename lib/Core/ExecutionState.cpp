@@ -600,7 +600,7 @@ void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {
   }
 }
 
-void ExecutionState::printFingerprint() {
+void ExecutionState::printFingerprint() const {
   auto current = memoryState.getFingerprint();
   llvm::errs() << "Current Fingerprint: " << MemoryFingerprint::toString(current) << "\n";
 
@@ -608,7 +608,7 @@ void ExecutionState::printFingerprint() {
   llvm::errs() << "Global: " << MemoryFingerprint::toString(global) << "\n";
 
   for (auto &t : threads) {
-    Thread &thread = t.second;
+    const Thread &thread = t.second;
     for (std::size_t i = 0; i < thread.stack.size(); ++i) {
       auto delta = thread.stack[i].fingerprintDelta;
       bool isCurrent = (currentThreadId() == t.first) && (thread.stack.size() - 1 == i);
