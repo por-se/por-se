@@ -3,6 +3,8 @@
 
 #include "klee/Config/config.h"
 #include "klee/Expr.h"
+#include "klee/util/ExprHashMap.h"
+#include "klee/util/ExprPPrinter.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -39,9 +41,9 @@ class KInstruction;
 
 class MemoryFingerprintDelta;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
-template <typename hashT> class VerifiedMemoryFingerprint;
 
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
+template <typename hashT> class VerifiedMemoryFingerprint;
 using MemoryFingerprint = VerifiedMemoryFingerprint<MemoryFingerprint_CryptoPP_BLAKE2b>;
 #else
 using MemoryFingerprint = MemoryFingerprint_CryptoPP_BLAKE2b;
@@ -162,221 +164,22 @@ public:
   ~MemoryFingerprintOstream() override { assert(GetNumBytesInBuffer() == 0); }
 };
 
-class MemoryFingerprint_CryptoPP_BLAKE2b
-    : public MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32> {
-  friend class MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
-  using Base = MemoryFingerprintT<MemoryFingerprint_CryptoPP_BLAKE2b, 32>;
-  template <typename hashT> friend class VerifiedMemoryFingerprint;
-  template <typename hashT> friend class VerifiedMemoryFingerprintOstream;
+} // namespace klee
 
-  CryptoPP::BLAKE2b blake2b{false, 32};
-  MemoryFingerprintOstream<CryptoPP::BLAKE2b> ostream{blake2b};
+#define INCLUDE_FROM_MEMORYFINGERPRINT_H
 
-  void generateHash();
-  void clearHash();
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  llvm::raw_ostream &updateOstream();
-
-public:
-  MemoryFingerprint_CryptoPP_BLAKE2b() = default;
-  MemoryFingerprint_CryptoPP_BLAKE2b(const MemoryFingerprint_CryptoPP_BLAKE2b &other) : Base(other) { }
-  MemoryFingerprint_CryptoPP_BLAKE2b(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
-  MemoryFingerprint_CryptoPP_BLAKE2b& operator=(MemoryFingerprint_CryptoPP_BLAKE2b &&) = delete;
-  ~MemoryFingerprint_CryptoPP_BLAKE2b() = default;
-};
-
+#include "MemoryFingerprint_CryptoPP_BLAKE2b.h"
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
-
-class MemoryFingerprint_StringSet
-    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>> {
-  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
-  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
-  template <typename hashT> friend class VerifiedMemoryFingerprint;
-  template <typename hashT> friend class VerifiedMemoryFingerprintOstream;
-
-  std::string current;
-  bool first = true;
-  llvm::raw_string_ostream ostream{current};
-
-  void generateHash();
-  void clearHash();
-  void updateUint8(const std::uint8_t value);
-  void updateUint64(const std::uint64_t value);
-  llvm::raw_ostream &updateOstream();
-
-  static void executeAdd(value_t &dst, const value_t &src);
-  static void executeRemove(value_t &dst, const value_t &src);
-
-  static std::string toString_impl(const value_t &fingerprintValue);
-
-public:
-  MemoryFingerprint_StringSet() = default;
-  MemoryFingerprint_StringSet(const MemoryFingerprint_StringSet &other) : Base(other) { }
-  MemoryFingerprint_StringSet(MemoryFingerprint_StringSet &&) = delete;
-  MemoryFingerprint_StringSet& operator=(MemoryFingerprint_StringSet &&) = delete;
-  ~MemoryFingerprint_StringSet() = default;
-
-  struct DecodedFragment {
-    std::size_t writes = 0;
-    bool containsSymbolicValue = false;
-    bool hasPathConstraint = false;
-    bool output = false;
-  };
-  static DecodedFragment decodeAndPrintFragment(llvm::raw_ostream &os,
-                                                std::string fragment,
-                                                bool showMemoryOperations);
-};
-
-template <typename hashT>
-class VerifiedMemoryFingerprintValue {
-  friend class VerifiedMemoryFingerprint<hashT>;
-  friend struct std::hash<VerifiedMemoryFingerprintValue<hashT>>;
-
-  MemoryFingerprint_StringSet::value_t stringSet;
-  typename hashT::value_t hash;
-
-public:
-  bool operator<(const VerifiedMemoryFingerprintValue<hashT> &other) const {
-    return std::tie(hash, stringSet) < std::tie(other.hash, other.stringSet);
-  }
-
-  bool operator==(const VerifiedMemoryFingerprintValue<hashT> &other) const {
-    if (hash == other.hash)
-      assert(stringSet == other.stringSet);
-    return hash == other.hash && stringSet == other.stringSet;
-  }
-
-  VerifiedMemoryFingerprintValue() = default;
-  VerifiedMemoryFingerprintValue(const VerifiedMemoryFingerprintValue &other) = default;
-  VerifiedMemoryFingerprintValue(VerifiedMemoryFingerprintValue &&) = delete;
-  VerifiedMemoryFingerprintValue& operator=(VerifiedMemoryFingerprintValue &&) = delete;
-  ~VerifiedMemoryFingerprintValue() = default;
-};
-
-template <typename hashT>
-class VerifiedMemoryFingerprintOstream : public llvm::raw_ostream {
-private:
-  MemoryFingerprint_StringSet &stringSetFingerprint;
-  hashT &hashFingerprint;
-  std::uint64_t pos = 0;
-
-public:
-  explicit VerifiedMemoryFingerprintOstream(MemoryFingerprint_StringSet &s, hashT &h)
-    : stringSetFingerprint(s), hashFingerprint(h) { }
-  uint64_t current_pos() const override { return pos; }
-  ~VerifiedMemoryFingerprintOstream() override { assert(GetNumBytesInBuffer() == 0); }
-
-  void write_impl(const char *ptr, std::size_t size) override {
-    std::string str(ptr, size);
-
-    llvm::raw_ostream &stringSetOS = stringSetFingerprint.updateOstream();
-    stringSetOS << str;
-    stringSetOS.flush();
-
-    llvm::raw_ostream &hashOS = hashFingerprint.updateOstream();
-    hashOS << str;
-    hashOS.flush();
-
-    pos += size;
-  }
-};
-
-template <typename hashT>
-class VerifiedMemoryFingerprint
-    : public MemoryFingerprintT<VerifiedMemoryFingerprint<hashT>, 0, VerifiedMemoryFingerprintValue<hashT>> {
-  friend class MemoryFingerprintT<VerifiedMemoryFingerprint<hashT>, 0, VerifiedMemoryFingerprintValue<hashT>>;
-  using Base = MemoryFingerprintT<VerifiedMemoryFingerprint<hashT>, 0, VerifiedMemoryFingerprintValue<hashT>>;
-
-  MemoryFingerprint_StringSet stringSetFingerprint;
-  hashT hashFingerprint;
-  VerifiedMemoryFingerprintOstream<hashT> ostream{stringSetFingerprint, hashFingerprint};
-
-  void generateHash() {
-    stringSetFingerprint.generateHash();
-    Base::buffer.stringSet = stringSetFingerprint.buffer;
-    hashFingerprint.generateHash();
-    Base::buffer.hash = hashFingerprint.buffer;
-  }
-
-  void clearHash() {
-    stringSetFingerprint.clearHash();
-    hashFingerprint.clearHash();
-  }
-
-  void updateUint8(const std::uint8_t value) {
-    stringSetFingerprint.updateUint8(value);
-    hashFingerprint.updateUint8(value);
-  }
-
-  void updateUint64(const std::uint64_t value) {
-    stringSetFingerprint.updateUint64(value);
-    hashFingerprint.updateUint64(value);
-  }
-
-  llvm::raw_ostream &updateOstream() {
-    return ostream;
-  }
-
-  static std::string toString_impl(const typename Base::value_t &fingerprintValue) {
-    return MemoryFingerprint_StringSet::toString(fingerprintValue.stringSet);
-  }
-
-  static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {
-    MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
-    hashT::executeAdd(dst.hash, src.hash);
-  }
-
-  static void executeRemove(typename Base::value_t &dst, const typename Base::value_t &src) {
-    MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
-    hashT::executeRemove(dst.hash, src.hash);
-  }
-
-public:
-  VerifiedMemoryFingerprint() = default;
-  VerifiedMemoryFingerprint(const VerifiedMemoryFingerprint &other) : Base(other) { }
-  VerifiedMemoryFingerprint(VerifiedMemoryFingerprint &&) = delete;
-  VerifiedMemoryFingerprint& operator=(VerifiedMemoryFingerprint &&) = delete;
-  ~VerifiedMemoryFingerprint() = default;
-};
-
+#include "MemoryFingerprint_StringSet.h"
+#include "MemoryFingerprint_Verified.h"
 #endif // ENABLE_VERIFIED_FINGERPRINTS
 
 // NOTE: MemoryFingerprint needs to be a complete type
-class MemoryFingerprintDelta {
-  friend class MemoryState;
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend std::string MemoryFingerprintT<Derived, hashSize, valueT>::toString(const MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addToFingerprintAndDelta(MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addToDeltaOnly(MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeFromDeltaOnly(MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addDelta(MemoryFingerprintDelta &delta);
-
-  template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeDelta(MemoryFingerprintDelta &delta);
-
-  MemoryFingerprint::value_t fingerprintValue = {};
-  std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
-};
-
-} // namespace klee
+#include "MemoryFingerprintDelta.h"
 
 // NOTE: MemoryFingerprintDelta needs to be a complete type
-#define INCLUDE_MEMORYFINGERPRINT_BASE_H
-// include definitions of MemoryFingerprintT member methods
 #include "MemoryFingerprint_Base.h"
-#undef INCLUDE_MEMORYFINGERPRINT_BASE_H
+
+#undef INCLUDE_FROM_MEMORYFINGERPRINT_H
 
 #endif

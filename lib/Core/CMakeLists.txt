@@ -6,7 +6,7 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-klee_add_component(kleeCore
+set(CORE_COMPONENTS
   AddressSpace.cpp
   MergeHandler.cpp
   CallPathManager.cpp
@@ -19,7 +19,7 @@ klee_add_component(kleeCore
   ExternalDispatcher.cpp
   ImpliedValue.cpp
   Memory.cpp
-  MemoryFingerprint.cpp
+  MemoryFingerprint_CryptoPP_BLAKE2b.cpp
   MemoryManager.cpp
   MemoryState.cpp
   PTree.cpp
@@ -32,6 +32,12 @@ klee_add_component(kleeCore
   TimingSolver.cpp
   UserSearcher.cpp
 )
+
+if (VERIFIED_FINGERPRINTS)
+  list(APPEND CORE_COMPONENTS MemoryFingerprint_StringSet.cpp)
+endif()
+
+klee_add_component(kleeCore ${CORE_COMPONENTS})
 
 # TODO: Work out what the correct LLVM components are for
 # kleeCore.

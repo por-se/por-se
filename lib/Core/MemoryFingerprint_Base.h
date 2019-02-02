@@ -1,12 +1,8 @@
-// This is file is included from "MemoryFingerprint.h" and defines member
-// functions of the base class MemoryFingerprintT.
+// This is an incomplete file, included from MemoryFingerprint.h
 
-#ifndef INCLUDE_MEMORYFINGERPRINT_BASE_H
+#ifndef INCLUDE_FROM_MEMORYFINGERPRINT_H
 static_assert(0, "DO NOT include this file directly!");
 #endif
-
-#include "klee/util/ExprHashMap.h"
-#include "klee/util/ExprPPrinter.h"
 
 namespace klee {
 

@@ -8,57 +8,16 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
 #include "llvm/Support/CommandLine.h"
-#endif
 
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
 namespace {
 llvm::cl::opt<bool>ShowMemoryOperations("verified-fingerprints-show-memory",
   llvm::cl::init(false),
   llvm::cl::desc("Show individual (per byte) memory operations in verified fingerprints (default=on)")
 );
 } // namespace
-#endif // ENABLE_VERIFIED_FINGERPRINTS
 
 namespace klee {
-
-/* MemoryFingerprintOstream<CryptoPP::BLAKE2b> */
-
-template <>
-void MemoryFingerprintOstream<CryptoPP::BLAKE2b>::write_impl(const char *ptr, std::size_t size) {
-  hash.Update(reinterpret_cast<const CryptoPP::byte *>(ptr), size);
-  pos += size;
-}
-
-/* MemoryFingerprint_CryptoPP_BLAKE2b */
-
-void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint8(const std::uint8_t value) {
-  static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
-  blake2b.Update(&value, 1);
-}
-
-void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(const std::uint64_t value) {
-  static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
-  blake2b.Update(reinterpret_cast<const std::uint8_t *>(&value), 8);
-}
-
-llvm::raw_ostream &MemoryFingerprint_CryptoPP_BLAKE2b::updateOstream() {
-  return ostream;
-}
-
-void MemoryFingerprint_CryptoPP_BLAKE2b::generateHash() {
-  blake2b.Final(buffer.data());
-}
-
-void MemoryFingerprint_CryptoPP_BLAKE2b::clearHash() {
-  // not really necessary as Final() already calls this internally
-  blake2b.Restart();
-}
-
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
-
-/* MemoryFingerprint_StringSet */
 
 void MemoryFingerprint_StringSet::updateUint8(const std::uint8_t value) {
   if (first) {
@@ -358,7 +317,5 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
 
   return result.str();
 }
-
-#endif // ENABLE_VERIFIED_FINGERPRINTS
 
 } // namespace klee
