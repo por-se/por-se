@@ -3923,9 +3923,6 @@ void Executor::executeAlloc(ExecutionState &state,
         os->initializeToRandom();
       }
 
-      if (PruneStates) {
-        state.memoryState.registerWrite(*mo, *os);
-      }
       bindLocal(target, state, mo->getBaseExpr());
       
       if (reallocFrom) {
@@ -3933,15 +3930,19 @@ void Executor::executeAlloc(ExecutionState &state,
         for (unsigned i=0; i<count; i++) {
           os->write(i, reallocFrom->read8(i));
         }
+
+        // free previous allocation
         const MemoryObject *reallocatedObject = reallocFrom->getObject();
         if (PruneStates) {
-          state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, count);
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
-
-        // The old object is implicitly freed
         processMemoryAccess(state, reallocatedObject, nullptr, MemoryAccessTracker::FREE_ACCESS);
         state.addressSpace.unbindObject(reallocatedObject);
+      }
+
+      if (PruneStates) {
+        // after realloc to let copied byted overwrite initialization
+        state.memoryState.registerWrite(*mo, *os);
       }
     }
   } else {
