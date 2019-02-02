@@ -8,6 +8,18 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/Support/CommandLine.h"
+
+namespace {
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+llvm::cl::opt<bool>ShowMemoryOperations("verified-fingerprints-show-memory",
+  llvm::cl::init(false),
+  llvm::cl::desc("Show individual (per byte) memory operations in verified fingerprints (default=on)")
+);
+#else
+bool ShowMemoryOperations = false;
+#endif
+} // namespace
 
 namespace klee {
 
@@ -317,13 +329,10 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
   bool containsSymbolicValue = false;
   bool hasPathConstraint = false;
 
-  // show individual memory operations in detail: writes (per byte)
-  bool showMemoryOperations = false;
-
   result << "{";
 
   for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
-    auto res = decodeAndPrintFragment(result, *it, showMemoryOperations);
+    auto res = decodeAndPrintFragment(result, *it, ShowMemoryOperations);
     writes += res.writes;
 
     if (res.containsSymbolicValue)
@@ -337,7 +346,7 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
     }
   }
 
-  if (!showMemoryOperations) {
+  if (!ShowMemoryOperations) {
     result << "} + " << writes << " write(s)";
   } else {
     result << "}";
