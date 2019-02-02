@@ -174,7 +174,7 @@ public:
 
   void registerPushFrame(std::uint64_t threadID, std::size_t stackFrameIndex,
                          const KFunction *callee, const KInstruction *caller);
-  void registerPopFrame(StackFrame &sf);
+  void registerPopFrame(const StackFrame &sf);
 
   MemoryFingerprint::value_t getFingerprint() const;
   MemoryFingerprint::value_t getGlobalFingerprintValue() const;

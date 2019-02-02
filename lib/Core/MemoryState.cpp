@@ -460,7 +460,7 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   fingerprint.addToFingerprintAndDelta(delta);
 }
 
-void MemoryState::registerPopFrame(StackFrame &sf) {
+void MemoryState::registerPopFrame(const StackFrame &sf) {
   if (DebugStatePruning) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }

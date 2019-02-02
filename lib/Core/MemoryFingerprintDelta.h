@@ -25,10 +25,10 @@ class MemoryFingerprintDelta {
   friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeFromDeltaOnly(MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addDelta(MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::addDelta(const MemoryFingerprintDelta &delta);
 
   template <typename Derived, std::size_t hashSize, typename valueT>
-  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeDelta(MemoryFingerprintDelta &delta);
+  friend void MemoryFingerprintT<Derived, hashSize, valueT>::removeDelta(const MemoryFingerprintDelta &delta);
 
   MemoryFingerprint::value_t fingerprintValue = {};
   std::unordered_map<const Array *, std::uint64_t> symbolicReferences;

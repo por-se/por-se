@@ -109,15 +109,15 @@ public:
   void removeFromFingerprintAndDelta(MemoryFingerprintDelta &delta);
   void addToDeltaOnly(MemoryFingerprintDelta &delta);
   void removeFromDeltaOnly(MemoryFingerprintDelta &delta);
-  void addDelta(MemoryFingerprintDelta &delta);
-  void removeDelta(MemoryFingerprintDelta &delta);
+  void addDelta(const MemoryFingerprintDelta &delta);
+  void removeDelta(const MemoryFingerprintDelta &delta);
 
   valueT getFingerprint(std::vector<ref<Expr>> &expressions);
 
   valueT getFingerprintWithDelta(std::vector<ref<Expr>> &expressions,
-                                 MemoryFingerprintDelta &delta);
+                                 const MemoryFingerprintDelta &delta);
 
-  void updateExpr(const ref<Expr> expr);
+  void updateExpr(const ref<Expr> &expr);
 
   void updateConstantExpr(const ConstantExpr &expr);
 
