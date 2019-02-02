@@ -99,186 +99,186 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
                                                     bool showMemoryOperations) {
   DecodedFragment result;
 
-    std::istringstream item(fragment);
-    int id;
-    item >> id;
-    switch (id) {
-    case 2:
-      result.containsSymbolicValue = true;
-      // fallthrough
-    case 1:
-      if (showMemoryOperations) {
-        std::uint64_t addr;
-        item >> addr;
+  std::istringstream item(fragment);
+  int id;
+  item >> id;
+  switch (id) {
+  case 2:
+    result.containsSymbolicValue = true;
+    // fallthrough
+  case 1:
+    if (showMemoryOperations) {
+      std::uint64_t addr;
+      item >> addr;
 
-        os << "[G]Write: ";
-        os << addr;
-        os << " =";
-
-        if (id == 2) {
-          std::string value;
-          for (std::string line; std::getline(item, line);) {
-            os << line;
-          }
-        } else {
-          unsigned value;
-          item >> value;
-          os << " " << value;
-        }
-        result.output = true;
-      }
-      result.writes++;
-      break;
-    case 4:
-      result.containsSymbolicValue = true;
-      // fallthrough
-    case 3: {
-      std::uint64_t tid;
-      std::uint64_t sfid;
-      std::uintptr_t ptr;
-
-      item >> tid;
-      item >> sfid;
-      item >> ptr;
-      llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
-
-      os << "[T" << tid << ':' << sfid << ']';
-      os << "Local: %";
-      if (inst->hasName()) {
-        os << inst->getName();
-      } else {
-        // extract slot number
-        std::string line;
-        llvm::raw_string_ostream sos(line);
-        sos << *inst;
-        sos.flush();
-        std::size_t start = line.find("%") + 1;
-        std::size_t end = line.find(" ", start);
-        os << line.substr(start, end - start);
-      }
-
-      const llvm::DebugLoc &dl = inst->getDebugLoc();
-      if (dl) {
-        auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
-        if (scope) {
-          os << " (" << scope->getFilename();
-          os << ":" << dl.getLine();
-          os << ")";
-        }
-      }
+      os << "[G]Write: ";
+      os << addr;
       os << " =";
 
-      for (std::string line; std::getline(item, line);) {
-        os << line;
-      }
-      result.output = true;
-      break;
-    }
-    case 6:
-      result.containsSymbolicValue = true;
-      // fallthrough
-    case 5: {
-      std::uint64_t tid;
-      std::uint64_t sfid;
-      std::uintptr_t ptr;
-      std::size_t argumentIndex;
-
-      item >> tid;
-      item >> sfid;
-      item >> ptr;
-      KFunction *kf = reinterpret_cast<KFunction *>(ptr);
-      item >> argumentIndex;
-      std::size_t total = kf->function->arg_size();
-
-      os << "[T" << tid << ':' << sfid << ']';
-      os << "Argument: ";
-      os << kf->function->getName() << "(";
-      for (std::size_t i = 0; i < total; ++i) {
-        if (argumentIndex == i) {
-          for (std::string line; std::getline(item, line);) {
-            os << line;
-          }
-        } else {
-          os << "?";
+      if (id == 2) {
+        std::string value;
+        for (std::string line; std::getline(item, line);) {
+          os << line;
         }
-        if (i != total - 1) {
-          os << ", ";
+      } else {
+        unsigned value;
+        item >> value;
+        os << " " << value;
+      }
+      result.output = true;
+    }
+    result.writes++;
+    break;
+  case 4:
+    result.containsSymbolicValue = true;
+    // fallthrough
+  case 3: {
+    std::uint64_t tid;
+    std::uint64_t sfid;
+    std::uintptr_t ptr;
+
+    item >> tid;
+    item >> sfid;
+    item >> ptr;
+    llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
+
+    os << "[T" << tid << ':' << sfid << ']';
+    os << "Local: %";
+    if (inst->hasName()) {
+      os << inst->getName();
+    } else {
+      // extract slot number
+      std::string line;
+      llvm::raw_string_ostream sos(line);
+      sos << *inst;
+      sos.flush();
+      std::size_t start = line.find("%") + 1;
+      std::size_t end = line.find(" ", start);
+      os << line.substr(start, end - start);
+    }
+
+    const llvm::DebugLoc &dl = inst->getDebugLoc();
+    if (dl) {
+      auto *scope = cast_or_null<llvm::DIScope>(dl.getScope());
+      if (scope) {
+        os << " (" << scope->getFilename();
+        os << ":" << dl.getLine();
+        os << ")";
+      }
+    }
+    os << " =";
+
+    for (std::string line; std::getline(item, line);) {
+      os << line;
+    }
+    result.output = true;
+    break;
+  }
+  case 6:
+    result.containsSymbolicValue = true;
+    // fallthrough
+  case 5: {
+    std::uint64_t tid;
+    std::uint64_t sfid;
+    std::uintptr_t ptr;
+    std::size_t argumentIndex;
+
+    item >> tid;
+    item >> sfid;
+    item >> ptr;
+    KFunction *kf = reinterpret_cast<KFunction *>(ptr);
+    item >> argumentIndex;
+    std::size_t total = kf->function->arg_size();
+
+    os << "[T" << tid << ':' << sfid << ']';
+    os << "Argument: ";
+    os << kf->function->getName() << "(";
+    for (std::size_t i = 0; i < total; ++i) {
+      if (argumentIndex == i) {
+        for (std::string line; std::getline(item, line);) {
+          os << line;
         }
+      } else {
+        os << "?";
       }
-      os << ")";
-      result.output = true;
-      break;
-    }
-    case 7: {
-      std::uint64_t tid;
-      std::uint64_t sfid;
-      std::uintptr_t ptr;
-
-      item >> tid;
-      item >> sfid;
-      item >> ptr;
-      llvm::Instruction *i = reinterpret_cast<llvm::Instruction *>(ptr);
-
-      os << "[T" << tid << ':' << sfid << ']';
-      os << "Program Counter: ";
-      os << i;
-      os << " in ";
-      os << i->getFunction()->getName();
-
-      result.output = true;
-      break;
-    }
-    case 8: {
-      std::uint64_t tid;
-      std::uint64_t sfid;
-      std::uintptr_t callerPtr;
-      std::uintptr_t calleePtr;
-
-      item >> tid;
-      item >> sfid;
-      item >> callerPtr;
-      item >> calleePtr;
-
-      KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
-      KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
-
-      os << "[T" << tid << ':' << sfid << ']';
-      os << "Stack Frame: ";
-      os << callee->function->getName();
-      os << " (called from ";
-      os << caller->inst;
-      os << ")";
-
-      result.output = true;
-      break;
-    }
-    case 9: {
-      std::size_t externalCallNum;
-
-      item >> externalCallNum;
-
-      os << "[G]External Function Call: ";
-      os << externalCallNum;
-
-      result.output = true;
-      break;
-    }
-    case 10: {
-      os << "[G]Path Constraint:";
-
-      for (std::string line; std::getline(item, line);) {
-        os << line;
-        result.hasPathConstraint = true;
+      if (i != total - 1) {
+        os << ", ";
       }
-      result.output = true;
-      break;
     }
-    default:
-      os << "[UNKNOWN:";
-      os << fragment;
-      os << "]";
-      result.output = true;
+    os << ")";
+    result.output = true;
+    break;
+  }
+  case 7: {
+    std::uint64_t tid;
+    std::uint64_t sfid;
+    std::uintptr_t ptr;
+
+    item >> tid;
+    item >> sfid;
+    item >> ptr;
+    llvm::Instruction *i = reinterpret_cast<llvm::Instruction *>(ptr);
+
+    os << "[T" << tid << ':' << sfid << ']';
+    os << "Program Counter: ";
+    os << i;
+    os << " in ";
+    os << i->getFunction()->getName();
+
+    result.output = true;
+    break;
+  }
+  case 8: {
+    std::uint64_t tid;
+    std::uint64_t sfid;
+    std::uintptr_t callerPtr;
+    std::uintptr_t calleePtr;
+
+    item >> tid;
+    item >> sfid;
+    item >> callerPtr;
+    item >> calleePtr;
+
+    KInstruction *caller = reinterpret_cast<KInstruction *>(callerPtr);
+    KFunction *callee = reinterpret_cast<KFunction *>(calleePtr);
+
+    os << "[T" << tid << ':' << sfid << ']';
+    os << "Stack Frame: ";
+    os << callee->function->getName();
+    os << " (called from ";
+    os << caller->inst;
+    os << ")";
+
+    result.output = true;
+    break;
+  }
+  case 9: {
+    std::size_t externalCallNum;
+
+    item >> externalCallNum;
+
+    os << "[G]External Function Call: ";
+    os << externalCallNum;
+
+    result.output = true;
+    break;
+  }
+  case 10: {
+    os << "[G]Path Constraint:";
+
+    for (std::string line; std::getline(item, line);) {
+      os << line;
+      result.hasPathConstraint = true;
     }
+    result.output = true;
+    break;
+  }
+  default:
+    os << "[UNKNOWN:";
+    os << fragment;
+    os << "]";
+    result.output = true;
+  }
 
   return result;
 }
