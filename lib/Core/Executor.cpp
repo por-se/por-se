@@ -1840,15 +1840,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       state.exitThread(thread.getThreadId());
       scheduleThreads(state);
     } else {
-      if (PruneStates) {
-        const llvm::BasicBlock *returningBB = ki->inst->getParent();
-        const llvm::BasicBlock *callerBB = caller->getParent();
-        // has to be called before state.popFrame() to update live register
-        // information that is only accessible within the stack frame that is to
-        // be left
-        state.memoryState.registerPopFrame(thread.tid, returningBB, callerBB);
-      }
-
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
       std::vector<const MemoryObject*> freedAllocas = thread.stack.back().allocas;

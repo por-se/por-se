@@ -19,6 +19,7 @@ class ExecutionState;
 class KFunction;
 class KInstruction;
 class KModule;
+class StackFrame;
 
 class MemoryState {
   MemoryState(const MemoryState &) = default;
@@ -173,9 +174,7 @@ public:
 
   void registerPushFrame(std::uint64_t threadID, std::size_t stackFrameIndex,
                          const KFunction *callee, const KInstruction *caller);
-  void registerPopFrame(std::uint64_t threadID,
-                        const llvm::BasicBlock *returningBB,
-                        const llvm::BasicBlock *callerBB);
+  void registerPopFrame(StackFrame &sf);
 
   MemoryFingerprint::value_t getFingerprint() const;
   MemoryFingerprint::value_t getGlobalFingerprintValue() const;

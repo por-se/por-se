@@ -156,10 +156,14 @@ ExecutionState *ExecutionState::branch() {
 }
 
 void ExecutionState::popFrameOfThread(Thread* thread) {
-  // We want to unbind all the objects from the current tread frame
   StackFrame &sf = thread->stack.back();
+
   for (auto &it : sf.allocas) {
     addressSpace.unbindObject(it);
+  }
+
+  if (PruneStates) {
+    memoryState.registerPopFrame(sf);
   }
 
   // Let the thread class handle the rest
@@ -269,8 +273,8 @@ void ExecutionState::exitThread(Thread::ThreadId tid) {
                                               currentSchedulingIndex);
   }
 
-   // Now remove all stack frames except the last one, because otherwise the stats tracker may fail
-   while (thread->stack.size() > 1) {
+   // Now remove all stack frames
+   while (!thread->stack.empty()) {
     popFrameOfThread(thread);
   }
 }

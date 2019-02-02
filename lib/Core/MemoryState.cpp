@@ -460,26 +460,12 @@ void MemoryState::registerPushFrame(std::uint64_t threadID,
   fingerprint.addToFingerprintAndDelta(delta);
 }
 
-void MemoryState::registerPopFrame(std::uint64_t threadID,
-                                   const llvm::BasicBlock *returningBB,
-                                   const llvm::BasicBlock *callerBB) {
-  // IMPORTANT: has to be called prior to state.popFrame()
-
+void MemoryState::registerPopFrame(StackFrame &sf) {
   if (DebugStatePruning) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
-  Thread &thread = executionState->currentThread();
-
-  if (thread.stack.size() > 0) {
-    // remove changes only accessible to stack frame that is to be left
-    StackFrame &sf = thread.stack.back();
-    fingerprint.removeDelta(sf.fingerprintDelta);
-  } else {
-    if (DebugStatePruning) {
-      llvm::errs() << "MemoryState: no stackframe left in trace\n";
-    }
-  }
+  fingerprint.removeDelta(sf.fingerprintDelta);
 }
 
 MemoryFingerprint::value_t MemoryState::getFingerprint() const {
