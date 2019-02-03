@@ -1415,7 +1415,14 @@ void Executor::printDebugInstructions(ExecutionState &state) {
 
   if (!DebugPrintInstructions.isSet(STDERR_COMPACT) &&
       !DebugPrintInstructions.isSet(FILE_COMPACT)) {
-    (*stream) << "     " << thread.pc->getSourceLocation() << ":";
+    auto sid = state.id;
+    auto tid = thread.getThreadId();
+    auto sf = thread.stack.size() - 1;
+    std::stringstream tmp;
+    tmp << "[state: " << std::setw(6) << sid
+        << " thread: " << std::setw(2) << tid
+        << " sf: " << std::setw(2) << sf << "] ";
+    (*stream) << tmp.str() << thread.pc->getSourceLocation() << ":";
   }
 
   (*stream) << thread.pc->info->assemblyLine;
