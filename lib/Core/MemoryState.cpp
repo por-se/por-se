@@ -20,6 +20,7 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 
@@ -339,7 +340,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   }
 
   std::uint64_t baseAddress = mo.getBaseExpr()->getZExtValue(64);
-
+  bool endlineMissing = false;
   for (std::uint64_t i = begin; i < end; ++i) {
     // add value of byte at offset to fingerprint
     ref<Expr> valExpr = os.read8(i);
@@ -361,22 +362,30 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
     }
 
     if (DebugStatePruning) {
-      llvm::errs() << "[+" << i << "] ";
+      std::stringstream stream;
+      stream << std::setw(std::floor(std::log10(end - 1)) + 1) << i;
+      llvm::errs() << "[+" << stream.str() << "] ";
       if (isSymbolic) {
         llvm::errs() << ExprString(valExpr);
       } else {
         ConstantExpr *constant = cast<ConstantExpr>(valExpr);
         std::uint8_t value = constant->getZExtValue(8);
         llvm::errs() << "0x";
+        if (value < 16) llvm::errs() << "0";
         llvm::errs().write_hex((int)value);
       }
 
       if (i % 10 == 9) {
+        endlineMissing = false;
         llvm::errs() << "\n";
       } else {
+        endlineMissing = true;
         llvm::errs() << " ";
       }
     }
+  }
+  if (DebugStatePruning && endlineMissing) {
+    llvm::errs() << "\n";
   }
 }
 
