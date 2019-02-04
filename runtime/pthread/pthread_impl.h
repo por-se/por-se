@@ -73,7 +73,7 @@ typedef struct {
 
 typedef struct {
   int value;
-  kpr_list waiting;
+  uint64_t waiting;
   const char* name;
 } kpr_semaphore;
 

@@ -22,6 +22,7 @@ static kpr_semaphore* kpr_sem_create(sem_t *kpr_sem, unsigned int kpr_value) {
 
   sem->value = kpr_value;
   sem->name = NULL;
+  sem->waiting = 0;
 
   *((kpr_semaphore**)kpr_sem) = sem;
 
@@ -48,7 +49,7 @@ int sem_destroy (sem_t *kpr_sem) {
   klee_toggle_thread_scheduling(0);
 
   kpr_semaphore* sem = kpr_obtain_semaphore(kpr_sem);
-  if (kpr_list_size(&sem->waiting) != 0) {
+  if (sem->waiting > 0) {
     klee_toggle_thread_scheduling(1);
 
     return -1;
@@ -94,7 +95,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
     }
 
     va_start(ap, __oflag);
-    mode_t mode = va_arg(ap, mode_t);
+    /*mode_t mode = */ va_arg(ap, mode_t);
     unsigned int value = va_arg(ap, unsigned int);
     va_end(ap);
 
@@ -182,6 +183,7 @@ int sem_wait (sem_t *kpr_sem) {
     result = kpr_sem_trywait(sem);
 
     if (result == EAGAIN) {
+      sem->waiting++;
       klee_wait_on(kpr_sem);
     } else {
       break;
@@ -224,7 +226,10 @@ int sem_post (sem_t *kpr_sem) {
   sem->value++;
   if (sem->value > 0) {
     // We can wake up all threads since our wait impl will rewait
-    klee_release_waiting(kpr_sem, KLEE_RELEASE_SINGLE);
+    if (sem->waiting > 0) {
+      sem->waiting--;
+      klee_release_waiting(kpr_sem, KLEE_RELEASE_SINGLE);
+    }
 
     klee_toggle_thread_scheduling(1);
     klee_preempt_thread();
