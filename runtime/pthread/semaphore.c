@@ -108,6 +108,8 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
     retSem = malloc(sizeof(sem));
     sem = kpr_sem_create(retSem, value);
     sem->name = __name;
+
+    kpr_list_push(&openSemaphores, sem);
   } else {
     if (createSet && exclSet) {
       // We are trying to create a semaphore that we already created
