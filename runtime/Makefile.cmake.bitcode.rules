@@ -84,16 +84,15 @@ endif
 # Compute the directory to put build files
 LOCAL_BUILD_DIR := $(abspath $(ROOT_OBJ)/$(DIR_SUFFIX))
 
-C_SRCS := $(sort $(shell echo $(SRC_DIR)/*.c))
+C_SRCS := $(sort $(shell find $(SRC_DIR) -name '*.c'))
 
 # Sanity check: Make sure at least one source file was found
 ifneq ($(strip $(filter %*.c,$(C_SRCS))),)
 $(error Failed to find C source files in $(SRC_DIR))
 endif
 
-C_SRCS_NO_DIR := $(notdir $(C_SRCS))
-BC_FILES_NO_DIR := $(C_SRCS_NO_DIR:.c=.bc)
-BC_FILES := $(addprefix $(LOCAL_BUILD_DIR)/,$(BC_FILES_NO_DIR))
+BC_FILES_NO_DIR := $(subst $(SRC_DIR),,$(C_SRCS:.c=.bc))
+BC_FILES := $(addprefix $(LOCAL_BUILD_DIR),$(BC_FILES_NO_DIR))
 
 # Path to file that stores the flags used for LLVMCC.
 # If the build flags are changed this should trigger
@@ -116,8 +115,9 @@ $(BC_FILES) : $(ADDITIONAL_BUILD_DEPS) $(LLVMCC_FLAGS_FILE)
 
 # Pattern rule to build bitcode files
 $(LOCAL_BUILD_DIR)/%.bc : $(SRC_DIR)/%.c
+    # Create the parent directory for the bitcode file
 	@echo "LLVMCC ($(RUNTIME_CONFIG_STRING)) $<"
-	$(Verb) $(MKDIR) -p $(LOCAL_BUILD_DIR)
+	$(Verb) $(MKDIR) -p $(LOCAL_BUILD_DIR)/$(subst $(SRC_DIR),,$(shell dirname $<))
 	$(Verb) $(LLVMCC) $(LLVMCC.Flags) $(LLVMCC.Warnings) $< -c -o $@ -MP -MMD -MF $(LOCAL_BUILD_DIR)/$*.dep
 
 # $(LLVMCC_FLAGS_FILE) depends on `force` which will force the rule to
