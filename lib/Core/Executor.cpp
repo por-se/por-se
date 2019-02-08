@@ -4683,14 +4683,13 @@ void Executor::prepareForEarlyExit() {
   }
 }
 
-void Executor::createThread(ExecutionState &state,
-                            KFunction *startRoutine,
-                            ref<Expr> runtimeStructPtr) {
+Thread::ThreadId Executor::createThread(ExecutionState &state,
+                                        KFunction *startRoutine,
+                                        ref<Expr> runtimeStructPtr) {
   Thread* thread = state.createThread(startRoutine, runtimeStructPtr);
   StackFrame* threadStartFrame = &thread->stack.back();
 
   threadStartFrame->locals[startRoutine->getArgRegister(0)].value = runtimeStructPtr;
-  threadStartFrame->locals[startRoutine->getArgRegister(1)].value = ConstantExpr::create(thread->getThreadId(), Expr::Int64);
 
   // If we create a thread, then we also have to create the TLS objects
 
@@ -4716,6 +4715,8 @@ void Executor::createThread(ExecutionState &state,
 
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), nullptr);
+
+  return thread->getThreadId();
 }
 
 void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {

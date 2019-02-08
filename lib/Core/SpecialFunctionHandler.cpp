@@ -115,7 +115,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
-  add("klee_create_thread", handleCreateThread, false),
+  add("klee_create_thread", handleCreateThread, true),
   add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
@@ -931,7 +931,8 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
     return;
   }
 
-  executor.createThread(state, kfuncPair->second, arguments[1]);
+  Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
+  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int64));
 }
 
 void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,

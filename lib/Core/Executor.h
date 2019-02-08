@@ -593,9 +593,9 @@ public:
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
 
-  void createThread(ExecutionState &state,
-                    KFunction *startRoutine,
-                    ref<Expr> runtimeStructPtr);
+  Thread::ThreadId createThread(ExecutionState &state,
+                                KFunction *startRoutine,
+                                ref<Expr> runtimeStructPtr);
   void threadWaitOn(ExecutionState &state, std::uint64_t lid);
   void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne);
   void preemptThread(ExecutionState &state);
