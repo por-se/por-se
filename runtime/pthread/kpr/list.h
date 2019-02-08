@@ -1,5 +1,5 @@
-#ifndef KLEE_PTHREAD_UTILS_H
-#define KLEE_PTHREAD_UTILS_H
+#ifndef KPR_LIST_H
+#define KPR_LIST_H
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -40,6 +40,4 @@ void* kpr_list_iterator_value(kpr_list_iterator it);
 
 void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it);
 
-bool kpr_checkIfSame(char* target, char* reference);
-
-#endif //KLEE_PTHREAD_UTILS_H
+#endif // KPR_LIST_H

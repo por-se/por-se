@@ -1,50 +1,12 @@
 #include "klee/klee.h"
-#include "pthread_impl.h"
+#include "klee/runtime/pthread.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <errno.h>
-#include <pthread.h>
 #include <assert.h>
 
-static pthread_mutex_t mutexDefault = PTHREAD_MUTEX_INITIALIZER;
-
-static int kpr_create_new_mutex(kpr_mutex **m) {
-  kpr_mutex* mutex = malloc(sizeof(kpr_mutex));
-  if (mutex == 0) {
-    return -1;
-  }
-
-  memset(mutex, 0, sizeof(kpr_mutex));
-
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
   mutex->acquired = 0;
   mutex->holdingThread = 0;
-
-  *m = mutex;
-  return 0;
-}
-
-static int kpr_obtain_mutex(pthread_mutex_t *mutex, kpr_mutex **dest) {
-  // So first we have to check if we are any of the default static mutex types
-  if (kpr_checkIfSame((char*) mutex, (char*) &mutexDefault)) {
-    return kpr_create_new_mutex(dest);
-  }
-
-  *dest = *((kpr_mutex**) mutex);
-
-  return 0;
-}
-
-int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
-  klee_toggle_thread_scheduling(0);
-
-  kpr_mutex *mutex;
-  int result = kpr_create_new_mutex(&mutex);
-
-  if (result != 0) {
-    klee_toggle_thread_scheduling(0);
-    return -1; // TODO check
-  }
 
   if (attr != NULL) {
     int type = 0;
@@ -52,14 +14,10 @@ int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) {
     mutex->type = type;
   }
 
-  *((kpr_mutex**)m) = mutex;
-
-  klee_toggle_thread_scheduling(1);
-
   return 0;
 }
 
-static int kpr_mutex_trylock_internal(kpr_mutex* mutex) {
+static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
   uint64_t tid = klee_get_thread_id();
 
   if (mutex->acquired == 0) {
@@ -75,29 +33,23 @@ static int kpr_mutex_trylock_internal(kpr_mutex* mutex) {
     }
   }
 
-  if (false /* Error checking mutex */) {
-    if (mutex->holdingThread == tid) {
-      return EDEADLK;
-    }
-  }
+//  if (false /* Error checking mutex */) {
+//    if (mutex->holdingThread == tid) {
+//      return EDEADLK;
+//    }
+//  }
 
   return EBUSY;
 }
 
-int pthread_mutex_lock(pthread_mutex_t *m) {
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
-
-  kpr_mutex* mutex;
-  if (kpr_obtain_mutex(m, &mutex) != 0) {
-    klee_toggle_thread_scheduling(1);
-    return -1;
-  }
 
   int sleptOnce = 0;
 
   while (kpr_mutex_trylock_internal(mutex) != 0) {
     sleptOnce = 1;
-    klee_wait_on(m);
+    klee_wait_on(mutex);
   }
 
   klee_toggle_thread_scheduling(1);
@@ -108,12 +60,7 @@ int pthread_mutex_lock(pthread_mutex_t *m) {
   return 0;
 }
 
-int kpr_mutex_unlock_internal(pthread_mutex_t *m) {
-  kpr_mutex* mutex;
-  if (kpr_obtain_mutex(m, &mutex) != 0) {
-    return -1;
-  }
-
+int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
   uint64_t tid = klee_get_thread_id();
 
   if (mutex->acquired == 0 || mutex->holdingThread != tid) {
@@ -132,7 +79,7 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *m) {
     mutex->acquired = 0;
   }
 
-  klee_release_waiting(m, KLEE_RELEASE_SINGLE);
+  klee_release_waiting(mutex, KLEE_RELEASE_SINGLE);
 
   return 0;
 }
@@ -147,14 +94,8 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
   return result;
 }
 
-int pthread_mutex_trylock(pthread_mutex_t *m) {
+int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
-
-  kpr_mutex* mutex;
-  if (kpr_obtain_mutex(m, &mutex) != 0) {
-    klee_toggle_thread_scheduling(1);
-    return -1;
-  }
 
   int result = kpr_mutex_trylock_internal(mutex);
 
@@ -164,27 +105,18 @@ int pthread_mutex_trylock(pthread_mutex_t *m) {
   return result;
 }
 
-//int pthread_mutex_timedlock(pthread_mutex_t *__restrict, const struct timespec *__restrict);
-
-int pthread_mutex_destroy(pthread_mutex_t *m) {
-  klee_toggle_thread_scheduling(0);
-
-  kpr_mutex* mutex;
-  if (kpr_obtain_mutex(m, &mutex) != 0) {
-    klee_toggle_thread_scheduling(1);
-    return -1;
-  }
-
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
   if (mutex->acquired >= 1) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
-  free(mutex);
-
-  // Some real support for mutex destroy
-  klee_toggle_thread_scheduling(1);
   return 0;
+}
+
+int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *time) {
+  klee_warning_once("pthread_mutex_timedlock: timed lock not supported, calling pthread_mutex_lock instead");
+  return pthread_mutex_lock(mutex);
 }
 
 //int pthread_mutex_consistent(pthread_mutex_t *);

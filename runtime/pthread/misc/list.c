@@ -1,8 +1,7 @@
 #include "klee/klee.h"
-#include "pthread_impl.h"
+#include "../kpr/list.h"
 
 #include <stdlib.h>
-#include <string.h>
 #include <errno.h>
 
 void kpr_list_create(kpr_list* stack) {
@@ -25,8 +24,7 @@ void kpr_list_clear(kpr_list* stack) {
 }
 
 void kpr_list_push(kpr_list* stack, void * data) {
-  kpr_list_node* newTail = malloc(sizeof(kpr_list_node));
-  memset(newTail, 0, sizeof(kpr_list_node));
+  kpr_list_node* newTail = calloc(sizeof(kpr_list_node), 1);
 
   newTail->data = data;
   newTail->prev = stack->tail;
@@ -63,8 +61,7 @@ void* kpr_list_pop(kpr_list* stack) {
 }
 
 void kpr_list_unshift(kpr_list* stack, void * data) {
-  kpr_list_node* newHead = malloc(sizeof(kpr_list_node));
-  memset(newHead, 0, sizeof(kpr_list_node));
+  kpr_list_node* newHead = calloc(sizeof(kpr_list_node), 1);
 
   newHead->data = data;
 
@@ -161,37 +158,3 @@ void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it) {
 
   free(nodeToDelete);
 }
-
-/*
- * Here is the stuff that is not directly part of the data structure but rather what is needed as well
- */
-
-bool kpr_checkIfSame(char* target, char* reference) {
-  // So this method should check if both of these objects have the same contents
-  size_t sizeOfTarget = klee_get_obj_size((void*) target);
-  size_t sizeOfReference = klee_get_obj_size((void*) reference);
-
-  // So it can happen that the structure is embedded into another memory regions
-  // so just check that we are not too small
-  if (sizeOfReference > sizeOfTarget) {
-    return false;
-  }
-
-  {
-    size_t i = 0;
-    for (; i < sizeOfTarget; i++) {
-      if (target[i] != reference[i]) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
-//
-//int pthread_getschedparam(pthread_t, int *__restrict, struct sched_param *__restrict);
-//int pthread_setschedparam(pthread_t, int, const struct sched_param *);
-//int pthread_setschedprio(pthread_t, int);
-//
-//int pthread_getcpuclockid(pthread_t, clockid_t *);
