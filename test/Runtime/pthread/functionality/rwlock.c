@@ -5,16 +5,7 @@
 /* This is based on the example given at https://www.ibm.com/support/knowledgecenter/en/ssw_i5_54/apis/users_86.htm#372485 */
 
 #include <pthread.h>
-#include <stdio.h>
-
-static void checkReturnCode(const char *msg, int rc) {
-  if (rc == 0) {
-    return;
-  }
-
-  printf("ERR: %s failed.\n", msg);
-  exit(1);
-}
+#include <assert.h>
 
 pthread_rwlock_t rwlock;
 
@@ -22,23 +13,23 @@ void *readThread(void *arg) {
   int rc;
 
   rc = pthread_rwlock_rdlock(&rwlock);
-  checkReturnCode("pthread_rwlock_rdlock()\n", rc);
-  
+  assert(rc == 0 && "pthread_rwlock_rdlock() failed");
+
   rc = pthread_rwlock_unlock(&rwlock);
-  checkReturnCode("pthread_rwlock_unlock()\n", rc);
-  
+  assert(rc == 0 && "pthread_rwlock_unlock() failed");
+
   return NULL;
 }
 
 void *writeThread(void *arg) {
   int rc;
-  
+
   rc = pthread_rwlock_wrlock(&rwlock);
-  checkReturnCode("pthread_rwlock_wrlock()\n", rc);
-  
+  assert(rc == 0 && "pthread_rwlock_wrlock() failed");
+
   rc = pthread_rwlock_unlock(&rwlock);
-  checkReturnCode("pthread_rwlock_unlock()\n", rc);
-  
+  assert(rc == 0 && "pthread_rwlock_unlock() failed");
+
   return NULL;
 }
 
@@ -48,37 +39,36 @@ int main(int argc, char **argv) {
   pthread_t wrThread;
 
   rc = pthread_rwlock_init(&rwlock, NULL);
-  checkReturnCode("pthread_rwlock_init()\n", rc);
+  assert(rc == 0 && "pthread_rwlock_init() failed");
 
   rc = pthread_rwlock_rdlock(&rwlock);
-  checkReturnCode("pthread_rwlock_rdlock()\n",rc);
+  assert(rc == 0 && "pthread_rwlock_rdlock() failed");
 
   rc = pthread_rwlock_rdlock(&rwlock);
-  checkReturnCode("pthread_rwlock_rdlock() second\n", rc);
+  assert(rc == 0 && "pthread_rwlock_rdlock() second failed");
 
   rc = pthread_create(&rdThread, NULL, readThread, NULL);
-  checkReturnCode("pthread_create\n", rc);
+  assert(rc == 0 && "pthread_create() failed");
 
   rc = pthread_rwlock_unlock(&rwlock);
-  checkReturnCode("pthread_rwlock_unlock()\n", rc);
+  assert(rc == 0 && "pthread_rwlock_unlock() failed");
 
 
   rc = pthread_create(&wrThread, NULL, writeThread, NULL);
-  checkReturnCode("pthread_create\n", rc);
-  
-  printf("Main - unlock the second read lock\n");
+  assert(rc == 0 && "pthread_create() failed");
+
   rc = pthread_rwlock_unlock(&rwlock);
-  checkReturnCode("pthread_rwlock_unlock()\n", rc);
+  assert(rc == 0 && "pthread_rwlock_unlock() failed");
 
 
   rc = pthread_join(rdThread, NULL);
-  checkReturnCode("pthread_join\n", rc);
+  assert(rc == 0 && "pthread_join() failed");
 
   rc = pthread_join(wrThread, NULL);
-  checkReturnCode("pthread_join\n", rc);
+  assert(rc == 0 && "pthread_join() failed");
 
   rc = pthread_rwlock_destroy(&rwlock);
-  checkReturnCode("pthread_rwlock_destroy()\n", rc);
+  assert(rc == 0 && "pthread_rwlock_destroy() failed");
 
   return 0;
 }
