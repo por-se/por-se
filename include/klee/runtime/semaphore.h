@@ -2,8 +2,14 @@
 #define _SEMAPHORE_H
 
 #include <time.h>
+#include <stdint.h>
 
 #define SEM_FAILED ((sem_t *) 0)
+
+#ifdef SEM_VALUE_MAX
+# undef SEM_VALUE_MAX
+#endif
+#define SEM_VALUE_MAX (1000)
 
 typedef struct {
   int value;
