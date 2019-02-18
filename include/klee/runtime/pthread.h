@@ -163,6 +163,8 @@ typedef void* pthread_key_t;
 // PTHREAD_RWLOCK_INITIALIZER
 #define PTHREAD_ONCE_INIT (0)
 
+#define PTHREAD_DESTRUCTOR_ITERATIONS (16)
+
 // Main threading api
 int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(void*), void *arg);
 int pthread_detach(pthread_t th);
@@ -220,10 +222,10 @@ int pthread_spin_unlock(pthread_spinlock_t *lock);
 //void pthread_testcancel(void);
 
 // thread keys
-//void *pthread_getspecific(pthread_key_t key);
-//int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
-//int pthread_key_delete(pthread_key_t key);
-//int pthread_setspecific(pthread_key_t key, const void * v);
+void *pthread_getspecific(pthread_key_t key);
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void*));
+int pthread_key_delete(pthread_key_t key);
+int pthread_setspecific(pthread_key_t key, const void * v);
 
 // General multithreading
 //int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(void));

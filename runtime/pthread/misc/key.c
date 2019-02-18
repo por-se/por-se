@@ -7,9 +7,7 @@
 #include <string.h>
 #include <errno.h>
 
-static unsigned int keyCount = 0;
-static unsigned int keySpace = 0;
-static kpr_key* keys = NULL;
+static kpr_list knownKeys = KPR_LIST_INITIALIZER;
 
 int pthread_key_create(pthread_key_t *k, void (*destructor) (void*)) {
   kpr_key* key = calloc(sizeof(kpr_key), 1);
@@ -19,13 +17,17 @@ int pthread_key_create(pthread_key_t *k, void (*destructor) (void*)) {
 
   *k = key;
 
+  klee_toggle_thread_scheduling(0);
+  kpr_list_push(&knownKeys, key);
+  klee_toggle_thread_scheduling(1);
+
   return 0;
 }
 
 static kpr_key_data* kpr_get_data(pthread_key_t k) {
   uint64_t tid = klee_get_thread_id();
 
-  kpr_key* key = (kpr_key*) k;
+  kpr_key* key = *((kpr_key**) k);
 
   kpr_list_iterator it = kpr_list_iterate(&key->values);
   while(kpr_list_iterator_valid(it)) {
@@ -49,9 +51,9 @@ static kpr_key_data* kpr_get_data(pthread_key_t k) {
 }
 
 int pthread_key_delete(pthread_key_t k) {
-  // TODO: check if the destructor needs to be called
+  kpr_key* key = *((kpr_key**) k);
 
-  kpr_key* key = (kpr_key*) k;
+  // Ensure that no destructor is called
   kpr_list_clear(&key->values);
 
   return 0;
@@ -77,30 +79,49 @@ int pthread_setspecific(pthread_key_t k, const void *val) {
   return 0;
 }
 
+static void kpr_clear_thread_key(kpr_key* key, kpr_key_data* d) {
+  if (key->destructor == NULL) {
+    return;
+  }
+
+  // So we have to call the destructor for as long as the value is not NULL
+
+  int runCount = 0;
+  while (runCount < PTHREAD_DESTRUCTOR_ITERATIONS && d->value != NULL) {
+    void *val = d->value;
+    d->value = NULL;
+
+    key->destructor(val);
+
+    runCount++;
+  }
+}
+
+static void kpr_clear_thread(kpr_key* key, uint64_t tid) {
+  kpr_list_iterator it = kpr_list_iterate(&key->values);
+  while(kpr_list_iterator_valid(it)) {
+    kpr_key_data* d = kpr_list_iterator_value(it);
+
+    if (d->thread == tid) {
+      kpr_clear_thread_key(key, d);
+
+      kpr_list_erase(&key->values, &it);
+      return;
+    }
+
+    kpr_list_iterator_next(&it);
+  }
+}
+
 // this is an internal method for the runtime to invoke all destructors that are associated with the
 // keys that this thread created/used
 void kpr_key_clear_data_of_thread(uint64_t tid) {
-// FIXME: this does currently not work
+  kpr_list_iterator it = kpr_list_iterate(&knownKeys);
+  while(kpr_list_iterator_valid(it)) {
+    kpr_key* k = kpr_list_iterator_value(it);
 
-//  unsigned i = 0;
-//  for (; i < keyCount; i++) {
-//    kpr_key* key = &keys[i];
-//
-//    if (key->destructor == NULL) {
-//      continue;
-//    }
-//
-//    // So we have a destructor that we may have to invoke
-//    kpr_list_iterator it = kpr_list_iterate(&key->values);
-//    for (; kpr_list_iterator_valid(it); kpr_list_iterator_next(&it)) {
-//      kpr_key_data* d = kpr_list_iterator_value(it);
-//
-//      if (d->thread != tid) {
-//        continue;
-//      }
-//
-//      // So there is a value associated and a destructor, make sure both is called
-//      key->destructor(d->value);
-//    }
-//  }
+    kpr_clear_thread(k, tid);
+
+    kpr_list_iterator_next(&it);
+  }
 }
