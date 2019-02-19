@@ -1,43 +1,52 @@
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
 
+#include "kpr/flags.h"
+
 #include <errno.h>
 #include <assert.h>
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
   mutex->acquired = 0;
-  mutex->holdingThread = 0;
+  mutex->holdingThread = NULL;
+  mutex->robustState = KPR_MUTEX_NORMAL;
 
   if (attr != NULL) {
-    int type = 0;
-    pthread_mutexattr_gettype(attr, &type);
-    mutex->type = type;
+    pthread_mutexattr_gettype(attr, &mutex->type);
+    pthread_mutexattr_getrobust(attr, &mutex->robust);
   }
 
   return 0;
 }
 
 static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
-  uint64_t tid = klee_get_thread_id();
+  pthread_t pthread = pthread_self();
+
+  if (mutex->robustState == KPR_MUTEX_UNUSABLE) {
+    return EINVAL;
+  }
 
   if (mutex->acquired == 0) {
     mutex->acquired = 1;
-    mutex->holdingThread = tid;
+    mutex->holdingThread = pthread;
     return 0;
   }
 
   if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
-    if (mutex->holdingThread == tid) {
+    if (mutex->holdingThread == pthread) {
       mutex->acquired++;
+
+      // need to check overflows -> EAGAIN
+
       return 0;
     }
   }
 
-//  if (false /* Error checking mutex */) {
-//    if (mutex->holdingThread == tid) {
-//      return EDEADLK;
-//    }
-//  }
+  if (mutex->type == PTHREAD_MUTEX_ERRORCHECK) {
+    if (mutex->holdingThread == pthread) {
+      return EDEADLK;
+    }
+  }
 
   return EBUSY;
 }
@@ -46,8 +55,32 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
 
   int sleptOnce = 0;
+  int result;
 
-  while (kpr_mutex_trylock_internal(mutex) != 0) {
+  for (;;) {
+    result = kpr_mutex_trylock_internal(mutex);
+
+    if (result == 0 || result == EINVAL) {
+      break;
+    }
+
+    // In the error check case, we have to prevent the deadlock
+    if (mutex->type == PTHREAD_MUTEX_ERRORCHECK && result == EDEADLK) {
+      break;
+    }
+
+    if (mutex->robust == PTHREAD_MUTEX_ROBUST && result == EBUSY) {
+      // Now we have to test if the owner is "dead"
+      if (mutex->holdingThread != NULL && mutex->holdingThread->state != KPR_THREAD_STATE_LIVE) {
+        mutex->robustState = KPR_MUTEX_INCONSISTENT;
+        mutex->acquired = 1;
+        mutex->holdingThread = pthread_self();
+
+        result = EOWNERDEAD;
+        break;
+      }
+    }
+
     sleptOnce = 1;
     klee_wait_on(mutex);
   }
@@ -57,16 +90,36 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     klee_preempt_thread();
   }
 
-  return 0;
+  return result;
+}
+
+int pthread_mutex_consistent(pthread_mutex_t *mutex) {
+  int result = EINVAL;
+
+  klee_toggle_thread_scheduling(0);
+  if (mutex->holdingThread == pthread_self() && mutex->robustState == KPR_MUTEX_INCONSISTENT) {
+    mutex->robustState = KPR_MUTEX_NORMAL;
+    result = 0;
+  }
+  klee_toggle_thread_scheduling(1);
+
+  return result;
 }
 
 int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
-  uint64_t tid = klee_get_thread_id();
+  pthread_t thread = pthread_self();
 
-  if (mutex->acquired == 0 || mutex->holdingThread != tid) {
-    // The return code for error checking mutexes, but we will simply use
-    // it in any case
+  if (mutex->acquired == 0 || mutex->holdingThread != thread) {
+    if (mutex->type == PTHREAD_MUTEX_NORMAL && mutex->robust == PTHREAD_MUTEX_STALLED) {
+      klee_report_error(__FILE__, __LINE__, "Unlocking a normal, nonrobust mutex results in undefined behavior", "undef");
+    }
+
+    // The return code for error checking mutexes or robust
     return EPERM;
+  }
+
+  if (mutex->robustState == KPR_MUTEX_INCONSISTENT) {
+    mutex->robustState = KPR_MUTEX_UNUSABLE;
   }
 
   if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
@@ -119,7 +172,5 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *time)
   return pthread_mutex_lock(mutex);
 }
 
-//int pthread_mutex_consistent(pthread_mutex_t *);
-//
 //int pthread_mutex_getprioceiling(const pthread_mutex_t *__restrict, int *__restrict);
 //int pthread_mutex_setprioceiling(pthread_mutex_t *__restrict, int, int *__restrict);

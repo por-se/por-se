@@ -5,6 +5,7 @@
 
 int pthread_mutexattr_init(pthread_mutexattr_t *attr) {
   attr->type = PTHREAD_MUTEX_DEFAULT;
+  attr->type = PTHREAD_MUTEX_STALLED;
   return 0;
 }
 
@@ -23,5 +24,19 @@ int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) {
   }
 
   attr->type = type;
+  return 0;
+}
+
+int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robust) {
+  *robust = attr->robust;
+  return 0;
+}
+
+int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust) {
+  if (robust != PTHREAD_MUTEX_STALLED && robust != PTHREAD_MUTEX_ROBUST) {
+    klee_report_error(__FILE__, __LINE__, "trying to set a mutex attr robust that is unknown", "user");
+  }
+
+  attr->robust = robust;
   return 0;
 }

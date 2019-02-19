@@ -103,8 +103,6 @@ typedef struct {
   void* (*startRoutine) (void* arg);
 
   void* returnValue;
-
-//  kpr_list cleanUpStack;
 } kpr_thread;
 typedef kpr_thread* pthread_t;
 
@@ -116,7 +114,10 @@ typedef struct {
 typedef struct {
   int acquired;
   int type;
-  uint64_t holdingThread;
+  int robust;
+
+  int robustState;
+  pthread_t holdingThread;
 } pthread_mutex_t;
 
 typedef struct {
@@ -150,6 +151,7 @@ typedef struct {
 
 typedef struct {
   int type;
+  int robust;
 } pthread_mutexattr_t;
 
 typedef struct {
@@ -277,12 +279,12 @@ int pthread_mutexattr_destroy(pthread_mutexattr_t *);
 //int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *attr, int *prioceiling);
 //int pthread_mutexattr_getprotocol(const pthread_mutexattr_t *attr, int *protocol);
 //int pthread_mutexattr_getpshared(const pthread_mutexattr_t *attr, int *pshared);
-//int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robust);
+int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robust);
 int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type);
 //int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling);
 //int pthread_mutexattr_setprotocol(pthread_mutexattr_t *attr, int protocol);
 //int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared);
-//int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust);
+int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust);
 int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
 
 // Rwlock attributes

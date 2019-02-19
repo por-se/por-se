@@ -38,7 +38,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   thread->startArg = arg;
   thread->returnValue = NULL;
 
-
   thread->state = KPR_THREAD_STATE_LIVE;
   thread->mode = KPR_THREAD_MODE_JOIN;
   thread->joinState = KPR_THREAD_JSTATE_JOINABLE;
@@ -94,6 +93,7 @@ void pthread_exit(void* arg) {
 
   kpr_thread* thread = pthread_self();
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
+  thread->state = KPR_THREAD_STATE_EXITED;
 
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
     thread->returnValue = arg;
@@ -110,7 +110,6 @@ void pthread_exit(void* arg) {
     }
   }
 
-  thread->state = KPR_THREAD_STATE_EXITED;
   klee_toggle_thread_scheduling(1);
 
   kpr_key_clear_data_of_thread(thread->tid);
