@@ -40,6 +40,9 @@ endif()
 
 if (ENABLE_PTHREAD_RUNTIME)
   set(ENABLE_PTHREAD_RUNTIME 1)
+
+  set(LLVMCC "${LLVMCC} -I${CMAKE_SOURCE_DIR}/include/klee/runtime")
+  set(LLVMCXX "${LLVMCXX} -I${CMAKE_SOURCE_DIR}/include/klee/runtime")
 else()
     message(AUTHOR_WARNING
       "Disabling pthread runtime tests!")

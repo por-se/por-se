@@ -17,7 +17,7 @@ static void* test(void* arg) {
 
 static void destructor(void* keyValue) {
   void* v = pthread_getspecific(&key);
-  assert(v != NULL);
+  assert(v == NULL);
 
   assert(pthread_equal(mainThread, pthread_self()));
   assert(keyValue == &count);
