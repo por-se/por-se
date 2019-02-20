@@ -2,11 +2,14 @@
 #include "klee/runtime/pthread.h"
 
 #include "kpr/flags.h"
+#include "kpr/internal.h"
 
 #include <errno.h>
 #include <assert.h>
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
+  kpr_ensure_valid(mutex);
+
   mutex->acquired = 0;
   mutex->holdingThread = NULL;
   mutex->robustState = KPR_MUTEX_NORMAL;
@@ -54,6 +57,8 @@ static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
 
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
   int sleptOnce = 0;
   int result;
 
@@ -97,6 +102,8 @@ int pthread_mutex_consistent(pthread_mutex_t *mutex) {
   int result = EINVAL;
 
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
   if (mutex->holdingThread == pthread_self() && mutex->robustState == KPR_MUTEX_INCONSISTENT) {
     mutex->robustState = KPR_MUTEX_NORMAL;
     result = 0;
@@ -137,9 +144,11 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
   return 0;
 }
 
-int pthread_mutex_unlock(pthread_mutex_t *m) {
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
-  int result = kpr_mutex_unlock_internal(m);
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
+  int result = kpr_mutex_unlock_internal(mutex);
   klee_toggle_thread_scheduling(1);
 
   klee_preempt_thread();
@@ -149,6 +158,7 @@ int pthread_mutex_unlock(pthread_mutex_t *m) {
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_mutex_t, mutex);
 
   int result = kpr_mutex_trylock_internal(mutex);
 
@@ -159,6 +169,8 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
 }
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
   if (mutex->acquired >= 1) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;

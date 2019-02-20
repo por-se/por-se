@@ -10,6 +10,15 @@
 
 #include <stdint.h>
 
+// What is the magic stuff?
+// The magic stuff is a pattern that is detected in the runtime to distinguish between
+// correctly initialized static mutexes and zero initialized ones
+typedef struct {
+  char magic;
+} pthread_internal_t;
+#define PTHREAD_INTERNAL_MAGIC_VALUE 42
+#define PTHREAD_INTERNAL_MAGIC {.magic = 42}
+
 // Constants that should be defined
 #define PTHREAD_BARRIER_SERIAL_THREAD -1
 
@@ -112,6 +121,7 @@ typedef struct {
 } pthread_barrier_t;
 
 typedef struct {
+  pthread_internal_t magic;
   int acquired;
   int type;
   int robust;
@@ -119,19 +129,24 @@ typedef struct {
   int robustState;
   pthread_t holdingThread;
 } pthread_mutex_t;
+#define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, 0, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL }
 
 typedef struct {
+  pthread_internal_t magic;
   pthread_mutex_t* waitingMutex;
   uint64_t waitingCount;
 } pthread_cond_t;
+#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 };
 
 typedef struct {
-  uint64_t acquiredWriter;
+  pthread_internal_t magic;
+  pthread_t acquiredWriter;
   size_t acquiredReaderCount;
 
   size_t waitingWriterCount;
   size_t waitingReaderCount;
 } pthread_rwlock_t;
+#define PTHREAD_RWLOCK_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0, 0, 0 };
 
 typedef pthread_mutex_t pthread_spinlock_t;
 
@@ -157,12 +172,8 @@ typedef struct {
 typedef struct {
 } pthread_rwlockattr_t;
 
-
 typedef void* pthread_key_t;
 
-// PTHREAD_COND_INITIALIZER
-// PTHREAD_MUTEX_INITIALIZER
-// PTHREAD_RWLOCK_INITIALIZER
 #define PTHREAD_ONCE_INIT (0)
 
 #define PTHREAD_DESTRUCTOR_ITERATIONS (16)

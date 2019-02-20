@@ -7,6 +7,8 @@
 #include <errno.h>
 
 int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
+  kpr_ensure_valid(lock);
+
   lock->waitingMutex = NULL;
   lock->waitingCount = 0;
 
@@ -14,6 +16,8 @@ int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
 }
 
 int pthread_cond_destroy(pthread_cond_t *lock) {
+  kpr_check_if_valid(pthread_cond_t, lock);
+
   if (lock->waitingCount != 0) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
@@ -24,6 +28,7 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
 
 int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_cond_t, lock);
 
   int result = kpr_mutex_unlock_internal(m);
   if (result != 0) {
@@ -49,6 +54,7 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
 
 int pthread_cond_broadcast(pthread_cond_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_cond_t, lock);
 
   // We can actually just use the transfer as we know that all wait on the
   // same mutex again
@@ -64,6 +70,7 @@ int pthread_cond_broadcast(pthread_cond_t *lock) {
 
 int pthread_cond_signal(pthread_cond_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_cond_t, lock);
 
   // We can actually just use the transfer as we know that all wait on the
   // same mutex again

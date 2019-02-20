@@ -1,16 +1,16 @@
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
 
+#include "kpr/internal.h"
+
 #include <errno.h>
 #include <stdbool.h>
 
-#define NO_WRITER_ACQUIRED (~((uint64_t)0))
-
 static int rwlock_tryrdlock(pthread_rwlock_t* lock) {
-  uint64_t tid = klee_get_thread_id();
+  pthread_t th = pthread_self();
 
-  if (lock->acquiredWriter != NO_WRITER_ACQUIRED) {
-    if (lock->acquiredWriter == tid) {
+  if (lock->acquiredWriter != NULL) {
+    if (lock->acquiredWriter == th) {
       return EDEADLK;
     } else {
       return EBUSY;
@@ -23,10 +23,10 @@ static int rwlock_tryrdlock(pthread_rwlock_t* lock) {
 }
 
 static int rwlock_trywrlock(pthread_rwlock_t* lock) {
-  uint64_t tid = klee_get_thread_id();
+  pthread_t th = pthread_self();
 
-  if (lock->acquiredWriter != NO_WRITER_ACQUIRED) {
-    if (lock->acquiredWriter == tid) {
+  if (lock->acquiredWriter != NULL) {
+    if (lock->acquiredWriter == th) {
       return EDEADLK;
     } else {
       return EBUSY;
@@ -37,14 +37,16 @@ static int rwlock_trywrlock(pthread_rwlock_t* lock) {
     return EBUSY;
   }
 
-  lock->acquiredWriter = tid;
+  lock->acquiredWriter = th;
   return 0;
 }
 
 // Now the actual implementation
 
 int pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr) {
-  lock->acquiredWriter = NO_WRITER_ACQUIRED;
+  kpr_ensure_valid(lock);
+
+  lock->acquiredWriter = NULL;
 
   lock->waitingReaderCount = 0;
   lock->waitingWriterCount = 0;
@@ -55,19 +57,19 @@ int pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr
 }
 
 int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
-  if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != NO_WRITER_ACQUIRED) {
+  if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != NULL) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
-  klee_toggle_thread_scheduling(1);
   return 0;
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
   int result;
   for (;;) {
@@ -89,6 +91,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
   int result = rwlock_tryrdlock(lock);
 
@@ -99,6 +102,7 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock) {
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
   int result;
   for (;;) {
@@ -120,6 +124,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
   int result = rwlock_trywrlock(lock);
 
@@ -130,13 +135,14 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_rwlock_t, lock);
 
   bool unlockAll = false;
   bool validUnlock = false;
 
   // So first of all test if we are the writer
-  if (lock->acquiredWriter == klee_get_thread_id()) {
-    lock->acquiredWriter = NO_WRITER_ACQUIRED;
+  if (lock->acquiredWriter == pthread_self()) {
+    lock->acquiredWriter = NULL;
     unlockAll = true;
     validUnlock = true;
   } else if (lock->acquiredReaderCount > 0) {
