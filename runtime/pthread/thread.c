@@ -93,7 +93,7 @@ void pthread_exit(void* arg) {
 
   kpr_thread* thread = pthread_self();
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
-  thread->state = KPR_THREAD_STATE_EXITED;
+  thread->state = KPR_THREAD_STATE_DEAD;
 
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
     thread->returnValue = arg;
@@ -109,6 +109,8 @@ void pthread_exit(void* arg) {
       klee_wait_on(thread);
     }
   }
+
+  thread->state = KPR_THREAD_STATE_EXITED;
 
   klee_toggle_thread_scheduling(1);
 
