@@ -14,7 +14,7 @@ namespace por::event {
 
 	protected:
 		thread_exit(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-			: event(event_kind::thread_exit, tid)
+			: event(event_kind::thread_exit, tid, thread_predecessor)
 			, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());

@@ -16,7 +16,7 @@ namespace por::event {
 
 	protected:
 		thread_join(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& joined_thread)
-			: event(event_kind::thread_join, tid)
+			: event(event_kind::thread_join, tid, thread_predecessor, joined_thread)
 			, _predecessors{std::move(thread_predecessor), std::move(joined_thread)}
 		{
 			assert(this->thread_predecessor());

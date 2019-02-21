@@ -14,8 +14,8 @@ namespace por::event {
 
 	protected:
 		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-			: event(event_kind::local, tid)
-			, _predecessors{::std::move(thread_predecessor)}
+			: event(event_kind::local, tid, thread_predecessor)
+			, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);

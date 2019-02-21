@@ -15,7 +15,7 @@ namespace por::event {
 
 	protected:
 		lock_release(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& lock_predecessor)
-			: event(event_kind::lock_release, tid)
+			: event(event_kind::lock_release, tid, thread_predecessor, lock_predecessor)
 			, _predecessors{std::move(thread_predecessor), std::move(lock_predecessor)}
 		{
 			assert(this->thread_predecessor());

@@ -14,7 +14,7 @@ namespace por::event {
 
 	protected:
 		thread_init(thread_id_t tid, std::shared_ptr<event>&& creator)
-			: event(event_kind::thread_init, tid)
+			: event(event_kind::thread_init, tid, creator)
 			, _predecessors{std::move(creator)}
 		{
 			assert(this->thread_creation_predecessor());
