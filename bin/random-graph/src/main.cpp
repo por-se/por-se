@@ -146,20 +146,21 @@ int main(int argc, char** argv){
 		}
 	}
 
-	std::set<por::event::event*> visited;
-	std::vector<por::event::event*> open;
-	std::map<por::event::thread_id_t, std::vector<por::event::event*>> threads;
-	std::vector<std::pair<por::event::event*, por::event::event*>> inter_thread_dependencies;
-	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event*, por::event::event*>>> intra_thread_dependencies;
+	std::set<por::event::event const*> visited;
+	std::vector<por::event::event const*> open;
+	std::map<por::event::thread_id_t, std::vector<por::event::event const*>> threads;
+	std::vector<std::pair<por::event::event const*, por::event::event const*>> inter_thread_dependencies;
+	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> non_immediate_intra_thread_dependencies;
+	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> intra_thread_dependencies;
 	std::size_t opened = 0;
 	for(auto& t : configuration.thread_heads()) {
 		open.push_back(t.second.get());
 		++opened;
 	}
 	while(!open.empty()) {
-		por::event::event* event = open.back();
+		por::event::event const* event = open.back();
 		open.pop_back();
-		if (!visited.insert(event).second) {
+		if(!visited.insert(event).second) {
 			// already visited
 			continue;
 		}
@@ -167,49 +168,51 @@ int main(int argc, char** argv){
 		threads[tid].push_back(event);
 		bool first = true;
 		for(auto& p : event->predecessors()) {
-			por::event::event* predecessor = p.get();
+			por::event::event const* predecessor = p.get();
 			if(visited.count(predecessor) == 0) {
 				open.push_back(predecessor);
 				++opened;
 			}
 			if(tid != predecessor->tid()) {
 				inter_thread_dependencies.emplace_back(std::make_pair(event, predecessor));
-			} else if(first) {
-				intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
-				first = false; // only insert thread_predecessor, not lock or cond predecessor on same thread
+			} else {
+				if(first) {
+					intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
+					first = false; // only insert thread_predecessor, not lock or cond predecessor on same thread
+				} else {
+					non_immediate_intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
+				}
 			}
 		}
 	}
 
 	std::cout << "\n\n";
 	std::cout << "digraph {\n"
-	          << "  rankdir=LR;\n"
-	          << "  nodesep=0.8;\n"
-	          << "  ranksep=1.6;\n";
+	          << "  rankdir=TB;\n";
 
 	std::size_t event_id = 1;
 	std::map<por::event::event const*, std::size_t> events;
 	for(auto const& t : threads) {
 		por::event::thread_id_t tid = t.first;
-		if (tid == 0) {
-			std::cout << "  subgraph cluster_T" << tid << " {\n"
-			          << "    graph[style=invis]\n"
+		if(tid == 0) {
+			std::cout << "\n"
+			          << "  subgraph cluster_T0 {\n"
+			          << "    graph[style=invis]\n\n"
 			          << "    node[shape=box style=dashed fixedsize=false width=1 label=\"\"]\n"
-			          << "    {\n";
+			          << "    // single visible node\n";
 
 		} else {
-			std::cout << "  subgraph cluster_T" << tid << " {\n"
-			          << "    graph[label=\"Thread " << tid << "\"]\n"
+			std::cout << "\n"
+			          << "  subgraph cluster_T" << tid << " {\n"
+			          << "    graph[label=\"Thread " << tid << "\"]\n\n"
 			          << "    node[shape=box fixedsize=false width=1 label=\"\"]\n"
-			          << "    edge[color=grey arrowhead=none]\n"
-			          << "    {\n"
-			          << "      rank=same;\n";
+			          << "    // visible and invisible nodes\n";
 		}
 
 		// topological sort of thread's events
 		auto const& relation = intra_thread_dependencies[tid];
 		std::vector<por::event::event const*> thread_events;
-		auto _init = std::find_if(threads[tid].begin(), threads[tid].end(), [](por::event::event* e) {
+		auto _init = std::find_if(threads[tid].begin(), threads[tid].end(), [](por::event::event const* e) {
 			return e->kind() == por::event::event_kind::thread_init || e->kind() == por::event::event_kind::program_init;
 		});
 		assert(_init != threads[tid].end() && "each thread should have an init event");
@@ -223,9 +226,19 @@ int main(int argc, char** argv){
 		}
 
 		std::size_t first_id = event_id;
+		std::size_t depth = (*_init)->depth();
+		std::vector<std::size_t> visibleNodes;
 		for(auto* e : thread_events) {
+			// account for difference in depth by inserting a number of invisible nodes
+			for(std::size_t i = depth; (i + 1) < e->depth(); i++) {
+				std::cout << "    e" << event_id++ << " [style=invis width=0 height=0]\n";
+			}
+
 			events[e] = event_id;
-			std::cout << "      e" << event_id << " [label=\"";
+			visibleNodes.push_back(event_id);
+			depth = e->depth();
+
+			std::cout << "    e" << event_id << " [label=\"";
 			switch(e->kind()) {
 				case por::event::event_kind::program_init:
 					std::cout << "init";
@@ -256,34 +269,62 @@ int main(int argc, char** argv){
 					break;
 			}
 
+			std::cout << " depth=" << e->depth();
 			std::cout << "\"]\n";
 			++event_id;
 		}
-		std::cout << "    }\n";
 
-		// print thread relation: e{event_id - 1} -> ... -> e{first_id}
-		if ((first_id + 1) != event_id) {
-			std::cout << "      e" << event_id - 1 << " -> ";
-			for (std::size_t i = event_id - 2; i >= first_id; --i) {
-				std::cout << "e" << i;
-				if (i != first_id) {
-					std::cout << " -> ";
+		std::vector<std::pair<por::event::event const*, por::event::event const*>> deps = non_immediate_intra_thread_dependencies[tid];
+
+		if(visibleNodes.size() > 1) {
+			std::cout << "\n"
+			          << "    edge[color=grey arrowtail=vee weight=1000 dir=back]\n"
+			          << "    // visible edges\n";
+			auto prev_it = visibleNodes.begin();
+			for(auto it = visibleNodes.begin() + 1, ie = visibleNodes.end(); it != ie; ++it) {
+				std::cout << "    e" << *prev_it << " -> e" << *it;
+				por::event::event const* prev_event = thread_events[std::distance(visibleNodes.begin(), prev_it)];
+				por::event::event const* curr_event = thread_events[std::distance(visibleNodes.begin(), it)];
+				auto deps_it = std::find(deps.begin(), deps.end(), std::make_pair(curr_event, prev_event));
+				if(deps_it != deps.end()) {
+					std::cout << "[color=blue]";
+					deps.erase(deps_it);
 				}
+				std::cout << "\n";
+				prev_it = it;
 			}
 		}
-		std::cout << "\n"
-		          << "  }\n";
+
+		if((event_id - first_id) > visibleNodes.size()) {
+			std::cout << "\n"
+			          << "    edge[style=invis]\n"
+			          << "    // invisible edges\n";
+			auto prev_it = visibleNodes.begin();
+			for(auto it = visibleNodes.begin() + 1, ie = visibleNodes.end(); it != ie; ++it) {
+				bool gap = *it - *prev_it > 1;
+				for(std::size_t i = *prev_it; gap && i <= (*it - 1); ++i) {
+					std::cout << "    e" << i << " -> e" << i + 1 << "\n";
+				}
+				prev_it = it;
+			}
+		}
+
+		if(deps.size() > 0) {
+			std::cout << "\n"
+			          << "    edge[color=blue arrowtail=vee style=dashed dir=back constraint=false weight=0]\n"
+			          << "    // object dependency edges\n";
+			for(auto &r : deps) {
+				std::cout << "    e" << events[r.second] << " -> e" << events[r.first] << "\n";
+			}
+		}
+
+		std::cout << "  }\n";
 	}
-	std::cout << "  edge[arrowhead=vee constraint=false dir=back]\n"
-	          << "\n";
+	std::cout << "  edge[color=blue arrowtail=vee dir=back]\n"
+	          << "  // dependency edges across threads\n";
 
 	for(auto &r : inter_thread_dependencies) {
-		std::cout << "  e" << events[r.second] << " -> e" << events[r.first];
-		if(r.first->kind() == por::event::event_kind::thread_init) {
-			//assert(r.second->kind() == por::event::thread_create);
-			std::cout << " [constraint=true]";
-		}
-		std::cout << "\n";
+		std::cout << "  e" << events[r.second] << " -> e" << events[r.first] << "\n";
 	}
 
 	std::cout << "}\n";
