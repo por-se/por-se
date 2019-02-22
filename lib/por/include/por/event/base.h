@@ -99,6 +99,7 @@ namespace por::event {
 
 	public:
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() = 0;
+		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const = 0;
 
 		bool operator<(event const& rhs) {
 			if(rhs._tid == _tid) {

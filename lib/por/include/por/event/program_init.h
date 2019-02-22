@@ -21,5 +21,10 @@ namespace por::event {
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr);
 		}
+
+		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
+			return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
+		}
+
 	};
 }
