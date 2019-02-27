@@ -6,6 +6,7 @@
 int pthread_mutexattr_init(pthread_mutexattr_t *attr) {
   attr->type = PTHREAD_MUTEX_DEFAULT;
   attr->type = PTHREAD_MUTEX_STALLED;
+  attr->type = PTHREAD_PROCESS_PRIVATE;
   return 0;
 }
 
@@ -38,5 +39,19 @@ int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust) {
   }
 
   attr->robust = robust;
+  return 0;
+}
+
+int pthread_mutexattr_getpshared(const pthread_mutexattr_t *attr, int *pshared) {
+  *pshared = attr->pshared;
+  return 0;
+}
+
+int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared) {
+  if (pshared != PTHREAD_PROCESS_PRIVATE && pshared != PTHREAD_PROCESS_SHARED) {
+    klee_report_error(__FILE__, __LINE__, "trying to set a pshared value that is unknown", "user");
+  }
+
+  attr->pshared = pshared;
   return 0;
 }

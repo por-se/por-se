@@ -159,17 +159,22 @@ typedef struct {
 } pthread_attr_t;
 
 typedef struct {
+  int pshared;
 } pthread_barrierattr_t;
 
 typedef struct {
+  int pshared;
+  clockid_t clock;
 } pthread_condattr_t;
 
 typedef struct {
   int type;
   int robust;
+  int pshared;
 } pthread_mutexattr_t;
 
 typedef struct {
+  int pshared;
 } pthread_rwlockattr_t;
 
 typedef void* pthread_key_t;
@@ -242,10 +247,11 @@ int pthread_setspecific(pthread_key_t key, const void * v);
 
 // General multithreading
 //int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(void));
+int pthread_once(pthread_once_t *once, void (*oncefunc)(void));
+// More scheduling that is not supported
 //int pthread_getconcurrency(void);
 //int pthread_getcpuclockid(pthread_t th, clockid_t *clock);
 //int pthread_getschedparam(pthread_t th, int *c, struct sched_param *schedparam);
-int pthread_once(pthread_once_t *once, void (*oncefunc)(void));
 //int pthread_setconcurrency(int concurrency);
 //int pthread_setschedparam(pthread_t, int c, const struct sched_param *schedparam);
 //int pthread_setschedprio(pthread_t, int schedprio);
@@ -254,54 +260,60 @@ int pthread_once(pthread_once_t *once, void (*oncefunc)(void));
 int pthread_attr_init(pthread_attr_t *attr);
 int pthread_attr_destroy(pthread_attr_t *attr);
 int pthread_attr_getdetachstate(const pthread_attr_t * attr, int * detachstate);
+int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate);
+
+// These are not supported since the stack is located inside klee
 //int pthread_attr_getguardsize(const pthread_attr_t *attr, size_t *guardsize);
-//int pthread_attr_getinheritsched(const pthread_attr_t *attr, int *inheritsched);
-//int pthread_attr_getschedparam(const pthread_attr_t *attr, struct sched_param *schedparam);
-//int pthread_attr_getschedpolicy(const pthread_attr_t *attr, int *schedpolicy);
-//int pthread_attr_getscope(const pthread_attr_t *attr, int *scope);
 //int pthread_attr_getstack(const pthread_attr_t *attr, void **restrict, size_t *stack);
 //int pthread_attr_getstacksize(const pthread_attr_t *attr, size_t *stacksize);
-int pthread_attr_setdetachstate(pthread_attr_t *attr, int detachstate);
 //int pthread_attr_setguardsize(pthread_attr_t *attr, size_t guardsize);
-//int pthread_attr_setinheritsched(pthread_attr_t *attr, int inheritsched);
-//int pthread_attr_setschedparam(pthread_attr_t *attr, const struct sched_param * schedparam);
-//int pthread_attr_setschedpolicy(pthread_attr_t *attr, int schedpolicy);
-//int pthread_attr_setscope(pthread_attr_t *attr, int scope);
 //int pthread_attr_setstack(pthread_attr_t *attr, void *, size_t stack);
 //int pthread_attr_setstacksize(pthread_attr_t *attr, size_t size);
 
+// Also not supported for now as they rely on scheduling differences
+//int pthread_attr_setscope(pthread_attr_t *attr, int scope);
+//int pthread_attr_getscope(const pthread_attr_t *attr, int *scope);
+//int pthread_attr_getschedparam(const pthread_attr_t *attr, struct sched_param *schedparam);
+//int pthread_attr_getschedpolicy(const pthread_attr_t *attr, int *schedpolicy);
+//int pthread_attr_setschedparam(pthread_attr_t *attr, const struct sched_param * schedparam);
+//int pthread_attr_setschedpolicy(pthread_attr_t *attr, int schedpolicy);
+//int pthread_attr_setinheritsched(pthread_attr_t *attr, int inheritsched);
+//int pthread_attr_getinheritsched(const pthread_attr_t *attr, int *inheritsched);
+
 // Barrier attributes
-//int pthread_barrierattr_destroy(pthread_barrierattr_t *attr);
-//int pthread_barrierattr_getpshared(const pthread_barrierattr_t *attr, int *pshared);
-//int pthread_barrierattr_init(pthread_barrierattr_t *attr);
-//int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
+int pthread_barrierattr_destroy(pthread_barrierattr_t *attr);
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *attr, int *pshared);
+int pthread_barrierattr_init(pthread_barrierattr_t *attr);
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
 
 // Condition variable attributes
-//int pthread_condattr_destroy(pthread_condattr_t *attr);
-//int pthread_condattr_getclock(const pthread_condattr_t *attr, clockid_t *clock);
-//int pthread_condattr_getpshared(const pthread_condattr_t *attr, int *pshared);
-//int pthread_condattr_init(pthread_condattr_t *attr);
-//int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock);
-//int pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared);
+int pthread_condattr_destroy(pthread_condattr_t *attr);
+int pthread_condattr_getclock(const pthread_condattr_t *attr, clockid_t *clock);
+int pthread_condattr_getpshared(const pthread_condattr_t *attr, int *pshared);
+int pthread_condattr_init(pthread_condattr_t *attr);
+int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock);
+int pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared);
 
 // Mutex attributes
 int pthread_mutexattr_init(pthread_mutexattr_t *attr);
 int pthread_mutexattr_destroy(pthread_mutexattr_t *);
-//int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *attr, int *prioceiling);
-//int pthread_mutexattr_getprotocol(const pthread_mutexattr_t *attr, int *protocol);
-//int pthread_mutexattr_getpshared(const pthread_mutexattr_t *attr, int *pshared);
+int pthread_mutexattr_getpshared(const pthread_mutexattr_t *attr, int *pshared);
 int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robust);
 int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type);
-//int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling);
-//int pthread_mutexattr_setprotocol(pthread_mutexattr_t *attr, int protocol);
-//int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared);
+int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared);
 int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robust);
 int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
+// These below are for now not supported as they can have an influence on how the
+// mutex can be acquired
+//int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *attr, int *prioceiling);
+//int pthread_mutexattr_getprotocol(const pthread_mutexattr_t *attr, int *protocol);
+//int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling);
+//int pthread_mutexattr_setprotocol(pthread_mutexattr_t *attr, int protocol);
 
 // Rwlock attributes
-//int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);
-//int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *attr, int *pshared);
-//int pthread_rwlockattr_init(pthread_rwlockattr_t *attr);
-//int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared);
+int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);
+int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *attr, int *pshared);
+int pthread_rwlockattr_init(pthread_rwlockattr_t *attr);
+int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared);
 
 #endif // _PTHREAD_H
