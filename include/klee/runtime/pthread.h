@@ -105,9 +105,6 @@ typedef struct {
   uint8_t mode;
   uint8_t joinState;
 
-  uint8_t cancelSignalReceived;
-  int cancelState;
-
   void* startArg;
   void* (*startRoutine) (void* arg);
 
@@ -234,10 +231,10 @@ int pthread_spin_trylock(pthread_spinlock_t *lock);
 int pthread_spin_unlock(pthread_spinlock_t *lock);
 
 // thread cancellation
-//int pthread_cancel(pthread_t th);
-//int pthread_setcancelstate(int p1, int *p2);
-//int pthread_setcanceltype(int p1, int *p2);
-//void pthread_testcancel(void);
+int pthread_cancel(pthread_t th);
+int pthread_setcancelstate(int p1, int *p2);
+int pthread_setcanceltype(int p1, int *p2);
+void pthread_testcancel(void);
 
 // thread keys
 void *pthread_getspecific(pthread_key_t key);
@@ -246,7 +243,7 @@ int pthread_key_delete(pthread_key_t key);
 int pthread_setspecific(pthread_key_t key, const void * v);
 
 // General multithreading
-//int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(void));
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(void));
 int pthread_once(pthread_once_t *once, void (*oncefunc)(void));
 // More scheduling that is not supported
 //int pthread_getconcurrency(void);

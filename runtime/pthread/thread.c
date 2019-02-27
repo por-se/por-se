@@ -41,7 +41,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   thread->state = KPR_THREAD_STATE_LIVE;
   thread->mode = KPR_THREAD_MODE_JOIN;
   thread->joinState = KPR_THREAD_JSTATE_JOINABLE;
-  thread->cancelState = PTHREAD_CANCEL_ENABLE;
 
 // kpr_list_create(&thread->cleanUpStack);
 
@@ -149,12 +148,12 @@ int pthread_join(pthread_t pthread, void **ret) {
   }
 
   if (ret != NULL) {
-    if (thread->cancelSignalReceived == 1) {
-      *ret = PTHREAD_CANCELED;
-    } else {
+    // if (thread->cancelSignalReceived == 1) {
+    //  *ret = PTHREAD_CANCELED;
+    // } else {
       // If we have returned, then we should be able to return the data
       *ret = thread->returnValue;
-    }
+    // }
   }
 
   klee_toggle_thread_scheduling(1);
