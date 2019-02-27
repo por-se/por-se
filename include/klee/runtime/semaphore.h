@@ -7,9 +7,9 @@
 #define SEM_FAILED ((sem_t *) 0)
 
 #ifdef SEM_VALUE_MAX
-# undef SEM_VALUE_MAX
+#undef SEM_VALUE_MAX
 #endif
-#define SEM_VALUE_MAX (1000)
+#define SEM_VALUE_MAX (32767)
 
 typedef struct {
   int value;
