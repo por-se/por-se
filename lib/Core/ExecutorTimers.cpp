@@ -129,6 +129,10 @@ void Executor::processTimers(ExecutionState *current,
           *os << "(" << es << ",";
           *os << "[";
           Thread &thread = es->currentThread();
+          if (thread.state == ThreadState::Exited) {
+            // FIXME: find more appropriate way to handle this (instead of skipping state entirely)
+            continue;
+          }
           auto next = thread.stack.begin();
           ++next;
           for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end();

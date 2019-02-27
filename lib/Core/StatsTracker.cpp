@@ -460,6 +460,8 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
          ie = executor.states.end(); it != ie; ++it) {
     ExecutionState &state = **it;
     Thread &thread = state.currentThread();
+    if (thread.state == ThreadState::Exited)
+      continue;
     const InstructionInfo &ii = *thread.pc->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
     if (UseCallPaths) {
