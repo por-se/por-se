@@ -3596,36 +3596,39 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
     Instruction ** lastInstruction) {
   Thread &thread = state.currentThread();
 
-  // unroll the stack of the applications state and find
-  // the last instruction which is not inside a KLEE internal function
-  ExecutionState::stack_ty::const_reverse_iterator it = thread.stack.rbegin(),
-      itE = thread.stack.rend();
-
-  // don't check beyond the outermost function (i.e. main())
-  itE--;
-
   const InstructionInfo * ii = 0;
-  if (kmodule->internalFunctions.count(it->kf->function) == 0){
-    ii = thread.prevPc->info;
-    *lastInstruction = thread.prevPc->inst;
-    //  Cannot return yet because even though
-    //  it->function is not an internal function it might of
-    //  been called from an internal function.
-  }
 
-  // Wind up the stack and check if we are in a KLEE internal function.
-  // We visit the entire stack because we want to return a CallInstruction
-  // that was not reached via any KLEE internal functions.
-  for (;it != itE; ++it) {
-    // check calling instruction and if it is contained in a KLEE internal function
-    const Function * f = (*it->caller).inst->getParent()->getParent();
-    if (kmodule->internalFunctions.count(f)){
-      ii = 0;
-      continue;
+  if (thread.state != ThreadState::Exited) {
+    // unroll the stack of the applications state and find
+    // the last instruction which is not inside a KLEE internal function
+    ExecutionState::stack_ty::const_reverse_iterator it = thread.stack.rbegin(),
+            itE = thread.stack.rend();
+
+    // don't check beyond the outermost function (i.e. main())
+    itE--;
+
+    if (kmodule->internalFunctions.count(it->kf->function) == 0) {
+      ii = thread.prevPc->info;
+      *lastInstruction = thread.prevPc->inst;
+      //  Cannot return yet because even though
+      //  it->function is not an internal function it might of
+      //  been called from an internal function.
     }
-    if (!ii){
-      ii = (*it->caller).info;
-      *lastInstruction = (*it->caller).inst;
+
+    // Wind up the stack and check if we are in a KLEE internal function.
+    // We visit the entire stack because we want to return a CallInstruction
+    // that was not reached via any KLEE internal functions.
+    for (; it != itE; ++it) {
+      // check calling instruction and if it is contained in a KLEE internal function
+      const Function *f = (*it->caller).inst->getParent()->getParent();
+      if (kmodule->internalFunctions.count(f)) {
+        ii = 0;
+        continue;
+      }
+      if (!ii) {
+        ii = (*it->caller).info;
+        *lastInstruction = (*it->caller).inst;
+      }
     }
   }
 
