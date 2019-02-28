@@ -1,6 +1,8 @@
 #ifndef KPR_LIST_H
 #define KPR_LIST_H
 
+#include "klee/runtime/pthread.h"
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -10,12 +12,6 @@ typedef struct kpr_list_node {
   struct kpr_list_node* next;
   void* data;
 } kpr_list_node;
-
-typedef struct {
-  kpr_list_node* tail;
-  kpr_list_node* head;
-  size_t size;
-} kpr_list;
 
 #define KPR_LIST_INITIALIZER { NULL, NULL, 0 }
 

@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include "kpr/list.h"
 #include "kpr/flags.h"
 #include "kpr/internal.h"
 
@@ -52,6 +53,8 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
       thread->mode = KPR_THREAD_MODE_DETACH;
     }
   }
+
+  kpr_list_create(&thread->cleanupStack);
 
   thread->tid = klee_create_thread(kpr_wrapper, thread);
   klee_preempt_thread();
@@ -113,6 +116,10 @@ void pthread_exit(void* arg) {
 
   klee_toggle_thread_scheduling(1);
 
+  while (kpr_list_size(&thread->cleanupStack) > 0) {
+    pthread_cleanup_pop(1);
+  }
+
   kpr_key_clear_data_of_thread(thread->tid);
   klee_exit_thread();
 }
@@ -162,4 +169,27 @@ int pthread_join(pthread_t pthread, void **ret) {
   }
 
   return 0;
+}
+
+void pthread_cleanup_pop(int execute) {
+  pthread_t thread = pthread_self();
+
+  assert(kpr_list_size(&thread->cleanupStack) > 0);
+  kpr_cleanup_data* data = (kpr_cleanup_data*) kpr_list_pop(&thread->cleanupStack);
+
+  if (execute != 0) {
+    data->routine(data->argument);
+  }
+
+  free(data);
+}
+
+void pthread_cleanup_push(void (*routine)(void*), void *arg) {
+  pthread_t thread = pthread_self();
+
+  kpr_cleanup_data* data = calloc(sizeof(kpr_cleanup_data), 1);
+  data->routine = routine;
+  data->argument = arg;
+
+  kpr_list_push(&thread->cleanupStack, data);
 }

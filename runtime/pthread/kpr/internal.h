@@ -19,4 +19,9 @@ void kpr_check_init_pattern(pthread_internal_t* data, size_t size);
 #define kpr_check_if_valid(typename, argument) kpr_check_init_pattern((pthread_internal_t*) argument, sizeof(typename));
 #define kpr_ensure_valid(argument) argument->magic.magic = PTHREAD_INTERNAL_MAGIC_VALUE
 
+typedef struct {
+  void* argument;
+  void (*routine)(void*);
+} kpr_cleanup_data;
+
 #endif // KPR_INTERNAL_H

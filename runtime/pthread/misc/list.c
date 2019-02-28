@@ -11,7 +11,7 @@ void kpr_list_create(kpr_list* stack) {
 }
 
 void kpr_list_clear(kpr_list* stack) {
-  kpr_list_node* n = stack->head;
+  kpr_list_node* n = (kpr_list_node*) stack->head;
   while (n != NULL) {
     kpr_list_node* newN = n->next;
     free(n);
@@ -27,7 +27,7 @@ void kpr_list_push(kpr_list* stack, void * data) {
   kpr_list_node* newTail = calloc(sizeof(kpr_list_node), 1);
 
   newTail->data = data;
-  newTail->prev = stack->tail;
+  newTail->prev = (kpr_list_node*) stack->tail;
 
   if (newTail->prev != NULL) {
     newTail->prev->next = newTail;
@@ -45,7 +45,7 @@ void* kpr_list_pop(kpr_list* stack) {
     return NULL;
   }
 
-  kpr_list_node* top = stack->tail;
+  kpr_list_node* top = (kpr_list_node*) stack->tail;
   stack->tail = top->prev;
 
   if (top->prev != NULL) {
@@ -65,7 +65,7 @@ void kpr_list_unshift(kpr_list* stack, void * data) {
 
   newHead->data = data;
 
-  newHead->next = stack->head;
+  newHead->next = (kpr_list_node*) stack->head;
   if (newHead->next != NULL) {
     newHead->next->prev = newHead;
   }
@@ -80,7 +80,7 @@ void* kpr_list_shift(kpr_list* stack) {
     return NULL;
   }
 
-  kpr_list_node* head = stack->head;
+  kpr_list_node* head = (kpr_list_node*) stack->head;
   stack->head = head->next;
 
   if (head->next != NULL) {

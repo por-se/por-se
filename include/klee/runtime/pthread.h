@@ -19,6 +19,13 @@ typedef struct {
 #define PTHREAD_INTERNAL_MAGIC_VALUE 42
 #define PTHREAD_INTERNAL_MAGIC {.magic = 42}
 
+// A small helper that is often needed in the runtime
+typedef struct {
+  void* tail;
+  void* head;
+  size_t size;
+} kpr_list;
+
 // Constants that should be defined
 #define PTHREAD_BARRIER_SERIAL_THREAD -1
 
@@ -109,6 +116,8 @@ typedef struct {
   void* (*startRoutine) (void* arg);
 
   void* returnValue;
+
+  kpr_list cleanupStack;
 } kpr_thread;
 typedef kpr_thread* pthread_t;
 
@@ -312,5 +321,8 @@ int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);
 int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *attr, int *pshared);
 int pthread_rwlockattr_init(pthread_rwlockattr_t *attr);
 int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared);
+
+void pthread_cleanup_pop(int execute);
+void pthread_cleanup_push(void (*routine)(void*), void *arg);
 
 #endif // _PTHREAD_H
