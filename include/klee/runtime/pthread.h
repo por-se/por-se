@@ -1,10 +1,6 @@
 #ifndef _PTHREAD_H
 #define _PTHREAD_H
 
-// This is part of the GNU sources -> make sure that we do not use the gnu defines
-#define _BITS_PTHREADTYPES_COMMON_H 1
-
-
 #include <sched.h>
 #include <time.h>
 
