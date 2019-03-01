@@ -12,6 +12,8 @@ int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
   lock->waitingMutex = NULL;
   lock->waitingCount = 0;
 
+  klee_por_register_event(por_condition_variable_create, lock);
+
   return 0;
 }
 
@@ -22,6 +24,8 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
+
+  klee_por_register_event(por_condition_variable_destroy, lock);
 
   return 0;
 }
@@ -46,8 +50,12 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
     }
   }
 
+  klee_por_register_event(por_wait1, lock, m);
+
   lock->waitingCount++;
   klee_wait_on(lock);
+
+  klee_por_register_event(por_wait2, lock, m);
 
   return pthread_mutex_lock(m);
 }
@@ -62,6 +70,8 @@ int pthread_cond_broadcast(pthread_cond_t *lock) {
 
   lock->waitingCount = 0;
   lock->waitingMutex = NULL;
+
+  klee_por_register_event(por_broadcast, lock);
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -82,6 +92,8 @@ int pthread_cond_signal(pthread_cond_t *lock) {
   if (lock->waitingCount == 0) {
     lock->waitingMutex = NULL;
   }
+
+  klee_por_register_event(por_signal, lock);
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();

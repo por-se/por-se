@@ -419,6 +419,9 @@ cl::opt<bool> DebugCheckForImpliedValues(
     cl::desc("Debug the implied value optimization"),
     cl::cat(DebugCat));
 
+cl::opt<bool> NoScheduleForks("no-schedule-forks",
+    cl::init(false));
+
 } // namespace
 
 namespace klee {
@@ -1880,8 +1883,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     
     if (thread.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      state.exitThread(thread.getThreadId());
-      scheduleThreads(state);
+      exitThread(state);
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
@@ -4436,6 +4438,7 @@ void Executor::runFunctionAsMain(Function *f,
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
+  registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4754,6 +4757,8 @@ Thread::ThreadId Executor::createThread(ExecutionState &state,
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), nullptr);
 
+  registerPorEvent(state, por_thread_create, { thread->getThreadId() });
+
   return thread->getThreadId();
 }
 
@@ -4816,8 +4821,16 @@ void Executor::preemptThread(ExecutionState &state) {
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  state.exitThread(state.currentThreadId());
+  Thread::ThreadId tid = state.currentThreadId();
+
+  state.exitThread(tid);
+  registerPorEvent(state, por_thread_exit, {tid});
+
   scheduleThreads(state);
+}
+
+void Executor::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
+  porEventManager.registerPorEvent(state, kind, std::move(args));
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
@@ -5003,6 +5016,10 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
 
   // So we are not able to fork for new states when we should not
   if (atMemoryLimit || inhibitForking) {
+    newForkCount = 0;
+  }
+
+  if (NoScheduleForks) {
     newForkCount = 0;
   }
 

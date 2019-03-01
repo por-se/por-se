@@ -19,6 +19,8 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
     pthread_mutexattr_getrobust(attr, &mutex->robust);
   }
 
+  klee_por_register_event(por_lock_create, mutex);
+
   return 0;
 }
 
@@ -95,6 +97,10 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     klee_preempt_thread();
   }
 
+  if (mutex->acquired == 1) {
+    klee_por_register_event(por_lock_acquire, mutex);
+  }
+
   return result;
 }
 
@@ -140,6 +146,7 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
   }
 
   klee_release_waiting(mutex, KLEE_RELEASE_SINGLE);
+  klee_por_register_event(por_lock_release, mutex);
 
   return 0;
 }
@@ -161,6 +168,9 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
   int result = kpr_mutex_trylock_internal(mutex);
+  if (result != 0) {
+    klee_por_register_event(por_lock_acquire, mutex);
+  }
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -175,6 +185,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
+
+  klee_por_register_event(por_lock_destroy, mutex);
 
   return 0;
 }

@@ -156,6 +156,7 @@ namespace klee {
     HANDLER(handleGetThreadRuntimeStructPtr);
     HANDLER(handleWaitOn);
     HANDLER(handleWakeUpWaiting);
+    HANDLER(handlePorRegisterEvent);
 #undef HANDLER
   };
 } // End klee namespace

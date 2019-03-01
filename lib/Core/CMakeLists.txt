@@ -31,6 +31,7 @@ set(CORE_COMPONENTS
   Thread.cpp
   TimingSolver.cpp
   UserSearcher.cpp
+  por/PorEventManager.cpp
 )
 
 if (VERIFIED_FINGERPRINTS)

@@ -154,6 +154,8 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
+  klee_por_register_event(por_thread_join, thread);
+
   if (ret != NULL) {
     // if (thread->cancelSignalReceived == 1) {
     //  *ret = PTHREAD_CANCELED;

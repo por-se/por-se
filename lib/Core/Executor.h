@@ -23,6 +23,9 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/util/ArrayCache.h"
 
+#include "klee/por/events.h"
+#include "por/PorEventManager.h"
+
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
@@ -142,6 +145,8 @@ private:
   SpecialFunctionHandler *specialFunctionHandler;
   std::vector<TimerInfo*> timers;
   PTree *processTree;
+
+  PorEventManager porEventManager;
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -601,6 +606,8 @@ public:
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);
+
+  void registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> ags);
 };
   
 } // End klee namespace

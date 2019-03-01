@@ -122,6 +122,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   addDNR("klee_exit_thread", handleExitThread),
   add("klee_wait_on", handleWaitOn, false),
   add("klee_release_waiting", handleWakeUpWaiting, false),
+  add("klee_por_register_event", handlePorRegisterEvent, false),
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
@@ -1013,6 +1014,37 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
           cast<ConstantExpr>(mode)->getZExtValue() == 1
           );
 }
+
+void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
+                                                    klee::KInstruction *target,
+                                                    std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() >= 1 && "invalid number of arguments to klee_por_register_event");
+
+  ref<Expr> kindExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(kindExpr)) {
+    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+    return;
+  }
+
+  auto kind = (por_event_t) cast<ConstantExpr>(kindExpr)->getZExtValue();
+
+  // All arguments have to be of type uint64_t
+  std::vector<std::uint64_t> args;
+  for (auto it = arguments.begin() + 1; it != arguments.end(); it++) {
+    ref<Expr> expr = executor.toUnique(state, *it);
+
+    if (!isa<ConstantExpr>(expr)) {
+      executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+      return;
+    }
+
+    args.push_back(cast<ConstantExpr>(expr)->getZExtValue());
+  }
+
+  executor.registerPorEvent(state, kind, args);
+}
+
 
 void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,
                                         klee::KInstruction *target,
