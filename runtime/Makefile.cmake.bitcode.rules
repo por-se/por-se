@@ -43,6 +43,8 @@ else
 LLVMCC.Flags += $(O0OPT)
 endif
 
+LLVMCC.Flags += $(RUNTIME_ADD_INCLUDES)
+
 # disable vectorization
 LLVMCC.Flags += -fno-vectorize
 

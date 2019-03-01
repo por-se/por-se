@@ -105,6 +105,10 @@ if (${LLVM_VERSION_MAJOR} GREATER 4)
 	set(O0OPT "${O0OPT} -Xclang -disable-O0-optnone")
 endif()
 
+set(RUNTIME_ADD_INCLUDES "")
+if (ENABLE_PTHREAD_RUNTIME)
+	set(RUNTIME_ADD_INCLUDES "-I${CMAKE_SOURCE_DIR}/include/klee/runtime")
+endif()
 
 # Use `ExternalProject_Add_Step` with `ALWAYS` argument instead of directly
 # building in `ExternalProject_Add` with `BUILD_ALWAYS` argument due to lack of
@@ -112,7 +116,7 @@ endif()
 ExternalProject_Add_Step(BuildKLEERuntimes RuntimeBuild
   # `env` is used here to make sure `MAKEFLAGS` of KLEE's build
   # is not propagated into the bitcode build system.
-  COMMAND ${ENV_BINARY} MAKEFLAGS="" O0OPT=${O0OPT} ${MAKE_BINARY} -f Makefile.cmake.bitcode all
+  COMMAND ${ENV_BINARY} MAKEFLAGS="" O0OPT=${O0OPT} RUNTIME_ADD_INCLUDES=${RUNTIME_ADD_INCLUDES} ${MAKE_BINARY} -f Makefile.cmake.bitcode all
   ALWAYS ${EXTERNAL_PROJECT_BUILD_ALWAYS_ARG}
   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
   ${EXTERNAL_PROJECT_ADD_STEP_USES_TERMINAL_ARG}
