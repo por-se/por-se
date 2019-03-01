@@ -3,8 +3,11 @@
 
 #include_next <limits.h>
 
-#ifndef SEM_VALUE_MAX
-#define SEM_VALUE_MAX (32767)
+// Ensure that we always enforce our limit
+#ifdef SEM_VALUE_MAX
+#undef SEM_VALUE_MAX
 #endif
+
+#define SEM_VALUE_MAX (32767)
 
 #endif // LIMITS_WRAPPER_H
