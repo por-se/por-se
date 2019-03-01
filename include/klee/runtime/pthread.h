@@ -118,6 +118,8 @@ typedef struct {
 typedef kpr_thread* pthread_t;
 
 typedef struct {
+  pthread_internal_t magic;
+
   unsigned count;
   unsigned currentCount;
 } pthread_barrier_t;

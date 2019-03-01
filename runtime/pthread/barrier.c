@@ -3,7 +3,11 @@
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
 
+#include "kpr/internal.h"
+
 int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t *attr, unsigned count) {
+  kpr_ensure_valid(barrier);
+
   if (count == 0) {
     return EINVAL;
   }
@@ -15,6 +19,8 @@ int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t
 }
 
 int pthread_barrier_destroy(pthread_barrier_t *barrier) {
+  kpr_check_if_valid(pthread_barrier_t, barrier);
+
   if (barrier->currentCount > 0) {
     return EBUSY;
   }
@@ -31,6 +37,7 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
   }
 
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_barrier_t, barrier);
 
   barrier->currentCount++;
 
