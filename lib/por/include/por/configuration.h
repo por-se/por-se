@@ -213,58 +213,50 @@ namespace por {
 		}
 
 		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
+			std::vector<std::shared_ptr<por::event::event>> result;
+
+			// immediate causal predecessor on same thread
+			std::shared_ptr<por::event::event> const* et = nullptr;
+			// maximal event concerning same lock in history of e
+			std::shared_ptr<por::event::event> const* er = nullptr;
+			// maximal event concerning same lock in [et]
+			std::shared_ptr<por::event::event> const* em = nullptr;
+
 			switch(e->kind()) {
 				case por::event::event_kind::lock_acquire: {
 					auto const* acq = static_cast<por::event::lock_acquire const*>(e.get());
-					std::shared_ptr<por::event::event> const& et = acq->thread_predecessor();
+					et = &acq->thread_predecessor();
+					er = &acq->lock_predecessor();
 
-					// maximal event concerning same lock in history of e
-					std::shared_ptr<por::event::event> const& er = acq->lock_predecessor();
+					assert(et != nullptr && *et != nullptr);
+					assert(er != nullptr && *er != nullptr);
 
 					// er is on same thread (incl. er == et)
-					if(er->tid() == e->tid()) {
-						// this implies em == er
+					if((*er)->tid() == e->tid()) {
+						// this implies em == er (without the need to compute em)
 						return {};
 					}
 
-					// maximal event concerning same lock in [et]
-					std::shared_ptr<por::event::event> const* em = &er;
-					while(et < *em) {
+					em = er;
+					while(em != nullptr && *em != nullptr && *et < *em) {
 						// descend chain of lock events until we are in [et]
-						if((*em)->kind() == por::event::event_kind::lock_create) {
-							// there is no predecessor within [et]
-							std::cerr << "data race of " << e->tid() << "@" << e->depth() << " with " << (*em)->tid() << "@" << (*em)->depth() << "\n";
-							em = nullptr;
-							//assert(0 && "data race");
-							break;
-						} else {
-							em = &get_lock_predecessor(*em);
-						}
-					}
-					if(em == &er && er->kind() == por::event::event_kind::lock_create) {
-						std::cerr << "data race of " << e->tid() << "@" << e->depth() << " with " << (*em)->tid() << "@" << (*em)->depth() << "\n";
+						em = &get_lock_predecessor(*em);
 					}
 
-					if(em == nullptr || em->get() == nullptr) {
-						return {};
+					if(em == nullptr || *em == nullptr ) {
+						result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr));
 					}
 
-					if(er->kind() != por::event::event_kind::lock_create) {
-						std::vector<std::shared_ptr<por::event::event>> result;
-						std::shared_ptr<por::event::event> const* ep = &get_lock_predecessor(er);
-						while((em < ep || em == ep)) {
-							if((*ep)->kind() == por::event::event_kind::lock_create
-							|| (*ep)->kind() == por::event::event_kind::lock_release
-							|| (*ep)->kind() == por::event::event_kind::wait1) {
-								result.emplace_back(por::event::lock_acquire::alloc(e->tid(), et, *ep));
-							}
-							if((*ep)->kind() == por::event::event_kind::lock_create) {
-								break;
-							}
-							ep = &get_lock_predecessor(*ep);
+					std::shared_ptr<por::event::event> const* ep = &get_lock_predecessor(*er);
+					do {
+						assert(ep != nullptr && *ep != nullptr);
+						if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
+							result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep));
 						}
-						return result;
-					}
+						ep = &get_lock_predecessor(*ep);
+					} while(*em < *ep || em == ep);
+
+					return result;
 				}
 				case por::event::event_kind::wait2: {
 					auto* w2 = static_cast<por::event::wait2 const*>(e.get());
