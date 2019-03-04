@@ -146,6 +146,13 @@ int main(int argc, char** argv){
 		}
 	}
 
+	auto cex = configuration.conflicting_extensions();
+	std::cerr << cex.size() << " cex found\n";
+	for(auto& c : cex) {
+		auto const* acq = static_cast<por::event::lock_acquire const*>(c.get());
+		std::cerr << c->tid() << "@" << c->depth() << ": " << acq->thread_predecessor()->tid() << "@" << acq->thread_predecessor()->depth() << " | " << acq->lock_predecessor()->tid() << "@" << acq->lock_predecessor()->depth() << "\n";
+	}
+
 	std::set<por::event::event const*> visited;
 	std::vector<por::event::event const*> open;
 	std::map<por::event::thread_id_t, std::vector<por::event::event const*>> threads;
