@@ -23,7 +23,7 @@ namespace por::event {
 			T&& begin_condition_variable_predecessors,
 			T&& end_condition_variable_predecessors
 		)
-			: event(event_kind::wait1, tid)
+			: event(event_kind::wait1, tid, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 2 + std::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
 		{
 			assert(this->thread_predecessor());

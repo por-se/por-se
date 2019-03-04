@@ -21,7 +21,7 @@ namespace por::event {
 			std::shared_ptr<event>&& lock_predecessor,
 			std::shared_ptr<event>&& condition_variable_predecessor
 		)
-			: event(event_kind::wait2, tid)
+			: event(event_kind::wait2, tid, condition_variable_predecessor)
 			, _predecessors{std::move(thread_predecessor), std::move(lock_predecessor), std::move(condition_variable_predecessor)}
 		{
 			assert(this->thread_predecessor());
