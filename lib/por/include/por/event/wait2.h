@@ -2,9 +2,8 @@
 
 #include "base.h"
 
-#include <util/sso_array.h>
-
 #include <cassert>
+#include <array>
 #include <memory>
 
 namespace por::event {
@@ -12,19 +11,18 @@ namespace por::event {
 		// predecessors:
 		// 1. same-thread predecessor
 		// 2. previous release of this lock
-		// 3+ previous operation on the condition variable
-		util::sso_array<std::shared_ptr<event>, 3> _predecessors;
+		// 3. signal or broadcast to trigger this event
+		std::array<std::shared_ptr<event>, 3> _predecessors;
 
 	protected:
 		template<typename T>
 		wait2(thread_id_t tid,
 			std::shared_ptr<event>&& thread_predecessor,
 			std::shared_ptr<event>&& lock_predecessor,
-			T&& begin_condition_variable_predecessors,
-			T&& end_condition_variable_predecessors
+			std::shared_ptr<event>&& condition_variable_predecessor
 		)
 			: event(event_kind::wait2, tid)
-			, _predecessors{util::create_uninitialized, 2 + std::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			, _predecessors{std::move(thread_predecessor), std::move(lock_predecessor), std::move(condition_variable_predecessor)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
@@ -36,15 +34,9 @@ namespace por::event {
 				this->lock_predecessor()->kind() == event_kind::lock_acquire
 				&& this->lock_predecessor()->tid() == this->tid()
 			);
-			assert(_predecessors.size() >= 2 && "overflow check");
-
-			// we perform a very small optimization by allocating the predecessors in uninitialized storage
-			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
-			new(_predecessors.data() + 1) std::shared_ptr<event>(std::move(lock_predecessor));
-			auto index = static_cast<std::size_t>(2);
-			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
-				new(_predecessors.data() + index) std::shared_ptr<event>(std::move(lock_predecessor));
-			}
+			assert(this->condition_variable_predecessor());
+			assert(this->condition_variable_predecessor()->tid() != this->tid());
+			assert(this->condition_variable_predecessor()->kind() == event_kind::signal || this->condition_variable_predecessor()->kind() == event_kind::broadcast);
 		}
 
 	public:
@@ -52,14 +44,12 @@ namespace por::event {
 		static std::shared_ptr<wait2> alloc(thread_id_t tid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> lock_predecessor,
-			T begin_condition_variable_predecessors,
-			T end_condition_variable_predecessors
+			std::shared_ptr<event> condition_variable_predecessor
 		) {
 			return std::make_shared<wait2>(wait2{tid,
 				std::move(thread_predecessor),
 				std::move(lock_predecessor),
-				std::move(begin_condition_variable_predecessors),
-				std::move(end_condition_variable_predecessors)
+				std::move(condition_variable_predecessor)
 			});
 		}
 
@@ -77,13 +67,7 @@ namespace por::event {
 		std::shared_ptr<event>      & lock_predecessor()       noexcept { return _predecessors[1]; }
 		std::shared_ptr<event> const& lock_predecessor() const noexcept { return _predecessors[1]; }
 
-		util::iterator_range<std::shared_ptr<event>*> condition_variable_predecessors() noexcept {
-			assert(_predecessors.size() >= 2);
-			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 2, _predecessors.data() + _predecessors.size());
-		}
-		util::iterator_range<std::shared_ptr<event> const*> condition_variable_predecessors() const noexcept {
-			assert(_predecessors.size() >= 2);
-			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 2, _predecessors.data() + _predecessors.size());
-		}
+		std::shared_ptr<event>      & condition_variable_predecessor()       noexcept { return _predecessors[2]; }
+		std::shared_ptr<event> const& condition_variable_predecessor() const noexcept { return _predecessors[2]; }
 	};
 }
