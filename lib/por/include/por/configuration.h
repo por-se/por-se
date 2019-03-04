@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <map>
+#include <vector>
 
 namespace por {
 	class configuration;
@@ -284,9 +285,7 @@ namespace por {
 			std::vector<std::shared_ptr<por::event::event>> S;
 			for(auto& t : _thread_heads) {
 				std::shared_ptr<por::event::event> const* e = &t.second;
-				std::cerr << "cex starting with thread " << t.first << "\n";
 				do {
-					std::cerr << "cex for event " << (*e)->tid() << "@" << (*e)->depth() << "\n";
 					switch((*e)->kind()) {
 						case por::event::event_kind::lock_acquire:
 						case por::event::event_kind::wait2: {
