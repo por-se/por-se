@@ -64,24 +64,26 @@ namespace por::event {
 			assert(_cone.size() >= immediate_predecessor->_cone.size());
 		}
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>& other_predecessor)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
 		: _cone(immediate_predecessor->_cone)
 		, _tid(tid)
 		, _kind(kind)
 		{
 			_cone[tid] = immediate_predecessor.get();
 
-			for(auto& pred : other_predecessor->_cone) {
-				auto t = pred.first;
-				auto& event = pred.second;
-				if(_cone.count(t) == 0 || _cone[t]->_depth < event->_depth) {
-					_cone[t] = event;
+			for(auto& op : other_predecessors) {
+				for(auto& pred : op->_cone) {
+					auto t = pred.first;
+					auto& event = pred.second;
+					if(_cone.count(t) == 0 || _cone[t]->_depth < event->_depth) {
+						_cone[t] = event;
+					}
 				}
-			}
 
-			// other_predecessor is not part of other_predecessor->_cone
-			if(_cone[other_predecessor->_tid]->_depth < other_predecessor->_depth) {
-				_cone[other_predecessor->_tid] = other_predecessor.get();
+				// op is not part of op->_cone
+				if(_cone[op->_tid]->_depth < op->_depth) {
+					_cone[op->_tid] = op.get();
+				}
 			}
 
 			std::size_t max_depth = 0;
@@ -92,10 +94,16 @@ namespace por::event {
 			_depth = max_depth + 1;
 
 			assert(immediate_predecessor->_depth < _depth);
-			assert(other_predecessor->_depth < _depth);
 			assert(_cone.size() >= immediate_predecessor->_cone.size());
-			assert(_cone.size() >= other_predecessor->_cone.size());
+			for(auto& op : other_predecessors) {
+				assert(op->_depth < _depth);
+				assert(_cone.size() >= op->_cone.size());
+			}
 		}
+
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>& other_predecessor)
+		: event(kind, tid, immediate_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(&other_predecessor, &other_predecessor + 1))
+		{ }
 
 	public:
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() = 0;
