@@ -154,6 +154,159 @@ namespace por {
 
 			thread_event = event::local::alloc(thread, std::move(thread_event));
 		}
+
+	private:
+		std::shared_ptr<por::event::event> const& get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {
+			switch(event->kind()) {
+				case por::event::event_kind::broadcast:
+					return static_cast<por::event::broadcast const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::condition_variable_create:
+					return static_cast<por::event::condition_variable_create const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::condition_variable_destroy:
+					return static_cast<por::event::condition_variable_destroy const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::local:
+					return static_cast<por::event::local const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::lock_acquire:
+					return static_cast<por::event::lock_acquire const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::lock_create:
+					return static_cast<por::event::lock_create const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::lock_destroy:
+					return static_cast<por::event::lock_destroy const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::lock_release:
+					return static_cast<por::event::lock_release const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::signal:
+					return static_cast<por::event::signal const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::thread_create:
+					return static_cast<por::event::thread_create const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::thread_exit:
+					return static_cast<por::event::thread_exit const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::thread_init:
+					return event;
+				case por::event::event_kind::thread_join:
+					return static_cast<por::event::thread_join const*>(event.get())->thread_predecessor();
+					return event;
+				case por::event::event_kind::wait1:
+					return static_cast<por::event::wait1 const*>(event.get())->thread_predecessor();
+				case por::event::event_kind::wait2:
+					return static_cast<por::event::wait2 const*>(event.get())->thread_predecessor();
+
+				default:
+					assert(0 && "event has no thread_predecessor");
+			}
+		}
+
+		std::shared_ptr<por::event::event> const& get_lock_predecessor(std::shared_ptr<por::event::event> const& event) {
+			switch(event->kind()) {
+				case por::event::event_kind::lock_acquire:
+					return static_cast<por::event::lock_acquire const*>(event.get())->lock_predecessor();
+				case por::event::event_kind::lock_destroy:
+					return static_cast<por::event::lock_destroy const*>(event.get())->lock_predecessor();
+				case por::event::event_kind::lock_release:
+					return static_cast<por::event::lock_release const*>(event.get())->lock_predecessor();
+				case por::event::event_kind::wait1:
+					return static_cast<por::event::wait1 const*>(event.get())->lock_predecessor();
+				case por::event::event_kind::wait2:
+					return static_cast<por::event::wait2 const*>(event.get())->lock_predecessor();
+				default:
+					assert(0 && "event has no lock_predecessor");
+			}
+		}
+
+		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
+			switch(e->kind()) {
+				case por::event::event_kind::lock_acquire: {
+					auto const* acq = static_cast<por::event::lock_acquire const*>(e.get());
+					std::shared_ptr<por::event::event> const& et = acq->thread_predecessor();
+
+					// maximal event concerning same lock in history of e
+					std::shared_ptr<por::event::event> const& er = acq->lock_predecessor();
+
+					// er is on same thread (incl. er == et)
+					if(er->tid() == e->tid()) {
+						// this implies em == er
+						return {};
+					}
+
+					// maximal event concerning same lock in [et]
+					std::shared_ptr<por::event::event> const* em = &er;
+					while(et < *em) {
+						// descend chain of lock events until we are in [et]
+						if((*em)->kind() == por::event::event_kind::lock_create) {
+							// there is no predecessor within [et]
+							std::cerr << "data race of " << e->tid() << "@" << e->depth() << " with " << (*em)->tid() << "@" << (*em)->depth() << "\n";
+							em = nullptr;
+							//assert(0 && "data race");
+							break;
+						} else {
+							em = &get_lock_predecessor(*em);
+						}
+					}
+					if(em == &er && er->kind() == por::event::event_kind::lock_create) {
+						std::cerr << "data race of " << e->tid() << "@" << e->depth() << " with " << (*em)->tid() << "@" << (*em)->depth() << "\n";
+					}
+
+					if(em == nullptr || em->get() == nullptr) {
+						return {};
+					}
+
+					if(er->kind() != por::event::event_kind::lock_create) {
+						std::vector<std::shared_ptr<por::event::event>> result;
+						std::shared_ptr<por::event::event> const* ep = &get_lock_predecessor(er);
+						while((em < ep || em == ep)) {
+							if((*ep)->kind() == por::event::event_kind::lock_create
+							|| (*ep)->kind() == por::event::event_kind::lock_release
+							|| (*ep)->kind() == por::event::event_kind::wait1) {
+								result.emplace_back(por::event::lock_acquire::alloc(e->tid(), et, *ep));
+							}
+							if((*ep)->kind() == por::event::event_kind::lock_create) {
+								break;
+							}
+							ep = &get_lock_predecessor(*ep);
+						}
+						return result;
+					}
+				}
+				case por::event::event_kind::wait2: {
+					auto* w2 = static_cast<por::event::wait2 const*>(e.get());
+					std::shared_ptr<por::event::event> const& et = w2->thread_predecessor();
+					// TODO: find sig or broadcast
+					//por::event::event* es = w2->condition_variable_predecessors()
+					std::shared_ptr<por::event::event> const& er = w2->lock_predecessor();
+					break;
+				}
+				default:
+					assert(0);
+			}
+			return {};
+		}
+
+	public:
+		std::vector<std::shared_ptr<por::event::event>> conflicting_extensions() {
+			std::vector<std::shared_ptr<por::event::event>> S;
+			for(auto& t : _thread_heads) {
+				std::shared_ptr<por::event::event> const* e = &t.second;
+				std::cerr << "cex starting with thread " << t.first << "\n";
+				do {
+					std::cerr << "cex for event " << (*e)->tid() << "@" << (*e)->depth() << "\n";
+					switch((*e)->kind()) {
+						case por::event::event_kind::lock_acquire:
+						case por::event::event_kind::wait2:
+							auto r = cex_acquire(*e);
+							S.insert(S.end(), r.begin(), r.end());
+							break;
+					}
+					bool has_predecessor = false;
+					auto& p = get_thread_predecessor(*e);
+					if(&p != e && p->tid() == t.first) {
+						// in lieu of a more sophisticated set of visited events, stop when entering another thread
+						e = &p;
+						has_predecessor = true;
+					}
+					if(!has_predecessor) e = nullptr;
+				} while(e != nullptr);
+			}
+			return S;
+		}
 	};
 
 	inline configuration configuration_builder::construct() { return configuration(std::move(*this)); }
