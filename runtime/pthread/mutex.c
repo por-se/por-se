@@ -92,13 +92,13 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     klee_wait_on(mutex);
   }
 
+  if (mutex->acquired == 1) {
+    klee_por_register_event(por_lock_acquire, mutex);
+  }
+
   klee_toggle_thread_scheduling(1);
   if (sleptOnce == 0) {
     klee_preempt_thread();
-  }
-
-  if (mutex->acquired == 1) {
-    klee_por_register_event(por_lock_acquire, mutex);
   }
 
   return result;
@@ -168,7 +168,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
   int result = kpr_mutex_trylock_internal(mutex);
-  if (result != 0) {
+  if (result == 0) {
     klee_por_register_event(por_lock_acquire, mutex);
   }
 

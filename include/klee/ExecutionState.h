@@ -27,6 +27,10 @@
 #include <set>
 #include <vector>
 
+namespace por {
+  class configuration;
+};
+
 namespace klee {
 class Array;
 class CallPathNode;
@@ -160,6 +164,8 @@ public:
 
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
+
+  por::configuration* porConfiguration = nullptr;
 
 private:
   void popFrameOfThread(Thread* thread);

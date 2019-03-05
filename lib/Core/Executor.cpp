@@ -78,6 +78,8 @@
 #include "llvm/IR/CallSite.h"
 #endif
 
+#include "por/configuration.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -4436,9 +4438,14 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+
+  // This creates a new configuration with one thread (aka our main thread)
+  state->porConfiguration = new por::configuration();
+
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
-  registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
+  // We do not have to register the por event as we already have created it
+  // registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4824,13 +4831,16 @@ void Executor::exitThread(ExecutionState &state) {
   Thread::ThreadId tid = state.currentThreadId();
 
   state.exitThread(tid);
-  registerPorEvent(state, por_thread_exit, {tid});
 
   scheduleThreads(state);
 }
 
 void Executor::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
-  porEventManager.registerPorEvent(state, kind, std::move(args));
+  bool successful = porEventManager.registerPorEvent(state, kind, std::move(args));
+
+  if (!successful) {
+    terminateStateOnError(state, "klee_por_register_event", Executor::User);
+  }
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {

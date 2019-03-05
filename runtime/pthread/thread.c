@@ -97,6 +97,8 @@ void pthread_exit(void* arg) {
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
   thread->state = KPR_THREAD_STATE_DEAD;
 
+  klee_por_register_event(por_thread_exit, thread->tid);
+
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
     thread->returnValue = arg;
 
@@ -154,7 +156,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
-  klee_por_register_event(por_thread_join, thread);
+  klee_por_register_event(por_thread_join, thread->tid);
 
   if (ret != NULL) {
     // if (thread->cancelSignalReceived == 1) {

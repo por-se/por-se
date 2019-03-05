@@ -27,6 +27,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "por/configuration.h"
+
 #include <algorithm>
 #include <cassert>
 #include <iomanip>
@@ -157,6 +159,11 @@ ExecutionState *ExecutionState::branch() {
 
   weight *= .5;
   falseState->weight -= weight;
+
+  if (porConfiguration != nullptr) {
+    // FIXME: this won't compile for now, but we have to make sure that this works at some state
+    // porConfiguration = new por::configuration(porConfiguration);
+  }
 
   return falseState;
 }

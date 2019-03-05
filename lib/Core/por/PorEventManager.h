@@ -1,18 +1,36 @@
 #ifndef KLEE_POREVENTMANAGER_H
 #define KLEE_POREVENTMANAGER_H
 
+#include "klee/Thread.h"
 #include "klee/ExecutionState.h"
 #include "klee/por/events.h"
 
 namespace klee {
-    class PorEventManager {
+  class PorEventManager {
     public:
-        PorEventManager() = default;
+      PorEventManager() = default;
 
-        bool registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args);
+      bool registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args);
+
     private:
-        static std::string getNameOfEvent(por_event_t kind);
-    };
+      static std::string getNameOfEvent(por_event_t kind);
+
+      bool handleThreadCreate(ExecutionState &state, Thread::ThreadId tid);
+      bool handleThreadExit(ExecutionState &state, Thread::ThreadId tid);
+      bool handleThreadJoin(ExecutionState &state, Thread::ThreadId joinedThread);
+
+      bool handleLockCreate(ExecutionState &state, std::uint64_t mId);
+      bool handleLockDestroy(ExecutionState &state, std::uint64_t mId);
+      bool handleLockAcquire(ExecutionState &state, std::uint64_t mId);
+      bool handleLockRelease(ExecutionState &state, std::uint64_t mId);
+
+      bool handleCondVarCreate(ExecutionState &state, std::uint64_t cId);
+      bool handleCondVarDestroy(ExecutionState &state, std::uint64_t cId);
+      bool handleCondVarSignal(ExecutionState &state, std::uint64_t cId);
+      bool handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId);
+      bool handleCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
+      bool handleCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
+  };
 };
 
 #endif //KLEE_POREVENTMANAGER_H
