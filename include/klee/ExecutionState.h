@@ -169,8 +169,6 @@ private:
 
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 
-  void assembleDependencyIndicator();
-
 public:
   ExecutionState(KFunction *kf);
 

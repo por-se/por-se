@@ -60,14 +60,16 @@ ExecutionState::ExecutionState(KFunction *kf) :
     memoryState(this),
     steppedInstructions(0)
 {
-    // Thread 0 is reserved for program's main thread (executing kf)
+    Thread::ThreadId mainThreadId = 1;
+
+    // Thread 1 is reserved for program's main thread (executing kf)
     auto result = threads.emplace(std::piecewise_construct,
-                                  std::forward_as_tuple(0),
-                                  std::forward_as_tuple(0, kf));
+                                  std::forward_as_tuple(mainThreadId),
+                                  std::forward_as_tuple(mainThreadId, kf));
     assert(result.second);
     currentThread(result.first->second);
-    runnableThreads.insert(0);
-    scheduleNextThread(0);
+    runnableThreads.insert(mainThreadId);
+    scheduleNextThread(mainThreadId);
 }
 
 
@@ -175,7 +177,7 @@ void ExecutionState::popFrameOfCurrentThread() {
 }
 
 Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
-  Thread::ThreadId tid = threads.size();
+  Thread::ThreadId tid = threads.size() + 1;
   auto result = threads.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(tid),
                                 std::forward_as_tuple(tid, kf));

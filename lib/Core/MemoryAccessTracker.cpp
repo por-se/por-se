@@ -36,16 +36,16 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   ema->tid = tid;
   ema->scheduleIndex = accessLists.size();
 
-  if (tid + 1 > lastExecutions.size()) {
-    lastExecutions.resize(tid + 1, NOT_EXECUTED);
+  if (tid > lastExecutions.size()) {
+    lastExecutions.resize(tid, NOT_EXECUTED);
   }
 
-  std::uint64_t exec = lastExecutions[tid];
+  std::uint64_t exec = lastExecutions[tid - 1];
   if (exec != NOT_EXECUTED) {
     ema->preThreadAccess = accessLists[exec];
   }
 
-  lastExecutions[tid] = ema->scheduleIndex;
+  lastExecutions[tid - 1] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
 
   knownThreads.insert(tid);
@@ -278,7 +278,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
                                                         std::uint64_t id, const MemoryAccess &access) {
-  std::uint64_t exec = lastExecutions[tid];
+  std::uint64_t exec = lastExecutions[tid - 1];
   if (exec == NOT_EXECUTED) {
     return;
   }

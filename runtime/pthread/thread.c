@@ -12,7 +12,7 @@
 
 static kpr_thread mainThread;
 pthread_t pthread_self(void) {
-  if (klee_get_thread_id() == 0) {
+  if (klee_get_thread_id() == 1) {
     // Main thread will not have any start argument so make sure that we pass the correct one
     return &mainThread;
   }
