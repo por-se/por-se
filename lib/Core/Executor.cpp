@@ -4377,7 +4377,7 @@ void Executor::runFunctionAsMain(Function *f,
       argvMO =
           memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
                            /*isLocal=*/false, /*isGlobal=*/true,
-                           /*allocSite=*/first, /*threadId=*/0,
+                           /*allocSite=*/first, /*threadId=*/1,
                            /*stackframeIndex=*/0, /*alignment=*/8);
 
       if (!argvMO)
