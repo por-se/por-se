@@ -4445,7 +4445,7 @@ void Executor::runFunctionAsMain(Function *f,
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
   // We do not have to register the por event as we already have created it
-  // registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
+  registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();

@@ -102,6 +102,12 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
 
 
 bool PorEventManager::handleThreadCreate(ExecutionState &state, Thread::ThreadId tid) {
+  if (tid == 0) {
+    // We do not have to pass this to the configuration since the main thread
+    // is created with the configuration
+    return true;
+  }
+
   state.porConfiguration->spawn_thread(state.currentThreadId() + 1, tid + 1);
   return true;
 }
