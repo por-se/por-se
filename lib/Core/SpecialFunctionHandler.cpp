@@ -932,7 +932,7 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   }
 
   Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
-  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int64));
+  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
 }
 
 void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,
@@ -941,7 +941,7 @@ void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,
   assert(arguments.empty() && "invalid number of arguments to klee_get_thread_id");
 
   uint64_t tid = state.currentThreadId();
-  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int64));
+  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
 }
 
 void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
