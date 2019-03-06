@@ -67,7 +67,7 @@ namespace klee {
       typedef std::vector<StackFrame> stack_ty;
 
       /// @brief Type for all thread ids
-      typedef std::uint64_t ThreadId;
+      typedef std::uint32_t ThreadId;
 
     private:
       /// @brief Pointer to instruction to be executed after the current

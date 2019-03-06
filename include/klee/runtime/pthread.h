@@ -103,7 +103,7 @@ enum
 
 // Why this indirection?
 typedef struct {
-  uint64_t tid;
+  uint32_t tid;
   uint8_t state;
   uint8_t mode;
   uint8_t joinState;

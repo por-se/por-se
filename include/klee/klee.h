@@ -160,9 +160,9 @@ extern "C" {
   /* Get errno value of the current state */
   int klee_get_errno(void);
 
-  uint64_t klee_create_thread(void (*start_routine)(void*), void *arg);
+  uint32_t klee_create_thread(void (*start_routine)(void*), void *arg);
 
-  uint64_t klee_get_thread_id(void);
+  uint32_t klee_get_thread_id(void);
 
   void* klee_get_thread_runtime_struct_ptr(void);
 

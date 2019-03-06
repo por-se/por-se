@@ -6,7 +6,7 @@
 #include "list.h"
 
 typedef struct {
-  uint64_t thread;
+  uint32_t thread;
   void* value;
 } kpr_key_data;
 
