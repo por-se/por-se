@@ -4831,6 +4831,12 @@ void Executor::exitThread(ExecutionState &state) {
   Thread::ThreadId tid = state.currentThreadId();
 
   state.exitThread(tid);
+  if (tid == 1) {
+    // Special handling since the main thread does not fire the thread_exit
+    // por event in the runtime
+    bool success = porEventManager.registerPorEvent(state, por_thread_exit, { tid });
+    assert(success && "Main thread can only exit once");
+  }
 
   scheduleThreads(state);
 }
