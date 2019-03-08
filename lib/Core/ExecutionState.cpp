@@ -574,9 +574,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
   unsigned idx = 0;
 
   const KInstruction *target = thread->prevPc;
-  for (ExecutionState::stack_ty::const_reverse_iterator
-         it = thread->stack.rbegin(), ie = thread->stack.rend();
-       it != ie; ++it) {
+  for (auto it = thread->stack.rbegin(), ie = thread->stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
     Function *f = sf.kf->function;
     const InstructionInfo &ii = *target->info;

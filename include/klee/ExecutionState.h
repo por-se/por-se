@@ -50,7 +50,6 @@ protected:
 public:
   const size_t id;
 
-  typedef std::vector<StackFrame> stack_ty;
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
 private:

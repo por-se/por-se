@@ -3640,8 +3640,7 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
   if (thread.state != ThreadState::Exited) {
     // unroll the stack of the applications state and find
     // the last instruction which is not inside a KLEE internal function
-    ExecutionState::stack_ty::const_reverse_iterator it = thread.stack.rbegin(),
-            itE = thread.stack.rend();
+    auto it = thread.stack.rbegin(), itE = thread.stack.rend();
 
     // don't check beyond the outermost function (i.e. main())
     itE--;

@@ -902,9 +902,8 @@ void StatsTracker::computeReachableUncovered() {
     Thread &thread = es->currentThread();
 
     uint64_t currentFrameMinDist = 0;
-    for (ExecutionState::stack_ty::iterator sfIt = thread.stack.begin(),
-           sf_ie = thread.stack.end(); sfIt != sf_ie; ++sfIt) {
-      ExecutionState::stack_ty::iterator next = sfIt + 1;
+    for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end(); sfIt != sf_ie; ++sfIt) {
+      auto next = sfIt + 1;
       KInstIterator kii;
 
       if (next == thread.stack.end()) {
