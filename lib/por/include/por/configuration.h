@@ -9,7 +9,7 @@
 namespace por {
 	class configuration;
 
-	class configuration_builder{
+	class configuration_root {
 		friend class configuration;
 
 		std::shared_ptr<por::event::program_init> _program_init = event::program_init::alloc();
@@ -23,7 +23,7 @@ namespace por {
 	public:
 		configuration construct();
 
-		configuration_builder& add_thread() {
+		configuration_root& add_thread() {
 			auto const tid = _next_thread++;
 			assert(tid > 0);
 
@@ -42,17 +42,17 @@ namespace por {
 		por::event::lock_id_t _next_lock;
 
 	public:
-		configuration() : configuration(configuration_builder{}.add_thread().construct()) { }
+		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = delete;
 		configuration& operator=(configuration const&) = delete;
 		configuration(configuration&&) = default;
 		configuration& operator=(configuration&&) = default;
-		configuration(configuration_builder&& builder)
-			: _thread_heads(std::move(builder._thread_heads))
-			, _next_thread(std::move(builder._next_thread))
+		configuration(configuration_root&& root)
+			: _thread_heads(std::move(root._thread_heads))
+			, _next_thread(std::move(root._next_thread))
 			, _active_threads(_thread_heads.size())
-			, _lock_heads(std::move(builder._lock_heads))
-			, _next_lock(std::move(builder._next_lock))
+			, _lock_heads(std::move(root._lock_heads))
+			, _next_lock(std::move(root._next_lock))
 		{
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 			assert(_next_thread > 0);
@@ -308,5 +308,5 @@ namespace por {
 		}
 	};
 
-	inline configuration configuration_builder::construct() { return configuration(std::move(*this)); }
+	inline configuration configuration_root::construct() { return configuration(std::move(*this)); }
 }
