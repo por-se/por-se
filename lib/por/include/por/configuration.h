@@ -17,9 +17,6 @@ namespace por {
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 		por::event::thread_id_t _next_thread = 1;
 
-		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
-		por::event::lock_id_t _next_lock = 1;
-
 	public:
 		configuration construct();
 
@@ -35,11 +32,7 @@ namespace por {
 
 	class configuration {
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
-		por::event::thread_id_t _next_thread;
-		por::event::thread_id_t _active_threads; // really optimizes for a case we will not care about outside of simulations
-
 		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
-		por::event::lock_id_t _next_lock;
 
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
@@ -49,37 +42,35 @@ namespace por {
 		configuration& operator=(configuration&&) = default;
 		configuration(configuration_root&& root)
 			: _thread_heads(std::move(root._thread_heads))
-			, _next_thread(std::move(root._next_thread))
-			, _active_threads(_thread_heads.size())
-			, _lock_heads(std::move(root._lock_heads))
-			, _next_lock(std::move(root._next_lock))
 		{
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
-			assert(_next_thread > 0);
-			assert(_active_threads > 0);
-			assert(_next_lock > 0);
 		}
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
 		auto const& lock_heads() const noexcept { return _lock_heads; }
 
-		por::event::thread_id_t const& active_threads() const noexcept { return _active_threads; }
+		por::event::thread_id_t active_threads() const noexcept {
+			if(_thread_heads.size() == 0)
+				return 0;
+			por::event::thread_id_t res = 0;
+			for(auto& e : _thread_heads) {
+				if(e.second->kind() != por::event::event_kind::thread_exit)
+					++res;
+			}
+			return res;
+		}
 
 		// Spawn a new thread from tid `source`.
-		por::event::thread_id_t spawn_thread(event::thread_id_t source) {
+		void spawn_thread(event::thread_id_t source, por::event::thread_id_t new_tid) {
 			auto source_it = _thread_heads.find(source);
 			assert(source_it != _thread_heads.end() && "Source thread must (still) exist");
 			auto& source_event = source_it->second;
 			assert(source_event->kind() != por::event::event_kind::thread_exit && "Source thread must not yet be exited");
 
-			++_active_threads;
-			assert(_active_threads > 0);
 			source_event = event::thread_create::alloc(source, std::move(source_event));
-			auto const tid = _next_thread++;
-			assert(tid > 0);
-			assert(thread_heads().find(tid) == thread_heads().end());
-			_thread_heads.emplace(tid, event::thread_init::alloc(tid, source_event));
-			return tid;
+			assert(new_tid > 0);
+			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
+			_thread_heads.emplace(new_tid, event::thread_init::alloc(new_tid, source_event));
 		}
 
 		void exit_thread(event::thread_id_t thread) {
@@ -88,25 +79,21 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			assert(_active_threads > 0);
-			--_active_threads;
-
+			assert(active_threads() > 0);
 			thread_event = event::thread_exit::alloc(thread, std::move(thread_event));
 		}
 
-		por::event::lock_id_t create_lock(event::thread_id_t thread) {
+		void create_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			auto const lock_id = _next_lock++;
-			assert(lock_id > 0);
-			assert(_lock_heads.find(lock_id) == _lock_heads.end());
+			assert(lock > 0);
+			assert(_lock_heads.find(lock) == _lock_heads.end() && "Lock id already taken");
 
 			thread_event = event::lock_create::alloc(thread, std::move(thread_event));
-			_lock_heads.emplace(lock_id, thread_event);
-			return lock_id;
+			_lock_heads.emplace(lock, thread_event);
 		}
 
 		void destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {

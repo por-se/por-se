@@ -43,6 +43,8 @@ int main(int argc, char** argv){
 	assert(argc > 0);
 
 	por::configuration configuration; // construct a default configuration with 1 main thread
+	por::event::thread_id_t next_thread_id = 2;
+	por::event::lock_id_t next_lock_id = 1;
 
 #ifdef SEED
 	std::mt19937_64 gen(SEED);
@@ -62,7 +64,8 @@ int main(int argc, char** argv){
 		if(roll < 40) {
 			// spawn new thread
 			auto source = choose_thread(configuration, gen);
-			auto tid = configuration.spawn_thread(source);
+			auto tid = next_thread_id++;
+			configuration.spawn_thread(source, tid);
 			std::cout << "+T " << tid << " (" << source << ")\n";
 		} else if(roll < 100) {
 			// kill old thread
@@ -72,7 +75,8 @@ int main(int argc, char** argv){
 		} else if(roll < 200) {
 			// spawn new lock
 			auto tid = choose_thread(configuration, gen);
-			auto lid = configuration.create_lock(tid);
+			auto lid = next_lock_id++;
+			configuration.create_lock(tid, lid);
 			std::cout << "+L " << lid << " (" << tid << ")\n";
 		} else if(roll < 300) {
 			// destroy lock, if one exists
