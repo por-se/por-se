@@ -76,6 +76,19 @@ namespace por {
 			_thread_heads.emplace(new_tid, event::thread_init::alloc(new_tid, source_event));
 		}
 
+		void join_thread(event::thread_id_t thread, event::thread_id_t joined) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			auto joined_it = _thread_heads.find(joined);
+			assert(joined_it != _thread_heads.end() && "Joined thread must exist");
+			auto& joined_event = joined_it->second;
+			assert(joined_event->kind() == por::event::event_kind::thread_exit && "Joined thread must be exited");
+
+			thread_event = event::thread_join::alloc(thread, std::move(thread_event), joined_event);
+		}
+
 		void exit_thread(event::thread_id_t thread) {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");

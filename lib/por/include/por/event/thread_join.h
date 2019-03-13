@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base.h"
-#include "thread_exit.h"
 
 #include <cassert>
 #include <array>
@@ -25,6 +24,8 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 			assert(this->joined_thread());
+			assert(this->joined_thread()->tid() != 0);
+			assert(this->joined_thread()->tid() != this->tid());
 			assert(this->joined_thread()->kind() == event_kind::thread_exit);
 		}
 
