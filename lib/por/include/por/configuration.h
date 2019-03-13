@@ -39,7 +39,7 @@ namespace por {
 
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
-		configuration(configuration const&) = delete;
+		configuration(configuration const&) = default;
 		configuration& operator=(configuration const&) = delete;
 		configuration(configuration&&) = default;
 		configuration& operator=(configuration&&) = default;
