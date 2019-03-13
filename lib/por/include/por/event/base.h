@@ -10,6 +10,7 @@
 namespace por::event {
 	using thread_id_t = std::uint32_t;
 	using lock_id_t = std::uint64_t;
+	using cond_id_t = std::uint64_t;
 
 	enum class event_kind : std::uint8_t {
 		local,

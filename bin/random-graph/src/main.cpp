@@ -45,6 +45,7 @@ int main(int argc, char** argv){
 	por::configuration configuration; // construct a default configuration with 1 main thread
 	por::event::thread_id_t next_thread_id = 2;
 	por::event::lock_id_t next_lock_id = 1;
+	por::event::lock_id_t next_cond_id = 1;
 
 #ifdef SEED
 	std::mt19937_64 gen(SEED);

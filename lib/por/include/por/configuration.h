@@ -37,6 +37,9 @@ namespace por {
 		// contains most recent event of ACTIVE locks
 		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
 
+		// contains most recent event of ACTIVE condition variables for each thread
+		std::map<por::event::cond_id_t, std::vector<std::shared_ptr<por::event::event>>> _cond_heads;
+
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -51,6 +54,7 @@ namespace por {
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
 		auto const& lock_heads() const noexcept { return _lock_heads; }
+		auto const& cond_heads() const noexcept { return _cond_heads; }
 
 		por::event::thread_id_t active_threads() const noexcept {
 			if(_thread_heads.size() == 0)
@@ -148,6 +152,18 @@ namespace por {
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_release::alloc(thread, std::move(thread_event), std::move(lock_event));
 			lock_event = thread_event;
+		}
+
+		void create_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(cond > 0);
+			assert(_cond_heads.find(cond) == _cond_heads.end() && "Condition variable id already taken");
+
+			thread_event = por::event::condition_variable_create::alloc(thread, std::move(thread_event));
+			_cond_heads.emplace(cond, std::vector{thread_event});
 		}
 
 		void local(event::thread_id_t thread) {

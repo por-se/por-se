@@ -14,7 +14,7 @@ namespace por::event {
 
 	protected:
 		condition_variable_create(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
-			: event(event_kind::condition_variable_create, tid)
+			: event(event_kind::condition_variable_create, tid, thread_predecessor)
 			, _predecessors{std::move(thread_predecessor)}
 		{
 			assert(this->thread_predecessor());
