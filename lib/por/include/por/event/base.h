@@ -32,7 +32,7 @@ namespace por::event {
 
 	class event : public std::enable_shared_from_this<event> {
 		std::size_t _depth;
-		std::map<thread_id_t, event const*> _cone;
+		std::map<thread_id_t, event*> _cone;
 		thread_id_t _tid;
 		event_kind _kind;
 
@@ -41,6 +41,7 @@ namespace por::event {
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
+		std::map<thread_id_t, event*> const& cone() const { return _cone; }
 
 	protected:
 		event(event_kind kind, thread_id_t tid)
@@ -120,6 +121,19 @@ namespace por::event {
 				}
 			}
 			return false;
+		}
+
+		std::pair<thread_id_t, thread_id_t> cone_bounds() const {
+			if(_cone.empty()) {
+				return std::make_pair(_tid,_tid);
+			} else if(_cone.size() == 1) {
+				thread_id_t tid = _cone.begin()->first;
+				return std::make_pair(tid, tid);
+			} else {
+				thread_id_t lower = _cone.begin()->first;
+				thread_id_t upper = (--_cone.end())->first;
+				return std::make_pair(lower, upper);
+			}
 		}
 	};
 }
