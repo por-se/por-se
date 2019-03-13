@@ -31,7 +31,10 @@ namespace por {
 	};
 
 	class configuration {
+		// contains most recent event of ALL threads that ever existed within this configuration
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
+
+		// contains most recent event of ACTIVE locks
 		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
 
 	public:
@@ -63,7 +66,7 @@ namespace por {
 		// Spawn a new thread from tid `source`.
 		void spawn_thread(event::thread_id_t source, por::event::thread_id_t new_tid) {
 			auto source_it = _thread_heads.find(source);
-			assert(source_it != _thread_heads.end() && "Source thread must (still) exist");
+			assert(source_it != _thread_heads.end() && "Source thread must exist");
 			auto& source_event = source_it->second;
 			assert(source_event->kind() != por::event::event_kind::thread_exit && "Source thread must not yet be exited");
 
@@ -75,7 +78,7 @@ namespace por {
 
 		void exit_thread(event::thread_id_t thread) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
@@ -85,7 +88,7 @@ namespace por {
 
 		void create_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
@@ -98,7 +101,7 @@ namespace por {
 
 		void destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			auto lock_it = _lock_heads.find(lock);
@@ -110,7 +113,7 @@ namespace por {
 
 		void acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			auto lock_it = _lock_heads.find(lock);
@@ -123,7 +126,7 @@ namespace por {
 
 		void release_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			auto lock_it = _lock_heads.find(lock);
@@ -136,7 +139,7 @@ namespace por {
 
 		void local(event::thread_id_t thread) {
 			auto thread_it = _thread_heads.find(thread);
-			assert(thread_it != _thread_heads.end() && "Thread must (still) exist");
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
