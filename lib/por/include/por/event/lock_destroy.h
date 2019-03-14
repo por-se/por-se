@@ -10,7 +10,7 @@ namespace por::event {
 	class lock_destroy final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
-		// 2. previous acquisition/release of this lock
+		// 2. previous operation on same lock (may be nullptr if only preceeded by lock_create event)
 		std::array<std::shared_ptr<event>, 2> _predecessors;
 
 	protected:
@@ -23,15 +23,17 @@ namespace por::event {
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
-			assert(this->lock_predecessor());
-			assert(
-				this->lock_predecessor()->kind() == event_kind::lock_create
-				|| this->lock_predecessor()->kind() == event_kind::lock_release
-				|| (
-					this->lock_predecessor()->kind() == event_kind::lock_acquire
-					&& this->lock_predecessor()->tid() == this->tid()
-				)
-			);
+
+			if(this->lock_predecessor()) {
+				assert(
+					this->lock_predecessor()->kind() == event_kind::lock_create
+					|| this->lock_predecessor()->kind() == event_kind::lock_release
+					|| (
+						this->lock_predecessor()->kind() == event_kind::lock_acquire
+						&& this->lock_predecessor()->tid() == this->tid()
+					)
+				);
+			}
 		}
 
 	public:

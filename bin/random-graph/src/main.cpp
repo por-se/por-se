@@ -155,7 +155,14 @@ int main(int argc, char** argv){
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& c : cex) {
 		auto const* acq = static_cast<por::event::lock_acquire const*>(c.get());
-		std::cerr << c->tid() << "@" << c->depth() << ": " << acq->thread_predecessor()->tid() << "@" << acq->thread_predecessor()->depth() << " | " << acq->lock_predecessor()->tid() << "@" << acq->lock_predecessor()->depth() << "\n";
+		assert(acq->thread_predecessor());
+		auto lp = acq->lock_predecessor();
+		std::cerr << c->tid() << "@" << c->depth() << ": " << acq->thread_predecessor()->tid() << "@" << acq->thread_predecessor()->depth();
+		if(lp) {
+			std::cerr << " | " << (*lp).tid() << "@" << (*lp).depth() << "\n";
+		} else {
+			std::cerr << "\n";
+		}
 	}
 
 	std::set<por::event::event const*> visited;

@@ -74,6 +74,8 @@ namespace por::event {
 			_cone[tid] = immediate_predecessor.get();
 
 			for(auto& op : other_predecessors) {
+				if(!op)
+					continue;
 				for(auto& pred : op->_cone) {
 					auto t = pred.first;
 					auto& event = pred.second;
@@ -98,6 +100,8 @@ namespace por::event {
 			assert(immediate_predecessor->_depth < _depth);
 			assert(_cone.size() >= immediate_predecessor->_cone.size());
 			for(auto& op : other_predecessors) {
+				if(!op)
+					continue;
 				assert(op->_depth < _depth);
 				assert(_cone.size() >= op->_cone.size());
 			}

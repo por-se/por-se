@@ -176,106 +176,125 @@ namespace por {
 		}
 
 	private:
-		std::shared_ptr<por::event::event> const& get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {
+		std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {
+			assert(event);
+			std::shared_ptr<por::event::event> const* pred = nullptr;
 			switch(event->kind()) {
 				case por::event::event_kind::broadcast:
-					return static_cast<por::event::broadcast const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::broadcast const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::condition_variable_create:
-					return static_cast<por::event::condition_variable_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::condition_variable_create const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::condition_variable_destroy:
-					return static_cast<por::event::condition_variable_destroy const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::condition_variable_destroy const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::local:
-					return static_cast<por::event::local const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::local const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::lock_acquire:
-					return static_cast<por::event::lock_acquire const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_acquire const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::lock_create:
-					return static_cast<por::event::lock_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_create const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::lock_destroy:
-					return static_cast<por::event::lock_destroy const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_destroy const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::lock_release:
-					return static_cast<por::event::lock_release const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_release const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::signal:
-					return static_cast<por::event::signal const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::signal const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::thread_create:
-					return static_cast<por::event::thread_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::thread_create const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::thread_exit:
-					return static_cast<por::event::thread_exit const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::thread_exit const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::thread_init:
-					return event;
+					break;
 				case por::event::event_kind::thread_join:
-					return static_cast<por::event::thread_join const*>(event.get())->thread_predecessor();
-					return event;
+					pred = &static_cast<por::event::thread_join const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::wait1:
-					return static_cast<por::event::wait1 const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::wait1 const*>(event.get())->thread_predecessor();
+					break;
 				case por::event::event_kind::wait2:
-					return static_cast<por::event::wait2 const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::wait2 const*>(event.get())->thread_predecessor();
+					break;
 
 				default:
 					assert(0 && "event has no thread_predecessor");
 			}
+			if(pred != nullptr && *pred != nullptr && (*pred)->kind() != por::event::event_kind::program_init) {
+				return pred;
+			}
+			return nullptr;
+
 		}
 
-		std::shared_ptr<por::event::event> const& get_lock_predecessor(std::shared_ptr<por::event::event> const& event) {
+		std::shared_ptr<por::event::event> const* get_lock_predecessor(std::shared_ptr<por::event::event> const& event) {
+			assert(event);
+			std::shared_ptr<por::event::event> const* pred = nullptr;
 			switch(event->kind()) {
 				case por::event::event_kind::lock_acquire:
-					return static_cast<por::event::lock_acquire const*>(event.get())->lock_predecessor();
+					pred = &static_cast<por::event::lock_acquire const*>(event.get())->lock_predecessor();
+					break;
+				case por::event::event_kind::lock_create:
+					break;
 				case por::event::event_kind::lock_destroy:
-					return static_cast<por::event::lock_destroy const*>(event.get())->lock_predecessor();
+					pred = &static_cast<por::event::lock_destroy const*>(event.get())->lock_predecessor();
+					break;
 				case por::event::event_kind::lock_release:
-					return static_cast<por::event::lock_release const*>(event.get())->lock_predecessor();
+					pred = &static_cast<por::event::lock_release const*>(event.get())->lock_predecessor();
+					break;
 				case por::event::event_kind::wait1:
-					return static_cast<por::event::wait1 const*>(event.get())->lock_predecessor();
+					pred = &static_cast<por::event::wait1 const*>(event.get())->lock_predecessor();
+					break;
 				case por::event::event_kind::wait2:
-					return static_cast<por::event::wait2 const*>(event.get())->lock_predecessor();
+					pred = &static_cast<por::event::wait2 const*>(event.get())->lock_predecessor();
+					break;
+
 				default:
 					assert(0 && "event has no lock_predecessor");
 			}
+			if(pred != nullptr && *pred != nullptr && (*pred)->kind() != por::event::event_kind::lock_create) {
+				return pred;
+			}
+			return nullptr;
 		}
 
 		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
+			assert(e->kind() == por::event::event_kind::lock_acquire || e->kind() == por::event::event_kind::wait2);
+
 			std::vector<std::shared_ptr<por::event::event>> result;
 
 			// immediate causal predecessor on same thread
-			std::shared_ptr<por::event::event> const* et = nullptr;
+			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
 			// maximal event concerning same lock in history of e
-			std::shared_ptr<por::event::event> const* er = nullptr;
+			std::shared_ptr<por::event::event> const* er = get_lock_predecessor(e);
 			// maximal event concerning same lock in [et]
-			std::shared_ptr<por::event::event> const* em = nullptr;
+			std::shared_ptr<por::event::event> const* em = er;
 			// signaling event (only for wait2)
 			std::shared_ptr<por::event::event> const* es = nullptr;
 
-			switch(e->kind()) {
-				case por::event::event_kind::lock_acquire: {
-					auto const* acq = static_cast<por::event::lock_acquire const*>(e.get());
-					et = &acq->thread_predecessor();
-					er = &acq->lock_predecessor();
-					break;
-				}
-				case por::event::event_kind::wait2: {
-					auto* w2 = static_cast<por::event::wait2 const*>(e.get());
-					et = &w2->thread_predecessor();
-					er = &w2->lock_predecessor();
-					es = &w2->condition_variable_predecessor();
-					break;
-				}
-				default:
-					assert(0 && "unexpected event");
-			}
-			assert(et != nullptr && *et != nullptr);
-			assert(er != nullptr && *er != nullptr);
+			assert(et != nullptr);
 
-			em = er;
 			if(e->kind() == por::event::event_kind::lock_acquire) {
-				while(em != nullptr && *em != nullptr && *et < *em) {
+				while(em != nullptr && *et < *em) {
 					// descend chain of lock events until em is in [et]
-					em = &get_lock_predecessor(*em);
+					em = get_lock_predecessor(*em);
 				}
 			} else {
 				assert(e->kind() == por::event::event_kind::wait2);
+				auto* w2 = static_cast<por::event::wait2 const*>(e.get());
+				es = &w2->condition_variable_predecessor();
 				assert(es != nullptr && *es != nullptr);
-				while(em != nullptr && *em != nullptr && *et < *em && *es < *em) {
+				while(em != nullptr && *et < *em && *es < *em) {
 					// descend chain of lock events until em is in [et] \cup [es]
-					em = &get_lock_predecessor(*em);
+					em = get_lock_predecessor(*em);
 				}
 			}
 
@@ -283,18 +302,19 @@ namespace por {
 				return {};
 			}
 
-			if(em == nullptr || *em == nullptr) {
+			if(em == nullptr) {
 				result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr));
 			}
 
-			std::shared_ptr<por::event::event> const* ep = &get_lock_predecessor(*er);
+			assert(er != nullptr);
+			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er);
 			do {
-				assert(ep != nullptr && *ep != nullptr);
+				assert(ep != nullptr);
 				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
 					result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep));
 				}
-				ep = &get_lock_predecessor(*ep);
-			} while(*em < *ep || em == ep);
+				ep = get_lock_predecessor(*ep);
+			} while(ep != nullptr && (*em < *ep || em == ep));
 
 			return result;
 		}
@@ -314,10 +334,10 @@ namespace por {
 						}
 					}
 					bool has_predecessor = false;
-					auto& p = get_thread_predecessor(*e);
-					if(&p != e && p->tid() == t.first) {
+					auto p = get_thread_predecessor(*e);
+					if(p != nullptr && p != e && (*p)->tid() == t.first) {
 						// in lieu of a more sophisticated set of visited events, stop when entering another thread
-						e = &p;
+						e = p;
 						has_predecessor = true;
 					}
 					if(!has_predecessor) e = nullptr;
