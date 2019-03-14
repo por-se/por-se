@@ -9,7 +9,7 @@
 namespace por::event {
 	class thread_exit final : public event {
 		// predecessors:
-		// 1. thread creation predecessor (must be a different thread or program exit)
+		// 1. same-thread predecessor
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
 	protected:

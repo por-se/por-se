@@ -18,9 +18,12 @@ namespace por::event {
 			, _predecessors{std::move(creator)}
 		{
 			assert(this->thread_creation_predecessor());
+			assert(this->thread_creation_predecessor()->tid() != this->tid());
 			assert(
-				this->thread_creation_predecessor()->kind() == event_kind::program_init
-				|| this->thread_creation_predecessor()->kind() == event_kind::thread_create
+				(this->thread_creation_predecessor()->kind() == event_kind::program_init
+					&& this->thread_creation_predecessor()->tid() == 0)
+				|| (this->thread_creation_predecessor()->kind() == event_kind::thread_create
+					&& this->thread_creation_predecessor()->tid() > 0)
 			);
 		}
 
