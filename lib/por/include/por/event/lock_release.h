@@ -26,8 +26,9 @@ namespace por::event {
 			assert(this->lock_predecessor());
 			assert(
 				this->lock_predecessor()->kind() == event_kind::lock_acquire
-				&& this->lock_predecessor()->tid() == this->tid()
+				|| this->lock_predecessor()->kind() == event_kind::wait2
 			);
+			assert(this->lock_predecessor()->tid() == this->tid());
 		}
 
 	public:
