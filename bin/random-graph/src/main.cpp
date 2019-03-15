@@ -18,7 +18,7 @@ namespace {
 		std::size_t count = 0;
 		for(auto it = configuration.thread_heads().begin(); ; ++it){
 			assert(it != configuration.thread_heads().end());
-			if(it->second->kind() != por::event::event_kind::thread_exit) {
+			if(it->second->kind() != por::event::event_kind::thread_exit && it->second->kind() != por::event::event_kind::wait1) {
 				++count;
 				if(count == chosen) {
 					assert(it->first == it->second->tid());

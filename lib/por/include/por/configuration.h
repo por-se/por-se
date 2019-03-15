@@ -61,7 +61,7 @@ namespace por {
 				return 0;
 			por::event::thread_id_t res = 0;
 			for(auto& e : _thread_heads) {
-				if(e.second->kind() != por::event::event_kind::thread_exit)
+				if(e.second->kind() != por::event::event_kind::thread_exit && e.second->kind() != por::event::event_kind::wait1)
 					++res;
 			}
 			return res;
