@@ -25,14 +25,8 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 
 			if(this->lock_predecessor()) {
-				assert(
-					this->lock_predecessor()->kind() == event_kind::lock_create
-					|| this->lock_predecessor()->kind() == event_kind::lock_release
-					|| (
-						this->lock_predecessor()->kind() == event_kind::lock_acquire
-						&& this->lock_predecessor()->tid() == this->tid()
-					)
-				);
+				assert(this->lock_predecessor()->kind() != event_kind::lock_acquire && "destroying an acquired lock is UB");
+				assert(this->lock_predecessor()->kind() == event_kind::lock_create || this->lock_predecessor()->kind() == event_kind::lock_release);
 			}
 		}
 

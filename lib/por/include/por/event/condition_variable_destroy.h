@@ -30,9 +30,9 @@ namespace por::event {
 			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
 			std::size_t index = 1;
 			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
+				assert((*iter)->kind() != event_kind::wait1 && "destroying a cond that a thread is blocked on is UB");
 				assert((*iter)->kind() == event_kind::broadcast
 				       || (*iter)->kind() == event_kind::signal
-				       || (*iter)->kind() == event_kind::wait1
 				       || (*iter)->kind() == event_kind::wait2
 				       || (*iter)->kind() == event_kind::condition_variable_create);
 				new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
