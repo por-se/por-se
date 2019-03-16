@@ -133,6 +133,15 @@ int main(int argc, char** argv){
 			auto tid = next_thread_id++;
 			configuration.spawn_thread(source, tid);
 			std::cout << "+T " << tid << " (" << source << ")\n";
+		} else if(roll < 60) {
+			// join thread
+			auto tid = choose_thread(configuration, gen);
+			auto join_tid = choose_suitable_thread(configuration, gen, rare_choice, por::event::event_kind::thread_exit);
+			if(tid && join_tid) {
+				configuration.join_thread(tid, join_tid);
+				std::cout << "jT " << tid << " " << join_tid << "\n";
+				break;
+			}
 		} else if(roll < 100) {
 			// kill old thread
 			auto tid = choose_thread(configuration, gen);
@@ -294,6 +303,9 @@ int main(int argc, char** argv){
 					break;
 				case por::event::event_kind::thread_init:
 					std::cout << "+T";
+					break;
+				case por::event::event_kind::thread_join:
+					std::cout << "join";
 					break;
 				case por::event::event_kind::thread_exit:
 					std::cout << "-T";
