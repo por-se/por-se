@@ -30,12 +30,77 @@ namespace {
 		std::abort();
 	}
 
+	por::event::thread_id_t choose_suitable_thread(por::configuration const& configuration,
+		std::mt19937_64& gen,
+		std::bernoulli_distribution& rare_choice,
+		por::event::event_kind kind
+	) {
+		for(bool done = false; !done; ) {
+			unsigned count = 0;
+			for(auto const& t : configuration.thread_heads()) {
+				if(t.second->kind() != kind)
+					continue;
+
+				++count;
+				if(rare_choice(gen)) {
+					return t.first;
+				}
+			}
+			if(count == 0) {
+				// no suitable threads exist
+				done = true;
+			}
+		}
+		return 0;
+	}
+
 	por::event::lock_id_t choose_lock(por::configuration const& configuration, std::mt19937_64& gen) {
-		assert(!configuration.lock_heads().empty());
+		if(configuration.lock_heads().empty())
+			return 0;
 
 		std::uniform_int_distribution<std::size_t> dis(0, configuration.lock_heads().size() - 1);
 		std::size_t chosen = dis(gen);
 		return std::next(configuration.lock_heads().begin(), chosen)->first;
+	}
+
+	por::event::lock_id_t choose_suitable_lock(por::configuration const& configuration,
+		std::mt19937_64& gen,
+		std::bernoulli_distribution& rare_choice,
+		bool released,
+		por::event::lock_id_t locked_by_tid = 0
+	) {
+		for(bool done = false; !done; ) {
+			unsigned count = 0;
+			for(auto const& l : configuration.lock_heads()) {
+				auto lock_kind = l.second->kind();
+				bool suitable = false;
+				if(released) {
+					suitable |= lock_kind == por::event::event_kind::lock_create;
+					suitable |= lock_kind == por::event::event_kind::lock_release;
+					suitable |= lock_kind == por::event::event_kind::wait1;
+				} else {
+					suitable |= lock_kind == por::event::event_kind::lock_acquire;
+					suitable |= lock_kind == por::event::event_kind::wait2;
+					if(suitable && locked_by_tid)
+						suitable = l.second->tid() == locked_by_tid;
+					if(suitable)
+						suitable = configuration.thread_heads().find(l.second->tid())->second->kind() != por::event::event_kind::thread_exit;
+				}
+
+				if(!suitable)
+					continue;
+
+				++count;
+				if(rare_choice(gen)) {
+					return l.first;
+				}
+			}
+			if(count == 0) {
+				// no suitable locks exist
+				done = true;
+			}
+		}
+		return 0;
 	}
 }
 
@@ -81,65 +146,27 @@ int main(int argc, char** argv){
 			std::cout << "+L " << lid << " (" << tid << ")\n";
 		} else if(roll < 300) {
 			// destroy lock, if one exists
-			if(!configuration.lock_heads().empty()) {
-				auto lid = choose_lock(configuration, gen);
-				auto tid = por::event::thread_id_t{};
-				auto lock = configuration.lock_heads().find(lid)->second;
-				if(lock->kind() == por::event::event_kind::lock_acquire) {
-					if(configuration.thread_heads().find(lock->tid())->second->kind() != por::event::event_kind::thread_exit) {
-						tid = lock->tid();
-						configuration.destroy_lock(tid, lid);
-						std::cout << "-L " << lid << " (" << tid << ")\n";
-					}	else {
-						// nop: lock is being held by a dead thread, and thus cannot be destroyed
-					}
-				} else {
-					tid = choose_thread(configuration, gen);
-					configuration.destroy_lock(tid, lid);
-					std::cout << "-L " << lid << " (" << tid << ")\n";
-				}
+			auto lid = choose_suitable_lock(configuration, gen, rare_choice, true);
+			auto tid = choose_thread(configuration, gen);
+			if(lid && tid) {
+				configuration.destroy_lock(tid, lid);
+				std::cout << "-L " << lid << " (" << tid << ")\n";
 			}
 		} else if(roll < 600) {
 			// acquire lock, if one can be acquired
-			for(bool done = false; !done; ) {
-				unsigned count = 0;
-				for(auto const& l : configuration.lock_heads()) {
-					if(l.second->kind() == por::event::event_kind::lock_create || l.second->kind() == por::event::event_kind::lock_release) {
-						++count;
-						if(rare_choice(gen)) {
-							auto tid = choose_thread(configuration, gen);
-							configuration.acquire_lock(tid, l.first);
-							std::cout << " L+ " << l.first << " (" << tid << ")\n";
-							done = true;
-							break;
-						}
-					}
-				}
-				if(count == 0) {
-					// no acquirable locks exist
-					done = true;
-				}
+			auto lid = choose_suitable_lock(configuration, gen, rare_choice, true);
+			auto tid = choose_thread(configuration, gen);
+			if(lid && tid) {
+				configuration.acquire_lock(tid, lid);
+				std::cout << " L+ " << lid << " (" << tid << ")\n";
 			}
 		} else if(roll < 900) {
 			// release lock, if one can be released
-			for(bool done = false; !done; ) {
-				unsigned count = 0;
-				for(auto const& l : configuration.lock_heads()) {
-					if(l.second->kind() == por::event::event_kind::lock_acquire && configuration.thread_heads().find(l.second->tid())->second->kind() != por::event::event_kind::thread_exit) {
-						++count;
-						if(rare_choice(gen)) {
-							auto const tid = l.second->tid();
-							configuration.release_lock(tid, l.first);
-							std::cout << " L- " << l.first << " (" << tid << ")\n";
-							done = true;
-							break;
-						}
-					}
-				}
-				if(count == 0) {
-					// no releasable locks exist
-					done = true;
-				}
+			auto lid = choose_suitable_lock(configuration, gen, rare_choice, false);
+			if(lid) {
+				auto const tid = configuration.lock_heads().find(lid)->second->tid();
+				configuration.release_lock(tid, lid);
+				std::cout << " L- " << lid << " (" << tid << ")\n";
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
