@@ -2,50 +2,168 @@
 
 #include "base.h"
 
+#include <util/sso_array.h>
+
 #include <cassert>
 #include <memory>
-#include <array>
 
 namespace por::event {
 	class broadcast final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
-		// 2. previous broadcast operation
-		std::array<std::shared_ptr<event>, 2> _predecessors;
+		// 2+ previous same-cond wait1 on notified threads
+		// X+ previous non-lost sig/bro operations on same condition variable that did not notify any of the threads referenced in any of the wait1s by signal
+		// OR (if broadcast is lost):
+		// 1. same-thread predecessor
+		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread by signal (tid of this broadcast event)
+		//    (may not exist if no such events and only preceeded by condition_variable_create event)
+		util::sso_array<std::shared_ptr<event>, 0> _predecessors;
 
-	protected:
+		std::size_t num_notified_threads = 0;
+
+	public: // FIXME: should be protected
 		template<typename T>
 		broadcast(thread_id_t tid,
 			std::shared_ptr<event>&& thread_predecessor,
-			std::shared_ptr<event>&& condition_variable_predecessor
+			T&& begin_condition_variable_predecessors,
+			T&& end_condition_variable_predecessors
 		)
-			: event(event_kind::broadcast, tid)
-			, _predecessors{std::move(thread_predecessor), std::move(condition_variable_predecessor)}
+			: event(event_kind::broadcast, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(*begin_condition_variable_predecessors, *end_condition_variable_predecessors))
+			, _predecessors{util::create_uninitialized, 1ul + std::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
 		{
+			// count events by type
+			std::size_t wait1_count = 0;
+			std::size_t sigbro_count = 0;
+			std::size_t create_count = 0;
+			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
+				assert(iter != nullptr);
+				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
+				switch((*iter)->kind()) {
+					case event_kind::condition_variable_create:
+						++create_count;
+						break;
+					case event_kind::wait1:
+						++wait1_count;
+						break;
+					case event_kind::signal:
+					case event_kind::broadcast:
+						++sigbro_count;
+						break;
+				}
+			}
+
+			// we perform a very small optimization by allocating the predecessors in uninitialized storage
+			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
+			std::size_t index = 1;
+			if(wait1_count > 0) {
+				assert(create_count == 0);
+				num_notified_threads = wait1_count;
+				// insert wait1 events first
+				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
+					if((*iter)->kind() == event_kind::wait1) {
+						new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+						++index;
+					}
+				}
+				assert(index == 1 + wait1_count);
+				// insert sig / bro events last
+				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
+					if((*iter)->kind() != event_kind::wait1) {
+						assert((*iter)->kind() == event_kind::signal || (*iter)->kind() == event_kind::broadcast);
+						new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+						++index;
+					}
+				}
+			} else {
+				assert(create_count <= 1);
+				if(sigbro_count > 0) {
+					assert(create_count == 0);
+					for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
+						if((*iter)->kind() == event_kind::condition_variable_create) {
+							// insert as last item
+							new(_predecessors.data() + _predecessors.size() - 1) std::shared_ptr<event>(std::move(*iter));
+						} else {
+							assert((*iter)->kind() == event_kind::signal || (*iter)->kind() == event_kind::broadcast);
+							new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+							++index;
+						}
+					}
+				}
+				if(create_count == 1) {
+					++index; // for assert
+				}
+			}
+			assert(index == _predecessors.size());
+
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
-			assert(this->condition_variable_predecessor());
+
+			assert(std::distance(this->wait_predecessors().begin(), this->wait_predecessors().end()) == wait1_count);
+			for(auto& e : this->wait_predecessors()) {
+				assert(e->kind() == event_kind::wait1);
+			}
+
+			if(wait1_count > 0) {
+				for(auto& e : this->condition_variable_predecessors()) {
+					if(e->kind() == event_kind::wait1) {
+						assert(e->tid() != this->tid());
+					} else if(e->kind() == event_kind::signal) {
+#if 0
+						auto sig = static_cast<signal*>(e.get());
+						assert(!sig->is_lost());
+						assert(sig->notified_thread() != this->tid());
+						for(auto& w : this->wait_predecessors()) {
+							assert(sig->notified_thread() != w->tid());
+						}
+#endif
+					} else {
+						assert(e->kind() == event_kind::broadcast);
+						auto bro = static_cast<broadcast*>(e.get());
+						assert(!bro->is_lost());
+					}
+				}
+			} else {
+				for(auto& e : this->condition_variable_predecessors()) {
+					if(e->kind() == event_kind::signal) {
+#if 0
+						auto sig = static_cast<signal*>(e.get());
+						assert(!sig->is_lost());
+						assert(sig->notified_thread() != this->tid());
+#endif
+					} else if(e->kind() == event_kind::broadcast) {
+						auto bro = static_cast<broadcast*>(e.get());
+						assert(!bro->is_lost());
+					} else {
+						assert(e->kind() == event_kind::condition_variable_create);
+					}
+				}
+			}
+
+			// (wait1_count > 0) <=> !is_lost()
+			assert(wait1_count > 0 || this->is_lost());
+			assert(!this->is_lost() || wait1_count == 0);
 		}
 
 	public:
 		template<typename T>
 		static std::shared_ptr<broadcast> alloc(thread_id_t tid,
 			std::shared_ptr<event> thread_predecessor,
-			std::shared_ptr<event> condition_variable_predecessor
+			T begin_condition_variable_predecessors,
+			T end_condition_variable_predecessors
 		) {
-			return std::make_shared<broadcast>(broadcast{tid,
+			return std::make_shared<broadcast>(tid,
 				std::move(thread_predecessor),
-				std::move(condition_variable_predecessor)
-			});
+				std::move(begin_condition_variable_predecessors),
+				std::move(end_condition_variable_predecessors)
+			);
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
-
 		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
@@ -53,7 +171,46 @@ namespace por::event {
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
-		std::shared_ptr<event>      & condition_variable_predecessor()       noexcept { return _predecessors[1]; }
-		std::shared_ptr<event> const& condition_variable_predecessor() const noexcept { return _predecessors[1]; }
+		// may return empty range if no wait predecessor exists (broadcast is lost)
+		util::iterator_range<std::shared_ptr<event>*> wait_predecessors() noexcept {
+			if(!is_lost()) {
+				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 1, _predecessors.data() + 1 + num_notified_threads);
+			} else {
+				return util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr);
+			}
+		}
+		// may return empty range if no wait predecessor exists (broadcast is lost)
+		util::iterator_range<std::shared_ptr<event> const*> wait_predecessors() const noexcept {
+			if(!is_lost()) {
+				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + 1 + num_notified_threads);
+			} else {
+				return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
+			}
+		}
+
+		// may return empty range if no condition variable predecessor other than condition_variable_create exists
+		util::iterator_range<std::shared_ptr<event>*> condition_variable_predecessors() noexcept {
+			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
+		}
+		// may return empty range if no condition variable predecessor other than condition_variable_create exists
+		util::iterator_range<std::shared_ptr<event> const*> condition_variable_predecessors() const noexcept {
+			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
+		}
+
+		bool is_lost() const noexcept {
+			return num_notified_threads == 0;
+		}
+
+		std::size_t num_notified() const noexcept {
+			return num_notified_threads;
+		}
+
+		thread_id_t is_notifying_thread(thread_id_t tid) const noexcept {
+			for(auto& e : wait_predecessors()) {
+				if(e->tid() == tid)
+					return true;
+			}
+			return false;
+		}
 	};
 }
