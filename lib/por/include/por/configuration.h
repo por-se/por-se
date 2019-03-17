@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <map>
+#include <set>
 #include <vector>
 
 namespace por {
@@ -188,6 +189,219 @@ namespace por {
 
 			thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
 			_cond_heads.erase(cond_head_it);
+		}
+
+		void wait1(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
+			auto cond_head_it = _cond_heads.find(cond);
+			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
+			auto& cond_preds = cond_head_it->second;
+			auto lock_it = _lock_heads.find(lock);
+			assert(_lock_heads.find(lock) != _lock_heads.end() && "Lock must (still) exist");
+
+			std::vector<std::shared_ptr<por::event::event>> non_waiting;
+			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
+				if((*it)->kind() == por::event::event_kind::wait1)
+					continue;
+
+				if((*it)->tid() == thread)
+					continue; // excluded event is part of [thread_event]
+
+				if((*it)->kind() == por::event::event_kind::signal) {
+					auto sig = static_cast<por::event::signal const*>(it->get());
+					if(sig->notified_thread() == thread)
+						continue;
+				}
+
+				if((*it)->kind() == por::event::event_kind::broadcast) {
+					auto bro = static_cast<por::event::broadcast const*>(it->get());
+					if(bro->is_notifying_thread(thread))
+						continue;
+				}
+
+				non_waiting.push_back(*it);
+			}
+
+			auto& lock_event = lock_it->second;
+			thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
+			lock_event = thread_event;
+			cond_preds.push_back(thread_event);
+		}
+
+		void wait2(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() == por::event::event_kind::wait1 && "Thread must be waiting");
+			auto cond_head_it = _cond_heads.find(cond);
+			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
+			auto& cond_preds = cond_head_it->second;
+			auto lock_it = _lock_heads.find(lock);
+			assert(_lock_heads.find(lock) != _lock_heads.end() && "Lock must (still) exist");
+			auto& lock_event = lock_it->second;
+
+			for(auto& e : cond_preds) {
+				if(e->kind() == por::event::event_kind::signal || e->kind() == por::event::event_kind::broadcast) {
+					// TODO: make search more efficient
+					if(std::find(e->predecessors().begin(), e->predecessors().end(), thread_event) != e->predecessors().end()) {
+						thread_event = por::event::wait2::alloc(thread, std::move(thread_event), std::move(lock_event), e);
+						lock_event = thread_event;
+						return;
+					}
+				}
+			}
+		}
+
+		void signal_thread(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::thread_id_t notified_thread) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
+			auto cond_head_it = _cond_heads.find(cond);
+			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
+			auto& cond_preds = cond_head_it->second;
+
+			if(notified_thread == 0) { // lost signal
+				std::vector<std::shared_ptr<por::event::event>> prev_notifications;
+				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
+					if((*it)->kind() == por::event::event_kind::wait1)
+						continue;
+
+					if((*it)->tid() == thread)
+						continue; // excluded event is part of [thread_event]
+
+					if((*it)->kind() == por::event::event_kind::broadcast) {
+						auto bro = static_cast<por::event::broadcast const*>(it->get());
+						if(bro->is_lost())
+							continue;
+					}
+
+					if((*it)->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(it->get());
+						if(sig->is_lost())
+							continue;
+
+						if(sig->notified_thread() == thread)
+							continue; // excluded event notified current thread by signal
+					}
+
+					prev_notifications.push_back(*it);
+				}
+
+				thread_event = por::event::signal::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				cond_preds.push_back(thread_event);
+			} else { // notifying signal
+				auto notified_thread_it = _thread_heads.find(notified_thread);
+				assert(notified_thread_it != _thread_heads.end() && "Notified thread must exist");
+				auto& notified_thread_event = notified_thread_it->second;
+				assert(notified_thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+				assert(notified_thread_event->kind() == por::event::event_kind::wait1 && "Notified thread must be waiting");
+
+				auto cond_it = std::find_if(cond_preds.begin(), cond_preds.end(), [&notified_thread](auto& e) {
+					return e->tid() == notified_thread && e->kind() == por::event::event_kind::wait1;
+				});
+				assert(cond_it != cond_preds.end() && "Wait1 event must be in cond_heads");
+				auto& cond_event = *cond_it;
+				assert(cond_event == notified_thread_event);
+
+				thread_event = por::event::signal::alloc(thread, std::move(thread_event), std::move(cond_event));
+				cond_event = thread_event;
+			}
+		}
+
+		void broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::set<por::event::thread_id_t> notified_threads) {
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
+			auto cond_head_it = _cond_heads.find(cond);
+			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
+			auto& cond_preds = cond_head_it->second;
+
+			if(notified_threads.empty()) { // lost broadcast
+				std::vector<std::shared_ptr<por::event::event>> prev_notifications;
+				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
+					if((*it)->kind() == por::event::event_kind::wait1)
+						continue;
+
+					if((*it)->tid() == thread)
+						continue; // excluded event is part of [thread_event]
+
+					if((*it)->kind() == por::event::event_kind::broadcast) {
+						auto bro = static_cast<por::event::broadcast const*>(it->get());
+						if(bro->is_lost())
+							continue;
+					}
+
+					if((*it)->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(it->get());
+						if(sig->is_lost())
+							continue;
+
+						if(sig->notified_thread() == thread)
+							continue; // excluded event notified current thread by signal
+					}
+
+					prev_notifications.push_back(*it);
+				}
+
+				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				cond_preds.push_back(thread_event);
+			} else { // notifying broadcast
+				std::vector<std::shared_ptr<por::event::event>> prev_events;
+				for(auto& nid : notified_threads) {
+					auto notified_thread_it = _thread_heads.find(nid);
+					assert(notified_thread_it != _thread_heads.end() && "Notified thread must exist");
+					auto& notified_thread_event = notified_thread_it->second;
+					assert(notified_thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+					assert(notified_thread_event->kind() == por::event::event_kind::wait1 && "Notified thread must be waiting");
+
+					auto cond_it = std::find_if(cond_preds.begin(), cond_preds.end(), [&nid](auto& e) {
+						return e->tid() == nid && e->kind() == por::event::event_kind::wait1;
+					});
+					assert(cond_it != cond_preds.end() && "Wait1 event must be in cond_heads");
+					auto& cond_event = *cond_it;
+					assert(cond_event == notified_thread_event);
+
+					prev_events.push_back(notified_thread_event);
+					cond_preds.erase(cond_it);
+				}
+
+				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
+					if((*it)->kind() == por::event::event_kind::wait1 || (*it)->kind() == por::event::event_kind::condition_variable_create)
+						continue;
+
+					if((*it)->tid() == thread)
+						continue; // excluded event is part of [thread_event]
+
+					if((*it)->kind() == por::event::event_kind::broadcast) {
+						auto bro = static_cast<por::event::broadcast const*>(it->get());
+						if(bro->is_lost())
+							continue;
+					}
+
+					if((*it)->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(it->get());
+						if(sig->is_lost())
+							continue;
+
+						if(notified_threads.count(sig->notified_thread()))
+							continue; // excluded event notified one of the included wait1s by signal
+					}
+
+					prev_events.push_back(*it);
+				}
+
+				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_events.data(), prev_events.data() + prev_events.size());
+				cond_preds.push_back(thread_event);
+			}
 		}
 
 		void local(event::thread_id_t thread) {
