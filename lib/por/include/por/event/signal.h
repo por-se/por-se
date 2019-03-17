@@ -142,9 +142,17 @@ namespace por::event {
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
 		// may return nullptr if signal is lost
-		std::shared_ptr<event>      & wait_predecessor()       noexcept { return _predecessors[1]; }
+		std::shared_ptr<event>       wait_predecessor()       noexcept {
+			if(!is_lost())
+				return _predecessors[1];
+			return nullptr;
+		}
 		// may return nullptr if signal is lost
-		std::shared_ptr<event> const& wait_predecessor() const noexcept { return _predecessors[1]; }
+		std::shared_ptr<event> const wait_predecessor() const noexcept {
+			if(!is_lost())
+				return _predecessors[1];
+			return nullptr;
+		}
 
 		// may return empty range if no condition variable predecessor other than condition_variable_create exists
 		util::iterator_range<std::shared_ptr<event>*> condition_variable_predecessors() noexcept {
