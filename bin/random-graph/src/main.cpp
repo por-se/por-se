@@ -117,6 +117,11 @@ int main(int argc, char** argv){
 #else
 	std::mt19937_64 gen(35);
 #endif
+
+	if(argc > 1) {
+		gen.seed(std::stoi(argv[1]));
+	}
+
 	// "warm up" mersenne twister to deal with weak initialization function
 	for(unsigned i = 0; i < 10'000; ++i) {
 		static_cast<void>(gen());
