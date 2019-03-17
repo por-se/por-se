@@ -35,11 +35,11 @@ namespace por::event {
 			assert(this->condition_variable_predecessor());
 			assert(this->condition_variable_predecessor()->tid() != this->tid());
 			if(this->condition_variable_predecessor()->kind() == event_kind::signal) {
-				auto sig = static_cast<signal*>(this->condition_variable_predecessor().get());
+				auto sig = static_cast<signal const*>(this->condition_variable_predecessor().get());
 				assert(sig->notified_thread() == this->tid());
 			} else {
 				assert(this->condition_variable_predecessor()->kind() == event_kind::broadcast);
-				auto bro = static_cast<broadcast*>(this->condition_variable_predecessor().get());
+				auto bro = static_cast<broadcast const*>(this->condition_variable_predecessor().get());
 				assert(bro->is_notifying_thread(this->tid()));
 			}
 		}

@@ -124,7 +124,7 @@ namespace por::event {
 						}
 					} else {
 						assert(e->kind() == event_kind::broadcast);
-						auto bro = static_cast<broadcast*>(e.get());
+						auto bro = static_cast<broadcast const*>(e.get());
 						assert(!bro->is_lost());
 					}
 				}
@@ -134,7 +134,7 @@ namespace por::event {
 						assert(!signal_is_lost(e.get()));
 						assert(signal_notified_thread(e.get()) != this->tid());
 					} else if(e->kind() == event_kind::broadcast) {
-						auto bro = static_cast<broadcast*>(e.get());
+						auto bro = static_cast<broadcast const*>(e.get());
 						assert(!bro->is_lost());
 					} else {
 						assert(e->kind() == event_kind::condition_variable_create);
