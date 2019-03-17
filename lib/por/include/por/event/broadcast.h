@@ -34,7 +34,7 @@ namespace por::event {
 			T&& begin_condition_variable_predecessors,
 			T&& end_condition_variable_predecessors
 		)
-			: event(event_kind::broadcast, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(*begin_condition_variable_predecessors, *end_condition_variable_predecessors))
+			: event(event_kind::broadcast, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 1ul + std::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
 		{
 			// count events by type
@@ -68,13 +68,14 @@ namespace por::event {
 				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
 					if((*iter)->kind() == event_kind::wait1) {
 						new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+						*iter = nullptr;
 						++index;
 					}
 				}
 				assert(index == 1 + wait1_count);
 				// insert sig / bro events last
 				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
-					if((*iter)->kind() != event_kind::wait1) {
+					if(*iter != nullptr && (*iter)->kind() != event_kind::wait1) {
 						assert((*iter)->kind() == event_kind::signal || (*iter)->kind() == event_kind::broadcast);
 						new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
 						++index;
@@ -82,8 +83,7 @@ namespace por::event {
 				}
 			} else {
 				assert(create_count <= 1);
-				if(sigbro_count > 0) {
-					assert(create_count == 0);
+				if(sigbro_count >= 0) {
 					for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
 						if((*iter)->kind() == event_kind::condition_variable_create) {
 							// insert as last item
@@ -118,7 +118,6 @@ namespace por::event {
 						assert(e->tid() != this->tid());
 					} else if(e->kind() == event_kind::signal) {
 						assert(!signal_is_lost(e.get()));
-						assert(signal_notified_thread(e.get()) != this->tid());
 						for(auto& w : this->wait_predecessors()) {
 							assert(signal_notified_thread(e.get()) != w->tid());
 						}
