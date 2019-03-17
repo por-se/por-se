@@ -7,6 +7,12 @@
 #include <cassert>
 #include <memory>
 
+namespace {
+	// signal header is not available yet and cannot be included (circular dependency)
+	bool signal_is_lost(por::event::event const*);
+	por::event::thread_id_t signal_notified_thread(por::event::event const*);
+}
+
 namespace por::event {
 	class broadcast final : public event {
 		// predecessors:
@@ -111,14 +117,11 @@ namespace por::event {
 					if(e->kind() == event_kind::wait1) {
 						assert(e->tid() != this->tid());
 					} else if(e->kind() == event_kind::signal) {
-#if 0
-						auto sig = static_cast<signal*>(e.get());
-						assert(!sig->is_lost());
-						assert(sig->notified_thread() != this->tid());
+						assert(!signal_is_lost(e.get()));
+						assert(signal_notified_thread(e.get()) != this->tid());
 						for(auto& w : this->wait_predecessors()) {
-							assert(sig->notified_thread() != w->tid());
+							assert(signal_notified_thread(e.get()) != w->tid());
 						}
-#endif
 					} else {
 						assert(e->kind() == event_kind::broadcast);
 						auto bro = static_cast<broadcast*>(e.get());
@@ -128,11 +131,8 @@ namespace por::event {
 			} else {
 				for(auto& e : this->condition_variable_predecessors()) {
 					if(e->kind() == event_kind::signal) {
-#if 0
-						auto sig = static_cast<signal*>(e.get());
-						assert(!sig->is_lost());
-						assert(sig->notified_thread() != this->tid());
-#endif
+						assert(!signal_is_lost(e.get()));
+						assert(signal_notified_thread(e.get()) != this->tid());
 					} else if(e->kind() == event_kind::broadcast) {
 						auto bro = static_cast<broadcast*>(e.get());
 						assert(!bro->is_lost());

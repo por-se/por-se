@@ -181,3 +181,16 @@ namespace por::event {
 		}
 	};
 }
+
+namespace {
+	// wrapper functions for broadcast.h
+	bool signal_is_lost(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::signal);
+		return static_cast<por::event::signal const*>(e)->is_lost();
+	}
+
+	por::event::thread_id_t signal_notified_thread(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::signal);
+		return static_cast<por::event::signal const*>(e)->notified_thread();
+	}
+}
