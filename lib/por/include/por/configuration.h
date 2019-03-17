@@ -190,7 +190,6 @@ namespace por {
 			thread_event = event::local::alloc(thread, std::move(thread_event));
 		}
 
-	private:
 		std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {
 			assert(event);
 			std::shared_ptr<por::event::event> const* pred = nullptr;
@@ -281,6 +280,7 @@ namespace por {
 			return nullptr;
 		}
 
+	private:
 		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
 			assert(e->kind() == por::event::event_kind::lock_acquire || e->kind() == por::event::event_kind::wait2);
 

@@ -158,8 +158,23 @@ int main(int argc, char** argv){
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, true);
 			auto tid = choose_thread(configuration, gen);
 			if(lid && tid) {
-				configuration.destroy_lock(tid, lid);
-				std::cout << "-L " << lid << " (" << tid << ")\n";
+				bool no_block_on_lock = true;
+				for(auto& e : configuration.thread_heads()) {
+					if(e.second->kind() == por::event::event_kind::wait1) {
+						auto& w = e.second;
+						auto* l = &configuration.lock_heads().at(lid);
+						while(l != nullptr && *w < **l) {
+							l = configuration.get_lock_predecessor(*l);
+						}
+						if(*l == w) {
+							no_block_on_lock = false;
+						}
+					}
+				}
+				if(no_block_on_lock) {
+					configuration.destroy_lock(tid, lid);
+					std::cout << "-L " << lid << " (" << tid << ")\n";
+				}
 			}
 		} else if(roll < 600) {
 			// acquire lock, if one can be acquired
@@ -174,8 +189,10 @@ int main(int argc, char** argv){
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, false);
 			if(lid) {
 				auto const tid = configuration.lock_heads().find(lid)->second->tid();
-				configuration.release_lock(tid, lid);
-				std::cout << " L- " << lid << " (" << tid << ")\n";
+				if(configuration.thread_heads().find(tid)->second->kind() != por::event::event_kind::wait1) {
+					configuration.release_lock(tid, lid);
+					std::cout << " L- " << lid << " (" << tid << ")\n";
+				}
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
