@@ -164,7 +164,7 @@ namespace por::event {
 		}
 
 		bool is_lost() const noexcept {
-			return _predecessors.size() != 2 || _predecessors[1] == nullptr || _predecessors[1]->kind() == event_kind::wait1;
+			return _predecessors.size() != 2 || _predecessors[1] == nullptr || _predecessors[1]->kind() != event_kind::wait1;
 		}
 
 		std::size_t num_notified() const noexcept {
