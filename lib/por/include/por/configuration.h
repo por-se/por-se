@@ -74,6 +74,7 @@ namespace por {
 			assert(source_it != _thread_heads.end() && "Source thread must exist");
 			auto& source_event = source_it->second;
 			assert(source_event->kind() != por::event::event_kind::thread_exit && "Source thread must not yet be exited");
+			assert(source_event->kind() != por::event::event_kind::wait1 && "Source thread must not be blocked");
 
 			source_event = event::thread_create::alloc(source, std::move(source_event));
 			assert(new_tid > 0);
@@ -86,6 +87,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto joined_it = _thread_heads.find(joined);
 			assert(joined_it != _thread_heads.end() && "Joined thread must exist");
 			auto& joined_event = joined_it->second;
@@ -99,6 +101,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 
 			assert(active_threads() > 0);
 			thread_event = event::thread_exit::alloc(thread, std::move(thread_event));
@@ -109,6 +112,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 
 			assert(lock > 0);
 			assert(_lock_heads.find(lock) == _lock_heads.end() && "Lock id already taken");
@@ -122,6 +126,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
 			assert(_lock_heads.find(lock) != _lock_heads.end() && "Lock must (still) exist");
 
@@ -134,6 +139,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
 			assert(_lock_heads.find(lock) != _lock_heads.end() && "Lock must (still) exist");
 
@@ -147,6 +153,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
 			assert(_lock_heads.find(lock) != _lock_heads.end() && "Lock must (still) exist");
 
@@ -160,6 +167,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			assert(cond > 0);
 			assert(_cond_heads.find(cond) == _cond_heads.end() && "Condition variable id already taken");
 
@@ -172,6 +180,7 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
