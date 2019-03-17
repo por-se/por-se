@@ -171,12 +171,13 @@ namespace por {
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
-			auto cond_it = _cond_heads.find(cond);
-			assert(cond_it != _cond_heads.end() && "Condition variable must (still) exist");
-			assert(cond_it->second.size() > 0);
+			auto cond_head_it = _cond_heads.find(cond);
+			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
+			auto& cond_preds = cond_head_it->second;
+			assert(cond_preds.size() > 0);
 
-			thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), cond_it->second.data(), cond_it->second.data() + cond_it->second.size());
-			_cond_heads.erase(cond_it);
+			thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
+			_cond_heads.erase(cond_head_it);
 		}
 
 		void local(event::thread_id_t thread) {
