@@ -102,6 +102,40 @@ namespace {
 		}
 		return 0;
 	}
+
+	por::event::cond_id_t choose_cond(por::configuration const& configuration, std::mt19937_64& gen) {
+		if(configuration.cond_heads().empty())
+			return 0;
+
+		std::uniform_int_distribution<std::size_t> dis(0, configuration.cond_heads().size() - 1);
+		std::size_t chosen = dis(gen);
+		return std::next(configuration.cond_heads().begin(), chosen)->first;
+	}
+
+	por::event::cond_id_t choose_suitable_cond(por::configuration const& configuration,
+		std::mt19937_64& gen,
+		std::bernoulli_distribution& rare_choice,
+		bool blocked
+	) {
+		for(bool done = false; !done; ) {
+			unsigned count = 0;
+			for(auto const& c : configuration.cond_heads()) {
+				std::size_t num_blocked = std::count_if(c.second.begin(), c.second.end(), [](auto& e) { return e->kind() == por::event::event_kind::wait1; });
+				if((!blocked && num_blocked > 0) || (blocked && num_blocked == 0))
+					continue;
+
+				++count;
+				if(rare_choice(gen)) {
+					return c.first;
+				}
+			}
+			if(count == 0) {
+				// no suitable conds exist
+				done = true;
+			}
+		}
+		return 0;
+	}
 }
 
 int main(int argc, char** argv){
@@ -181,7 +215,7 @@ int main(int argc, char** argv){
 					std::cout << "-L " << lid << " (" << tid << ")\n";
 				}
 			}
-		} else if(roll < 600) {
+		} else if(roll < 400) {
 			// acquire lock, if one can be acquired
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, true);
 			auto tid = choose_thread(configuration, gen);
@@ -189,7 +223,7 @@ int main(int argc, char** argv){
 				configuration.acquire_lock(tid, lid);
 				std::cout << " L+ " << lid << " (" << tid << ")\n";
 			}
-		} else if(roll < 900) {
+		} else if(roll < 500) {
 			// release lock, if one can be released
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, false);
 			if(lid) {
@@ -198,6 +232,125 @@ int main(int argc, char** argv){
 					configuration.release_lock(tid, lid);
 					std::cout << " L- " << lid << " (" << tid << ")\n";
 				}
+			}
+		} else if(roll < 600) {
+			// wait on condition variable, if possible
+			auto tid = choose_thread(configuration, gen);
+			auto lid = choose_suitable_lock(configuration, gen, rare_choice, false, tid);
+			auto cid = choose_cond(configuration, gen);
+			if(tid && lid && cid) {
+				configuration.wait1(tid, cid, lid);
+				std::cout << " C+ " << cid << ", " <<  lid << " (" << tid << ")\n";
+			}
+		} else if(roll < 700) {
+			// signal single thread, if possible
+			auto tid = choose_thread(configuration, gen);
+			auto cid = choose_suitable_cond(configuration, gen, rare_choice, true);
+			por::event::thread_id_t blocked_tid = 0;
+			if(tid && cid) {
+				for(auto& w : configuration.cond_heads().at(cid)) {
+					if(w->kind() != por::event::event_kind::wait1 || w->tid() == tid)
+						continue;
+					blocked_tid = w->tid();
+					break;
+				}
+				configuration.signal_thread(tid, cid, blocked_tid);
+				std::cout << "sT " << cid << ", " <<  blocked_tid << " (" << tid << ")\n";
+			}
+		} else if(roll < 750) {
+			// lost signal, if possible
+			auto tid = choose_thread(configuration, gen);
+			// TODO: can also happen with blocked cids
+			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
+			if(tid && cid) {
+				configuration.signal_thread(tid, cid, 0);
+				std::cout << "sT " << cid << ", " <<  0 << " (" << tid << ")\n";
+			}
+		} else if(roll < 800) {
+			// broadcast threads, if possible
+			auto tid = choose_thread(configuration, gen);
+			auto cid = choose_suitable_cond(configuration, gen, rare_choice, true);
+			std::set<por::event::thread_id_t> blocked_tids;
+			if(tid && cid) {
+				for(auto& w : configuration.cond_heads().at(cid)) {
+					if(w->kind() != por::event::event_kind::wait1 || w->tid() == tid)
+						continue;
+					blocked_tids.insert(w->tid());
+					break;
+				}
+				configuration.broadcast_threads(tid, cid, blocked_tids);
+				std::cout << "bT " << cid << ", " <<  blocked_tids.size() << " threads (" << tid << ")\n";
+			}
+		} else if(roll < 850) {
+			// lost broadcast, if possible
+			auto tid = choose_thread(configuration, gen);
+			// TODO: can also happen with blocked cids
+			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
+			if(tid && cid) {
+				configuration.broadcast_threads(tid, cid, {});
+				std::cout << "bT " << cid << ", {} (" << tid << ")\n";
+			}
+		} else if(roll < 900) {
+			// wake up notified thread, if possible
+			auto tid = choose_suitable_thread(configuration, gen, rare_choice, por::event::event_kind::wait1);
+			if(tid) {
+				auto& wait1 = configuration.thread_heads().find(tid)->second;
+				por::event::cond_id_t cid = 0;
+				for(auto& cond : configuration.cond_heads()) {
+					for(auto& e : cond.second) {
+						if(e->tid() == tid || (e->kind() != por::event::event_kind::signal && e->kind() != por::event::event_kind::broadcast))
+							continue;
+						if(e->kind() == por::event::event_kind::signal) {
+							auto sig = static_cast<por::event::signal const*>(e.get());
+							if(sig->wait_predecessor() == wait1) {
+								cid = cond.first;
+							}
+						} else {
+							assert(e->kind() == por::event::event_kind::broadcast);
+							auto bro = static_cast<por::event::broadcast const*>(e.get());
+							for(auto& w : bro->wait_predecessors()) {
+								if(w == wait1) {
+									cid = cond.first;
+									break;
+								}
+							}
+						}
+						if(cid)
+							break;
+					}
+					if(cid)
+						break;
+				}
+				if(cid) {
+					auto lid = 0;
+					for(auto& e : configuration.lock_heads()) {
+						auto l = &e.second;
+						while(l != nullptr && *wait1 < **l) {
+							l = configuration.get_lock_predecessor(*l);
+						}
+						if(*l == wait1) {
+							lid = e.first;
+						}
+					}
+					if(lid) {
+						configuration.wait2(tid, cid, lid);
+						std::cout << "wT " << cid << ", " <<  lid << " (" << tid << ")\n";
+					}
+				}
+			}
+		} else if(roll < 950) {
+			// spawn new cond
+			auto tid = choose_thread(configuration, gen);
+			auto cid = next_cond_id++;
+			configuration.create_cond(tid, cid);
+			std::cout << "+C " << cid << " (" << tid << ")\n";
+		} else if(roll < 970) {
+			// destroy cond, if one exists
+			auto tid = choose_thread(configuration, gen);
+			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
+			if(cid) {
+				configuration.destroy_cond(tid, cid);
+				std::cout << "-C " << cid << " (" << tid << ")\n";
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
@@ -346,6 +499,24 @@ int main(int argc, char** argv){
 					break;
 				case por::event::event_kind::lock_release:
 					std::cout << "rel";
+					break;
+				case por::event::event_kind::condition_variable_create:
+					std::cout << "+C";
+					break;
+				case por::event::event_kind::condition_variable_destroy:
+					std::cout << "-C";
+					break;
+				case por::event::event_kind::wait1:
+					std::cout << "w1";
+					break;
+				case por::event::event_kind::wait2:
+					std::cout << "w2";
+					break;
+				case por::event::event_kind::signal:
+					std::cout << "sig";
+					break;
+				case por::event::event_kind::broadcast:
+					std::cout << "bro";
 					break;
 			}
 
