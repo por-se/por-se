@@ -12,7 +12,7 @@ namespace por::event {
 		// predecessors:
 		// 1. same-thread predecessor
 		// 2. previous acquisition on same lock
-		// 3+ previous sig/bro operations (or cond_create) on same condition variable that did not notify this thread
+		// 3+ previous sig/bro operations (or cond_create) on same condition variable that did not notify this thread by signal
 		//    (may not exist if no such events and only preceeded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 2> _predecessors;
 
@@ -50,7 +50,7 @@ namespace por::event {
 			for(auto& e : this->condition_variable_predecessors()) {
 				if(e->kind() == event_kind::signal) {
 					auto sig = static_cast<signal const*>(e.get());
-					assert(sig->notified_thread() == 0);
+					assert(sig->notified_thread() != this->tid());
 				} else if(e->kind() == event_kind::broadcast) {
 					auto bro = static_cast<broadcast const*>(e.get());
 					assert(!bro->is_notifying_thread(this->tid()));
