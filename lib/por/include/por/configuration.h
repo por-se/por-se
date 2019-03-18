@@ -636,15 +636,14 @@ namespace por {
 				result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr));
 			}
 
-			assert(er != nullptr);
+			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
 			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er);
-			do {
-				assert(ep != nullptr);
+			while(ep != nullptr && em != nullptr && (*em < *ep || em == ep)) {
 				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
 					result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep));
 				}
 				ep = get_lock_predecessor(*ep);
-			} while(ep != nullptr && (*em < *ep || em == ep));
+			}
 
 			return result;
 		}
