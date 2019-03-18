@@ -504,6 +504,98 @@ namespace por {
 		}
 
 	private:
+		template<typename UnaryPredicate>
+		std::vector<std::vector<std::shared_ptr<por::event::event> const*>> concurrent_combinations(
+			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> &comb,
+			UnaryPredicate filter
+		) {
+			std::vector<std::vector<std::shared_ptr<por::event::event> const*>> result;
+			// compute all combinations: S \subseteq comb (where S is concurrent,
+			// i.e. there are no causal dependencies between any of its elements)
+			assert(comb.size() < 64);
+			for(std::uint64_t mask = 0; mask < (1 << comb.size()); ++mask) {
+				std::size_t popcount = 0;
+				for(std::size_t i = 0; i < comb.size(); ++i) {
+					if((mask >> i) & 1)
+						++popcount;
+				}
+				if (popcount > 0) {
+					// indexes of the threads enabled in current mask
+					// (of which there are popcount-many)
+					std::vector<por::event::thread_id_t> selected_threads;
+					selected_threads.reserve(popcount);
+
+					// maps a selected thread to the highest index present in its event vector
+					// i.e. highest_index[i] == comb[selected_threads[i]].size() - 1
+					std::vector<std::size_t> highest_index;
+					highest_index.reserve(popcount);
+
+					auto it = comb.begin();
+					for(std::size_t i = 0; i < comb.size(); ++i, ++it) {
+						assert(std::next(comb.begin(), i) == it);
+						assert(std::next(comb.begin(), i) != comb.end());
+						if((mask >> i) & 1) {
+							selected_threads.push_back(it->first);
+							highest_index.push_back(it->second.size() - 1);
+						}
+					}
+
+					// index in the event vector of corresponding thread for
+					// each selected thread, starting with all zeros
+					std::vector<std::size_t> event_indices(popcount, 0);
+
+					std::size_t pos = 0;
+					while(pos < popcount) {
+						// complete subset
+						std::vector<std::shared_ptr<por::event::event> const*> subset;
+						subset.reserve(popcount);
+						bool is_concurrent = true;
+						for(std::size_t k = 0; k < popcount; ++k) {
+							auto& new_event = comb[selected_threads[k]][event_indices[k]];
+							if(k > 0) {
+								// check if new event is concurrent to previous ones
+								for(auto& e : subset) {
+									if(**e < **new_event || **new_event < **e) {
+										is_concurrent = false;
+										break;
+									}
+								}
+							}
+							if(!is_concurrent)
+								break;
+							subset.push_back(new_event);
+						}
+						if(is_concurrent && filter(subset)) {
+							result.push_back(std::move(subset));
+						}
+
+						// search for lowest position that can be incremented
+						while(pos < popcount && event_indices[pos] == highest_index[pos]) {
+							++pos;
+						}
+
+						if(pos == popcount && event_indices[pos - 1] == highest_index[pos - 1])
+							break;
+
+						++event_indices[pos];
+
+						// reset lower positions and go back to pos = 0
+						while(pos > 0) {
+							--pos;
+							event_indices[pos] = 0;
+						}
+					}
+				} else {
+					// empty set
+					std::vector<std::shared_ptr<por::event::event> const*> empty;
+					if(filter(empty)) {
+						result.push_back(std::move(empty));
+					}
+				}
+			}
+			return result;
+		}
+
 		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
 			assert(e->kind() == por::event::event_kind::lock_acquire || e->kind() == por::event::event_kind::wait2);
 
