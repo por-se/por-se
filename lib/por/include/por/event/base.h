@@ -148,7 +148,7 @@ namespace por::event {
 				auto it = rhs._cone.find(_tid);
 				if(it != rhs._cone.end()) {
 					event const& g = *it->second;
-					return rhs._depth < g._depth && g._depth < _depth;
+					return _depth < g._depth;
 				}
 			}
 			return false;
