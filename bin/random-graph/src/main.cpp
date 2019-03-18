@@ -365,15 +365,16 @@ int main(int argc, char** argv){
 	auto cex = configuration.conflicting_extensions();
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& c : cex) {
-		auto const* acq = static_cast<por::event::lock_acquire const*>(c.get());
-		assert(acq->thread_predecessor());
-		auto lp = acq->lock_predecessor();
-		std::cerr << c->tid() << "@" << c->depth() << ": " << acq->thread_predecessor()->tid() << "@" << acq->thread_predecessor()->depth();
-		if(lp) {
-			std::cerr << " | " << (*lp).tid() << "@" << (*lp).depth() << "\n";
-		} else {
-			std::cerr << "\n";
+		std::cerr << c->tid() << "@" << c->depth();
+		for(auto it = c->predecessors().begin(), ie = c->predecessors().end(); it != ie; ++it) {
+			if(it == c->predecessors().begin())
+				std::cerr << ": ";
+			std::cerr << (*it)->tid() << "@" << (*it)->depth();
+			if(std::next(it) != ie) {
+				std::cerr << " | ";
+			}
 		}
+		std::cerr << "\n";
 	}
 
 	std::set<por::event::event const*> visited;
