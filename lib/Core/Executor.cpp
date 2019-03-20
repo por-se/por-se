@@ -4774,19 +4774,27 @@ void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
   scheduleThreads(state);
 }
 
-void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne) {
+void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, por_event_t asEvent) {
   if (!onlyOne) {
-    for (auto th : state.threads) {
+    std::vector<std::uint64_t> porData;
+    porData.push_back(lid);
+
+    for (const auto &th : state.threads) {
       if (th.second.waitingHandle == lid) {
         state.wakeUpThread(th.first);
+        porData.push_back(th.first);
       }
+    }
+
+    if (asEvent != 0) {
+      porEventManager.registerPorEvent(state, asEvent, porData);
     }
 
     return;
   }
 
   std::vector<Thread::ThreadId> choices;
-  for (auto th : state.threads) {
+  for (const auto &th : state.threads) {
     if (th.second.waitingHandle == lid) {
       choices.push_back(th.first);
     }
@@ -4804,7 +4812,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   }
 
   // So we are not able to fork for new states when we should not
-  if (atMemoryLimit || inhibitForking) {
+  if (atMemoryLimit || inhibitForking || NoScheduleForks) {
     allowedChoices = 1;
   }
 
@@ -4818,7 +4826,13 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       addedStates.push_back(st);
     }
 
-    st->wakeUpThread(choices[i]);
+    Thread::ThreadId tidToWakeUp = choices[i];
+
+    if (asEvent != 0) {
+      porEventManager.registerPorEvent(*st, asEvent, { lid, tidToWakeUp });
+    }
+
+    st->wakeUpThread(tidToWakeUp);
   }
 }
 

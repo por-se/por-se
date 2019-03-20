@@ -67,8 +67,8 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
     klee_toggle_thread_scheduling(1);
     klee_preempt_thread();
 
+    klee_por_register_event(por_lock_acquire, &barrier->currentCount);
     klee_por_register_event(por_broadcast, &barrier->count);
-
     klee_por_register_event(por_lock_release, &barrier->currentCount);
 
     return PTHREAD_BARRIER_SERIAL_THREAD;

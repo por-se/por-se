@@ -26,8 +26,8 @@ namespace klee {
 
       bool handleCondVarCreate(ExecutionState &state, std::uint64_t cId);
       bool handleCondVarDestroy(ExecutionState &state, std::uint64_t cId);
-      bool handleCondVarSignal(ExecutionState &state, std::uint64_t cId);
-      bool handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId);
+      bool handleCondVarSignal(ExecutionState &state, std::uint64_t cId, Thread::ThreadId notifiedThread);
+      bool handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId, std::vector<std::uint64_t> threads);
       bool handleCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
       bool handleCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
   };

@@ -56,12 +56,7 @@ static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
   return EBUSY;
 }
 
-int pthread_mutex_lock(pthread_mutex_t *mutex) {
-  klee_toggle_thread_scheduling(0);
-
-  kpr_check_if_valid(pthread_mutex_t, mutex);
-
-  int sleptOnce = 0;
+int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept) {
   int result;
 
   for (;;) {
@@ -88,16 +83,29 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
       }
     }
 
-    sleptOnce = 1;
+    if (hasSlept != NULL) {
+      *hasSlept = 1;
+    }
+
     klee_wait_on(mutex);
   }
+
+  return result;
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+  klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
+  int hasSlept = 0;
+  int result = kpr_mutex_lock_internal(mutex, &hasSlept);
 
   if (mutex->acquired == 1) {
     klee_por_register_event(por_lock_acquire, mutex);
   }
 
   klee_toggle_thread_scheduling(1);
-  if (sleptOnce == 0) {
+  if (hasSlept != 0) {
     klee_preempt_thread();
   }
 
@@ -146,7 +154,6 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
   }
 
   klee_release_waiting(mutex, KLEE_RELEASE_SINGLE);
-  klee_por_register_event(por_lock_release, mutex);
 
   return 0;
 }
@@ -156,6 +163,10 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
   int result = kpr_mutex_unlock_internal(mutex);
+  if (result == 0 && mutex->acquired == 0) {
+    klee_por_register_event(por_lock_release, mutex);
+  }
+
   klee_toggle_thread_scheduling(1);
 
   klee_preempt_thread();

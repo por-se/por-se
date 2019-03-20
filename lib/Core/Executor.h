@@ -602,7 +602,7 @@ public:
                                 KFunction *startRoutine,
                                 ref<Expr> runtimeStructPtr);
   void threadWaitOn(ExecutionState &state, std::uint64_t lid);
-  void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne);
+  void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, por_event_t asEvent);
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);

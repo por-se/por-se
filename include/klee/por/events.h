@@ -6,6 +6,8 @@ extern "C" {
 #endif
 
 typedef enum {
+  por_empty = 0,
+
   por_local = 1,
   por_program_init = 2,
   por_thread_create = 3,

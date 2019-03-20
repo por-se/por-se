@@ -32,6 +32,7 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
 
 int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_mutex_t, m);
   kpr_check_if_valid(pthread_cond_t, lock);
 
   int result = kpr_mutex_unlock_internal(m);
@@ -55,9 +56,11 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   lock->waitingCount++;
   klee_wait_on(lock);
 
+  result = kpr_mutex_lock_internal(m, NULL);
+
   klee_por_register_event(por_wait2, lock, m);
 
-  return pthread_mutex_lock(m);
+  return result;
 }
 
 int pthread_cond_broadcast(pthread_cond_t *lock) {
@@ -66,12 +69,10 @@ int pthread_cond_broadcast(pthread_cond_t *lock) {
 
   // We can actually just use the transfer as we know that all wait on the
   // same mutex again
-  klee_release_waiting(lock, KLEE_RELEASE_ALL);
+  klee_release_waiting(lock, KLEE_RELEASE_ALL, por_broadcast);
 
   lock->waitingCount = 0;
   lock->waitingMutex = NULL;
-
-  klee_por_register_event(por_broadcast, lock);
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -84,7 +85,7 @@ int pthread_cond_signal(pthread_cond_t *lock) {
 
   // We can actually just use the transfer as we know that all wait on the
   // same mutex again
-  klee_release_waiting(lock, KLEE_RELEASE_SINGLE);
+  klee_release_waiting(lock, KLEE_RELEASE_SINGLE, por_signal);
   if (lock->waitingCount > 0) {
     lock->waitingCount--;
   }
@@ -92,8 +93,6 @@ int pthread_cond_signal(pthread_cond_t *lock) {
   if (lock->waitingCount == 0) {
     lock->waitingMutex = NULL;
   }
-
-  klee_por_register_event(por_signal, lock);
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();

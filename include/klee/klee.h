@@ -180,7 +180,7 @@ extern "C" {
 
 #define KLEE_RELEASE_SINGLE (1 << 0)
 #define KLEE_RELEASE_ALL (0 << 0)
-  void klee_release_waiting(void* address, uint64_t mode);
+  void klee_release_waiting(void* address, uint64_t mode, ...);
 #ifdef __cplusplus
 }
 #endif

@@ -18,6 +18,8 @@
 #include "klee/ExecutionState.h"
 #include "klee/Thread.h"
 
+#include "klee/por/events.h"
+
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/Debug.h"
@@ -998,7 +1000,7 @@ void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
 void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
                                                  KInstruction *target,
                                                  std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 2 && "invalid number of arguments to klee_release_waiting");
+  assert((arguments.size() == 2 || arguments.size() == 3) && "invalid number of arguments to klee_release_waiting");
   ref<Expr> lid = executor.toUnique(state, arguments[0]);
   ref<Expr> mode = executor.toUnique(state, arguments[1]);
 
@@ -1007,18 +1009,30 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
     return;
   }
 
+  por_event_t asEvent = por_empty;
+  if (arguments.size() > 2) {
+    ref<Expr> asEventExpr = executor.toUnique(state, arguments[2]);
+
+    if (!isa<ConstantExpr>(asEventExpr)) {
+      executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
+      return;
+    }
+
+    asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
+  }
+
   // mode == 0 -> KLEE_RELEASE_ALL
   // mode == 1 -> KLEE_RELEASE_SINGLE
   executor.threadWakeUpWaiting(state,
           cast<ConstantExpr>(lid)->getZExtValue(),
-          cast<ConstantExpr>(mode)->getZExtValue() == 1
-          );
+          cast<ConstantExpr>(mode)->getZExtValue() == 1,
+          asEvent);
 }
 
 void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
                                                     klee::KInstruction *target,
                                                     std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() >= 1 && "invalid number of arguments to klee_por_register_event");
+  assert(!arguments.empty() && "invalid number of arguments to klee_por_register_event");
 
   ref<Expr> kindExpr = executor.toUnique(state, arguments[0]);
 

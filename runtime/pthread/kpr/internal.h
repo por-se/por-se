@@ -14,6 +14,8 @@ void kpr_key_clear_data_of_thread(uint32_t tid);
 
 int kpr_mutex_unlock_internal(pthread_mutex_t *m);
 
+int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept);
+
 void kpr_check_init_pattern(pthread_internal_t* data, size_t size);
 
 #define kpr_check_if_valid(typename, argument) kpr_check_init_pattern((pthread_internal_t*) argument, sizeof(typename));

@@ -47,12 +47,19 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
   }
 
   // Make sure that we always have the correct number of arguments
-  if ((kind == por_wait1 || kind == por_wait2) && args.size() != 2) {
-    return false;
-  }
-
-  if (kind != por_wait1 && kind != por_wait2 && args.size() != 1) {
-    return false;
+  if (kind == por_wait1 || kind == por_wait2) {
+    if (args.size() != 2) {
+      return false;
+    }
+  } else if (kind == por_signal || kind == por_broadcast) {
+    if (args.empty()) {
+      return false;
+    }
+  } else {
+    // Every other event type requires exactly one parameter
+    if (args.size() != 1) {
+      return false;
+    }
   }
 
   switch (kind) {
@@ -84,10 +91,10 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
       return handleCondVarDestroy(state, args[0]);
 
     case por_signal:
-      return handleCondVarSignal(state, args[0]);
+      return handleCondVarSignal(state, args[0], static_cast<Thread::ThreadId>(args[1]));
 
     case por_broadcast:
-      return handleCondVarBroadcast(state, args[0]);
+      return handleCondVarBroadcast(state, args[0], { args.begin() + 1, args.end() });
 
     case por_wait1:
       return handleCondVarWait1(state, args[0], args[1]);
@@ -145,29 +152,37 @@ bool PorEventManager::handleLockRelease(ExecutionState &state, std::uint64_t mId
 
 
 bool PorEventManager::handleCondVarCreate(ExecutionState &state, std::uint64_t cId) {
-  state.porConfiguration->create_condition_variable(state.currentThreadId(), cId);
+  state.porConfiguration->create_cond(state.currentThreadId(), cId);
   return true;
 }
 
 bool PorEventManager::handleCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
-  state.porConfiguration->destroy_condition_variable(state.currentThreadId(), cId);
+  state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
   return true;
 }
 
-bool PorEventManager::handleCondVarSignal(ExecutionState &state, std::uint64_t cId) {
-  state.porConfiguration->signal(state.currentThreadId(), cId);
+bool PorEventManager::handleCondVarSignal(ExecutionState &state, std::uint64_t cId, Thread::ThreadId notifiedThread) {
+  state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
   return true;
 }
 
-bool PorEventManager::handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId) {
-  state.porConfiguration->broadcast(state.currentThreadId(), cId);
+bool PorEventManager::handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId, std::vector<std::uint64_t> threads) {
+  std::set<Thread::ThreadId> notifiedThreads;
+
+  for (auto& tid : threads) {
+    notifiedThreads.insert(static_cast<Thread::ThreadId>(tid));
+  }
+
+  state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, notifiedThreads);
   return true;
 }
 
 bool PorEventManager::handleCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+  state.porConfiguration->wait1(state.currentThreadId(), cId, mId);
   return true;
 }
 
 bool PorEventManager::handleCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+  state.porConfiguration->wait2(state.currentThreadId(), cId, mId);
   return true;
 }
