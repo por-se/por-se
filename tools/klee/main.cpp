@@ -21,6 +21,8 @@
 #include "klee/Internal/Support/PrintVersion.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/Interpreter.h"
+#include "klee/OptionCategories.h"
+#include "klee/SolverCmdLine.h"
 #include "klee/Statistics.h"
 
 #include "llvm/IR/Constants.h"
@@ -84,6 +86,12 @@ namespace {
                                  "These options select the files to generate for each test case.");
 
   cl::opt<bool>
+  WriteNone("write-no-tests",
+            cl::init(false),
+            cl::desc("Do not generate any test files (default=false)"),
+            cl::cat(TestCaseCat));
+
+  cl::opt<bool>
   WriteCVCs("write-cvcs",
             cl::desc("Write .cvc files for each test case (default=false)"),
             cl::cat(TestCaseCat));
@@ -119,9 +127,9 @@ namespace {
                 cl::cat(TestCaseCat));
 
 
-  /*** Starting options ***/
+  /*** Startup options ***/
 
-  cl::OptionCategory StartCat("Starting options",
+  cl::OptionCategory StartCat("Startup options",
                               "These options affect how execution is started.");
 
   cl::opt<std::string>
@@ -151,6 +159,11 @@ namespace {
                  cl::desc("Optimize the code before execution (default=false)."),
 		 cl::init(false),
                  cl::cat(StartCat));
+
+  cl::opt<bool>
+  WarnAllExternals("warn-all-external-symbols",
+                   cl::desc("Issue a warning on startup for all external symbols (default=false)."),
+                   cl::cat(StartCat));
   
 
   /*** Linking options ***/
@@ -211,19 +224,13 @@ namespace {
                  cl::init(true),
                  cl::cat(ChecksCat));
 
- 
 
-  cl::opt<bool>
-  NoOutput("no-output",
-           cl::desc("Don't generate test files (default=false)."));
-
-  cl::opt<bool>
-  WarnAllExternals("warn-all-externals",
-                   cl::desc("Give initial warning for all externals (default=false)."));
 
   cl::opt<bool>
   OptExitOnError("exit-on-error",
-              cl::desc("Exit KLEE if an error in the tested application has been found (default=false)."));
+                 cl::desc("Exit KLEE if an error in the tested application has been found (default=false)"),
+                 cl::init(false),
+                 cl::cat(TerminationCat));
 
 
   /*** Replaying options ***/
@@ -258,30 +265,45 @@ namespace {
 
 
   cl::list<std::string>
-  SeedOutFile("seed-out");
+  SeedOutFile("seed-file",
+              cl::desc(".ktest file to be used as seed"),
+              cl::cat(SeedingCat));
 
   cl::list<std::string>
-  SeedOutDir("seed-out-dir");
+  SeedOutDir("seed-dir",
+             cl::desc("Directory with .ktest files to be used as seeds"),
+             cl::cat(SeedingCat));
 
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic",
                        cl::desc("Probabilistic rate at which to make concrete reads symbolic, "
 				"i.e. approximately 1 in n concrete reads will be made symbolic (0=off, 1=all).  "
-				"Used for testing."),
-                       cl::init(0));
+				"Used for testing (default=0)"),
+                       cl::init(0),
+                       cl::cat(DebugCat));
 
   cl::opt<unsigned>
   MaxTests("max-tests",
-           cl::desc("Stop execution after generating the given number of tests. Extra tests corresponding to partially explored paths will also be dumped (default=0 (off))."),
-           cl::init(0));
+           cl::desc("Stop execution after generating the given number of tests. Extra tests corresponding to partially explored paths will also be dumped.  Set to 0 to disable (default=0)"),
+           cl::init(0),
+           cl::cat(TerminationCat));
 
   cl::opt<bool>
   Watchdog("watchdog",
            cl::desc("Use a watchdog process to enforce --max-time."),
-           cl::init(0));
+           cl::init(0),
+           cl::cat(TerminationCat));
+
+  cl::opt<bool>
+  Libcxx("libcxx",
+           cl::desc("Link the llvm libc++ library into the bitcode (default=false)"),
+           cl::init(false),
+           cl::cat(LinkCat));
 }
 
+namespace klee {
 extern cl::opt<std::string> MaxTime;
+}
 
 /***/
 
@@ -475,7 +497,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
                                          const char *errorSuffix) {
   std::string ktest_output_name = "";
 
-  if (!NoOutput) {
+  if (!WriteNone) {
     std::vector< std::pair<std::string, std::vector<unsigned char> > > out;
     bool success = m_interpreter->getSymbolicSolution(state, out);
 
@@ -558,7 +580,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
         *f << constraints;
     }
 
-    if(WriteSMT2s) {
+    if (WriteSMT2s) {
       std::string constraints;
         m_interpreter->getConstraintLog(state, constraints, Interpreter::SMTLIB2);
         auto f = openTestFile("smt2", id);
@@ -600,7 +622,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
       if (f)
         *f << "Time to generate test case: " << elapsed_time << '\n';
     }
-  }
+  } // if (!WriteNone)
 
   if (errorMessage && OptExitOnError) {
     m_interpreter->prepareForEarlyExit();
@@ -826,6 +848,7 @@ static const char *modelledExternals[] = {
   "__ubsan_handle_mul_overflow",
   "__ubsan_handle_divrem_overflow",
 };
+
 // Symbols we aren't going to warn about
 static const char *dontCareExternals[] = {
 #if 0
@@ -874,17 +897,19 @@ static const char *dontCareExternals[] = {
   "__isnan",
   "__signbit",
 };
+
 // Extra symbols we aren't going to warn about with klee-libc
 static const char *dontCareKlee[] = {
   "__ctype_b_loc",
   "__ctype_get_mb_cur_max",
 
-  // io system calls
+  // I/O system calls
   "open",
   "write",
   "read",
   "close",
 };
+
 // Extra symbols we aren't going to warn about with uclibc
 static const char *dontCareUclibc[] = {
   "__dso_handle",
@@ -894,6 +919,7 @@ static const char *dontCareUclibc[] = {
   "printf",
   "vprintf"
 };
+
 // Symbols we consider unsafe
 static const char *unsafeExternals[] = {
   "fork", // oh lord
@@ -902,6 +928,7 @@ static const char *unsafeExternals[] = {
   "raise", // yeah
   "kill", // mmmhmmm
 };
+
 #define NELEMS(array) (sizeof(array)/sizeof(array[0]))
 void externalsAndGlobalsCheck(const llvm::Module *m) {
   std::map<std::string, bool> externals;
@@ -945,6 +972,7 @@ void externalsAndGlobalsCheck(const llvm::Module *m) {
       }
     }
   }
+
   for (Module::const_global_iterator
          it = m->global_begin(), ie = m->global_end();
        it != ie; ++it)
@@ -1150,6 +1178,8 @@ linkWithUclibc(StringRef libDir,
 int main(int argc, char **argv, char **envp) {
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
 
+  KCommandLine::HideOptions(llvm::cl::GeneralCategory);
+
   llvm::InitializeNativeTarget();
 
   parseArguments(argc, argv);
@@ -1279,6 +1309,20 @@ int main(int argc, char **argv, char **envp) {
                         errorMsg))
       klee_error("error loading PThread support '%s': %s", Path.c_str(),
                  errorMsg.c_str());
+  }
+
+  if (Libcxx) {
+#ifndef SUPPORT_KLEE_LIBCXX
+    klee_error("Klee was not compiled with libcxx support");
+#else
+    SmallString<128> LibcxxBC(Opts.LibraryDir);
+    llvm::sys::path::append(LibcxxBC, KLEE_LIBCXX_BC_NAME);
+    if (!klee::loadFile(LibcxxBC.c_str(), mainModule->getContext(), loadedModules,
+                        errorMsg))
+      klee_error("error loading free standing support '%s': %s",
+                 LibcxxBC.c_str(), errorMsg.c_str());
+    klee_message("NOTE: Using libcxx : %s", LibcxxBC.c_str());
+#endif
   }
 
   switch (Libc) {

@@ -8,11 +8,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "Executor.h"
+
+#include "../Expr/ArrayExprOptimizer.h"
 #include "Context.h"
 #include "CoreStats.h"
+#include "ExecutorTimerInfo.h"
 #include "ExternalDispatcher.h"
 #include "ImpliedValue.h"
 #include "Memory.h"
+#include "MemoryAccessTracker.h"
 #include "MemoryManager.h"
 #include "MemoryState.h"
 #include "PTree.h"
@@ -22,21 +26,11 @@
 #include "StatsTracker.h"
 #include "TimingSolver.h"
 #include "UserSearcher.h"
-#include "ExecutorTimerInfo.h"
-#include "MemoryAccessTracker.h"
 
+#include "klee/Common.h"
+#include "klee/Config/Version.h"
 #include "klee/ExecutionState.h"
 #include "klee/Expr.h"
-#include "klee/Interpreter.h"
-#include "klee/TimerStatIncrementer.h"
-#include "klee/SolverCmdLine.h"
-#include "klee/Common.h"
-#include "klee/util/Assignment.h"
-#include "klee/util/ExprPPrinter.h"
-#include "klee/util/ExprSMTLIBPrinter.h"
-#include "klee/util/ExprUtil.h"
-#include "klee/util/GetElementPtrTypeIterator.h"
-#include "klee/Config/Version.h"
 #include "klee/Internal/ADT/KTest.h"
 #include "klee/Internal/ADT/RNG.h"
 #include "klee/Internal/Module/Cell.h"
@@ -47,11 +41,19 @@
 #include "klee/Internal/Support/FileHandling.h"
 #include "klee/Internal/Support/FloatEvaluation.h"
 #include "klee/Internal/Support/ModuleUtil.h"
-#include "klee/Internal/System/Time.h"
 #include "klee/Internal/System/MemoryUsage.h"
+#include "klee/Internal/System/Time.h"
+#include "klee/Interpreter.h"
+#include "klee/OptionCategories.h"
+#include "klee/SolverCmdLine.h"
 #include "klee/SolverStats.h"
+#include "klee/TimerStatIncrementer.h"
+#include "klee/util/Assignment.h"
+#include "klee/util/ExprPPrinter.h"
+#include "klee/util/ExprSMTLIBPrinter.h"
+#include "klee/util/ExprUtil.h"
+#include "klee/util/GetElementPtrTypeIterator.h"
 
-#include "../Expr/ArrayExprOptimizer.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/Attributes.h"
@@ -63,7 +65,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/TypeBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FileSystem.h"
@@ -77,45 +78,44 @@
 #include "llvm/IR/CallSite.h"
 #endif
 
-#include <cassert>
 #include <algorithm>
+#include <cassert>
+#include <cerrno>
+#include <cxxabi.h>
+#include <fstream>
 #include <iomanip>
 #include <iosfwd>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <string>
 #include <memory>
-
+#include <sstream>
+#include <string>
 #include <sys/mman.h>
-
-#include <errno.h>
-#include <cxxabi.h>
+#include <vector>
 
 
 using namespace llvm;
 using namespace klee;
 
+namespace klee {
+cl::OptionCategory DebugCat("Debugging options",
+                            "These are debugging options.");
+
+cl::OptionCategory ExtCallsCat("External call policy options",
+                               "These options impact external calls.");
+
+cl::OptionCategory SeedingCat(
+    "Seeding options",
+    "These options are related to the use of seeds to start exploration.");
+
+cl::OptionCategory
+    TerminationCat("State and overall termination options",
+                   "These options control termination of the overall KLEE "
+                   "execution and of individual states.");
+
+cl::OptionCategory TestGenCat("Test generation options",
+                              "These options impact test generation.");
+} // namespace klee
 
 namespace {
-
-  /*** Test generation options ***/
-
-  cl::OptionCategory TestGenCat("Test generation options",
-                                "These options impact test generation.");
-
-  cl::opt<bool>
-  DumpStatesOnHalt("dump-states-on-halt",
-                   cl::init(true),
-		   cl::desc("Dump test cases for all active states on exit (default=on)"),
-                   cl::cat(TestGenCat));
-
-  cl::opt<bool>
-  OnlyOutputStatesCoveringNew("only-output-states-covering-new",
-                              cl::init(false),
-			      cl::desc("Only output test cases covering new code (default=off)."),
-                              cl::cat(TestGenCat));
-
   cl::opt<bool> LogStateJSON(
       "log-state-json-files",
       cl::desc("Creates two files (states.json, states_fork.json) in output directory that record relevant information about states (default=false)"),
@@ -128,267 +128,298 @@ namespace {
       cl::init(false));
 #endif
 
-  cl::opt<bool>
-  EmitAllErrors("emit-all-errors",
-                cl::init(false),
-                cl::desc("Generate tests cases for all errors "
-                         "(default=off, i.e. one per (error,instruction) pair)"),
-                cl::cat(TestGenCat));
+/*** Test generation options ***/
+
+cl::opt<bool> DumpStatesOnHalt(
+    "dump-states-on-halt",
+    cl::init(true),
+    cl::desc("Dump test cases for all active states on exit (default=true)"),
+    cl::cat(TestGenCat));
+
+cl::opt<bool> OnlyOutputStatesCoveringNew(
+    "only-output-states-covering-new",
+    cl::init(false),
+    cl::desc("Only output test cases covering new code (default=false)"),
+    cl::cat(TestGenCat));
+
+cl::opt<bool> EmitAllErrors(
+    "emit-all-errors", cl::init(false),
+    cl::desc("Generate tests cases for all errors "
+             "(default=false, i.e. one per (error,instruction) pair)"),
+    cl::cat(TestGenCat));
 
 
+/* Constraint solving options */
+
+cl::opt<unsigned> MaxSymArraySize(
+    "max-sym-array-size",
+    cl::desc(
+        "If a symbolic array exceeds this size (in bytes), symbolic addresses "
+        "into this array are concretized.  Set to 0 to disable (default=0)"),
+    cl::init(0),
+    cl::cat(SolvingCat));
+
+cl::opt<bool>
+    SimplifySymIndices("simplify-sym-indices",
+                       cl::init(false),
+                       cl::desc("Simplify symbolic accesses using equalities "
+                                "from other constraints (default=false)"),
+                       cl::cat(SolvingCat));
+
+cl::opt<bool>
+    EqualitySubstitution("equality-substitution", cl::init(true),
+                         cl::desc("Simplify equality expressions before "
+                                  "querying the solver (default=true)"),
+                         cl::cat(SolvingCat));
 
 
-  cl::opt<bool>
-  SimplifySymIndices("simplify-sym-indices",
-                     cl::init(false),
-		     cl::desc("Simplify symbolic accesses using equalities from other constraints (default=off)"));
+/*** External call policy options ***/
 
-  cl::opt<bool>
-  EqualitySubstitution("equality-substitution",
-		       cl::init(true),
-		       cl::desc("Simplify equality expressions before querying the solver (default=on)."));
+enum class ExternalCallPolicy {
+  None,     // No external calls allowed
+  Concrete, // Only external calls with concrete arguments allowed
+  All,      // All external calls allowed
+};
 
-  cl::opt<unsigned>
-  MaxSymArraySize("max-sym-array-size",
-                  cl::init(0));
+cl::opt<ExternalCallPolicy> ExternalCalls(
+    "external-calls",
+    cl::desc("Specify the external call policy"),
+    cl::values(
+        clEnumValN(
+            ExternalCallPolicy::None, "none",
+            "No external function calls are allowed.  Note that KLEE always "
+            "allows some external calls with concrete arguments to go through "
+            "(in particular printf and puts), regardless of this option."),
+        clEnumValN(ExternalCallPolicy::Concrete, "concrete",
+                   "Only external function calls with concrete arguments are "
+                   "allowed (default)"),
+        clEnumValN(ExternalCallPolicy::All, "all",
+                   "All external function calls are allowed.  This concretizes "
+                   "any symbolic arguments in calls to external functions.")
+            KLEE_LLVM_CL_VAL_END),
+    cl::init(ExternalCallPolicy::Concrete),
+    cl::cat(ExtCallsCat));
 
+cl::opt<bool> SuppressExternalWarnings(
+    "suppress-external-warnings",
+    cl::init(false),
+    cl::desc("Supress warnings about calling external functions."),
+    cl::cat(ExtCallsCat));
 
-  
-  /*** External call policy options ***/
-
-  cl::OptionCategory ExtCallsCat("External call policy options",
-                                 "These options impact external calls.");
-  
-  enum class ExternalCallPolicy {
-    None,     // No external calls allowed
-    Concrete, // Only external calls with concrete arguments allowed
-    All,      // All external calls allowed
-  };
-
-  cl::opt<ExternalCallPolicy>
-  ExternalCalls("external-calls",
-                cl::desc("Specify the external call policy"),
-                cl::values(clEnumValN(ExternalCallPolicy::None, "none", "No external function calls are allowed.  Note that KLEE always allows some external calls with concrete arguments to go through (in particular printf and puts), regardless of this option."),
-                           clEnumValN(ExternalCallPolicy::Concrete, "concrete", "Only external function calls with concrete arguments are allowed (default)"),
-                           clEnumValN(ExternalCallPolicy::All, "all", "All external function calls are allowed.  This concretizes any symbolic arguments in calls to external functions.")
-                           KLEE_LLVM_CL_VAL_END),
-                cl::init(ExternalCallPolicy::Concrete),
-                cl::cat(ExtCallsCat));
-
-  cl::opt<bool>
-  SuppressExternalWarnings("suppress-external-warnings",
-			   cl::init(false),
-			   cl::desc("Supress warnings about calling external functions."),
-                           cl::cat(ExtCallsCat));
-
-  cl::opt<bool>
-  AllExternalWarnings("all-external-warnings",
-		      cl::init(false),
-		      cl::desc("Issue a warning everytime an external call is made," 
-			       "as opposed to once per function (default=off)"),
-                      cl::cat(ExtCallsCat));
+cl::opt<bool> AllExternalWarnings(
+    "all-external-warnings",
+    cl::init(false),
+    cl::desc("Issue a warning everytime an external call is made, "
+             "as opposed to once per function (default=false)"),
+    cl::cat(ExtCallsCat));
 
 
-  /*** Seeding options ***/
+/*** Seeding options ***/
 
-  cl::OptionCategory SeedingCat("Seeding options",
-                                "These options are related to the use of seeds to start exploration.");
+cl::opt<bool> AlwaysOutputSeeds(
+    "always-output-seeds",
+    cl::init(true),
+    cl::desc(
+        "Dump test cases even if they are driven by seeds only (default=true)"),
+    cl::cat(SeedingCat));
 
-  cl::opt<bool>
-  AlwaysOutputSeeds("always-output-seeds",
-		    cl::init(true),
-                    cl::desc("Dump test cases even if they are driven by seeds only (default=true)"),
-                    cl::cat(SeedingCat));
+cl::opt<bool> OnlyReplaySeeds(
+    "only-replay-seeds",
+    cl::init(false),
+    cl::desc("Discard states that do not have a seed (default=false)."),
+    cl::cat(SeedingCat));
 
-  cl::opt<bool>
-  OnlyReplaySeeds("only-replay-seeds",
-		  cl::init(false),
-                  cl::desc("Discard states that do not have a seed (default=off)."),
-                  cl::cat(SeedingCat));
+cl::opt<bool> OnlySeed("only-seed",
+                       cl::init(false),
+                       cl::desc("Stop execution after seeding is done without "
+                                "doing regular search (default=false)."),
+                       cl::cat(SeedingCat));
 
-  cl::opt<bool>
-  OnlySeed("only-seed",
-	   cl::init(false),
-           cl::desc("Stop execution after seeding is done without doing regular search (default=off)."),
-           cl::cat(SeedingCat));
- 
-  cl::opt<bool>
-  AllowSeedExtension("allow-seed-extension",
-		     cl::init(false),
-                     cl::desc("Allow extra (unbound) values to become symbolic during seeding (default=false)."),
-                     cl::cat(SeedingCat));
- 
-  cl::opt<bool>
-  ZeroSeedExtension("zero-seed-extension",
-		    cl::init(false),
-		    cl::desc("Use zero-filled objects if matching seed not found (default=off)"),
-                    cl::cat(SeedingCat));
- 
-  cl::opt<bool>
-  AllowSeedTruncation("allow-seed-truncation",
-		      cl::init(false),
-                      cl::desc("Allow smaller buffers than in seeds (default=off)."),
-                      cl::cat(SeedingCat));
- 
-  cl::opt<bool>
-  NamedSeedMatching("named-seed-matching",
-		    cl::init(false),
-                    cl::desc("Use names to match symbolic objects to inputs (default=off)."),
-                    cl::cat(SeedingCat));
+cl::opt<bool>
+    AllowSeedExtension("allow-seed-extension",
+                       cl::init(false),
+                       cl::desc("Allow extra (unbound) values to become "
+                                "symbolic during seeding (default=false)."),
+                       cl::cat(SeedingCat));
 
-  cl::opt<std::string>
-  SeedTime("seed-time",
-           cl::desc("Amount of time to dedicate to seeds, before normal search (default=0s (off))"),
-           cl::cat(SeedingCat));
+cl::opt<bool> ZeroSeedExtension(
+    "zero-seed-extension",
+    cl::init(false),
+    cl::desc(
+        "Use zero-filled objects if matching seed not found (default=false)"),
+    cl::cat(SeedingCat));
 
+cl::opt<bool> AllowSeedTruncation(
+    "allow-seed-truncation",
+    cl::init(false),
+    cl::desc("Allow smaller buffers than in seeds (default=false)."),
+    cl::cat(SeedingCat));
 
-  /*** Termination criteria options ***/
+cl::opt<bool> NamedSeedMatching(
+    "named-seed-matching",
+    cl::init(false),
+    cl::desc("Use names to match symbolic objects to inputs (default=false)."),
+    cl::cat(SeedingCat));
 
-  cl::OptionCategory TerminationCat("State and overall termination options",
-                                    "These options control termination of the overall KLEE execution and of individual states.");
-
-  cl::list<Executor::TerminateReason>
-  ExitOnErrorType("exit-on-error-type",
-		  cl::desc("Stop execution after reaching a specified condition (default=off)"),
-		  cl::values(
-		    clEnumValN(Executor::Abort, "Abort", "The program crashed"),
-		    clEnumValN(Executor::Assert, "Assert", "An assertion was hit"),
-		    clEnumValN(Executor::BadVectorAccess, "BadVectorAccess", "Vector accessed out of bounds"),
-		    clEnumValN(Executor::Exec, "Exec", "Trying to execute an unexpected instruction"),
-		    clEnumValN(Executor::External, "External", "External objects referenced"),
-		    clEnumValN(Executor::Free, "Free", "Freeing invalid memory"),
-		    clEnumValN(Executor::Model, "Model", "Memory model limit hit"),
-		    clEnumValN(Executor::Overflow, "Overflow", "An overflow occurred"),
-		    clEnumValN(Executor::Ptr, "Ptr", "Pointer error"),
-		    clEnumValN(Executor::ReadOnly, "ReadOnly", "Write to read-only memory"),
-		    clEnumValN(Executor::ReportError, "ReportError", "klee_report_error called"),
-		    clEnumValN(Executor::User, "User", "Wrong klee_* functions invocation"),
-		    clEnumValN(Executor::Unhandled, "Unhandled", "Unhandled instruction hit")
-		    KLEE_LLVM_CL_VAL_END),
-		  cl::ZeroOrMore,
-                  cl::cat(TerminationCat));
-
-  cl::opt<unsigned long long>
-  MaxInstructions("max-instructions",
-                  cl::desc("Stop execution after this many instructions (default=0 (off))"),
-                  cl::init(0),
-                  cl::cat(TerminationCat));
-  
-  cl::opt<unsigned>
-  MaxForks("max-forks",
-           cl::desc("Only fork this many times (default=-1 (off))"),
-           cl::init(~0u),
-           cl::cat(TerminationCat));
-  
-  cl::opt<unsigned>
-  MaxDepth("max-depth",
-           cl::desc("Only allow this many symbolic branches (default=0 (off))"),
-           cl::init(0),
-           cl::cat(TerminationCat));
-  
-  cl::opt<unsigned>
-  MaxMemory("max-memory",
-            cl::desc("Refuse to fork when above this amount of memory (in MB, default=2000)"),
-            cl::init(2000),
-            cl::cat(TerminationCat));
-
-  cl::opt<bool>
-  MaxMemoryInhibit("max-memory-inhibit",
-                   cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
-                   cl::init(true),
-                   cl::cat(TerminationCat));
-
-  cl::opt<unsigned> RuntimeMaxStackFrames("max-stack-frames",
-                                          cl::desc("Terminate a state after this many stack frames (default=8192).  Disable check with 0."),
-                                          cl::init(8192),
-                                          cl::cat(TerminationCat));
-
-  cl::opt<std::string>
-  MaxInstructionTime("max-instruction-time",
-                     cl::desc("Allow a single instruction to take only this much time (default=0s (off)). Enables --use-forked-solver"),
-                     cl::cat(TerminationCat));
-
-  cl::opt<double>
-  MaxStaticForkPct("max-static-fork-pct",
-		   cl::init(1.),
-		   cl::desc("Maximum percentage spent by an instruction forking out of the forking of all instructions (default=1.0 (always))"),
-                   cl::cat(TerminationCat));
-
-  cl::opt<double>
-  MaxStaticSolvePct("max-static-solve-pct",
-		    cl::init(1.),
-		    cl::desc("Maximum percentage of solving time that can be spent by a single instruction over total solving time for all instructions (default=1.0 (always))"),
-                    cl::cat(TerminationCat));
-
-  cl::opt<double>
-  MaxStaticCPForkPct("max-static-cpfork-pct", 
-		     cl::init(1.),
-		     cl::desc("Maximum percentage spent by an instruction of a call path forking out of the forking of all instructions in the call path (default=1.0 (always))"),
-                     cl::cat(TerminationCat));
-
-  cl::opt<double>
-  MaxStaticCPSolvePct("max-static-cpsolve-pct",
-		      cl::init(1.),
-		      cl::desc("Maximum percentage of solving time that can be spent by a single instruction of a call path over total solving time for all instructions (default=1.0 (always))"),
-                      cl::cat(TerminationCat));
+cl::opt<std::string>
+    SeedTime("seed-time",
+             cl::desc("Amount of time to dedicate to seeds, before normal "
+                      "search (default=0s (off))"),
+             cl::cat(SeedingCat));
 
 
+/*** Termination criteria options ***/
 
-  /*** Debugging options ***/
+cl::list<Executor::TerminateReason> ExitOnErrorType(
+    "exit-on-error-type",
+    cl::desc(
+        "Stop execution after reaching a specified condition (default=false)"),
+    cl::values(
+        clEnumValN(Executor::Abort, "Abort", "The program crashed"),
+        clEnumValN(Executor::Assert, "Assert", "An assertion was hit"),
+        clEnumValN(Executor::BadVectorAccess, "BadVectorAccess",
+                   "Vector accessed out of bounds"),
+        clEnumValN(Executor::Exec, "Exec",
+                   "Trying to execute an unexpected instruction"),
+        clEnumValN(Executor::External, "External",
+                   "External objects referenced"),
+        clEnumValN(Executor::Free, "Free", "Freeing invalid memory"),
+        clEnumValN(Executor::Model, "Model", "Memory model limit hit"),
+        clEnumValN(Executor::Overflow, "Overflow", "An overflow occurred"),
+        clEnumValN(Executor::Ptr, "Ptr", "Pointer error"),
+        clEnumValN(Executor::ReadOnly, "ReadOnly", "Write to read-only memory"),
+        clEnumValN(Executor::ReportError, "ReportError",
+                   "klee_report_error called"),
+        clEnumValN(Executor::User, "User", "Wrong klee_* functions invocation"),
+        clEnumValN(Executor::Unhandled, "Unhandled",
+                   "Unhandled instruction hit") KLEE_LLVM_CL_VAL_END),
+    cl::ZeroOrMore,
+    cl::cat(TerminationCat));
 
-  cl::OptionCategory DebugCat("Debugging options",
-                              "These are debugging options.");
+cl::opt<unsigned long long> MaxInstructions(
+    "max-instructions",
+    cl::desc("Stop execution after this many instructions.  Set to 0 to disable (default=0)"),
+    cl::init(0),
+    cl::cat(TerminationCat));
 
-  /// The different query logging solvers that can switched on/off
-  enum PrintDebugInstructionsType {
-    STDERR_ALL, ///
-    STDERR_SRC,
-    STDERR_COMPACT,
-    FILE_ALL,    ///
-    FILE_SRC,    ///
-    FILE_COMPACT ///
-  };
+cl::opt<unsigned>
+    MaxForks("max-forks",
+             cl::desc("Only fork this many times.  Set to -1 to disable (default=-1)"),
+             cl::init(~0u),
+             cl::cat(TerminationCat));
 
-  llvm::cl::bits<PrintDebugInstructionsType> DebugPrintInstructions(
-      "debug-print-instructions",
-      llvm::cl::desc("Log instructions during execution."),
-      llvm::cl::values(
-          clEnumValN(STDERR_ALL, "all:stderr", "Log all instructions to stderr "
-                                               "in format [src, inst_id, "
-                                               "llvm_inst]"),
-          clEnumValN(STDERR_SRC, "src:stderr",
-                     "Log all instructions to stderr in format [src, inst_id]"),
-          clEnumValN(STDERR_COMPACT, "compact:stderr",
-                     "Log all instructions to stderr in format [inst_id]"),
-          clEnumValN(FILE_ALL, "all:file", "Log all instructions to file "
-                                           "instructions.txt in format [src, "
-                                           "inst_id, llvm_inst]"),
-          clEnumValN(FILE_SRC, "src:file", "Log all instructions to file "
-                                           "instructions.txt in format [src, "
-                                           "inst_id]"),
-          clEnumValN(FILE_COMPACT, "compact:file",
-                     "Log all instructions to file instructions.txt in format "
-                     "[inst_id]")
-          KLEE_LLVM_CL_VAL_END),
-      llvm::cl::CommaSeparated,
-      cl::cat(DebugCat));
+cl::opt<unsigned> MaxDepth(
+    "max-depth",
+    cl::desc("Only allow this many symbolic branches.  Set to 0 to disable (default=0)"),
+    cl::init(0),
+    cl::cat(TerminationCat));
+
+cl::opt<unsigned> MaxMemory("max-memory",
+                            cl::desc("Refuse to fork when above this amount of "
+                                     "memory (in MB) (default=2000)"),
+                            cl::init(2000),
+                            cl::cat(TerminationCat));
+
+cl::opt<bool> MaxMemoryInhibit(
+    "max-memory-inhibit",
+    cl::desc(
+        "Inhibit forking at memory cap (vs. random terminate) (default=true)"),
+    cl::init(true),
+    cl::cat(TerminationCat));
+
+cl::opt<unsigned> RuntimeMaxStackFrames(
+    "max-stack-frames",
+    cl::desc("Terminate a state after this many stack frames.  Set to 0 to "
+             "disable (default=8192)"),
+    cl::init(8192),
+    cl::cat(TerminationCat));
+
+cl::opt<std::string> MaxInstructionTime(
+    "max-instruction-time",
+    cl::desc("Allow a single instruction to take only this much time.  Enables "
+             "--use-forked-solver.  Set to 0s to disable (default=0s)"),
+    cl::cat(TerminationCat));
+
+cl::opt<double> MaxStaticForkPct(
+    "max-static-fork-pct", cl::init(1.),
+    cl::desc("Maximum percentage spent by an instruction forking out of the "
+             "forking of all instructions (default=1.0 (always))"),
+    cl::cat(TerminationCat));
+
+cl::opt<double> MaxStaticSolvePct(
+    "max-static-solve-pct", cl::init(1.),
+    cl::desc("Maximum percentage of solving time that can be spent by a single "
+             "instruction over total solving time for all instructions "
+             "(default=1.0 (always))"),
+    cl::cat(TerminationCat));
+
+cl::opt<double> MaxStaticCPForkPct(
+    "max-static-cpfork-pct", cl::init(1.),
+    cl::desc("Maximum percentage spent by an instruction of a call path "
+             "forking out of the forking of all instructions in the call path "
+             "(default=1.0 (always))"),
+    cl::cat(TerminationCat));
+
+cl::opt<double> MaxStaticCPSolvePct(
+    "max-static-cpsolve-pct", cl::init(1.),
+    cl::desc("Maximum percentage of solving time that can be spent by a single "
+             "instruction of a call path over total solving time for all "
+             "instructions (default=1.0 (always))"),
+    cl::cat(TerminationCat));
+
+
+/*** Debugging options ***/
+
+/// The different query logging solvers that can switched on/off
+enum PrintDebugInstructionsType {
+  STDERR_ALL, ///
+  STDERR_SRC,
+  STDERR_COMPACT,
+  FILE_ALL,    ///
+  FILE_SRC,    ///
+  FILE_COMPACT ///
+};
+
+llvm::cl::bits<PrintDebugInstructionsType> DebugPrintInstructions(
+    "debug-print-instructions",
+    llvm::cl::desc("Log instructions during execution."),
+    llvm::cl::values(
+        clEnumValN(STDERR_ALL, "all:stderr",
+                   "Log all instructions to stderr "
+                   "in format [src, inst_id, "
+                   "llvm_inst]"),
+        clEnumValN(STDERR_SRC, "src:stderr",
+                   "Log all instructions to stderr in format [src, inst_id]"),
+        clEnumValN(STDERR_COMPACT, "compact:stderr",
+                   "Log all instructions to stderr in format [inst_id]"),
+        clEnumValN(FILE_ALL, "all:file",
+                   "Log all instructions to file "
+                   "instructions.txt in format [src, "
+                   "inst_id, llvm_inst]"),
+        clEnumValN(FILE_SRC, "src:file",
+                   "Log all instructions to file "
+                   "instructions.txt in format [src, "
+                   "inst_id]"),
+        clEnumValN(FILE_COMPACT, "compact:file",
+                   "Log all instructions to file instructions.txt in format "
+                   "[inst_id]") KLEE_LLVM_CL_VAL_END),
+    llvm::cl::CommaSeparated,
+    cl::cat(DebugCat));
 
 #ifdef HAVE_ZLIB_H
-  cl::opt<bool>
-  DebugCompressInstructions("debug-compress-instructions",
-                            cl::init(false),
-                            cl::desc("Compress the logged instructions in gzip format (default=off)."),
-                            cl::cat(DebugCat));
+cl::opt<bool> DebugCompressInstructions(
+    "debug-compress-instructions", cl::init(false),
+    cl::desc(
+        "Compress the logged instructions in gzip format (default=false)."),
+    cl::cat(DebugCat));
 #endif
 
-  cl::opt<bool>
-  DebugCheckForImpliedValues("debug-check-for-implied-values",
-                             cl::init(false),
-                             cl::desc("Debug the implied value optimization"),
-                             cl::cat(DebugCat));
+cl::opt<bool> DebugCheckForImpliedValues(
+    "debug-check-for-implied-values", cl::init(false),
+    cl::desc("Debug the implied value optimization"),
+    cl::cat(DebugCat));
 
-}
-
+} // namespace
 
 namespace klee {
   RNG theRNG;
@@ -573,6 +604,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
   preservedFunctions.push_back("memmove");
 
   kmodule->optimiseAndPrepare(opts, preservedFunctions);
+  kmodule->checkModule();
 
   // 4.) Manifest the module
   kmodule->manifest(interpreterHandler, StatsTracker::useStatistics());
@@ -657,7 +689,11 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     for (unsigned i=0, e=cds->getNumElements(); i != e; ++i)
       initializeGlobalObject(state, os, cds->getElementAsConstant(i),
                              offset + i*elementSize);
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
+  } else if (!isa<UndefValue>(c) && !isa<MetadataAsValue>(c)) {
+#else
   } else if (!isa<UndefValue>(c)) {
+#endif
     unsigned StoreBits = targetData->getTypeStoreSizeInBits(c->getType());
     ref<ConstantExpr> C = evalConstant(c);
 
@@ -870,11 +906,19 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
   
   // link aliases to their definitions (if bound)
-  for (Module::alias_iterator i = m->alias_begin(), ie = m->alias_end(); 
-       i != ie; ++i) {
+  for (auto i = m->alias_begin(), ie = m->alias_end(); i != ie; ++i) {
     // Map the alias to its aliasee's address. This works because we have
-    // addresses for everything, even undefined functions. 
-    globalAddresses.insert(std::make_pair(&*i, evalConstant(i->getAliasee())));
+    // addresses for everything, even undefined functions.
+
+    // Alias may refer to other alias, not necessarily known at this point.
+    // Thus, resolve to real alias directly.
+    const GlobalAlias *alias = &*i;
+    while (const auto *ga = dyn_cast<GlobalAlias>(alias->getAliasee())) {
+      assert(ga != alias && "alias pointing to itself");
+      alias = ga;
+    }
+
+    globalAddresses.insert(std::make_pair(&*i, evalConstant(alias->getAliasee())));
   }
 
   // once all objects are allocated, do the actual initialization
@@ -1021,7 +1065,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
   time::Span timeout = coreSolverTimeout;
   if (isSeeding)
-    timeout *= it->second.size();
+    timeout *= static_cast<unsigned>(it->second.size());
   solver->setTimeout(timeout);
   bool success = solver->evaluate(current, condition, res);
   solver->setTimeout(time::Span());
@@ -1465,14 +1509,11 @@ void Executor::executeCall(ExecutionState &state,
   if (PruneStates) {
     state.memoryState.registerFunctionCall(f, arguments);
   }
-
-  Instruction *i = nullptr;
   Thread &thread = state.currentThread();
-
-  if (ki)
-    i = ki->inst;
-
-  if (ki && f && f->isDeclaration()) {
+  Instruction *i = ki->inst;
+  if (i && isa<DbgInfoIntrinsic>(i))
+    return;
+  if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
@@ -1790,11 +1831,6 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
     } else
       return 0;
   }
-}
-
-/// TODO remove?
-static bool isDebugIntrinsic(const Function *f, KModule *KM) {
-  return false;
 }
 
 static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
@@ -2136,6 +2172,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Invoke:
   case Instruction::Call: {
+    // Ignore debug intrinsic calls
+    if (isa<DbgInfoIntrinsic>(i))
+      break;
     CallSite cs(i);
 
     unsigned numArgs = cs.arg_size();
@@ -2143,7 +2182,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     Function *f = getTargetFunction(fp, state);
 
     // Skip debug intrinsics, we can't evaluate their metadata arguments.
-    if (f && isDebugIntrinsic(f, kmodule.get()))
+    if (isa<DbgInfoIntrinsic>(i))
       break;
 
     if (isa<InlineAsm>(fp)) {
@@ -4138,7 +4177,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   if (success) {
     const MemoryObject *mo = op.first;
 
-    if (MaxSymArraySize && mo->size>=MaxSymArraySize) {
+    if (MaxSymArraySize && mo->size >= MaxSymArraySize) {
       address = toConstant(state, address, "max-sym-array-size");
     }
     

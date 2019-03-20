@@ -1,4 +1,4 @@
-// RUN: %llvmgcc %s -emit-llvm %O0opt -g -c -o %t.bc
+// RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee  --pthread-runtime --output-dir=%t.klee-out %t.bc 2>&1
 // RUN: test -f %t.klee-out/test000001.unsafememoryaccess.err

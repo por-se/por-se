@@ -357,9 +357,11 @@ BatchingSearcher::~BatchingSearcher() {
 }
 
 ExecutionState &BatchingSearcher::selectState() {
-  if (!lastState || 
-      (time::getWallTime() - lastStartTime) > timeBudget ||
-      (stats::instructions - lastStartInstructions) > instructionBudget) {
+  if (!lastState ||
+      (((timeBudget.toSeconds() > 0) &&
+        (time::getWallTime() - lastStartTime) > timeBudget)) ||
+      ((instructionBudget > 0) &&
+       (stats::instructions - lastStartInstructions) > instructionBudget)) {
     if (lastState) {
       time::Span delta = time::getWallTime() - lastStartTime;
       auto t = timeBudget;
@@ -438,7 +440,7 @@ void IterativeDeepeningTimeSearcher::update(
   }
 
   if (baseSearcher->empty()) {
-    time *= 2;
+    time *= 2U;
     klee_message("increased time budget to %f\n", time.toSeconds());
     std::vector<ExecutionState *> ps(pausedStates.begin(), pausedStates.end());
     baseSearcher->update(0, ps, std::vector<ExecutionState *>());

@@ -13,6 +13,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 
 # if LLVM_VERSION_CODE < LLVM_VERSION(3,5)
@@ -33,163 +34,263 @@
 #else
 #include "llvm/DebugInfo.h"
 #endif
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
+#include "llvm/IR/DebugInfoMetadata.h"
+#endif
+
+#if LLVM_VERSION_CODE == LLVM_VERSION(3, 6)
+#include "llvm/Support/Debug.h"
+#endif
 
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/Path.h"
 
+#include <cstdint>
 #include <map>
 #include <string>
 
-using namespace llvm;
 using namespace klee;
 
 class InstructionToLineAnnotator : public llvm::AssemblyAnnotationWriter {
 public:
-  void emitInstructionAnnot(const Instruction *i,
+  void emitInstructionAnnot(const llvm::Instruction *i,
                             llvm::formatted_raw_ostream &os) {
     os << "%%%";
-    os << (uintptr_t) i;
+    os << reinterpret_cast<std::uintptr_t>(i);
+  }
+
+  void emitFunctionAnnot(const llvm::Function *f,
+                         llvm::formatted_raw_ostream &os) {
+    os << "%%%";
+    os << reinterpret_cast<std::uintptr_t>(f);
   }
 };
-        
-static void buildInstructionToLineMap(Module *m,
-                                      std::map<const Instruction*, unsigned> &out) {  
+
+static std::map<uintptr_t, uint64_t>
+buildInstructionToLineMap(const llvm::Module &m) {
+
+  std::map<uintptr_t, uint64_t> mapping;
   InstructionToLineAnnotator a;
   std::string str;
+
   llvm::raw_string_ostream os(str);
-  m->print(os, &a);
+  m.print(os, &a);
   os.flush();
+
   const char *s;
 
   unsigned line = 1;
   for (s=str.c_str(); *s; s++) {
-    if (*s=='\n') {
-      line++;
-      if (s[1]=='%' && s[2]=='%' && s[3]=='%') {
-        s += 4;
-        char *end;
-        unsigned long long value = strtoull(s, &end, 10);
-        if (end!=s) {
-          out.insert(std::make_pair((const Instruction*) value, line));
-        }
-        s = end;
-      }
+    if (*s != '\n')
+      continue;
+
+    line++;
+    if (s[1] != '%' || s[2] != '%' || s[3] != '%')
+      continue;
+
+    s += 4;
+    char *end;
+    uint64_t value = strtoull(s, &end, 10);
+    if (end != s) {
+      mapping.insert(std::make_pair(value, line));
     }
+    s = end;
   }
+
+  return mapping;
 }
 
-static std::string getDSPIPath(const DILocation &Loc) {
-  std::string dir = Loc.getDirectory();
-  std::string file = Loc.getFilename();
-  if (dir.empty() || file[0] == '/') {
-    return file;
-  } else if (*dir.rbegin() == '/') {
-    return dir + file;
-  } else {
-    return dir + "/" + file;
-  }
+static std::string getFullPath(llvm::StringRef Directory,
+                               llvm::StringRef FileName) {
+  llvm::SmallString<128> file_pathname(Directory);
+  llvm::sys::path::append(file_pathname, FileName);
+
+  return file_pathname.str();
 }
 
-bool InstructionInfoTable::getInstructionDebugInfo(const llvm::Instruction *I, 
-                                                   const std::string *&File,
-                                                   unsigned &Line) {
-  if (MDNode *N = I->getMetadata("dbg")) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
-    DILocation *Loc = cast<DILocation>(N);
-    File = internString(getDSPIPath(*Loc));
-    Line = Loc->getLine();
-#else
-    DILocation Loc(N);
-    File = internString(getDSPIPath(Loc));
-    Line = Loc.getLineNumber();
+class DebugInfoExtractor {
+  std::vector<std::unique_ptr<std::string>> &internedStrings;
+  std::map<uintptr_t, uint64_t> lineTable;
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 8)
+  llvm::DebugInfoFinder DIF;
 #endif
-    return true;
+
+  const llvm::Module &module;
+
+public:
+  DebugInfoExtractor(
+      std::vector<std::unique_ptr<std::string>> &_internedStrings,
+      const llvm::Module &_module)
+      : internedStrings(_internedStrings), module(_module) {
+#if LLVM_VERSION_CODE < LLVM_VERSION(3, 8)
+    DIF.processModule(module);
+#endif
+    lineTable = buildInstructionToLineMap(module);
   }
 
-  return false;
-}
+  std::string &getInternedString(const std::string &s) {
+    auto found = std::find_if(internedStrings.begin(), internedStrings.end(),
+                              [&s](const std::unique_ptr<std::string> &item) {
+                                return *item.get() == s;
+                              });
+    if (found != internedStrings.end())
+      return *found->get();
 
-InstructionInfoTable::InstructionInfoTable(Module *m) 
-  : dummyString(""), dummyInfo(0, dummyString, 0, 0) {
-  unsigned id = 0;
-  std::map<const Instruction*, unsigned> lineTable;
-  buildInstructionToLineMap(m, lineTable);
+    auto newItem = std::unique_ptr<std::string>(new std::string(s));
+    auto result = newItem.get();
 
-  for (Module::iterator fnIt = m->begin(), fn_ie = m->end(); 
-       fnIt != fn_ie; ++fnIt) {
-    Function *fn = &*fnIt;
+    internedStrings.emplace_back(std::move(newItem));
+    return *result;
+  }
 
-    // We want to ensure that as all instructions have source information, if
-    // available. Clang sometimes will not write out debug information on the
-    // initial instructions in a function (correspond to the formal parameters),
-    // so we first search forward to find the first instruction with debug info,
-    // if any.
-    const std::string *initialFile = &dummyString;
-    unsigned initialLine = 0;
-    for (inst_iterator it = inst_begin(fn), ie = inst_end(fn); it != ie; ++it) {
-      if (getInstructionDebugInfo(&*it, initialFile, initialLine))
-        break;
+  std::unique_ptr<FunctionInfo> getFunctionInfo(const llvm::Function &Func) {
+    auto asmLine = lineTable.at(reinterpret_cast<std::uintptr_t>(&Func));
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
+    auto dsub = Func.getSubprogram();
+#else
+    auto dsub = llvm::getDISubprogram(&Func);
+#endif
+    if (dsub != nullptr) {
+      auto path = getFullPath(dsub->getDirectory(), dsub->getFilename());
+      return std::unique_ptr<FunctionInfo>(new FunctionInfo(
+          0, getInternedString(path), dsub->getLine(), asmLine));
     }
 
-    const std::string *file = initialFile;
-    unsigned line = initialLine;
-    for (inst_iterator it = inst_begin(fn), ie = inst_end(fn); it != ie;
-        ++it) {
-      Instruction *instr = &*it;
-      unsigned assemblyLine = lineTable[instr];
+#elif LLVM_VERSION_CODE == LLVM_VERSION(3, 7)
+    for (const auto SP : DIF.subprograms()) {
+      auto &SubProgram = *SP;
+      if (SubProgram.getFunction() != &Func)
+        continue;
+      auto path =
+          getFullPath(SubProgram.getDirectory(), SubProgram.getFilename());
+      return std::unique_ptr<FunctionInfo>(new FunctionInfo(
+          0, getInternedString(path), SubProgram.getLine(), asmLine));
+    }
+#endif
 
-      // Update our source level debug information.
-      getInstructionDebugInfo(instr, file, line);
+#if LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
+    // Workaround missing debug information for older LLVM versions
+    // Search for any instructions inside this function with debug information
+    // and assume it's part of this function in the source code as well.
+    for (auto it = llvm::inst_begin(&Func), ie = llvm::inst_end(&Func);
+         it != ie; ++it) {
+      auto iInfo = getInstructionInfo(*it, nullptr);
+      if (iInfo->file.empty())
+        continue;
+      // Found an instruction
+      return std::unique_ptr<FunctionInfo>(new FunctionInfo(
+          0, getInternedString(iInfo->file), iInfo->line, asmLine));
+    }
 
-      infos.insert(std::make_pair(instr,
-                                  InstructionInfo(id++, *file, line,
-                                                  assemblyLine)));
+#endif
+    // Fallback: Mark as unknown
+    return std::unique_ptr<FunctionInfo>(
+        new FunctionInfo(0, getInternedString(""), 0, asmLine));
+  }
+
+  std::unique_ptr<InstructionInfo>
+  getInstructionInfo(const llvm::Instruction &Inst, const FunctionInfo *f) {
+    auto asmLine = lineTable.at(reinterpret_cast<std::uintptr_t>(&Inst));
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
+    // Retrieve debug information associated with instruction
+    auto dl = Inst.getDebugLoc();
+
+    // Check if a valid debug location is assigned to the instruction.
+    if (dl.get() != nullptr) {
+      auto full_path = dl.get()->getFilename();
+      auto line = dl.getLine();
+      auto column = dl.getCol();
+
+      // Still, if the line is unknown, take the context of the instruction to
+      // narrow it down
+      if (line == 0) {
+        if (auto LexicalBlock =
+                llvm::dyn_cast<llvm::DILexicalBlock>(dl.getScope())) {
+          line = LexicalBlock->getLine();
+          column = LexicalBlock->getColumn();
+        }
+      }
+      return std::unique_ptr<InstructionInfo>(new InstructionInfo(
+          0, getInternedString(full_path), line, column, asmLine));
+    }
+#elif LLVM_VERSION_CODE == LLVM_VERSION(3, 7)
+    // Retrieve debug information
+    llvm::DebugLoc Loc(Inst.getDebugLoc());
+    // Check if valid
+    if (Loc.get() != nullptr) {
+      auto subProg = getDISubprogram(Loc.getScope());
+      auto full_path =
+          getFullPath(subProg->getDirectory(), subProg->getFilename());
+      return std::unique_ptr<InstructionInfo>(
+          new InstructionInfo(0, getInternedString(full_path), Loc.getLine(),
+                              Loc.getCol(), asmLine));
+    }
+#elif LLVM_VERSION_CODE <= LLVM_VERSION(3, 6)
+    if (llvm::MDNode *N = Inst.getMetadata("dbg")) {
+      llvm::DILocation Loc(N);
+      auto path = getFullPath(Loc.getDirectory(), Loc.getFilename());
+      auto Line = Loc.getLineNumber();
+      return std::unique_ptr<InstructionInfo>(
+          new InstructionInfo(0, getInternedString(path), Line, 0, asmLine));
+    }
+#endif
+
+    if (f != nullptr)
+      // If nothing found, use the surrounding function
+      return std::unique_ptr<InstructionInfo>(
+          new InstructionInfo(0, f->file, f->line, 0, asmLine));
+    // If nothing found, use the surrounding function
+    return std::unique_ptr<InstructionInfo>(
+        new InstructionInfo(0, getInternedString(""), 0, 0, asmLine));
+  }
+};
+
+InstructionInfoTable::InstructionInfoTable(const llvm::Module &m) {
+  // Generate all debug instruction information
+  DebugInfoExtractor DI(internedStrings, m);
+  for (const auto &Func : m) {
+    auto F = DI.getFunctionInfo(Func);
+    auto FR = F.get();
+    functionInfos.insert(std::make_pair(&Func, std::move(F)));
+
+    for (auto it = llvm::inst_begin(Func), ie = llvm::inst_end(Func); it != ie;
+         ++it) {
+      auto instr = &*it;
+      infos.insert(std::make_pair(instr, DI.getInstructionInfo(*instr, FR)));
     }
   }
-}
 
-InstructionInfoTable::~InstructionInfoTable() {
-  for (std::set<const std::string *, ltstr>::iterator
-         it = internedStrings.begin(), ie = internedStrings.end();
-       it != ie; ++it)
-    delete *it;
-}
-
-const std::string *InstructionInfoTable::internString(std::string s) {
-  std::set<const std::string *, ltstr>::iterator it = internedStrings.find(&s);
-  if (it==internedStrings.end()) {
-    std::string *interned = new std::string(s);
-    internedStrings.insert(interned);
-    return interned;
-  } else {
-    return *it;
-  }
+  // Make sure that every item has a unique ID
+  size_t idCounter = 0;
+  for (auto &item : infos)
+    item.second->id = idCounter++;
+  for (auto &item : functionInfos)
+    item.second->id = idCounter++;
 }
 
 unsigned InstructionInfoTable::getMaxID() const {
-  return infos.size();
+  return infos.size() + functionInfos.size();
 }
 
 const InstructionInfo &
-InstructionInfoTable::getInfo(const Instruction *inst) const {
-  std::map<const llvm::Instruction*, InstructionInfo>::const_iterator it = 
-    infos.find(inst);
+InstructionInfoTable::getInfo(const llvm::Instruction &inst) const {
+  auto it = infos.find(&inst);
   if (it == infos.end())
     llvm::report_fatal_error("invalid instruction, not present in "
                              "initial module!");
-  return it->second;
+  return *it->second.get();
 }
 
-const InstructionInfo &
-InstructionInfoTable::getFunctionInfo(const Function *f) const {
-  if (f->isDeclaration()) {
-    // FIXME: We should probably eliminate this dummyInfo object, and instead
-    // allocate a per-function object to track the stats for that function
-    // (otherwise, anyone actually trying to use those stats is getting ones
-    // shared across all functions). I'd like to see if this matters in practice
-    // and construct a test case for it if it does, though.
-    return dummyInfo;
-  } else {
-    return getInfo(&*(f->begin()->begin()));
-  }
+const FunctionInfo &
+InstructionInfoTable::getFunctionInfo(const llvm::Function &f) const {
+  auto found = functionInfos.find(&f);
+  if (found == functionInfos.end())
+    llvm::report_fatal_error("invalid instruction, not present in "
+                             "initial module!");
+
+  return *found->second.get();
 }

@@ -6,7 +6,7 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-set(MODULE_CPP_FILES
+set(KLEE_MODULE_COMPONENT_SRCS
   Checks.cpp
   InstructionInfoTable.cpp
   InstructionOperandTypeCheckPass.cpp
@@ -17,13 +17,18 @@ set(MODULE_CPP_FILES
   LowerSwitch.cpp
   ModuleUtil.cpp
   Optimize.cpp
+  OptNone.cpp
   PhiCleaner.cpp
   RaiseAsm.cpp
   Scalarizer.cpp
 )
 
+if (USE_WORKAROUND_LLVM_PR39177)
+  list(APPEND KLEE_MODULE_COMPONENT_SRCS WorkaroundLLVMPR39177.cpp)
+endif()
+
 klee_add_component(kleeModule
-  ${MODULE_CPP_FILES}
+  ${KLEE_MODULE_COMPONENT_SRCS}
 )
 
 set(LLVM_COMPONENTS
@@ -44,9 +49,16 @@ target_link_libraries(kleeModule PRIVATE
 
 
 # build single passes as shared objects for opt / systemtests
+if (USE_WORKAROUND_LLVM_PR39177)
 set(LLVM_OPTIONAL_SOURCES
-  ${MODULE_CPP_FILES}
+  ${KLEE_MODULE_COMPONENT_SRCS}
 )
+else()
+set(LLVM_OPTIONAL_SOURCES
+  ${KLEE_MODULE_COMPONENT_SRCS}
+  WorkaroundLLVMPR39177.cpp
+)
+endif()
 
 klee_add_llvm_loadable_module(LiveRegister
   LiveRegister.cpp

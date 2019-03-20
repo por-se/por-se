@@ -53,6 +53,9 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
     // increment now since deletion of instructions makes iterator invalid.
     ++i;
     if (ii) {
+      if (isa<DbgInfoIntrinsic>(ii))
+        continue;
+
       switch (ii->getIntrinsicID()) {
       case Intrinsic::vastart:
       case Intrinsic::vaend:
@@ -191,16 +194,6 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
         resultStruct = builder.CreateInsertValue(resultStruct, overflow, 1);
 
         ii->replaceAllUsesWith(resultStruct);
-        ii->eraseFromParent();
-        dirty = true;
-        break;
-      }
-
-      case Intrinsic::dbg_value:
-      case Intrinsic::dbg_declare: {
-        // Remove these regardless of lower intrinsics flag. This can
-        // be removed once IntrinsicLowering is fixed to not have bad
-        // caches.
         ii->eraseFromParent();
         dirty = true;
         break;

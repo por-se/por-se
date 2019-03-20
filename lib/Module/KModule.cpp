@@ -8,19 +8,21 @@
 //===----------------------------------------------------------------------===//
 
 #define DEBUG_TYPE "KModule"
-#include "klee/Internal/Module/KModule.h"
-#include "klee/Internal/Support/ErrorHandling.h"
 
 #include "Passes.h"
 
 #include "klee/Config/Version.h"
-#include "klee/Interpreter.h"
-#include "klee/StatePruningCmdLine.h"
 #include "klee/Internal/Module/Cell.h"
-#include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
+#include "klee/Internal/Module/KInstruction.h"
+#include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/Module/LLVMPassManager.h"
 #include "klee/Internal/Support/Debug.h"
+#include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/Internal/Support/ModuleUtil.h"
+#include "klee/Interpreter.h"
+#include "klee/OptionCategories.h"
+#include "klee/StatePruningCmdLine.h"
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -40,15 +42,18 @@
 #include "llvm/Support/CallSite.h"
 #else
 #include "llvm/IR/CallSite.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Linker/Linker.h"
 #endif
 
-#include "klee/Internal/Module/LLVMPassManager.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Transforms/Scalar.h"
+#if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
+#include "llvm/Transforms/Scalar/Scalarizer.h"
+#endif
 
 #include "llvm/Transforms/Utils/Cloning.h"
 
@@ -61,6 +66,12 @@
 using namespace llvm;
 using namespace klee;
 
+namespace klee {
+cl::OptionCategory
+    ModuleCat("Module-related options",
+              "These options affect the compile-time processing of the code.");
+}
+
 namespace {
   enum SwitchImplType {
     eSwitchTypeSimple,
@@ -70,16 +81,18 @@ namespace {
 
   cl::opt<bool>
   OutputSource("output-source",
-               cl::desc("Write the assembly for the final transformed source"),
-               cl::init(true));
+               cl::desc("Write the assembly for the final transformed source (default=true)"),
+               cl::init(true),
+	       cl::cat(ModuleCat));
 
   cl::opt<bool>
   OutputModule("output-module",
                cl::desc("Write the bitcode for the final transformed module"),
-               cl::init(false));
+               cl::init(false),
+	       cl::cat(ModuleCat));
 
   cl::opt<SwitchImplType>
-  SwitchType("switch-type", cl::desc("Select the implementation of switch"),
+  SwitchType("switch-type", cl::desc("Select the implementation of switch (default=internal)"),
              cl::values(clEnumValN(eSwitchTypeSimple, "simple", 
                                    "lower to ordered branches"),
                         clEnumValN(eSwitchTypeLLVM, "llvm", 
@@ -87,11 +100,25 @@ namespace {
                         clEnumValN(eSwitchTypeInternal, "internal", 
                                    "execute switch internally")
                         KLEE_LLVM_CL_VAL_END),
-             cl::init(eSwitchTypeInternal));
+             cl::init(eSwitchTypeInternal),
+	     cl::cat(ModuleCat));
   
   cl::opt<bool>
   DebugPrintEscapingFunctions("debug-print-escaping-functions", 
-                              cl::desc("Print functions whose address is taken."));
+                              cl::desc("Print functions whose address is taken (default=false)"),
+			      cl::cat(ModuleCat));
+
+  // Don't run VerifierPass when checking module
+  cl::opt<bool>
+  DontVerify("disable-verify",
+             cl::desc("Do not verify the module integrity (default=false)"),
+             cl::init(false), cl::cat(klee::ModuleCat));
+
+  cl::opt<bool>
+  OptimiseKLEECall("klee-call-optimisation",
+                             cl::desc("Allow optimization of functions that "
+                                      "contain KLEE calls (default=true)"),
+                             cl::init(true), cl::cat(ModuleCat));
 }
 
 /***/
@@ -239,6 +266,14 @@ void KModule::instrument(const Interpreter::ModuleOptions &opts) {
 void KModule::optimiseAndPrepare(
     const Interpreter::ModuleOptions &opts,
     llvm::ArrayRef<const char *> preservedFunctions) {
+  // Preserve all functions containing klee-related function calls from being
+  // optimised around
+  if (!OptimiseKLEECall) {
+    LegacyLLVMPassManagerTy pm;
+    pm.add(new OptNonePass());
+    pm.run(*module);
+  }
+
   if (opts.Optimize)
     Optimize(module.get(), preservedFunctions);
 
@@ -266,19 +301,9 @@ void KModule::optimiseAndPrepare(
   case eSwitchTypeLLVM:  pm3.add(createLowerSwitchPass()); break;
   default: klee_error("invalid --switch-type");
   }
-  InstructionOperandTypeCheckPass *operandTypeCheckPass =
-      new InstructionOperandTypeCheckPass();
   pm3.add(new IntrinsicCleanerPass(*targetData));
   pm3.add(new PhiCleanerPass());
-  pm3.add(operandTypeCheckPass);
   pm3.run(*module);
-
-  // Enforce the operand type invariants that the Executor expects.  This
-  // implicitly depends on the "Scalarizer" pass to be run in order to succeed
-  // in the presence of vector instructions.
-  if (!operandTypeCheckPass->checkPassed()) {
-    klee_error("Unexpected instruction operand types detected");
-  }
 }
 
 void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
@@ -300,7 +325,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
   /* Build shadow structures */
 
   infos = std::unique_ptr<InstructionInfoTable>(
-      new InstructionInfoTable(module.get()));
+      new InstructionInfoTable(*module.get()));
 
   std::vector<Function *> declarations;
 
@@ -314,7 +339,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
 
     for (unsigned i=0; i<kf->numInstructions; ++i) {
       KInstruction *ki = kf->instructions[i];
-      ki->info = &infos->getInfo(ki->inst);
+      ki->info = &infos->getInfo(*ki->inst);
       const_cast<InstructionInfo *>(ki->info)->setKInstruction(ki);
     }
 
@@ -362,7 +387,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
         for (const Value *liveValue : *set) {
           // convert Value* to KInstruction*
           const auto *liveInst = cast<llvm::Instruction>(liveValue);
-          const InstructionInfo &ii = infos->getInfo(liveInst);
+          const InstructionInfo &ii = infos->getInfo(*liveInst);
           const KInstruction *liveKInst = ii.getKInstruction();
           liveKInstSet.push_back(liveKInst);
         }
@@ -371,6 +396,24 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
         ii->setLiveLocals(std::move(liveKInstSet));
       }
     }
+  }
+}
+
+void KModule::checkModule() {
+  InstructionOperandTypeCheckPass *operandTypeCheckPass =
+      new InstructionOperandTypeCheckPass();
+
+  LegacyLLVMPassManagerTy pm;
+  if (!DontVerify)
+    pm.add(createVerifierPass());
+  pm.add(operandTypeCheckPass);
+  pm.run(*module);
+
+  // Enforce the operand type invariants that the Executor expects.  This
+  // implicitly depends on the "Scalarizer" pass to be run in order to succeed
+  // in the presence of vector instructions.
+  if (!operandTypeCheckPass->checkPassed()) {
+    klee_error("Unexpected instruction operand types detected");
   }
 }
 
@@ -412,7 +455,8 @@ static int getOperandNum(Value *v,
     return a->getArgNo();
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
     // Metadata is no longer a Value
-  } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v)) {
+  } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v) ||
+             isa<MetadataAsValue>(v)) {
 #else
   } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v) ||
              isa<MDNode>(v)) {

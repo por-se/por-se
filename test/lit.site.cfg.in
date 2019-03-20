@@ -9,14 +9,15 @@ config.klee_obj_root = "@KLEE_BINARY_DIR@"
 config.klee_tools_dir = "@KLEE_TOOLS_DIR@"
 config.llvm_tools_dir = "@LLVM_TOOLS_DIR@"
 
+config.libcxx_include_dir = "@KLEE_LIBCXX_INCLUDE_DIR@"
+
 # Needed to check if a hack needs to be applied
 config.llvm_version_major = "@LLVM_VERSION_MAJOR@"
 config.llvm_version_minor = "@LLVM_VERSION_MINOR@"
 
 # Compilers
-# FIXME: use llvmcc not llvmgcc
-config.llvmgcc = "@LLVMCC@"
-config.llvmgxx = "@LLVMCXX@"
+config.clang = "@LLVMCC@"
+config.clangxx = "@LLVMCXX@"
 
 config.cc = "@NATIVE_CC@"
 config.cxx = "@NATIVE_CXX@"
@@ -31,12 +32,14 @@ if @LLVM_VERSION_MAJOR@ >= 5:
 config.enable_uclibc = True if @ENABLE_UCLIBC@ == 1 else False
 config.enable_posix_runtime = True if @ENABLE_POSIX_RUNTIME@ == 1 else False
 config.enable_pthread_runtime = True if @ENABLE_PTHREAD_RUNTIME@ == 1 else False
+config.enable_libcxx = True if @SUPPORT_KLEE_LIBCXX@ == 1 else False
 config.have_selinux = True if @HAVE_SELINUX@ == 1 else False
 config.enable_stp = True if @ENABLE_STP@ == 1 else False
 config.enable_z3 = True if @ENABLE_Z3@ == 1 else False
 config.enable_zlib = True if @HAVE_ZLIB_H@ == 1 else False
 config.have_asan = True if @IS_ASAN_BUILD@ == 1 else False
 config.have_ubsan = True if @IS_UBSAN_BUILD@ == 1 else False
+config.have_msan = True if @IS_MSAN_BUILD@ == 1 else False
 
 # Add sanitizer list
 config.environment['LSAN_OPTIONS'] = "suppressions=@KLEE_UTILS_DIR@/sanitizers/lsan.txt"

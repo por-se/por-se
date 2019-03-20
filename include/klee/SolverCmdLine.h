@@ -26,7 +26,7 @@ extern llvm::cl::opt<bool> UseFastCexSolver;
 
 extern llvm::cl::opt<bool> UseCexCache;
 
-extern llvm::cl::opt<bool> UseCache;
+extern llvm::cl::opt<bool> UseBranchCache;
 
 extern llvm::cl::opt<bool> UseIndependentSolver;
 
@@ -52,7 +52,7 @@ enum QueryLoggingSolverType {
   SOLVER_SMTLIB  ///< Log queries passed to solver in .smt2 (SMT-LIBv2) format
 };
 
-extern llvm::cl::bits<QueryLoggingSolverType> queryLoggingOptions;
+extern llvm::cl::bits<QueryLoggingSolverType> QueryLoggingOptions;
 
 enum CoreSolverType {
   STP_SOLVER,
@@ -82,12 +82,11 @@ extern llvm::cl::opt<klee::MetaSMTBackendType> MetaSMTBackend;
 
 class KCommandLine {
 public:
+  /// Hide all options in the specified category
+  static void HideOptions(llvm::cl::OptionCategory &Category);
+
   /// Hide all options except the ones in the specified category
   static void HideUnrelatedOptions(llvm::cl::OptionCategory &Category);
-
-  /// Hide all options except the ones in the specified categories
-  static void HideUnrelatedOptions(
-      llvm::ArrayRef<const llvm::cl::OptionCategory *> Categories);
 };
 } // namespace klee
 

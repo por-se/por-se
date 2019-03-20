@@ -23,35 +23,39 @@
 using namespace klee;
 
 namespace {
+
+llvm::cl::OptionCategory MemoryCat("Memory management options",
+                                   "These options control memory management.");
+
 llvm::cl::opt<bool> DeterministicAllocation(
     "allocate-determ",
-    llvm::cl::desc("Allocate memory deterministically(default=off)"),
-    llvm::cl::init(false));
+    llvm::cl::desc("Allocate memory deterministically (default=false)"),
+    llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<unsigned> DeterministicAllocationSize(
     "allocate-determ-size",
     llvm::cl::desc(
         "Preallocated memory for deterministic allocation in MB (default=100)"),
-    llvm::cl::init(100));
+    llvm::cl::init(100), llvm::cl::cat(MemoryCat));
 
-llvm::cl::opt<bool>
-    NullOnZeroMalloc("return-null-on-zero-malloc",
-                     llvm::cl::desc("Returns NULL in case malloc(size) was "
-                                    "called with size 0 (default=off)."),
-                     llvm::cl::init(false));
+llvm::cl::opt<bool> NullOnZeroMalloc(
+    "return-null-on-zero-malloc",
+    llvm::cl::desc("Returns NULL if malloc(0) is called (default=false)"),
+    llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 
-llvm::cl::opt<unsigned> RedZoneSpace(
-    "red-zone-space",
-    llvm::cl::desc("Set the amount of free space between allocations. This is "
-                   "important to detect out-of-bound accesses (default=10)."),
-    llvm::cl::init(10));
+llvm::cl::opt<unsigned> RedzoneSize(
+    "redzone-size",
+    llvm::cl::desc("Set the size of the redzones to be added after each "
+                   "allocation (in bytes). This is important to detect "
+                   "out-of-bounds accesses (default=10)"),
+    llvm::cl::init(10), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<unsigned long long> DeterministicStartAddress(
     "allocate-determ-start-address",
     llvm::cl::desc("Start address for deterministic allocation. Has to be page "
-                   "aligned (default=0x7ff30000000)."),
-    llvm::cl::init(0x7ff30000000));
-}
+                   "aligned (default=0x7ff30000000)"),
+    llvm::cl::init(0x7ff30000000), llvm::cl::cat(MemoryCat));
+} // namespace
 
 /***/
 MemoryManager::MemoryManager(ArrayCache *_arrayCache)
@@ -125,7 +129,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
     // This way, we make sure we have this allocation between its own red zones
     size_t alloc_size = std::max(size, (uint64_t)1);
     if ((char *)address + alloc_size < deterministicSpace + spaceSize) {
-      nextFreeSlot = (char *)address + alloc_size + RedZoneSpace;
+      nextFreeSlot = (char *)address + alloc_size + RedzoneSize;
     } else {
       klee_warning_once(0, "Couldn't allocate %" PRIu64
                            " bytes. Not enough deterministic space left.",
