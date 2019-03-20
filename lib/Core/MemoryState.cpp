@@ -510,7 +510,7 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() const {
     bool isPhiNode = isa<llvm::PHINode>(liveInst);
 
     // last instruction of previous BB
-    bool isTermInst = isa<llvm::TerminatorInst>(liveInst);
+    bool isTermInst = liveInst->isTerminator();
 
     if (isPhiNode) {
       assert(liveInst == thread.prevPc->inst);
