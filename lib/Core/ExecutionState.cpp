@@ -160,8 +160,8 @@ ExecutionState *ExecutionState::branch() {
   weight *= .5;
   falseState->weight -= weight;
 
-  if (porConfiguration != nullptr) {
-    falseState->porConfiguration = new por::configuration(*porConfiguration);
+  if (porConfiguration) {
+    falseState->porConfiguration = std::make_unique<por::configuration>(*porConfiguration);
   }
 
   return falseState;

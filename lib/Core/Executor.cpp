@@ -4440,7 +4440,7 @@ void Executor::runFunctionAsMain(Function *f,
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
 
   // This creates a new configuration with one thread (aka our main thread)
-  state->porConfiguration = new por::configuration();
+  state->porConfiguration = std::make_unique<por::configuration>();
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();

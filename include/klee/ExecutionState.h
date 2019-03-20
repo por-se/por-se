@@ -27,6 +27,7 @@
 #include <set>
 #include <vector>
 
+// We do not want to expose the por::configuration type directly
 namespace por {
   class configuration;
 };
@@ -165,7 +166,7 @@ public:
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
 
-  por::configuration* porConfiguration = nullptr;
+  std::unique_ptr<por::configuration> porConfiguration;
 
 private:
   void popFrameOfThread(Thread* thread);
