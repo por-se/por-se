@@ -42,8 +42,13 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
 
 bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
   if (LogPorEvents) {
-    printf("Por event: %s with current thread %u and args: %lu\n",
-           getNameOfEvent(kind).c_str(), state.currentThreadId(), args[0]);
+    std::cout << "Por event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId() << " and args: ";
+
+    for (const auto& arg : args) {
+      std::cout << arg  << " ";
+    }
+
+    std::cout << "\n";
   }
 
   // Make sure that we always have the correct number of arguments
