@@ -161,8 +161,7 @@ ExecutionState *ExecutionState::branch() {
   falseState->weight -= weight;
 
   if (porConfiguration != nullptr) {
-    // FIXME: this won't compile for now, but we have to make sure that this works at some state
-    // porConfiguration = new por::configuration(porConfiguration);
+    falseState->porConfiguration = new por::configuration(*porConfiguration);
   }
 
   return falseState;
