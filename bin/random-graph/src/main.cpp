@@ -383,10 +383,8 @@ int main(int argc, char** argv){
 	std::vector<std::pair<por::event::event const*, por::event::event const*>> inter_thread_dependencies;
 	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> non_immediate_intra_thread_dependencies;
 	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> intra_thread_dependencies;
-	std::size_t opened = 0;
 	for(auto& t : configuration.thread_heads()) {
 		open.push_back(t.second.get());
-		++opened;
 	}
 	while(!open.empty()) {
 		por::event::event const* event = open.back();
@@ -402,7 +400,6 @@ int main(int argc, char** argv){
 			por::event::event const* predecessor = p.get();
 			if(visited.count(predecessor) == 0) {
 				open.push_back(predecessor);
-				++opened;
 			}
 			if(tid != predecessor->tid()) {
 				inter_thread_dependencies.emplace_back(std::make_pair(event, predecessor));
