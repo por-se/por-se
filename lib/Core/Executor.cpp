@@ -372,6 +372,8 @@ cl::opt<double> MaxStaticCPSolvePct(
 
 /*** Debugging options ***/
 
+llvm::cl::opt<bool> DebugPrintCalls("debug-print-calls", cl::init(false), cl::cat(DebugCat));
+
 /// The different query logging solvers that can switched on/off
 enum PrintDebugInstructionsType {
   STDERR_ALL, ///
@@ -1514,7 +1516,23 @@ void Executor::executeCall(ExecutionState &state,
   if (PruneStates) {
     state.memoryState.registerFunctionCall(f, arguments);
   }
+
   Thread &thread = state.currentThread();
+
+  if (DebugPrintCalls) {
+    auto sid = state.id;
+    auto tid = thread.getThreadId();
+    std::stringstream tmp;
+    tmp << "[state: " << std::setw(6) << sid
+        << " thread: " << std::setw(2) << tid
+        << "] " << std::setfill(' ') << std::setw(thread.stack.size()) << "+";
+    if (f->hasName()) {
+      llvm::errs() << tmp.str() << f->getName() << "\n";
+    } else {
+      llvm::errs() << tmp.str() << "unnamed function\n";
+    }
+  }
+
   Instruction *i = ki->inst;
   if (i && isa<DbgInfoIntrinsic>(i))
     return;
@@ -4436,6 +4454,12 @@ void Executor::runFunctionAsMain(Function *f,
       }
     }
   }
+
+    if (DebugPrintCalls) {
+      std::stringstream tmp;
+      tmp << "[state: " << std::setw(6) << 0 << " thread: " << std::setw(2) << 0 << "] ";
+      llvm::errs() << tmp.str() << f->getName() << "\n";
+    }
 
   ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
 
