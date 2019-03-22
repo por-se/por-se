@@ -4872,8 +4872,7 @@ void Executor::exitThread(ExecutionState &state) {
   if (tid == 1) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
-    bool success = porEventManager.registerPorEvent(state, por_thread_exit, { tid });
-    assert(success && "Main thread can only exit once");
+    porEventManager.registerPorEvent(state, por_thread_exit, { tid });
   }
 
   scheduleThreads(state);
@@ -5069,11 +5068,7 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
   }
 
   // So we are not able to fork for new states when we should not
-  if (atMemoryLimit || inhibitForking) {
-    newForkCount = 0;
-  }
-
-  if (NoScheduleForks) {
+  if (atMemoryLimit || inhibitForking || NoScheduleForks) {
     newForkCount = 0;
   }
 
