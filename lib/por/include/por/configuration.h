@@ -292,6 +292,7 @@ namespace por {
 					}
 				}
 			}
+			assert(0 && "There has to be a notifying event before a wait2");
 		}
 
 		void signal_thread(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::thread_id_t notified_thread) {
