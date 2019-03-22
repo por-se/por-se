@@ -2,6 +2,7 @@
 
 #include "base.h"
 
+#include <util/distance.h>
 #include <util/sso_array.h>
 
 #include <cassert>
@@ -56,15 +57,17 @@ namespace por::event {
 			T&& end_condition_variable_predecessors
 		)
 			: event(event_kind::signal, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
-			, _predecessors{util::create_uninitialized, 1ul + std::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
 		{
 			// we perform a very small optimization by allocating the predecessors in uninitialized storage
 			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
 			std::size_t index = 1;
-			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
-				assert(iter != nullptr);
-				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
-				new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+			if constexpr(!std::is_same_v<std::decay_t<T>, decltype(nullptr)>) {
+				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
+					assert(iter != nullptr);
+					assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
+					new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+				}
 			}
 			if(index == 1) {
 				new(_predecessors.data() + index) std::shared_ptr<event>(nullptr);

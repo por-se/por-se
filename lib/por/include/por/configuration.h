@@ -32,6 +32,9 @@ namespace por {
 	};
 
 	class configuration {
+		// creation events for locks and condition variables are optional
+		static const bool optional_creation_events = true;
+
 		// contains most recent event of ALL threads that ever existed within this configuration
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 
@@ -129,6 +132,12 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
+			if constexpr(optional_creation_events) {
+				if(_lock_heads.find(lock) == _lock_heads.end()) {
+					thread_event = event::lock_destroy::alloc(thread, std::move(thread_event), nullptr);
+					return;
+				}
+			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_destroy::alloc(thread, std::move(thread_event), std::move(lock_event));
@@ -142,8 +151,14 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
+			if constexpr(optional_creation_events) {
+				if(lock_it == _lock_heads.end()) {
+					thread_event = event::lock_acquire::alloc(thread, std::move(thread_event), nullptr);
+					_lock_heads.emplace(lock, thread_event);
+					return;
+				}
+			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
-
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_acquire::alloc(thread, std::move(thread_event), std::move(lock_event));
 			lock_event = thread_event;
@@ -156,8 +171,14 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto lock_it = _lock_heads.find(lock);
+			if constexpr(optional_creation_events) {
+				if(_lock_heads.find(lock) == _lock_heads.end()) {
+					thread_event = event::lock_release::alloc(thread, std::move(thread_event), nullptr);
+					_lock_heads.emplace(lock, thread_event);
+					return;
+				}
+			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
-
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_release::alloc(thread, std::move(thread_event), std::move(lock_event));
 			lock_event = thread_event;
@@ -183,6 +204,12 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
+			if constexpr(optional_creation_events) {
+				if(cond_head_it == _cond_heads.end()) {
+					thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					return;
+				}
+			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 			assert(cond_preds.size() > 0);
@@ -198,10 +225,21 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
+			auto lock_it = _lock_heads.find(lock);
+			if constexpr(optional_creation_events) {
+				if(cond_head_it == _cond_heads.end()) {
+					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
+					auto& lock_event = lock_it->second;
+					thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
+					lock_event = thread_event;
+					_cond_heads.emplace(cond, std::vector{thread_event});
+					return;
+				}
+			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
-			auto lock_it = _lock_heads.find(lock);
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
+			auto& lock_event = lock_it->second;
 
 			std::vector<std::shared_ptr<por::event::event>> non_waiting;
 			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
@@ -226,7 +264,6 @@ namespace por {
 				non_waiting.push_back(*it);
 			}
 
-			auto& lock_event = lock_it->second;
 			thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
@@ -264,6 +301,13 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
+			if constexpr(optional_creation_events) {
+				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
+					thread_event = por::event::signal::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					_cond_heads.emplace(cond, std::vector{thread_event});
+					return;
+				}
+			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 
@@ -322,6 +366,13 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
+			if constexpr(optional_creation_events) {
+				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
+					thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					_cond_heads.emplace(cond, std::vector{thread_event});
+					return;
+				}
+			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 
