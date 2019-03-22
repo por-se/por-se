@@ -848,6 +848,7 @@ static const char *modelledExternals[] = {
   "__ubsan_handle_sub_overflow",
   "__ubsan_handle_mul_overflow",
   "__ubsan_handle_divrem_overflow",
+  "puts",
 };
 
 // Symbols we aren't going to warn about
