@@ -325,6 +325,9 @@ namespace por {
 						auto bro = static_cast<por::event::broadcast const*>(it->get());
 						if(bro->is_lost())
 							continue;
+
+						if(bro->is_notifying_thread(thread))
+							continue;
 					}
 
 					if((*it)->kind() == por::event::event_kind::signal) {
@@ -390,6 +393,9 @@ namespace por {
 						auto bro = static_cast<por::event::broadcast const*>(it->get());
 						if(bro->is_lost())
 							continue;
+
+						if(bro->is_notifying_thread(thread))
+							continue;
 					}
 
 					if((*it)->kind() == por::event::event_kind::signal) {
@@ -398,7 +404,7 @@ namespace por {
 							continue;
 
 						if(sig->notified_thread() == thread)
-							continue; // excluded event notified current thread by signal
+							continue;
 					}
 
 					prev_notifications.push_back(*it);

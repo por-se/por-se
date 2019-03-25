@@ -22,7 +22,7 @@ namespace por::event {
 		// X+ previous non-lost sig/bro operations on same condition variable that did not notify any of the threads referenced in any of the wait1s by signal
 		// OR (if broadcast is lost):
 		// 1. same-thread predecessor
-		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread by signal (tid of this broadcast event)
+		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread (tid of this broadcast event)
 		//    (may not exist if no such events and only preceeded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 0> _predecessors;
 
@@ -140,6 +140,7 @@ namespace por::event {
 					} else if(e->kind() == event_kind::broadcast) {
 						auto bro = static_cast<broadcast const*>(e.get());
 						assert(!bro->is_lost());
+						assert(!bro->is_notifying_thread(this->tid()));
 					} else {
 						assert(e->kind() == event_kind::condition_variable_create);
 					}
