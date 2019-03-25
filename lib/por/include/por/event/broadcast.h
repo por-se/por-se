@@ -19,7 +19,7 @@ namespace por::event {
 		// predecessors:
 		// 1. same-thread predecessor
 		// 2+ previous same-cond wait1 on notified threads
-		// X+ previous non-lost sig/bro operations on same condition variable that did not notify any of the threads referenced in any of the wait1s by signal
+		// X+ previous non-lost signal operations on same condition variable that did not notify any of the threads referenced in any of the wait1s or this thread (tid of broadcast event)
 		// OR (if broadcast is lost):
 		// 1. same-thread predecessor
 		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread (tid of this broadcast event)
@@ -123,15 +123,13 @@ namespace por::event {
 				for(auto& e : this->condition_variable_predecessors()) {
 					if(e->kind() == event_kind::wait1) {
 						assert(e->tid() != this->tid());
-					} else if(e->kind() == event_kind::signal) {
+					} else {
+						assert(e->kind() == event_kind::signal);
 						assert(!signal_is_lost(e.get()));
+						assert(signal_notified_thread(e.get()) != this->tid());
 						for(auto& w : this->wait_predecessors()) {
 							assert(signal_notified_thread(e.get()) != w->tid());
 						}
-					} else {
-						assert(e->kind() == event_kind::broadcast);
-						auto bro = static_cast<broadcast const*>(e.get());
-						assert(!bro->is_lost());
 					}
 				}
 			} else {

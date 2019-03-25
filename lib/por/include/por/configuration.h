@@ -441,11 +441,8 @@ namespace por {
 					if((*it)->tid() == thread)
 						continue; // excluded event is part of [thread_event]
 
-					if((*it)->kind() == por::event::event_kind::broadcast) {
-						auto bro = static_cast<por::event::broadcast const*>(it->get());
-						if(bro->is_lost())
-							continue;
-					}
+					if((*it)->kind() == por::event::event_kind::broadcast)
+						continue;
 
 					if((*it)->kind() == por::event::event_kind::signal) {
 						auto sig = static_cast<por::event::signal const*>(it->get());
@@ -453,7 +450,10 @@ namespace por {
 							continue;
 
 						if(notified_threads.count(sig->notified_thread()))
-							continue; // excluded event notified one of the included wait1s by signal
+							continue;
+
+						if(sig->notified_thread() == thread)
+							continue;
 					}
 
 					prev_events.push_back(*it);
