@@ -36,17 +36,27 @@ namespace por::event {
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
-			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+			if(_predecessors[1] != nullptr) {
+				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + 2);
+			} else {
+				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + 1);
+			}
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
-			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+			if(_predecessors[1] != nullptr) {
+				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + 2);
+			} else {
+				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + 1);
+			}
 		}
 
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
+		// may return nullptr if only preceeded by lock_create event
 		std::shared_ptr<event>      & lock_predecessor()       noexcept { return _predecessors[1]; }
+		// may return nullptr if only preceeded by lock_create event
 		std::shared_ptr<event> const& lock_predecessor() const noexcept { return _predecessors[1]; }
 	};
 }
