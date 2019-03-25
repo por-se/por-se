@@ -251,7 +251,7 @@ namespace por {
 
 				if((*it)->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(it->get());
-					if(sig->notified_thread() == thread)
+					if(!sig->is_lost())
 						continue;
 				}
 
