@@ -115,6 +115,8 @@ namespace por::event {
 			assert(std::distance(this->wait_predecessors().begin(), this->wait_predecessors().end()) == wait1_count);
 			for(auto& e : this->wait_predecessors()) {
 				assert(e->kind() == event_kind::wait1);
+				assert(e->tid() != 0);
+				assert(e->tid() != this->tid());
 			}
 
 			if(wait1_count > 0) {

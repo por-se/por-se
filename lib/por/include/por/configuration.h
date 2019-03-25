@@ -345,6 +345,7 @@ namespace por {
 				thread_event = por::event::signal::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				cond_preds.push_back(thread_event);
 			} else { // notifying signal
+				assert(notified_thread != thread && "Thread cannot notify itself");
 				auto notified_thread_it = _thread_heads.find(notified_thread);
 				assert(notified_thread_it != _thread_heads.end() && "Notified thread must exist");
 				auto& notified_thread_event = notified_thread_it->second;
@@ -415,6 +416,7 @@ namespace por {
 			} else { // notifying broadcast
 				std::vector<std::shared_ptr<por::event::event>> prev_events;
 				for(auto& nid : notified_threads) {
+					assert(nid != thread && "Thread cannot notify itself");
 					auto notified_thread_it = _thread_heads.find(nid);
 					assert(notified_thread_it != _thread_heads.end() && "Notified thread must exist");
 					auto& notified_thread_event = notified_thread_it->second;
