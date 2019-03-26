@@ -6,6 +6,8 @@
 #include "../kpr/internal.h"
 
 static int detect_init_pattern(pthread_internal_t* obj, size_t size) {
+  klee_check_memory_access(obj, size);
+
   if (obj->magic == PTHREAD_INTERNAL_MAGIC_VALUE) {
     return KPR_OTHER_INIT;
   }
