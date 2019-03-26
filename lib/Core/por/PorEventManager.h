@@ -5,8 +5,6 @@
 #include "klee/ExecutionState.h"
 #include "klee/por/events.h"
 
-#include <iostream>
-
 namespace klee {
   class PorEventManager {
     public:

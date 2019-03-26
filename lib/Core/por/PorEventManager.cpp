@@ -1,18 +1,18 @@
-#include <string>
-
-#include "llvm/Support/CommandLine.h"
+#include "PorEventManager.h"
 
 #include "por/configuration.h"
 
-#include "PorEventManager.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
+
+#include <string>
 
 using namespace klee;
-using namespace llvm;
 
 namespace {
-  cl::opt<bool>
+  llvm::cl::opt<bool>
   LogPorEvents("log-por-events",
-               cl::init(false));
+               llvm::cl::init(false));
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -42,13 +42,13 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
 
 bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
   if (LogPorEvents) {
-    std::cout << "Por event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId() << " and args: ";
+    llvm::errs() << "POR event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId() << " and args: ";
 
     for (const auto& arg : args) {
-      std::cout << arg  << " ";
+      llvm::errs() << arg  << " ";
     }
 
-    std::cout << "\n";
+    llvm::errs() << "\n";
   }
 
   // Make sure that we always have the correct number of arguments
