@@ -44,6 +44,9 @@ namespace por {
 		// contains most recent event of ACTIVE condition variables for each thread
 		std::map<por::event::cond_id_t, std::vector<std::shared_ptr<por::event::event>>> _cond_heads;
 
+		// sequence of events in order of their execution
+		std::vector<std::shared_ptr<por::event::event>> _schedule;
+
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -53,12 +56,18 @@ namespace por {
 		configuration(configuration_root&& root)
 			: _thread_heads(std::move(root._thread_heads))
 		{
+			_schedule.emplace_back(root._program_init);
+			for(auto& thread : _thread_heads) {
+				_schedule.emplace_back(thread.second);
+			}
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 		}
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
 		auto const& lock_heads() const noexcept { return _lock_heads; }
 		auto const& cond_heads() const noexcept { return _cond_heads; }
+
+		auto const& schedule() const noexcept { return _schedule; }
 
 		por::event::thread_id_t active_threads() const noexcept {
 			if(_thread_heads.size() == 0)
@@ -84,6 +93,9 @@ namespace por {
 			assert(new_tid > 0);
 			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
 			_thread_heads.emplace(new_tid, event::thread_init::alloc(new_tid, source_event));
+
+			_schedule.emplace_back(source_event);
+			_schedule.emplace_back(_thread_heads[new_tid]);
 		}
 
 		void join_thread(event::thread_id_t thread, event::thread_id_t joined) {
@@ -98,6 +110,8 @@ namespace por {
 			assert(joined_event->kind() == por::event::event_kind::thread_exit && "Joined thread must be exited");
 
 			thread_event = event::thread_join::alloc(thread, std::move(thread_event), joined_event);
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void exit_thread(event::thread_id_t thread) {
@@ -109,6 +123,8 @@ namespace por {
 
 			assert(active_threads() > 0);
 			thread_event = event::thread_exit::alloc(thread, std::move(thread_event));
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void create_lock(event::thread_id_t thread, event::lock_id_t lock) {
@@ -123,6 +139,8 @@ namespace por {
 
 			thread_event = event::lock_create::alloc(thread, std::move(thread_event));
 			_lock_heads.emplace(lock, thread_event);
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {
@@ -135,6 +153,8 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
 					thread_event = event::lock_destroy::alloc(thread, std::move(thread_event), nullptr);
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -142,6 +162,8 @@ namespace por {
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_destroy::alloc(thread, std::move(thread_event), std::move(lock_event));
 			_lock_heads.erase(lock_it);
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
@@ -155,6 +177,8 @@ namespace por {
 				if(lock_it == _lock_heads.end()) {
 					thread_event = event::lock_acquire::alloc(thread, std::move(thread_event), nullptr);
 					_lock_heads.emplace(lock, thread_event);
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -162,6 +186,8 @@ namespace por {
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_acquire::alloc(thread, std::move(thread_event), std::move(lock_event));
 			lock_event = thread_event;
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void release_lock(event::thread_id_t thread, event::lock_id_t lock) {
@@ -175,6 +201,8 @@ namespace por {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
 					thread_event = event::lock_release::alloc(thread, std::move(thread_event), nullptr);
 					_lock_heads.emplace(lock, thread_event);
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -182,6 +210,8 @@ namespace por {
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_release::alloc(thread, std::move(thread_event), std::move(lock_event));
 			lock_event = thread_event;
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void create_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
@@ -195,6 +225,8 @@ namespace por {
 
 			thread_event = por::event::condition_variable_create::alloc(thread, std::move(thread_event));
 			_cond_heads.emplace(cond, std::vector{thread_event});
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void destroy_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
@@ -207,6 +239,8 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end()) {
 					thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), nullptr, nullptr);
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -216,6 +250,8 @@ namespace por {
 
 			thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
 			_cond_heads.erase(cond_head_it);
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void wait1(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
@@ -233,6 +269,8 @@ namespace por {
 					thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -267,6 +305,8 @@ namespace por {
 			thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void wait2(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
@@ -288,6 +328,8 @@ namespace por {
 					if(std::find(e->predecessors().begin(), e->predecessors().end(), thread_event) != e->predecessors().end()) {
 						thread_event = por::event::wait2::alloc(thread, std::move(thread_event), std::move(lock_event), e);
 						lock_event = thread_event;
+
+						_schedule.emplace_back(thread_event);
 						return;
 					}
 				}
@@ -306,6 +348,8 @@ namespace por {
 				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
 					thread_event = por::event::signal::alloc(thread, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -362,6 +406,8 @@ namespace por {
 				thread_event = por::event::signal::alloc(thread, std::move(thread_event), std::move(cond_event));
 				cond_event = thread_event;
 			}
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::set<por::event::thread_id_t> notified_threads) {
@@ -375,6 +421,8 @@ namespace por {
 				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
 					thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
+
+					_schedule.emplace_back(thread_event);
 					return;
 				}
 			}
@@ -462,6 +510,8 @@ namespace por {
 				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_events.data(), prev_events.data() + prev_events.size());
 				cond_preds.push_back(thread_event);
 			}
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		void local(event::thread_id_t thread) {
@@ -471,6 +521,8 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
 			thread_event = event::local::alloc(thread, std::move(thread_event));
+
+			_schedule.emplace_back(thread_event);
 		}
 
 		std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {

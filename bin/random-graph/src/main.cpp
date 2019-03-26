@@ -414,6 +414,8 @@ int main(int argc, char** argv){
 		}
 	}
 
+	assert(visited.size() == configuration.schedule().size());
+
 	std::cout << "\n\n";
 	std::cout << "digraph {\n"
 	          << "  rankdir=TB;\n";
