@@ -105,7 +105,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   }
 
   klee_toggle_thread_scheduling(1);
-  if (hasSlept != 0) {
+  if (hasSlept == 0) {
     klee_preempt_thread();
   }
 
