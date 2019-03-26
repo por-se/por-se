@@ -6,16 +6,6 @@
 #include "../kpr/internal.h"
 
 static int detect_init_pattern(pthread_internal_t* obj, size_t size) {
-// XXX: the main problem here is that the klee function fails if the pthread primitive
-//      is not at the start of the struct or memory location
-// TODO: maybe change the special function in some way?
-
-//  size_t actualSize = klee_get_obj_size(obj);
-//
-//  if (actualSize < size) {
-//    return KPR_INVALID;
-//  }
-
   if (obj->magic == PTHREAD_INTERNAL_MAGIC_VALUE) {
     return KPR_OTHER_INIT;
   }
