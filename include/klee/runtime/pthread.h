@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#define _USING_PORSE_PTHREAD (1)
+
 // What is the magic stuff?
 // The magic stuff is a pattern that is detected in the runtime to distinguish between
 // correctly initialized static mutexes and zero initialized ones
