@@ -60,6 +60,8 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
 
   klee_por_register_event(por_wait2, lock, m);
 
+  klee_toggle_thread_scheduling(1);
+
   return result;
 }
 
