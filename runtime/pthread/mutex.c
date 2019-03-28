@@ -153,7 +153,7 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
     mutex->acquired = 0;
   }
 
-  klee_release_waiting(mutex, KLEE_RELEASE_SINGLE);
+  klee_release_waiting(mutex, KLEE_RELEASE_ALL);
 
   return 0;
 }
