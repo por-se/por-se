@@ -526,7 +526,7 @@ private:
 
   void scheduleThreads(ExecutionState &state);
 
-  void forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount);
+  void forkForThreadScheduling(ExecutionState &state, std::size_t newForkCount);
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,

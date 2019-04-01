@@ -5059,7 +5059,7 @@ ExecutionState* Executor::forkToNewState(ExecutionState &state) {
   return ns;
 }
 
-void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<ExecutionState*>& newStates, uint64_t newForkCount) {
+void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newForkCount) {
   assert(newForkCount < state.runnableThreads.size());
 
   // Before we actually fork the states, make sure we honor MaxForks
@@ -5075,7 +5075,6 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
   stats::forks += newForkCount;
 
   auto rIt = state.runnableThreads.begin();
-  newStates.reserve(newForkCount + 1);
 
   for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
     // we want to reuse the current state when that is possible
@@ -5086,7 +5085,6 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::vector<Execut
       st = forkToNewState(state);
       addedStates.push_back(st);
     }
-    newStates.push_back(st);
 
     st->scheduleNextThread(*rIt);
     st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
@@ -5139,8 +5137,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   uint64_t newForkCount = runnable.size() - 1;
-  std::vector<ExecutionState*> newStates;
-  forkForThreadScheduling(state, newStates, newForkCount);
+  forkForThreadScheduling(state, newForkCount);
 }
 
 /// Returns the errno location in memory
