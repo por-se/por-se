@@ -121,13 +121,6 @@ typedef kpr_thread* pthread_t;
 
 typedef struct {
   pthread_internal_t magic;
-
-  unsigned count;
-  unsigned currentCount;
-} pthread_barrier_t;
-
-typedef struct {
-  pthread_internal_t magic;
   int acquired;
   int type;
   int robust;
@@ -157,6 +150,18 @@ typedef struct {
 typedef pthread_mutex_t pthread_spinlock_t;
 
 typedef int pthread_once_t;
+
+// Primitives that need other primitives
+
+typedef struct {
+  pthread_internal_t magic;
+
+  unsigned count;
+  unsigned currentCount;
+
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+} pthread_barrier_t;
 
 // Attributes
 

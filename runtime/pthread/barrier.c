@@ -15,8 +15,8 @@ int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t
   barrier->count = count;
   barrier->currentCount = 0;
 
-  klee_por_register_event(por_condition_variable_create, &barrier->count);
-  klee_por_register_event(por_lock_create, &barrier->currentCount);
+  pthread_mutex_init(&barrier->mutex, NULL);
+  pthread_cond_init(&barrier->cond, NULL);
 
   return 0;
 }
@@ -31,8 +31,8 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier) {
   barrier->count = 0;
   barrier->currentCount = 0;
 
-  klee_por_register_event(por_condition_variable_destroy, &barrier->count);
-  klee_por_register_event(por_lock_destroy, &barrier->currentCount);
+  pthread_mutex_destroy(&barrier->mutex);
+  pthread_cond_destroy(&barrier->cond);
 
   return 0;
 }
@@ -45,35 +45,17 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_barrier_t, barrier);
 
-  klee_por_register_event(por_lock_acquire, &barrier->currentCount);
+  pthread_mutex_lock(&barrier->mutex);
 
   barrier->currentCount++;
 
-  if (barrier->currentCount < barrier->count) {
-    klee_por_register_event(por_wait1, &barrier->count, &barrier->currentCount);
-    klee_wait_on(barrier);
-
-    klee_por_register_event(por_wait2, &barrier->count, &barrier->currentCount);
-    klee_por_register_event(por_lock_release, &barrier->currentCount);
-
-    klee_toggle_thread_scheduling(1);
-    return 0;
-  }
-
   if (barrier->currentCount == barrier->count) {
+    pthread_cond_broadcast(&barrier->cond);
     barrier->currentCount = 0;
-    klee_release_waiting(barrier, KLEE_RELEASE_ALL);
-
-    klee_toggle_thread_scheduling(1);
-    klee_preempt_thread();
-
-    klee_por_register_event(por_lock_acquire, &barrier->currentCount);
-    klee_por_register_event(por_broadcast, &barrier->count);
-    klee_por_register_event(por_lock_release, &barrier->currentCount);
-
-    return PTHREAD_BARRIER_SERIAL_THREAD;
+  } else {
+    pthread_cond_wait(&barrier->cond, &barrier->mutex);
   }
 
-  klee_toggle_thread_scheduling(1);
-  return EINVAL;
+  pthread_mutex_unlock(&barrier->mutex);
+  return 0;
 }

@@ -4,6 +4,8 @@
 #include <time.h>
 #include <stdint.h>
 
+#include "pthread.h"
+
 #define SEM_FAILED ((sem_t *) 0)
 
 #ifdef SEM_VALUE_MAX
@@ -15,6 +17,9 @@ typedef struct {
   int value;
   uint64_t waiting;
   const char* name;
+
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
 } sem_t;
 
 int sem_init(sem_t *sem, int f, unsigned v);

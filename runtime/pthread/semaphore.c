@@ -9,11 +9,15 @@
 #include "kpr/list.h"
 
 static kpr_list openSemaphores = KPR_LIST_INITIALIZER;
+static pthread_mutex_t openSemaphoresLock = PTHREAD_MUTEX_INITIALIZER;
 
 static inline void kpr_sem_init(sem_t *sem, unsigned int value) {
   sem->value = value;
   sem->name = NULL;
   sem->waiting = 0;
+
+  pthread_mutex_init(&sem->mutex, NULL);
+  pthread_cond_init(&sem->cond, NULL);
 }
 
 int sem_init (sem_t *sem, int kpr_pshared, unsigned int value) {
@@ -37,6 +41,9 @@ int sem_destroy (sem_t *sem) {
     errno = EINVAL;
     return -1;
   }
+
+  pthread_mutex_destroy(&sem->mutex);
+  pthread_cond_destroy(&sem->cond);
 
   return 0;
 }
@@ -63,7 +70,7 @@ static kpr_list_iterator find_sem_by_name(const char* name) {
 
 sem_t *sem_open (__const char *__name, int __oflag, ...) {
   va_list ap;
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&openSemaphoresLock);
 
   sem_t* sem = NULL;
   kpr_list_iterator it = find_sem_by_name(__name);
@@ -76,7 +83,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
 
   // there is already a valid semaphore
   if (sem != NULL) {
-    klee_toggle_thread_scheduling(1);
+    pthread_mutex_unlock(&openSemaphoresLock);
 
     if (createSet && exclSet) {
       // We are trying to create a semaphore that we already created
@@ -90,7 +97,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
   // So there is not a semaphore with that name
   if (!createSet) {
     errno = ENOENT;
-    klee_toggle_thread_scheduling(1);
+    pthread_mutex_unlock(&openSemaphoresLock);
     return SEM_FAILED;
   }
 
@@ -103,7 +110,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
 
   if (value > SEM_VALUE_MAX) {
     errno = EINVAL;
-    klee_toggle_thread_scheduling(1);
+    pthread_mutex_unlock(&openSemaphoresLock);
     return SEM_FAILED;
   }
 
@@ -113,7 +120,7 @@ sem_t *sem_open (__const char *__name, int __oflag, ...) {
 
   kpr_list_push(&openSemaphores, sem);
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&openSemaphoresLock);
   return sem;
 }
 
@@ -124,14 +131,17 @@ int sem_close (sem_t *sem) {
 int sem_unlink (__const char *__name) {
   sem_t* sem = NULL;
 
+  pthread_mutex_lock(&openSemaphoresLock);
+
   kpr_list_iterator it = find_sem_by_name(__name);
   if (kpr_list_iterator_valid(it)) {
     sem = kpr_list_iterator_value(it);
     kpr_list_erase(&openSemaphores, &it);
   }
 
+  pthread_mutex_unlock(&openSemaphoresLock);
+
   if (sem == NULL) {
-    klee_toggle_thread_scheduling(1);
     return ENOENT;
   }
 
@@ -148,7 +158,7 @@ static int kpr_sem_trywait(sem_t* sem) {
 }
 
 int sem_wait (sem_t *sem) {
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&sem->mutex);
 
   int result = 0;
   while (1) {
@@ -156,23 +166,23 @@ int sem_wait (sem_t *sem) {
 
     if (result == EAGAIN) {
       sem->waiting++;
-      klee_wait_on(sem);
+      pthread_cond_wait(&sem->cond, &sem->mutex);
     } else {
       break;
     }
   }
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&sem->mutex);
 
   return result;
 }
 
 int sem_trywait (sem_t *sem) {
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&sem->mutex);
 
   int result = kpr_sem_trywait(sem);
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&sem->mutex);
 
   if (result == 0) {
     return result;
@@ -183,10 +193,10 @@ int sem_trywait (sem_t *sem) {
 }
 
 int sem_post (sem_t *sem) {
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&sem->mutex);
 
   if (sem->value == SEM_VALUE_MAX) {
-    klee_toggle_thread_scheduling(1);
+    pthread_mutex_unlock(&sem->mutex);
     errno = EOVERFLOW;
     return -1;
   }
@@ -196,24 +206,22 @@ int sem_post (sem_t *sem) {
     // We can wake up all threads since our wait impl will rewait
     if (sem->waiting > 0) {
       sem->waiting--;
-      klee_release_waiting(sem, KLEE_RELEASE_SINGLE);
-    }
 
-    klee_toggle_thread_scheduling(1);
-    klee_preempt_thread();
-  } else {
-    klee_toggle_thread_scheduling(1);
+      pthread_cond_signal(&sem->cond);
+    }
   }
+
+  pthread_mutex_unlock(&sem->mutex);
 
   return 0;
 }
 
 int sem_getvalue (sem_t *sem, int * kpr_sval) {
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&sem->mutex);
 
   *kpr_sval = sem->value;
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&sem->mutex);
 
   return 0;
 }
