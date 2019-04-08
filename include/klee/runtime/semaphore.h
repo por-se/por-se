@@ -15,7 +15,6 @@
 
 typedef struct {
   int value;
-  uint64_t waiting;
   const char* name;
 
   pthread_mutex_t mutex;

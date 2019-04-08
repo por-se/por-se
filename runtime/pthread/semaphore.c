@@ -14,7 +14,6 @@ static pthread_mutex_t openSemaphoresLock = PTHREAD_MUTEX_INITIALIZER;
 static inline void kpr_sem_init(sem_t *sem, unsigned int value) {
   sem->value = value;
   sem->name = NULL;
-  sem->waiting = 0;
 
   pthread_mutex_init(&sem->mutex, NULL);
   pthread_cond_init(&sem->cond, NULL);
@@ -32,7 +31,7 @@ int sem_init (sem_t *sem, int kpr_pshared, unsigned int value) {
 }
 
 int sem_destroy (sem_t *sem) {
-  if (sem->waiting > 0) {
+  if (sem->cond.waitingCount > 0) {
     errno = EBUSY;
     return -1;
   }
@@ -165,7 +164,6 @@ int sem_wait (sem_t *sem) {
     result = kpr_sem_trywait(sem);
 
     if (result == EAGAIN) {
-      sem->waiting++;
       pthread_cond_wait(&sem->cond, &sem->mutex);
     } else {
       break;
@@ -203,10 +201,7 @@ int sem_post (sem_t *sem) {
 
   sem->value++;
   if (sem->value > 0) {
-    // We can wake up all threads since our wait impl will rewait
-    if (sem->waiting > 0) {
-      sem->waiting--;
-
+    if (sem->cond.waitingCount > 0) {
       pthread_cond_signal(&sem->cond);
     }
   }
