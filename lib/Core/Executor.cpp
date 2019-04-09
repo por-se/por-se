@@ -4810,7 +4810,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       }
     }
 
-    if (asEvent != 0) {
+    if (asEvent != por_empty) {
       porEventManager.registerPorEvent(state, asEvent, porData);
     }
 
