@@ -41,7 +41,7 @@ static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
     if (mutex->holdingThread == pthread) {
       mutex->acquired++;
 
-      // need to check overflows -> EAGAIN
+      // TODO: need to check overflows -> EAGAIN
 
       return 0;
     }
