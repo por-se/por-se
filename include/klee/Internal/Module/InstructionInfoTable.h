@@ -57,7 +57,7 @@ class KInstruction;
     }
 
     void setLiveLocals(std::vector<const KInstruction *> &&set) {
-      liveLocals = set;
+      liveLocals = std::move(set);
       hasValidLiveLocals = true;
     }
 
