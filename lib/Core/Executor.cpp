@@ -4469,7 +4469,7 @@ void Executor::runFunctionAsMain(Function *f,
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
   // We do not have to register the por event as we already have created it
-  registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
+  porEventManager.registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4874,14 +4874,6 @@ void Executor::exitThread(ExecutionState &state) {
   }
 
   scheduleThreads(state);
-}
-
-void Executor::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
-  bool successful = porEventManager.registerPorEvent(state, kind, std::move(args));
-
-  if (!successful) {
-    terminateStateOnError(state, "klee_por_register_event", Executor::User);
-  }
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {

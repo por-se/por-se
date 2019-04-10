@@ -606,8 +606,6 @@ public:
   void preemptThread(ExecutionState &state);
   void exitThread(ExecutionState &state);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);
-
-  void registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> ags);
 };
   
 } // End klee namespace

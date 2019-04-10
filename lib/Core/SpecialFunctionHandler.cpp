@@ -1059,7 +1059,9 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
     args.push_back(cast<ConstantExpr>(expr)->getZExtValue());
   }
 
-  executor.registerPorEvent(state, kind, args);
+  if (!executor.porEventManager.registerPorEvent(state, kind, std::move(args))) {
+    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+  }
 }
 
 
