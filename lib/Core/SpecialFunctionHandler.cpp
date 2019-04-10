@@ -935,6 +935,9 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
 
   Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
   executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
+
+  // has to happen last as it needs to include return value
+  executor.porEventManager.registerPorEvent(state, por_thread_create, { tid });
 }
 
 void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,

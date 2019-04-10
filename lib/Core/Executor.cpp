@@ -4788,8 +4788,6 @@ Thread::ThreadId Executor::createThread(ExecutionState &state,
   if (statsTracker)
     statsTracker->framePushed(&thread->stack.back(), nullptr);
 
-  registerPorEvent(state, por_thread_create, { thread->getThreadId() });
-
   return thread->getThreadId();
 }
 
