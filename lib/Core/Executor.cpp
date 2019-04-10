@@ -4796,7 +4796,7 @@ void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
   scheduleThreads(state);
 }
 
-void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, por_event_t asEvent) {
+void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent) {
   if (!onlyOne) {
     std::vector<std::uint64_t> porData;
     porData.push_back(lid);
@@ -4808,8 +4808,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       }
     }
 
-    if (asEvent != por_empty) {
-      porEventManager.registerPorEvent(state, asEvent, porData);
+    if (registerAsNotificationEvent) {
+      porEventManager.registerPorEvent(state, por_broadcast, porData);
     }
 
     return;
@@ -4848,13 +4848,11 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       addedStates.push_back(st);
     }
 
-    Thread::ThreadId tidToWakeUp = choices[i];
-
-    if (asEvent != 0) {
-      porEventManager.registerPorEvent(*st, asEvent, { lid, tidToWakeUp });
+    if (registerAsNotificationEvent) {
+      porEventManager.registerPorEvent(*st, por_signal, { lid, choices[i] });
     }
 
-    st->wakeUpThread(tidToWakeUp);
+    st->wakeUpThread(choices[i]);
   }
 }
 

@@ -1004,15 +1004,23 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
                                                  KInstruction *target,
                                                  std::vector<klee::ref<klee::Expr>> &arguments) {
   assert((arguments.size() == 2 || arguments.size() == 3) && "invalid number of arguments to klee_release_waiting");
-  ref<Expr> lid = executor.toUnique(state, arguments[0]);
-  ref<Expr> mode = executor.toUnique(state, arguments[1]);
+  ref<Expr> lidExpr = executor.toUnique(state, arguments[0]);
+  ref<Expr> modeExpr = executor.toUnique(state, arguments[1]);
 
-  if (!isa<ConstantExpr>(lid) || !isa<ConstantExpr>(mode)) {
+  if (!isa<ConstantExpr>(lidExpr) || !isa<ConstantExpr>(modeExpr)) {
     executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
     return;
   }
 
-  por_event_t asEvent = por_empty;
+  std::uint64_t lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
+
+  // mode == 0 -> KLEE_RELEASE_ALL
+  // mode == 1 -> KLEE_RELEASE_SINGLE
+  auto mode = cast<ConstantExpr>(modeExpr)->getZExtValue();
+  assert((mode == 0 || mode == 1) && "invalid mode given to klee_release_waiting");
+  bool releaseSingle = (mode == 1);
+
+  bool registerAsNotificationEvent = false;
   if (arguments.size() > 2) {
     ref<Expr> asEventExpr = executor.toUnique(state, arguments[2]);
 
@@ -1020,16 +1028,18 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
       executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
       return;
     }
+    por_event_t asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
 
-    asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
+    // only allow por_broadcast and por_signal with corresponding mode
+    bool legitimateRegistration = (asEvent == por_broadcast && !releaseSingle) || (asEvent == por_signal && releaseSingle);
+    if (!legitimateRegistration) {
+      executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
+      return;
+    }
+    registerAsNotificationEvent = true;
   }
 
-  // mode == 0 -> KLEE_RELEASE_ALL
-  // mode == 1 -> KLEE_RELEASE_SINGLE
-  executor.threadWakeUpWaiting(state,
-          cast<ConstantExpr>(lid)->getZExtValue(),
-          cast<ConstantExpr>(mode)->getZExtValue() == 1,
-          asEvent);
+  executor.threadWakeUpWaiting(state, lid, releaseSingle, registerAsNotificationEvent);
 }
 
 void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
