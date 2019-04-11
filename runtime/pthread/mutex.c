@@ -93,12 +93,23 @@ int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept) {
   return result;
 }
 
+static inline void check_for_unsupported_acquire(int result) {
+  // XXX: Since the current thread has now acquired the mutex, we would trigger
+  // two lock_acquire events following each other. Our partial order does not currently
+  // handle this case.
+  if (result == EOWNERDEAD) {
+    klee_report_error(__FILE__, __LINE__, "Reacquiring of robust mutex with owner being dead (unsupported)", "xxx.err");
+  }
+}
+
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
   int hasSlept = 0;
   int result = kpr_mutex_lock_internal(mutex, &hasSlept);
+
+  check_for_unsupported_acquire(result);
 
   if (mutex->acquired == 1) {
     klee_por_register_event(por_lock_acquire, mutex);
@@ -108,6 +119,24 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
   if (hasSlept == 0) {
     klee_preempt_thread();
   }
+
+  return result;
+}
+
+int pthread_mutex_trylock(pthread_mutex_t *mutex) {
+  klee_toggle_thread_scheduling(0);
+  kpr_check_if_valid(pthread_mutex_t, mutex);
+
+  int result = kpr_mutex_trylock_internal(mutex);
+
+  check_for_unsupported_acquire(result);
+
+  if (mutex->acquired == 1 && mutex->holdingThread == pthread_self()) {
+    klee_por_register_event(por_lock_acquire, mutex);
+  }
+
+  klee_toggle_thread_scheduling(1);
+  klee_preempt_thread();
 
   return result;
 }
@@ -169,21 +198,6 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
   klee_toggle_thread_scheduling(1);
 
-  klee_preempt_thread();
-
-  return result;
-}
-
-int pthread_mutex_trylock(pthread_mutex_t *mutex) {
-  klee_toggle_thread_scheduling(0);
-  kpr_check_if_valid(pthread_mutex_t, mutex);
-
-  int result = kpr_mutex_trylock_internal(mutex);
-  if (result == 0) {
-    klee_por_register_event(por_lock_acquire, mutex);
-  }
-
-  klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
 
   return result;
