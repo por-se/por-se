@@ -135,21 +135,24 @@ typedef struct {
   pthread_mutex_t* waitingMutex;
   uint64_t waitingCount;
 } pthread_cond_t;
-#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 };
+#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 }
 
 typedef struct {
   pthread_internal_t magic;
   pthread_t acquiredWriter;
   size_t acquiredReaderCount;
 
-  size_t waitingWriterCount;
-  size_t waitingReaderCount;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
 } pthread_rwlock_t;
-#define PTHREAD_RWLOCK_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0, 0, 0 };
+#define PTHREAD_RWLOCK_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0, PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER }
 
 typedef pthread_mutex_t pthread_spinlock_t;
 
-typedef int pthread_once_t;
+typedef struct {
+  int called;
+  pthread_mutex_t mutex;
+} pthread_once_t;
 
 // Primitives that need other primitives
 
@@ -190,7 +193,7 @@ typedef struct {
 
 typedef void* pthread_key_t;
 
-#define PTHREAD_ONCE_INIT (0)
+#define PTHREAD_ONCE_INIT { 0, PTHREAD_MUTEX_INITIALIZER }
 
 #define PTHREAD_DESTRUCTOR_ITERATIONS (16)
 

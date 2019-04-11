@@ -2,15 +2,15 @@
 #include "klee/runtime/pthread.h"
 
 int pthread_once(pthread_once_t *once, void (*oncefunc)(void)) {
-  klee_toggle_thread_scheduling(0);
+  pthread_mutex_lock(&once->mutex);
 
-  if (*once != 0) {
-    klee_toggle_thread_scheduling(1);
+  if (once->called != 0) {
+    pthread_mutex_unlock(&once->mutex);
     return 0;
   }
 
-  *once = 1;
-  klee_toggle_thread_scheduling(1);
+  once->called = 1;
+  pthread_mutex_unlock(&once->mutex);
 
   oncefunc();
 

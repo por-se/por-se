@@ -48,10 +48,10 @@ int pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr
 
   lock->acquiredWriter = NULL;
 
-  lock->waitingReaderCount = 0;
-  lock->waitingWriterCount = 0;
-
   lock->acquiredReaderCount = 0;
+
+  pthread_mutex_init(&lock->mutex, NULL);
+  pthread_cond_init(&lock->cond, NULL);
 
   return 0;
 }
@@ -64,12 +64,17 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
     return EBUSY;
   }
 
+  pthread_mutex_destroy(&lock->mutex);
+  pthread_cond_destroy(&lock->cond);
+
   return 0;
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
+
+  pthread_mutex_lock(&lock->mutex);
 
   int result;
   for (;;) {
@@ -78,13 +83,12 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
       break;
     }
 
-    lock->waitingReaderCount++;
-    klee_wait_on(lock);
+    pthread_cond_wait(&lock->cond, &lock->mutex);
 
     // And try again if we did not succeed
   }
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&lock->mutex);
 
   return result;
 }
@@ -93,9 +97,9 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
+  pthread_mutex_lock(&lock->mutex);
   int result = rwlock_tryrdlock(lock);
-
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&lock->mutex);
 
   return result;
 }
@@ -104,6 +108,8 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
+  pthread_mutex_lock(&lock->mutex);
+
   int result;
   for (;;) {
     result = rwlock_trywrlock(lock);
@@ -111,13 +117,12 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
       break;
     }
 
-    lock->waitingWriterCount++;
-    klee_wait_on(lock);
+    pthread_cond_wait(&lock->cond, &lock->mutex);
 
     // And try again if we did not succeed
   }
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&lock->mutex);
 
   return result;
 }
@@ -126,9 +131,10 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
-  int result = rwlock_trywrlock(lock);
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_lock(&lock->mutex);
+  int result = rwlock_trywrlock(lock);
+  pthread_mutex_unlock(&lock->mutex);
 
   return result;
 }
@@ -136,6 +142,8 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
 int pthread_rwlock_unlock(pthread_rwlock_t *lock) {
   klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
+
+  pthread_mutex_lock(&lock->mutex);
 
   bool unlockAll = false;
   bool validUnlock = false;
@@ -154,13 +162,10 @@ int pthread_rwlock_unlock(pthread_rwlock_t *lock) {
   }
 
   if (unlockAll) {
-    klee_release_waiting(lock, KLEE_RELEASE_ALL);
-
-    lock->waitingReaderCount = 0;
-    lock->waitingWriterCount = 0;
+    pthread_cond_broadcast(&lock->cond);
   }
 
-  klee_toggle_thread_scheduling(1);
+  pthread_mutex_unlock(&lock->mutex);
   return validUnlock ? 0 : -1;
 }
 
