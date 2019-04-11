@@ -92,6 +92,9 @@ public:
   /// @brief Thread map representing all threads that exist at the moment
   threads_ty threads;
 
+  /// @brief True if scheduleThreads() should be run after current instruction
+  bool needsThreadScheduling = false;
+
     /// @brief the history of scheduling up until now
   std::vector<Thread::ThreadId> schedulingHistory;
 

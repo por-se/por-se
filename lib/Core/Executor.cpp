@@ -3177,6 +3177,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::updateStates(ExecutionState *current) {
+  if (current && current->needsThreadScheduling) {
+    scheduleThreads(*current);
+    current->needsThreadScheduling = false;
+  }
+
   if (searcher) {
     searcher->update(current, addedStates, removedStates);
   }
@@ -4793,7 +4798,7 @@ Thread::ThreadId Executor::createThread(ExecutionState &state,
 
 void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
   state.threadWaitOn(lid);
-  scheduleThreads(state);
+  state.needsThreadScheduling = true;
 }
 
 void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent) {
@@ -4858,7 +4863,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
 
 void Executor::preemptThread(ExecutionState &state) {
   state.preemptThread(state.currentThreadId());
-  scheduleThreads(state);
+  state.needsThreadScheduling = true;
 }
 
 void Executor::exitThread(ExecutionState &state) {
@@ -4871,7 +4876,7 @@ void Executor::exitThread(ExecutionState &state) {
     porEventManager.registerPorEvent(state, por_thread_exit, { tid });
   }
 
-  scheduleThreads(state);
+  state.needsThreadScheduling = true;
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
