@@ -16,33 +16,25 @@
 //===----------------------------------------------------------------------===//
 
 #include "klee/Config/Version.h"
-#include "klee/Internal/Module/LLVMPassManager.h"
 #include "klee/OptionCategories.h"
 
 #ifdef USE_WORKAROUND_LLVM_PR39177
 #include "Passes.h"
 #endif
 
+#include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/Passes.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/PluginLoader.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-#include "llvm/IR/Verifier.h"
-#else
-#include "llvm/Analysis/Verifier.h"
-#endif
-
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
-#include "llvm/Analysis/GlobalsModRef.h"
-#endif
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
 #include "llvm/Transforms/IPO/FunctionAttrs.h"
@@ -93,7 +85,7 @@ static cl::alias A1("S", cl::desc("Alias for --strip-debug"),
 
 // A utility function that adds a pass to the pass manager but will also add
 // a verifier pass after if we're supposed to verify.
-static inline void addPass(klee::LegacyLLVMPassManagerTy &PM, Pass *P) {
+static inline void addPass(legacy::PassManager &PM, Pass *P) {
   // Add the pass to the pass manager...
   PM.add(P);
 
@@ -105,7 +97,7 @@ static inline void addPass(klee::LegacyLLVMPassManagerTy &PM, Pass *P) {
 namespace llvm {
 
 
-static void AddStandardCompilePasses(klee::LegacyLLVMPassManagerTy &PM) {
+static void AddStandardCompilePasses(legacy::PassManager &PM) {
   PM.add(createVerifierPass());                  // Verify that input is correct
 
   // If the -strip-debug command line option was specified, do it.
@@ -122,16 +114,12 @@ static void AddStandardCompilePasses(klee::LegacyLLVMPassManagerTy &PM) {
   addPass(PM, createCFGSimplificationPass());    // Clean up after IPCP & DAE
 
   addPass(PM, createPruneEHPass());              // Remove dead EH info
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
   addPass(PM, createPostOrderFunctionAttrsLegacyPass());
 #else
   addPass(PM, createPostOrderFunctionAttrsPass());
 #endif
   addPass(PM, createReversePostOrderFunctionAttrsPass()); // Deduce function attrs
-#else
-  addPass(PM, createFunctionAttrsPass());        // Deduce function attrs
-#endif
 
   if (!DisableInline)
     addPass(PM, createFunctionInliningPass());   // Inline small functions
@@ -180,7 +168,7 @@ static void AddStandardCompilePasses(klee::LegacyLLVMPassManagerTy &PM) {
 void Optimize(Module *M, llvm::ArrayRef<const char *> preservedFunctions) {
 
   // Instantiate the pass manager to organize the passes.
-  klee::LegacyLLVMPassManagerTy Passes;
+  legacy::PassManager Passes;
 
   // If we're verifying, start off with a verification pass.
   if (VerifyEach)
@@ -188,19 +176,6 @@ void Optimize(Module *M, llvm::ArrayRef<const char *> preservedFunctions) {
 
 #ifdef USE_WORKAROUND_LLVM_PR39177
   addPass(Passes, new klee::WorkaroundLLVMPR39177Pass());
-#endif
-
-  // Add an appropriate DataLayout instance for this module...
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 7)
-  // LLVM 3.7+ doesn't have DataLayoutPass anymore.
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-  DataLayoutPass *dlpass = new DataLayoutPass();
-  dlpass->doInitialization(*M);
-  addPass(Passes, dlpass);
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
-  addPass(Passes, new DataLayoutPass(M));
-#else
-  addPass(Passes, new DataLayout(M));
 #endif
 
   // DWD - Run the opt standard pass list as well.
@@ -269,7 +244,6 @@ void Optimize(Module *M, llvm::ArrayRef<const char *> preservedFunctions) {
 #endif
 
   // Run a few AA driven optimizations here and now, to cleanup the code.
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
   addPass(Passes, createPostOrderFunctionAttrsLegacyPass());
 #else
@@ -277,10 +251,6 @@ void Optimize(Module *M, llvm::ArrayRef<const char *> preservedFunctions) {
 #endif
   addPass(Passes, createReversePostOrderFunctionAttrsPass()); // Add nocapture
   addPass(Passes, createGlobalsAAWrapperPass()); // IP alias analysis
-#else
-  addPass(Passes, createFunctionAttrsPass());        // Add nocapture
-  addPass(Passes, createGlobalsModRefPass());        // IP alias analysis
-#endif
 
   addPass(Passes, createLICMPass());                 // Hoist loop invariants
   addPass(Passes, createGVNPass());                  // Remove redundancies

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- encoding: utf-8 -*-
 
 # ===-- klee-stats --------------------------------------------------------===##
@@ -12,23 +12,18 @@
 
 """Output statistics logged by Klee."""
 
-# use '/' to mean true division and '//' to mean floor division
-from __future__ import division
-from __future__ import print_function
-
 import os
-import re
 import sys
 import argparse
+import sqlite3
 
-from operator import itemgetter
 try:
-    from tabulate import TableFormat, Line, DataRow, tabulate
+    from tabulate import TableFormat, Line, DataRow, tabulate, _table_formats
 except:
     print('Error: Package "tabulate" required for table formatting. '
-          'Please install it using "pip" or your package manager.',
+          'Please install it using "pip" or your package manager.'
+          'You can still use --grafana and --to-csv without tabulate.',
           file=sys.stderr)
-    exit(1)
 
 Legend = [
     ('Instrs', 'number of executed instructions'),
@@ -62,53 +57,27 @@ def getLogFile(path):
     """Return the path to run.stats."""
     return os.path.join(path, 'run.stats')
 
-
 class LazyEvalList:
     """Store all the lines in run.stats and eval() when needed."""
-    def __init__(self, lines):
+    def __init__(self, fileName):
         # The first line in the records contains headers.
-        self.lines = lines[1:]
+      self.conn = sqlite3.connect(fileName)
+      self.c = self.conn.cursor()
+      self.c.execute("SELECT * FROM stats ORDER BY Instructions DESC LIMIT 1")
+      self.line = self.c.fetchone()
 
-    def __getitem__(self, index):
-        if isinstance(self.lines[index], str):
-            self.lines[index] = eval(self.lines[index])
-        return self.lines[index]
+    def aggregateRecords(self):
+      memC = self.conn.cursor()
+      memC.execute("SELECT max(MallocUsage) / 1024 / 1024, avg(MallocUsage) / 1024 / 1024 from stats")
+      maxMem, avgMem = memC.fetchone()
 
-    def __len__(self):
-        return len(self.lines)
+      stateC = self.conn.cursor()
+      stateC.execute("SELECT max(NumStates), avg(NumStates) from stats")
+      maxStates, avgStates = stateC.fetchone()
+      return (maxMem, avgMem, maxStates, avgStates)
 
-
-def getMatchedRecordIndex(records, column, target):
-    """Find target from the specified column in records."""
-    target = int(target)
-    lo = 0
-    hi = len(records) - 1
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if column(records[mid]) <= target:
-            lo = mid + 1
-        else:
-            hi = mid
-    return lo
-
-
-def aggregateRecords(records):
-    # index for memUsage and stateCount in run.stats
-    memIndex = 6
-    stateIndex = 5
-
-    # maximum and average memory usage
-    memValues = list(map(itemgetter(memIndex), records))
-    maxMem = max(memValues) / 1024 / 1024
-    avgMem = sum(memValues) / len(memValues) / 1024 / 1024
-
-    # maximum and average number of states
-    stateValues = list(map(itemgetter(stateIndex), records))
-    maxStates = max(stateValues)
-    avgStates = sum(stateValues) / len(stateValues)
-
-    return (maxMem, avgMem, maxStates, avgStates)
-
+    def getLastRecord(self):
+      return self.line
 
 def stripCommonPathPrefix(paths):
     paths = map(os.path.normpath, paths)
@@ -119,19 +88,6 @@ def stripCommonPathPrefix(paths):
         if len(set(elts)) > 1:
             break
     return ['/'.join(p[i:]) for p in paths]
-
-
-def getKeyIndex(key, labels):
-    """Get the index of the specified key in labels."""
-    def normalizeKey(key):
-        return re.split('\W', key)[0]
-
-    for i, title in enumerate(labels):
-        if normalizeKey(title) == normalizeKey(key):
-            return i
-    else:
-        raise ValueError('invalid key: {0}'.format(key))
-
 
 def getKleeOutDirs(dirs):
     kleeOutDirs = []
@@ -145,7 +101,6 @@ def getKleeOutDirs(dirs):
                     if os.path.exists(os.path.join(path, 'info')):
                         kleeOutDirs.append(path)
     return kleeOutDirs
-
 
 def getLabels(pr):
     if pr == 'all':
@@ -178,6 +133,7 @@ def getRow(record, stats, pr):
     if BTot == 0:
         BFull = BTot = 1
 
+    Ts, Tcex, Tf, Tr, T, Treal = [e / 1000000 for e in [Ts, Tcex, Tf, Tr, T, Treal]] #convert from microseconds
     Mem = Mem / 1024 / 1024
     AvgQC = int(QCon / max(1, QTot))
 
@@ -205,69 +161,66 @@ def getRow(record, stats, pr):
     return row
 
 
-def drawLineChart(vectors, titles):
-    """Draw a line chart based on data from vectors.
+def grafana(dirs):
+    dr = getLogFile(dirs[0])
+    from flask import Flask, jsonify, request
+    import datetime
+    app = Flask(__name__)
 
-    Args:
-        vectors: A list of vectors. Each vector is drawn in a separate
-                 subchart.
-        titles: A list of strings. Each string is an explanation of the
-                corresponding vector.
-    """
-    try:
-        import matplotlib
-        matplotlib.use('Agg')  # plot without X-server connection
-        import matplotlib.pyplot as plt
-    except:
-        print('Error: Package "matplotlib" required for figure plotting. '
-              'Please install it using "pip" or your package manager.',
-              file=sys.stderr)
-        exit(1)
-    from math import sqrt, ceil
+    def toEpoch(date_text):
+        dt = datetime.datetime.strptime(date_text, "%Y-%m-%dT%H:%M:%S.%fZ")
+        epoch = (dt - datetime.datetime(1970, 1, 1)).total_seconds()
+        return epoch
 
-    nFigs = len(vectors)       # number of subfigures
-    nRow = int(sqrt(nFigs))    # number of rows in the figure
-    nCol = ceil(nFigs / nRow)  # number of columns in the figure
+    @app.route('/')
+    def status():
+        return 'OK'
 
-    fig = plt.figure()
-    for i in range(nFigs):
-        ax = fig.add_subplot(nRow, nCol, i+1)
-        ax.plot(vectors[i])
-        ax.set_title(titles[i])
-        #ax.set_xlabel()
-        #ax.set_ylabel()
+    @app.route('/search', methods=['GET', 'POST'])
+    def search():
+        conn = sqlite3.connect(dr)
+        cursor = conn.execute('SELECT * FROM stats')
+        names = [description[0] for description in cursor.description]
+        return jsonify(names)
 
-    #fig.show()
-    #raw_input('Press any key to continue..')
+    @app.route('/query', methods=['POST'])
+    def query():
+        jsn = request.get_json()
+        interval = jsn["intervalMs"]
+        limit = jsn["maxDataPoints"]
+        frm = toEpoch(jsn["range"]["from"])
+        to = toEpoch(jsn["range"]["to"])
+        targets = [str(t["target"]) for t in jsn["targets"]]
+        startTime = os.path.getmtime(dr)
+        fromTime = frm - startTime if frm - startTime > 0 else 0
+        toTime = to - startTime if to - startTime > fromTime else fromTime + 100
+        #convert to microseconds
+        startTime, fromTime, toTime = startTime*1000000, fromTime*1000000, toTime*1000000
+        sqlTarget = ",".join(["AVG( {0} )".format(t) for t in targets if t.isalnum()])
 
-    def getFileName():
-        """Get a unused file name in current directory."""
-        i = 0
-        fileName = 'fig-klee-stats-{0}.png'.format(i)
-        while os.path.exists(fileName):
-            i = i + 1
-            fileName = 'fig-klee-stats-{0}.png'.format(i)
-        return fileName
+        conn = sqlite3.connect(dr)
 
-    plt.savefig(getFileName(),
-                dpi=150,  # dots-per-inch, default: 100
-                bbox_inches='tight',  # tighter bbox
-                transparent=False)
+        s = "SELECT WallTime + ? , {fields} " \
+            + " FROM stats" \
+            + " WHERE WallTime >= ? AND WallTime <= ?" \
+            + " GROUP BY WallTime/? LIMIT ?"
+        s = s.format(fields=sqlTarget) #can't use prepared staments for this one
 
+        #All times need to be in microseconds, interval is in milliseconds
+        cursor = conn.execute(s, ( startTime, fromTime, toTime, interval*1000, limit))
+        result = [ {"target": t, "datapoints": []} for t in targets ]
+        for line in cursor:
+            unixtimestamp = int(line[0]) / 1000 #Convert from microsecond to miliseconds
+            for field, datastream in zip(line[1:], result):
+                datastream["datapoints"].append([field, unixtimestamp])
+
+        ret = jsonify(result)
+        return ret
+
+    app.run()
+    return 0
 
 def main():
-    # function for sanitizing arguments
-    def isPositiveInt(value):
-        try:
-            value = int(value)
-        except ValueError:
-            raise argparse.ArgumentTypeError(
-                'integer expected: {0}'.format(value))
-        if value <= 0:
-            raise argparse.ArgumentTypeError(
-                'positive integer expected: {0}'.format(value))
-        return value
-
     parser = argparse.ArgumentParser(
         description='output statistics logged by klee',
         epilog='LEGEND\n' + tabulate(Legend),
@@ -275,27 +228,16 @@ def main():
 
     parser.add_argument('dir', nargs='+', help='klee output directory')
 
-    parser.add_argument('--precision',
-                        dest='precision', type=isPositiveInt,
-                        default=2, metavar='n',
-                        help='Floating point numbers display precision '
-                        '(default: 2).')
     parser.add_argument('--table-format',
-                        choices=['plain', 'simple', 'grid', 'pipe', 'orgtbl',
-                                 'rst', 'mediawiki', 'latex', 'klee'],
-                        dest='tableFormat', default='klee',
-                        help='Table format for the summary.')
-    parser.add_argument('--draw-line-chart',
-                        dest='drawLineChart', metavar='header-list',
-                        help='Draw line chart for a list of columns. '
-                        'Columns must be chosen from the headers of the '
-                        'table outputted and separated by comma (e.g., '
-                        '--draw-line-chart=Instrs,Time). Data points '
-                        'on x-axis correspond to lines in run.stats.')
-    parser.add_argument('--sample-interval', dest='sampleInterv',
-                        type=isPositiveInt, default='10', metavar='n',
-                        help='Sample a data point every n lines for a '
-                        'run.stats (default: 10)')
+                          choices=['klee'] + list(_table_formats.keys()),
+                          dest='tableFormat', default='klee',
+                          help='Table format for the summary.')
+    parser.add_argument('--to-csv',
+                          action='store_true', dest='toCsv',
+                          help='Output stats as comma-separated values (CSV)')
+    parser.add_argument('--grafana',
+                          action='store_true', dest='grafana',
+                          help='Start a grafana web server')
 
     # argument group for controlling output verboseness
     pControl = parser.add_mutually_exclusive_group(required=False)
@@ -316,32 +258,8 @@ def main():
                           help='Print extra information (needed when '
                           'monitoring an ongoing run).')
 
-    # arguments for sorting
-    parser.add_argument('--sort-by', dest='sortBy', metavar='header',
-                        help='Key value to sort by. Must be chosen from '
-                        'the headers of the table outputted  (e.g., '
-                        '--sort-by=Instrs).')
-    parser.add_argument('--ascending',
-                        dest='ascending', action='store_true',
-                        help='Sort in ascending order (default: False).')
-
-    # arguments for comparing
-    parser.add_argument('--compare-by', dest='compBy', metavar='header',
-                        help='Key value on which to compare runs to the '
-                        'reference one (which is the first one). Must be '
-                        'chosen from the headers of the table oputputted. '
-                        'e.g., --compare-by=Instrs shows how each run '
-                        'compares to the reference run after executing the '
-                        'same number of instructions as the reference run. '
-                        "If a run hasn't executed as many instructions as "
-                        'the reference one, we simply print the statistics '
-                        'at the end of that run.')
-    parser.add_argument('--compare-at', dest='compAt', metavar='value',
-                        help='Value to compare the runs at. Can be special '
-                        "value 'last' to compare at the last point which "
-                        'makes sense. Use in conjunction with --compare-by.')
-
     args = parser.parse_args()
+
 
     # get print controls
     pr = 'NONE'
@@ -355,33 +273,33 @@ def main():
         pr = 'more'
 
     dirs = getKleeOutDirs(args.dir)
+    if args.grafana:
+      return grafana(dirs)
     if len(dirs) == 0:
         print('no klee output dir found', file=sys.stderr)
         exit(1)
     # read contents from every run.stats file into LazyEvalList
-    data = [LazyEvalList(list(open(getLogFile(d)))) for d in dirs]
+    data = [LazyEvalList(getLogFile(d)) for d in dirs]
+
+    if args.toCsv:
+        import csv
+        data = data[0]
+        c = data.conn.cursor()
+        sql3_cursor = c.execute("SELECT * FROM stats")
+        csv_out = csv.writer(sys.stdout)
+        # write header                        
+        csv_out.writerow([d[0] for d in sql3_cursor.description])
+        # write data                          
+        for result in sql3_cursor:
+          csv_out.writerow(result)
+        return
+
     if len(data) > 1:
         dirs = stripCommonPathPrefix(dirs)
     # attach the stripped path
     data = list(zip(dirs, data))
 
     labels = getLabels(pr)
-    # labels in the same order as in the run.stats file. used by --compare-by.
-    # current impl needs monotonic values, so only keep the ones making sense.
-    rawLabels = ('Instrs', '', '', '', '', '', '', 'Queries',
-                 '', '', 'Time', 'ICov', '', '', '', '', '', '')
-
-    if args.compBy:
-        # index in the record of run.stats
-        compIndex = getKeyIndex(args.compBy, rawLabels)
-        if args.compAt:
-            if args.compAt == 'last':
-                # [records][last-record][compare-by-index]
-                refValue = min(map(lambda r: r[1][-1][compIndex], data))
-            else:
-                refValue = args.compAt
-        else:
-            refValue = data[0][1][-1][compIndex]
 
     # build the main body of the table
     table = []
@@ -389,28 +307,16 @@ def main():
     totStats = []    # accumulated stats
     for path, records in data:
         row = [path]
-        if args.compBy:
-            matchIndex = getMatchedRecordIndex(
-                records, itemgetter(compIndex), refValue)
-            stats = aggregateRecords(LazyEvalList(records[:matchIndex + 1]))
-            totStats.append(stats)
-            row.extend(getRow(records[matchIndex], stats, pr))
-            totRecords.append(records[matchIndex])
-        else:
-            stats = aggregateRecords(records)
-            totStats.append(stats)
-            row.extend(getRow(records[-1], stats, pr))
-            totRecords.append(records[-1])
+        stats = records.aggregateRecords()
+        totStats.append(stats)
+        row.extend(getRow(records.getLastRecord(), stats, pr))
+        totRecords.append(records.getLastRecord())
         table.append(row)
     # calculate the total
     totRecords = [sum(e) for e in zip(*totRecords)]
     totStats = [sum(e) for e in zip(*totStats)]
     totalRow = ['Total ({0})'.format(len(table))]
     totalRow.extend(getRow(totRecords, totStats, pr))
-
-    if args.sortBy:
-        table = sorted(table, key=itemgetter(getKeyIndex(args.sortBy, labels)),
-                       reverse=(not args.ascending))
 
     if len(data) > 1:
         table.append(totalRow)
@@ -420,13 +326,13 @@ def main():
         print(tabulate(
             table, headers='firstrow',
             tablefmt=args.tableFormat,
-            floatfmt='.{p}f'.format(p=args.precision),
+            floatfmt='.{p}f'.format(p=2),
             numalign='right', stralign='center'))
     else:
         stream = tabulate(
             table, headers='firstrow',
             tablefmt=KleeTable,
-            floatfmt='.{p}f'.format(p=args.precision),
+            floatfmt='.{p}f'.format(p=2),
             numalign='right', stralign='center')
         # add a line separator before the total line
         if len(data) > 1:
@@ -435,36 +341,6 @@ def main():
             stream = '\n'.join(stream)
         print(stream)
 
-    if args.drawLineChart:
-        if len(dirs) != 1:
-            print('--draw-line-chart only supports using a single file',
-                  file=sys.stderr)
-            exit(1)
-
-        # sample according to the given interval
-        samples = [r for i, r in enumerate(data[0][1])
-                   if i % args.sampleInterv == 0]
-        vectors = []
-        for i in range(len(samples)):
-            # aggregate all the samples upto the i-th one
-            stats = aggregateRecords(samples[:i + 1])
-            vectors.append(getRow(samples[i], stats, pr))
-
-        titles = args.drawLineChart.split(',')
-        # Index returned by getKeyIndex() against labels is starting from
-        # 'Path' column.  vectors here doesn't have the 'Path' column.
-        indices = [getKeyIndex(e, labels) - 1 for e in titles]
-        # get one more column to make sure itemgetter always return tuples
-        indices.append(0)
-        # strip columns not specified by the user
-        vectors = map(itemgetter(*indices), vectors)
-        # combine elements in the same column into the same tuple
-        vectors = list(zip(*vectors))
-        # remove the column we get but not needed
-        vectors = vectors[:-1]
-
-        drawLineChart(vectors, titles)
-
-
+   
 if __name__ == '__main__':
     main()

@@ -16,7 +16,6 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
-#include "klee/Internal/Module/LLVMPassManager.h"
 #include "klee/Internal/Support/Debug.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/Internal/Support/ModuleUtil.h"
@@ -29,34 +28,25 @@
 #else
 #include "llvm/Bitcode/ReaderWriter.h"
 #endif
+#include "llvm/IR/CallSite.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/ValueSymbolTable.h"
-
-#if LLVM_VERSION_CODE < LLVM_VERSION(3, 5)
-#include "llvm/Analysis/Verifier.h"
-#include "llvm/Linker.h"
-#include "llvm/Support/CallSite.h"
-#else
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Linker/Linker.h"
-#endif
-
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Transforms/Scalar.h"
 #if LLVM_VERSION_CODE >= LLVM_VERSION(8, 0)
 #include "llvm/Transforms/Scalar/Scalarizer.h"
 #endif
-
 #include "llvm/Transforms/Utils/Cloning.h"
-
 #if LLVM_VERSION_CODE >= LLVM_VERSION(7, 0)
 #include "llvm/Transforms/Utils.h"
 #endif
@@ -151,14 +141,10 @@ static Function *getStubFunctionForCtorList(Module *m,
   if (arr) {
     for (unsigned i=0; i<arr->getNumOperands(); i++) {
       auto cs = cast<ConstantStruct>(arr->getOperand(i));
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 5)
       // There is a third *optional* element in global_ctor elements (``i8
       // @data``).
       assert((cs->getNumOperands() == 2 || cs->getNumOperands() == 3) &&
              "unexpected element in ctor initializer list");
-#else
-      assert(cs->getNumOperands()==2 && "unexpected element in ctor initializer list");
-#endif
       auto fp = cs->getOperand(1);
       if (!fp->isNullValue()) {
         if (auto ce = dyn_cast<llvm::ConstantExpr>(fp))
@@ -193,11 +179,7 @@ injectStaticConstructorsAndDestructors(Module *m,
                entryFunction.str().c_str());
 
   if (ctors) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
     llvm::IRBuilder<> Builder(&*mainFn->begin()->begin());
-#else
-    llvm::IRBuilder<> Builder(mainFn->begin()->begin());
-#endif
     Builder.CreateCall(getStubFunctionForCtorList(m, ctors, "klee.ctor_stub"));
   }
 
@@ -246,7 +228,7 @@ void KModule::instrument(const Interpreter::ModuleOptions &opts) {
   // invariant transformations that we will end up doing later so that
   // optimize is seeing what is as close as possible to the final
   // module.
-  LegacyLLVMPassManagerTy pm;
+  legacy::PassManager pm;
   pm.add(new RaiseAsmPass());
 
   // This pass will scalarize as much code as possible so that the Executor
@@ -269,7 +251,7 @@ void KModule::optimiseAndPrepare(
   // Preserve all functions containing klee-related function calls from being
   // optimised around
   if (!OptimiseKLEECall) {
-    LegacyLLVMPassManagerTy pm;
+    legacy::PassManager pm;
     pm.add(new OptNonePass());
     pm.run(*module);
   }
@@ -293,7 +275,7 @@ void KModule::optimiseAndPrepare(
   // linked in something with intrinsics but any external calls are
   // going to be unresolved. We really need to handle the intrinsics
   // directly I think?
-  LegacyLLVMPassManagerTy pm3;
+  legacy::PassManager pm3;
   pm3.add(createCFGSimplificationPass());
   switch(SwitchType) {
   case eSwitchTypeInternal: break;
@@ -424,7 +406,7 @@ void KModule::checkModule() {
   InstructionOperandTypeCheckPass *operandTypeCheckPass =
       new InstructionOperandTypeCheckPass();
 
-  LegacyLLVMPassManagerTy pm;
+  legacy::PassManager pm;
   if (!DontVerify)
     pm.add(createVerifierPass());
   pm.add(operandTypeCheckPass);
@@ -474,14 +456,8 @@ static int getOperandNum(Value *v,
     return registerMap[inst];
   } else if (Argument *a = dyn_cast<Argument>(v)) {
     return a->getArgNo();
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 6)
-    // Metadata is no longer a Value
   } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v) ||
              isa<MetadataAsValue>(v)) {
-#else
-  } else if (isa<BasicBlock>(v) || isa<InlineAsm>(v) ||
-             isa<MDNode>(v)) {
-#endif
     return -1;
   } else {
     assert(isa<Constant>(v));

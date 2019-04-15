@@ -89,16 +89,12 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
           Builder.CreateStore(val, pDst, ii);
 
           auto off = ConstantInt::get(Type::getInt64Ty(ctx), 1);
-          pDst = Builder.CreateGEP(KLEE_LLVM_GEP_TYPE(nullptr) pDst, off,
-                                   std::string());
-          pSrc = Builder.CreateGEP(KLEE_LLVM_GEP_TYPE(nullptr) pSrc, off,
-                                   std::string());
+          pDst = Builder.CreateGEP(nullptr, pDst, off, std::string());
+          pSrc = Builder.CreateGEP(nullptr, pSrc, off, std::string());
           val = Builder.CreateLoad(pSrc, std::string());
           Builder.CreateStore(val, pDst);
-          pDst = Builder.CreateGEP(KLEE_LLVM_GEP_TYPE(nullptr) pDst, off,
-                                   std::string());
-          pSrc = Builder.CreateGEP(KLEE_LLVM_GEP_TYPE(nullptr) pSrc, off,
-                                   std::string());
+          pDst = Builder.CreateGEP(nullptr, pDst, off, std::string());
+          pSrc = Builder.CreateGEP(nullptr, pSrc, off, std::string());
           val = Builder.CreateLoad(pSrc, std::string());
           Builder.CreateStore(val, pDst);
         }
@@ -113,11 +109,7 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
       case Intrinsic::uadd_with_overflow:
       case Intrinsic::usub_with_overflow:
       case Intrinsic::umul_with_overflow: {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 8)
         IRBuilder<> builder(ii->getParent(), ii->getIterator());
-#else
-        IRBuilder<> builder(ii->getParent(), ii);
-#endif
 
         Value *op1 = ii->getArgOperand(0);
         Value *op2 = ii->getArgOperand(1);
