@@ -1501,7 +1501,7 @@ void Executor::stepInstruction(ExecutionState &state) {
 
   ++stats::instructions;
   ++state.steppedInstructions;
-  thread.liveSetPc = thread.prevPc;
+  thread.liveSetPc = thread.pc;
   thread.prevPc = thread.pc;
   ++thread.pc;
 
@@ -1769,10 +1769,8 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
     thread.incomingBBIndex = first->getBasicBlockIndex(src);
   } else {
-    if (dst->getParent() == src->getParent()) {
-      // within same function
-      thread.liveSetPc = thread.prevPc;
-    }
+    // liveSetPc == pc: first instruction has not yet been executed
+    thread.liveSetPc = thread.pc;
     phiNodeProcessingCompleted(dst, src, state);
   }
 }
@@ -2309,7 +2307,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (thread.pc->inst->getOpcode() != Instruction::PHI) {
       // no more PHI nodes coming
       BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread.incomingBBIndex);
-      thread.liveSetPc = thread.prevPc;
       phiNodeProcessingCompleted(i->getParent(), src, state);
     }
     break;

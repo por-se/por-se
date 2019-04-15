@@ -395,6 +395,27 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
         InstructionInfo *ii = const_cast<InstructionInfo *>(ki->info);
         ii->setLiveLocals(std::move(liveKInstSet));
       }
+
+      for (auto &bb : *kf->function) {
+        // attach set of live KInstruction*s to each BasicBlock without PHIs
+        if (!isa<PHINode>(bb.front())) {
+          const auto *set = lrp.getBasicBlockLiveSet(&bb);
+          assert(set != nullptr);
+
+          std::vector<const KInstruction *> liveKInstSet;
+          liveKInstSet.reserve(set->size());
+
+          for (const Value *liveValue : *set) {
+            // convert Value* to KInstruction*
+            const auto *liveInst = cast<llvm::Instruction>(liveValue);
+            const InstructionInfo &ii = infos->getInfo(*liveInst);
+            const KInstruction *liveKInst = ii.getKInstruction();
+            liveKInstSet.push_back(liveKInst);
+          }
+
+          kf->setLiveLocals(&bb, std::move(liveKInstSet));
+        }
+      }
     }
   }
 }

@@ -506,22 +506,23 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() const {
     if (isFirstOfEntryBB)
       continue;
 
-    // basic block with PHI node
-    bool isPhiNode = isa<llvm::PHINode>(liveInst);
+    const std::vector<const KInstruction *> *liveSet = nullptr;
+    if (liveInst == thread.pc->inst) {
+      // liveInst is yet to be executed: excution is at start of BasicBlock
+      assert(&liveInst->getParent()->front() == liveInst);
+      assert(!isa<llvm::PHINode>(liveInst));
 
-    // last instruction of previous BB
-    bool isTermInst = liveInst->isTerminator();
-
-    if (isPhiNode) {
+      llvm::BasicBlock *parentBB = liveInst->getParent();
+      const KFunction *parentKF = kmodule->functionMap[parentBB->getParent()];
+      liveSet = parentKF->getLiveLocals(parentBB);
+    } else {
       assert(liveInst == thread.prevPc->inst);
-    } else if (!isTermInst && !isFirstOfEntryBB) {
-      KInstIterator tmp = thread.liveSetPc;
-      ++tmp;
-      assert(tmp->inst == thread.prevPc->inst);
+
+      liveSet = thread.liveSetPc->info->getLiveLocals();
     }
 
-    assert(thread.liveSetPc->info->getLiveLocals() != nullptr);
-    for (const KInstruction *ki : *thread.liveSetPc->info->getLiveLocals()) {
+    assert(liveSet != nullptr);
+    for (const KInstruction *ki : *liveSet) {
       ref<Expr> value = thread.stack.back().locals[ki->dest].value;
       if (value.isNull())
         continue;

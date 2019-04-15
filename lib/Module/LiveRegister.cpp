@@ -78,9 +78,12 @@ bool LiveRegisterPass::runOnFunction(Function &F) {
 
   for (auto it = F.begin(), ie = F.end(); it != ie; ++it) {
     // remove NOP instructions that were added in the initialization phase
+    // and store their liveSets in separate data structure
     {
       BasicBlock &bb = *it;
       Instruction &nop = *bb.begin();
+      basicBlocks[&bb] = std::move(instructions[&nop].live);
+      instructions.erase(&nop);
       nop.eraseFromParent();
     }
 
@@ -136,6 +139,14 @@ LiveRegisterPass::getLiveSet(const llvm::Instruction *inst) const {
     return nullptr;
 
   return &ii.live;
+}
+
+const LiveRegisterPass::valueset_t *
+LiveRegisterPass::getBasicBlockLiveSet(const llvm::BasicBlock *bb) const {
+  if (basicBlocks.count(bb) == 0)
+    return nullptr;
+
+  return &basicBlocks.at(bb);
 }
 
 void LiveRegisterPass::initializeWorklist(const Function &F) {

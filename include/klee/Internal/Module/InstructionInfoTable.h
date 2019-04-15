@@ -56,11 +56,13 @@ class KInstruction;
       return ki;
     }
 
+    /// @brief Set which locals are live *after* executing this instruction.
     void setLiveLocals(std::vector<const KInstruction *> &&set) {
       liveLocals = std::move(set);
       hasValidLiveLocals = true;
     }
 
+    /// @brief Get set of locals live *after* executing this instruction.
     const std::vector<const KInstruction *> *getLiveLocals() const {
       if (!hasValidLiveLocals)
         return nullptr;
