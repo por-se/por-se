@@ -1741,7 +1741,7 @@ void Executor::executeCall(ExecutionState &state,
     const llvm::BasicBlock *dst = thread.pc->inst->getParent();
 
     // including arguments and va_args
-    phiNodeProcessingCompleted(dst, nullptr, state);
+    enterBasicBlock(dst, nullptr, state);
   }
 }
 
@@ -1771,13 +1771,13 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   } else {
     // liveSetPc == pc: first instruction has not yet been executed
     thread.liveSetPc = thread.pc;
-    phiNodeProcessingCompleted(dst, src, state);
+    enterBasicBlock(dst, src, state);
   }
 }
 
-void Executor::phiNodeProcessingCompleted(const BasicBlock *dst,
-                                          const BasicBlock *src,
-                                          ExecutionState &state) {
+void Executor::enterBasicBlock(const BasicBlock *dst,
+                               const BasicBlock *src,
+                               ExecutionState &state) {
   if (PruneStates && state.memoryState.isEnabled()) {
     MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
 
@@ -2307,7 +2307,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (thread.pc->inst->getOpcode() != Instruction::PHI) {
       // no more PHI nodes coming
       BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread.incomingBBIndex);
-      phiNodeProcessingCompleted(i->getParent(), src, state);
+      enterBasicBlock(i->getParent(), src, state);
     }
     break;
   }
