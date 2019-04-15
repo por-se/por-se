@@ -24,7 +24,7 @@ class StackFrame;
 class MemoryState {
   MemoryState(const MemoryState &) = default;
 
-  const ExecutionState *executionState = nullptr;
+  ExecutionState *executionState = nullptr;
   MemoryFingerprint fingerprint;
 
   bool disableMemoryState = false;
@@ -101,12 +101,12 @@ public:
   MemoryState() = delete;
   MemoryState& operator=(const MemoryState&) = delete;
 
-  MemoryState(const ExecutionState *state) : executionState(state) {
+  MemoryState(ExecutionState *state) : executionState(state) {
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
     fingerprint.state = state;
 #endif
   }
-  MemoryState(const MemoryState &from, const ExecutionState *state)
+  MemoryState(const MemoryState &from, ExecutionState *state)
     : MemoryState(from) {
     executionState = state;
 #ifdef ENABLE_VERIFIED_FINGERPRINTS

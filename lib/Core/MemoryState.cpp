@@ -326,7 +326,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   MemoryFingerprintDelta *delta = nullptr;
   if (mo.isLocal) {
     std::pair<std::size_t, std::size_t> alloc = mo.getAllocationStackFrame();
-    auto &thread = const_cast<Thread &>(executionState->threads.at(alloc.first));
+    Thread &thread = executionState->threads.at(alloc.first);
     StackFrame &sf = thread.stack.at(alloc.second);
     delta = &sf.fingerprintDelta;
   }
