@@ -4952,7 +4952,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   }
 
   if (!access.safeMemoryAccess) {
-    exitWithUnsafeMemAccess(state, mo, racingInstruction);
+    terminateStateOnUnsafeMemAccess(state, mo, racingInstruction);
   } else {
     if (!access.atomicMemoryAccess) {
       Thread::ThreadId tid = state.currentThreadId();
@@ -4971,7 +4971,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
   return access.safeMemoryAccess;
 }
 
-void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction) {
+void Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction) {
   std::string TmpStr;
   llvm::raw_string_ostream os(TmpStr);
   os << "Unsafe access to memory from multiple threads\nAffected memory: ";
@@ -4988,7 +4988,7 @@ void Executor::exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject
                         UnsafeMemoryAccess, nullptr, os.str());
 }
 
-void Executor::exitWithDeadlock(ExecutionState &state) {
+void Executor::terminateStateOnDeadlock(ExecutionState &state) {
   std::string TmpStr;
   llvm::raw_string_ostream os(TmpStr);
   os << "Deadlock in scheduling with ";
@@ -5067,7 +5067,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     Thread &curThread = state.currentThread();
     if (curThread.state == ThreadState::Waiting) {
-      exitWithDeadlock(state);
+      terminateStateOnDeadlock(state);
       return;
     } else if (curThread.state != ThreadState::Exited) {
       assert(curThread.state == ThreadState::Runnable);
@@ -5096,7 +5096,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (allExited) {
       terminateStateOnExit(state);
     } else {
-      exitWithDeadlock(state);
+      terminateStateOnDeadlock(state);
     }
 
     return;

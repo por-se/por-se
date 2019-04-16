@@ -514,9 +514,9 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
-  void exitWithDeadlock(ExecutionState &state);
+  void terminateStateOnDeadlock(ExecutionState &state);
 
-  void exitWithUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction);
+  void terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction);
 
   bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
                            ref<Expr> offset, uint8_t type);
