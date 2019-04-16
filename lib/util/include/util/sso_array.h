@@ -67,7 +67,7 @@ namespace util {
 		}
 
 		sso_array(sso_array const& rhs) noexcept(std::is_nothrow_copy_constructible_v<T>)
-			: sso_array(create_uninitialized, rhs.size)
+			: sso_array(create_uninitialized, rhs._size)
 		{
 			if constexpr(sso_capacity == 0) {
 				for(std::size_t i = 0; i < _size; ++i) {
@@ -86,7 +86,7 @@ namespace util {
 		sso_array& operator=(sso_array const&) = delete;
 
 		sso_array(sso_array&& rhs) noexcept(std::is_nothrow_move_constructible_v<T>)
-			: _size(rhs.size)
+			: _size(rhs._size)
 		{
 			assert((_size * sizeof(T)) / sizeof(T) == _size && "overflow in size computation");
 			if constexpr(sso_capacity == 0) {
