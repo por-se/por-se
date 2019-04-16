@@ -105,7 +105,7 @@ namespace util {
 				auto& lhs_data = reinterpret_cast<T(&)[sso_capacity]>(_data);
 				auto& rhs_data = reinterpret_cast<T(&)[sso_capacity]>(rhs._data);
 				for(std::size_t i = 0; i < _size; ++i) {
-					new(lhs_data + i) T(std::move(rhs_data + i));
+					new(lhs_data + i) T(std::move(rhs_data[i]));
 				}
 			}
 		}
