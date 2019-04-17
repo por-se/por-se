@@ -4794,6 +4794,12 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   }
 
   if (choices.empty()) {
+    // So if we have no choices, but this should be a signal, then
+    // this is a lost signal (signalled thread id == 0)
+    if (registerAsNotificationEvent) {
+      porEventManager.registerPorEvent(state, por_signal, { lid, 0 });
+    }
+
     return;
   }
 
