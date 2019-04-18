@@ -3571,25 +3571,20 @@ void Executor::continueState(ExecutionState &state){
   }
 }
 
-template<class T>
-static bool isInVector(std::vector<T> list, T tid) {
-  return std::find(list.begin(), list.end(), tid) != list.end();
-}
-
 void Executor::terminateStateSilently(ExecutionState &state) {
   auto it = std::find(addedStates.begin(), addedStates.end(), &state);
 
   if (it == addedStates.end()) {
     Thread &thread = state.currentThread();
     thread.pc = thread.prevPc;
-
-    assert(!isInVector(removedStates, &state) && "May not add a state double times");
+    auto it2 __attribute__ ((unused)) = std::find(removedStates.begin(),
+                                                  removedStates.end(), &state);
+    assert(it2 == removedStates.end() && "May not add a state double times");
 
     removedStates.push_back(&state);
   } else {
     // never reached searcher, just delete immediately
-    std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it3 =
-            seedMap.find(&state);
+    auto it3 = seedMap.find(&state);
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     addedStates.erase(it);
