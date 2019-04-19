@@ -4492,6 +4492,10 @@ void Executor::runFunctionAsMain(Function *f,
   delete processTree;
   processTree = 0;
 
+  for (ExecutionState *state : standbyStates) {
+    delete state;
+  }
+
   // hack to clear memory objects
   delete memory;
   memory = new MemoryManager(NULL);

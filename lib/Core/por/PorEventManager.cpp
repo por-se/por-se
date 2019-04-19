@@ -1,4 +1,5 @@
 #include "PorEventManager.h"
+#include "../Executor.h"
 
 #include "por/configuration.h"
 
@@ -67,6 +68,19 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
     }
   }
 
+  if (registerPorEventInternal(state, kind, args)) {
+    ExecutionState *newState = new ExecutionState(state);
+    newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
+    executor.standbyStates.push_back(newState);
+
+    state.porConfiguration->attach_execution_state(newState);
+    return true;
+  }
+
+  return false;
+}
+
+bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args) {
   switch (kind) {
     case por_thread_create:
       return handleThreadCreate(state, static_cast<Thread::ThreadId>(args[0]));

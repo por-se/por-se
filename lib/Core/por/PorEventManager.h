@@ -7,12 +7,16 @@
 
 namespace klee {
   class PorEventManager {
+    Executor &executor;
     public:
-      PorEventManager() = default;
+      PorEventManager() = delete;
+      PorEventManager(Executor &executor) : executor(executor) {}
 
       bool registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args);
 
     private:
+      bool registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args);
+
       static std::string getNameOfEvent(por_event_t kind);
 
       bool handleThreadCreate(ExecutionState &state, Thread::ThreadId tid);

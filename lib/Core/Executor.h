@@ -95,6 +95,7 @@ class Executor : public Interpreter {
   friend class StatsTracker;
   friend class MergeHandler;
   friend class MergingSearcher;
+  friend class PorEventManager;
 
 public:
   class Timer {
@@ -146,7 +147,7 @@ private:
   std::vector<TimerInfo*> timers;
   PTree *processTree;
 
-  PorEventManager porEventManager;
+  PorEventManager porEventManager{*this};
 
   /// Keeps track of all currently ongoing merges.
   /// An ongoing merge is a set of states which branched from a single state
@@ -175,6 +176,9 @@ private:
   /// States that were 'paused' from scheduling, that now may be
   /// scheduled again
   std::vector<ExecutionState *> continuedStates;
+
+  /// Used for conflicting extensions.
+  std::vector<ExecutionState *> standbyStates;
 
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order
