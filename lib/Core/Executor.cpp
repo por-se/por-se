@@ -4433,8 +4433,6 @@ void Executor::runFunctionAsMain(Function *f,
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
-  // We do not have to register the por event as we already have created it
-  porEventManager.registerPorEvent(*state, por_thread_create, { thread.getThreadId() });
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4487,6 +4485,10 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = new PTree(state);
   state->ptreeNode = processTree->root;
+
+  // register thread_init event for main thread at last possible moment
+  // to ensure that all data structures are properly set up
+  porEventManager.registerPorEvent(*state, por_thread_init, { thread.getThreadId() });
 
   run(*state);
   delete processTree;

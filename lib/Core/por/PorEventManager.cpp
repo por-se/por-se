@@ -85,6 +85,16 @@ bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_
     case por_thread_create:
       return handleThreadCreate(state, static_cast<Thread::ThreadId>(args[0]));
 
+    case por_thread_init: {
+      auto tid = static_cast<Thread::ThreadId>(args[0]);
+      if (tid == 1) {
+        // main thread only: event already present in configuration
+        return true;
+      }
+      assert(0 && "thread_init can only be registered as part of thread_create");
+      return false;
+    }
+
     case por_thread_join:
       return handleThreadJoin(state, static_cast<Thread::ThreadId>(args[0]));
 
@@ -128,12 +138,7 @@ bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_
 
 
 bool PorEventManager::handleThreadCreate(ExecutionState &state, Thread::ThreadId tid) {
-  if (tid == 1) {
-    // We do not have to pass this to the configuration since the main thread
-    // is created with the configuration
-    return true;
-  }
-
+  assert(state.currentThreadId() != tid);
   state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
   return true;
 }
