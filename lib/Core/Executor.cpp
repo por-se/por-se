@@ -961,11 +961,7 @@ void Executor::branch(ExecutionState &state,
       ExecutionState *ns = es->branch();
       addedStates.push_back(ns);
       result.push_back(ns);
-      es->ptreeNode->data = 0;
-      std::pair<PTree::Node*,PTree::Node*> res = 
-        processTree->split(es->ptreeNode, ns, es);
-      ns->ptreeNode = res.first;
-      es->ptreeNode = res.second;
+      registerForkInProcessTree(*es, *ns);
 
       updateForkJSON(*es, *ns, *ns);
     }
@@ -1224,11 +1220,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    current.ptreeNode->data = 0;
-    std::pair<PTree::Node*, PTree::Node*> res =
-      processTree->split(current.ptreeNode, falseState, trueState);
-    falseState->ptreeNode = res.first;
-    trueState->ptreeNode = res.second;
+    registerForkInProcessTree(*trueState, *falseState);
 
     if (pathWriter) {
       // Need to update the pathOS.id field of falseState, otherwise the same id
@@ -4996,12 +4988,17 @@ void Executor::terminateStateOnDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
-void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
-  state.ptreeNode->data = nullptr;
+void Executor::registerForkInProcessTree(ExecutionState &existing, ExecutionState &fork) {
+  assert(existing.ptreeNode != nullptr);
+  existing.ptreeNode->data = nullptr;
 
-  auto res = processTree->split(state.ptreeNode, fork, &state);
-  fork->ptreeNode = res.first;
-  state.ptreeNode = res.second;
+  auto res = processTree->split(existing.ptreeNode, &fork, &existing);
+  fork.ptreeNode = res.first;
+  existing.ptreeNode = res.second;
+}
+
+void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
+  registerForkInProcessTree(state, *fork);
 
   if (pathWriter) {
     fork->pathOS = pathWriter->open(state.pathOS);
