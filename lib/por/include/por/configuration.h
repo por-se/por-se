@@ -47,6 +47,9 @@ namespace por {
 		// sequence of events in order of their execution
 		std::vector<std::shared_ptr<por::event::event>> _schedule;
 
+		// sequence of standby execution states along the schedule
+		std::vector<klee::ExecutionState const*> _standby_states;
+
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -68,6 +71,19 @@ namespace por {
 		auto const& cond_heads() const noexcept { return _cond_heads; }
 
 		auto const& schedule() const noexcept { return _schedule; }
+		klee::ExecutionState const* standby_execution_state() const noexcept { return _standby_states.back(); }
+
+		void attach_execution_state(klee::ExecutionState const* s) {
+			assert(s != nullptr);
+			assert(_schedule.size() > 0);
+			assert(_schedule_pos > 0);
+			_standby_states.resize(_schedule_pos, nullptr);
+			if(_schedule_pos == _schedule.size()) {
+				assert(_standby_states.back() == nullptr);
+				_standby_states.back() = s;
+			}
+			assert(_standby_states.back() != nullptr);
+		}
 
 		por::event::thread_id_t active_threads() const noexcept {
 			if(_thread_heads.size() == 0)
