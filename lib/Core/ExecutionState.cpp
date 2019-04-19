@@ -639,3 +639,8 @@ void ExecutionState::printFingerprint() const {
     }
   }
 }
+
+por::configuration *klee::configuration_from_execution_state(const ExecutionState *s) {
+  assert(s != nullptr && s->porConfiguration != nullptr);
+  return s->porConfiguration.get();
+}
