@@ -71,9 +71,9 @@ namespace por {
 		auto const& cond_heads() const noexcept { return _cond_heads; }
 
 		auto const& schedule() const noexcept { return _schedule; }
-		klee::ExecutionState const* standby_execution_state() const noexcept { return _standby_states.back(); }
 
-		void attach_execution_state(klee::ExecutionState const* s) {
+		klee::ExecutionState const* standby_execution_state() const noexcept { return _standby_states.back(); }
+		void standby_execution_state(klee::ExecutionState const* s) {
 			assert(s != nullptr);
 			assert(_schedule.size() > 0);
 			assert(_schedule_pos > 0);
