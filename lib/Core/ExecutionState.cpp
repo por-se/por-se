@@ -22,6 +22,7 @@
 #include "Memory.h"
 #include "MemoryAccessTracker.h"
 #include "MemoryState.h"
+#include "PTree.h"
 
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
@@ -215,6 +216,10 @@ void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
   assert(thread.waitingHandle == 0 && "Thread may not be waiting on a resource");
 
   schedulingHistory.push_back(tid);
+  if (ptreeNode) {
+    ptreeNode->schedulingDecision.scheduledThread = tid;
+    ptreeNode->schedulingDecision.epochNumber = schedulingHistory.size();
+  }
 
   memAccessTracker.scheduledNewThread(tid);
 

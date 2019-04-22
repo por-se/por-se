@@ -5057,8 +5057,6 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newFor
     }
 
     st->scheduleNextThread(*rIt);
-    st->ptreeNode->schedulingDecision.scheduledThread = *rIt;
-    st->ptreeNode->schedulingDecision.epochNumber = st->schedulingHistory.size();
   }
 }
 
