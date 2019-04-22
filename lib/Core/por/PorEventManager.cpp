@@ -73,7 +73,7 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
     newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
     executor.standbyStates.push_back(newState);
 
-    state.porConfiguration->attach_execution_state(newState);
+    state.porConfiguration->standby_execution_state(newState);
     return true;
   }
 
