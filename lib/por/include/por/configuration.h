@@ -432,7 +432,7 @@ namespace por {
 
 	public:
 		void wait1(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
-			if(_schedule_pos < _schedule.size()) {
+			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::wait1);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
@@ -496,7 +496,7 @@ namespace por {
 
 	public:
 		void wait2(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
-			if(_schedule_pos < _schedule.size()) {
+			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::wait2);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
@@ -576,7 +576,7 @@ namespace por {
 
 	public:
 		void signal_thread(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::thread_id_t notified_thread) {
-			if(_schedule_pos < _schedule.size()) {
+			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::signal);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
@@ -635,7 +635,7 @@ namespace por {
 
 	public:
 		void broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::set<por::event::thread_id_t> notified_threads) {
-			if(_schedule_pos < _schedule.size()) {
+			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::broadcast);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
