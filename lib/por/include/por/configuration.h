@@ -9,6 +9,14 @@
 
 namespace por {
 	class configuration;
+}
+
+namespace klee {
+	class ExecutionState;
+	por::configuration* configuration_from_execution_state(klee::ExecutionState const* s);
+}
+
+namespace por {
 
 	class configuration_root {
 		friend class configuration;
