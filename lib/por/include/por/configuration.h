@@ -881,7 +881,7 @@ namespace por {
 							if(k > 0) {
 								// check if new event is concurrent to previous ones
 								for(auto& e : subset) {
-									if(**e < **new_event || **new_event < **e) {
+									if((**e).is_less_than(**new_event) || (**new_event).is_less_than(**e)) {
 										is_concurrent = false;
 										break;
 									}
@@ -939,7 +939,7 @@ namespace por {
 			assert(et != nullptr);
 
 			if(e->kind() == por::event::event_kind::lock_acquire) {
-				while(em != nullptr && *et < *em) {
+				while(em != nullptr && !((**em).is_less_than(**et))) {
 					// descend chain of lock events until em is in [et]
 					em = get_lock_predecessor(*em);
 				}
@@ -948,7 +948,7 @@ namespace por {
 				auto* w2 = static_cast<por::event::wait2 const*>(e.get());
 				es = &w2->condition_variable_predecessor();
 				assert(es != nullptr && *es != nullptr);
-				while(em != nullptr && *et < *em && *es < *em) {
+				while(em != nullptr && !((**em).is_less_than(**et)) && !((**em).is_less_than(**es))) {
 					// descend chain of lock events until em is in [et] \cup [es]
 					em = get_lock_predecessor(*em);
 				}
@@ -964,7 +964,7 @@ namespace por {
 
 			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
 			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er);
-			while(ep != nullptr && em != nullptr && (*em < *ep || em == ep)) {
+			while(ep != nullptr && em != nullptr && ((**em).is_less_than(**ep) || em == ep)) {
 				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
 					if(e->kind() == por::event::event_kind::lock_acquire) {
 						result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep));

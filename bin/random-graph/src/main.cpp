@@ -202,7 +202,7 @@ int main(int argc, char** argv){
 					if(e.second->kind() == por::event::event_kind::wait1) {
 						auto& w = e.second;
 						auto* l = &configuration.lock_heads().at(lid);
-						while(l != nullptr && *w < **l) {
+						while(l != nullptr && (*w).is_less_than(**l)) {
 							l = configuration.get_lock_predecessor(*l);
 						}
 						if(*l == w) {
@@ -325,7 +325,7 @@ int main(int argc, char** argv){
 					auto lid = 0;
 					for(auto& e : configuration.lock_heads()) {
 						auto l = &e.second;
-						while(l != nullptr && *wait1 < **l) {
+						while(l != nullptr && (*wait1).is_less_than(**l)) {
 							l = configuration.get_lock_predecessor(*l);
 						}
 						if(*l == wait1) {

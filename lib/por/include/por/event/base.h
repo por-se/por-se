@@ -141,7 +141,7 @@ namespace por::event {
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() = 0;
 		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const = 0;
 
-		bool operator<(event const& rhs) const {
+		bool is_less_than(event const& rhs) const {
 			if(rhs._tid == _tid) {
 				return _depth < rhs._depth;
 			} else {
