@@ -60,7 +60,8 @@ namespace por::event {
 		, _tid(tid)
 		, _kind(kind)
 		{
-			_cone[tid] = immediate_predecessor.get();
+			// immediate_predecessor may be on different thread than this new event, e.g. in thread_init
+			_cone[immediate_predecessor->tid()] = immediate_predecessor.get();
 
 			assert(immediate_predecessor->_depth < _depth);
 			assert(_cone.size() >= immediate_predecessor->_cone.size());
@@ -89,7 +90,7 @@ namespace por::event {
 		, _tid(tid)
 		, _kind(kind)
 		{
-			_cone[tid] = immediate_predecessor.get();
+			_cone[immediate_predecessor->tid()] = immediate_predecessor.get();
 
 			if(single_other_predecessor) {
 				insert_predecessor_into_cone(*single_other_predecessor);
