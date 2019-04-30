@@ -103,9 +103,7 @@ enum
 #define PTHREAD_SCOPE_PROCESS   PTHREAD_SCOPE_PROCESS
 };
 
-// Why this indirection?
 typedef struct {
-  uint32_t tid;
   uint8_t state;
   uint8_t mode;
   uint8_t joinState;

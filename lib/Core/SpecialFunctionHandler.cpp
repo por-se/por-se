@@ -115,7 +115,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_create_thread", handleCreateThread, true),
-  add("klee_get_thread_id", handleGetThreadId, true),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
   add("klee_get_thread_runtime_struct_ptr", handleGetThreadRuntimeStructPtr, true),
@@ -123,6 +122,8 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_wait_on", handleWaitOn, false),
   add("klee_release_waiting", handleWakeUpWaiting, false),
   add("klee_por_register_event", handlePorRegisterEvent, false),
+  add("klee_por_thread_join", handlePorThreadJoin, false),
+  add("klee_por_thread_exit", handlePorThreadExit, false),
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
@@ -884,7 +885,7 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
 
   // The addresses of the function in the program are equal to the addresses
   // of the llvm functions
-  llvm::Function* funcPointer = reinterpret_cast<llvm::Function*>(funcAddress);
+  auto funcPointer = reinterpret_cast<llvm::Function*>(funcAddress);
   auto kfuncPair = executor.kmodule->functionMap.find(funcPointer);
   if (kfuncPair == executor.kmodule->functionMap.end()) {
     executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
@@ -892,19 +893,9 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   }
 
   Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
-  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
 
   // has to happen last as it needs to include return value
   executor.porEventManager.registerPorEvent(state, por_thread_create, { tid });
-}
-
-void SpecialFunctionHandler::handleGetThreadId(klee::ExecutionState &state,
-                                               klee::KInstruction *target,
-                                               std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_get_thread_id");
-
-  uint64_t tid = state.currentThreadId();
-  executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
 }
 
 void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
@@ -986,7 +977,8 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
       executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
       return;
     }
-    por_event_t asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
+
+    auto asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
 
     // only allow por_broadcast and por_signal with corresponding mode
     bool legitimateRegistration = (asEvent == por_broadcast && !releaseSingle) || (asEvent == por_signal && releaseSingle);
@@ -1035,6 +1027,49 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
   }
 }
 
+void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
+                                                 KInstruction *target,
+                                                 std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_por_thread_join");
+
+  ref<Expr> expr = executor.toUnique(state, arguments[0]);
+  if (!isa<ConstantExpr>(expr)) {
+    executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
+    return;
+  }
+
+  Thread::ThreadId tid;
+  bool found = false;
+
+  // For now we assume that the runtime struct ptr is unique for every pthread object in the runtime.
+  // (At the current time, this is guaranteed with the pthread implementation)
+  for (const auto& th : state.threads) {
+    if (th.second.runtimeStructPtr == expr) {
+      tid = th.first;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
+    return;
+  }
+
+  if (!executor.porEventManager.registerPorEvent(state, por_thread_join, { tid })) {
+    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+  }
+}
+
+void SpecialFunctionHandler::handlePorThreadExit(ExecutionState &state,
+                                                 KInstruction *target,
+                                                 std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to klee_por_thread_exit");
+
+  if (!executor.porEventManager.registerPorEvent(state, por_thread_exit, { state.currentThreadId() })) {
+    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+  }
+}
 
 void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,
                                         klee::KInstruction *target,

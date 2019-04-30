@@ -156,9 +156,7 @@ extern "C" {
   /* Get errno value of the current state */
   int klee_get_errno(void);
 
-  uint32_t klee_create_thread(void (*start_routine)(void*), void *arg);
-
-  uint32_t klee_get_thread_id(void);
+  void klee_create_thread(void (*start_routine)(void*), void *arg);
 
   void* klee_get_thread_runtime_struct_ptr(void);
 
@@ -171,6 +169,10 @@ extern "C" {
   void klee_wait_on(void* address);
 
   void klee_por_register_event(por_event_t evt, ...);
+
+  // These two should only be used internally to find the correct threads
+  void klee_por_thread_join(void* arg);
+  void klee_por_thread_exit(void);
 
 #define KLEE_RELEASE_SINGLE (1 << 0)
 #define KLEE_RELEASE_ALL (0 << 0)

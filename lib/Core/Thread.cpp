@@ -44,6 +44,8 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(tid) {
   // initialize program counters
   this->prevPc = threadStartRoutine->instructions;
   this->pc = this->prevPc;
+
+  this->runtimeStructPtr = ConstantExpr::createPointer(0);
 }
 
 Thread::ThreadId Thread::getThreadId() const {

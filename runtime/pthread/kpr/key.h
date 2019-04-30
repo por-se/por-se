@@ -2,11 +2,12 @@
 #define KPR_KEY_H
 
 #include <stdint.h>
+#include "klee/runtime/pthread.h"
 
 #include "list.h"
 
 typedef struct {
-  uint32_t thread;
+  pthread_t thread;
   void* value;
 } kpr_key_data;
 
