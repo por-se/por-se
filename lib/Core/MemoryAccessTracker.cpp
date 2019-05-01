@@ -3,8 +3,6 @@
 
 using namespace klee;
 
-static const std::uint64_t NOT_EXECUTED = ~((std::uint64_t) 0);
-
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
     return;
@@ -36,16 +34,12 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   ema->tid = tid;
   ema->scheduleIndex = accessLists.size();
 
-  if (tid > lastExecutions.size()) {
-    lastExecutions.resize(tid, NOT_EXECUTED);
+  auto it = lastExecutions.find(tid);
+  if (it != lastExecutions.end()) {
+    ema->preThreadAccess = accessLists[it->second];
   }
 
-  std::uint64_t exec = lastExecutions[tid - 1];
-  if (exec != NOT_EXECUTED) {
-    ema->preThreadAccess = accessLists[exec];
-  }
-
-  lastExecutions[tid - 1] = ema->scheduleIndex;
+  lastExecutions[tid] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
 
   knownThreads.insert(tid);
@@ -176,18 +170,17 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
 
 std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
   assert(tid != reference && "ThreadIds have to be unequal");
-  std::uint64_t max = std::max(tid, reference);
+  auto pair = std::make_pair(tid, reference);
 
-  // Skip the combination of reference == tid by offsetting the indexes by 1 correspondingly
-  if (max + 1 > threadSyncs.size()) {
-    threadSyncs.resize(max + 1);
+  auto it = threadSyncs.find(pair);
+  if (it == threadSyncs.end()) {
+    auto insertIt = threadSyncs.insert(std::make_pair(pair, 0));
+    assert(insertIt.second);
 
-    for (auto &threadSync : threadSyncs) {
-      threadSync.resize(max + 1, 0);
-    }
+    return &(insertIt.first->second);
   }
 
-  return &threadSyncs[tid][reference];
+  return &it->second;
 }
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result, std::uint64_t mid,
@@ -278,15 +271,15 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
                                                         std::uint64_t id, const MemoryAccess &access) {
-  std::uint64_t exec = lastExecutions[tid - 1];
-  if (exec == NOT_EXECUTED) {
+  auto it = lastExecutions.find(tid);
+  if (it == lastExecutions.end()) {
     return;
   }
 
   Thread::ThreadId curTid = accessLists.back()->tid;
 
   std::uint64_t sync = *getThreadSyncValueTo(curTid, tid);
-  std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[exec];
+  std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[it->second];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
     assert(ema->tid == tid);

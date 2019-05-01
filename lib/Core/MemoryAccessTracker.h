@@ -60,10 +60,10 @@ namespace klee {
 
       std::vector<std::shared_ptr<EpochMemoryAccesses>> accessLists;
 
-      std::vector<std::vector<std::uint64_t>> threadSyncs;
+      std::map<std::pair<Thread::ThreadId,Thread::ThreadId>, std::uint64_t> threadSyncs;
 
       std::set<Thread::ThreadId> knownThreads;
-      std::vector<std::uint64_t> lastExecutions;
+      std::map<Thread::ThreadId, std::uint64_t> lastExecutions;
 
       std::uint64_t globalTrackingMinimum = 0;
 
