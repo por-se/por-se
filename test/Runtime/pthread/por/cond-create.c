@@ -5,15 +5,15 @@
 #include <pthread.h>
 
 int main(void) {
-  // CHECK: POR event: thread_init with current thread 1 and args: 1
+  // CHECK: POR event: thread_init with current thread [[M_TID:[0-9]+]] and args: [[M_TID]]
   pthread_cond_t cond;
 
-  // CHECK-NEXT: POR event: condition_variable_create with current thread 1 and args: [[COND:[0-9]+]]
+  // CHECK-NEXT: POR event: condition_variable_create with current thread [[M_TID]] and args: [[COND:[0-9]+]]
   pthread_cond_init(&cond, NULL);
 
-  // CHECK-NEXT: POR event: condition_variable_destroy with current thread 1 and args: [[COND]]
+  // CHECK-NEXT: POR event: condition_variable_destroy with current thread [[M_TID]] and args: [[COND]]
   pthread_cond_destroy(&cond);
 
   return 0;
-  // CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and args: [[M_TID]]
 }
