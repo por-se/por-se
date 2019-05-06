@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event/event.h"
+#include "unfolding.h"
 
 #include <cassert>
 #include <map>
@@ -23,6 +24,8 @@ namespace por {
 
 		std::shared_ptr<por::event::program_init> _program_init = event::program_init::alloc();
 
+		std::shared_ptr<por::unfolding> _unfolding = std::make_shared<por::unfolding>(_program_init.get());
+
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 		por::event::thread_id_t _next_thread = 1;
 
@@ -34,6 +37,7 @@ namespace por {
 			assert(tid > 0);
 
 			_thread_heads.emplace(tid, event::thread_init::alloc(tid, _program_init));
+			_unfolding->mark_as_visited(_thread_heads[tid].get());
 
 			return *this;
 		}
@@ -42,6 +46,9 @@ namespace por {
 	class configuration {
 		// creation events for locks and condition variables are optional
 		static const bool optional_creation_events = true;
+
+		// the unfolding this configuration is part of
+		std::shared_ptr<por::unfolding> _unfolding;
 
 		// contains most recent event of ALL threads that ever existed within this configuration
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
@@ -68,7 +75,8 @@ namespace por {
 		configuration(configuration&&) = default;
 		configuration& operator=(configuration&&) = default;
 		configuration(configuration_root&& root)
-			: _thread_heads(std::move(root._thread_heads))
+			: _unfolding(std::move(root._unfolding))
+			, _thread_heads(std::move(root._thread_heads))
 		{
 			_schedule.emplace_back(root._program_init);
 			for(auto& thread : _thread_heads) {
@@ -77,6 +85,7 @@ namespace por {
 			_schedule_pos = _schedule.size();
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 		}
+		~configuration() = default;
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
 		auto const& lock_heads() const noexcept { return _lock_heads; }

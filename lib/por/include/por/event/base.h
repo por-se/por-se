@@ -39,6 +39,8 @@ namespace por::event {
 
 
 	public:
+		mutable bool visited = false;
+
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
