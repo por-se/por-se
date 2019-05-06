@@ -364,7 +364,8 @@ int main(int argc, char** argv){
 
 	auto cex = configuration.conflicting_extensions();
 	std::cerr << cex.size() << " cex found\n";
-	for(auto& c : cex) {
+	for(auto& entry : cex) {
+		auto& c = entry.new_event();
 		std::cerr << c->tid() << "@" << c->depth();
 		for(auto it = c->predecessors().begin(), ie = c->predecessors().end(); it != ie; ++it) {
 			if(it == c->predecessors().begin())

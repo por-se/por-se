@@ -966,10 +966,10 @@ namespace por {
 			return result;
 		}
 
-		std::vector<std::shared_ptr<por::event::event>> cex_acquire(std::shared_ptr<por::event::event> const& e) {
+		std::vector<conflicting_extension> cex_acquire(std::shared_ptr<por::event::event> const& e) {
 			assert(e->kind() == por::event::event_kind::lock_acquire || e->kind() == por::event::event_kind::wait2);
 
-			std::vector<std::shared_ptr<por::event::event>> result;
+			std::vector<conflicting_extension> result;
 
 			// immediate causal predecessor on same thread
 			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
@@ -977,6 +977,8 @@ namespace por {
 			std::shared_ptr<por::event::event> const* er = get_lock_predecessor(e);
 			// maximal event concerning same lock in [et]
 			std::shared_ptr<por::event::event> const* em = er;
+			// immediate successor of em / ep operating on same lock
+			std::shared_ptr<por::event::event> const* conflict = &e;
 			// signaling event (only for wait2)
 			std::shared_ptr<por::event::event> const* es = nullptr;
 
@@ -985,6 +987,7 @@ namespace por {
 			if(e->kind() == por::event::event_kind::lock_acquire) {
 				while(em != nullptr && !((**em).is_less_than(**et))) {
 					// descend chain of lock events until em is in [et]
+					conflict = em;
 					em = get_lock_predecessor(*em);
 				}
 			} else {
@@ -994,6 +997,7 @@ namespace por {
 				assert(es != nullptr && *es != nullptr);
 				while(em != nullptr && !((**em).is_less_than(**et)) && !((**em).is_less_than(**es))) {
 					// descend chain of lock events until em is in [et] \cup [es]
+					conflict = em;
 					em = get_lock_predecessor(*em);
 				}
 			}
@@ -1004,20 +1008,22 @@ namespace por {
 
 			if(em == nullptr) {
 				// (kind(em) == lock_release || kind(em) == wait1) is included in while loop below (with correct lock predecessor)
-				result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr));
+				result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr), *conflict);
 			}
 
 			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
 			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er);
+			conflict = er;
 			while(ep != nullptr && em != nullptr && ((**em).is_less_than(**ep) || em == ep)) {
 				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
 					if(e->kind() == por::event::event_kind::lock_acquire) {
-						result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep));
+						result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep), *conflict);
 					} else {
 						assert(e->kind() == por::event::event_kind::wait2);
-						result.emplace_back(por::event::wait2::alloc(e->tid(), *et, *ep, *es));
+						result.emplace_back(por::event::wait2::alloc(e->tid(), *et, *ep, *es), *conflict);
 					}
 				}
+				conflict = ep;
 				ep = get_lock_predecessor(*ep);
 			}
 
@@ -1025,19 +1031,31 @@ namespace por {
 		}
 
 	public:
-		std::vector<std::shared_ptr<por::event::event>> conflicting_extensions() {
-			std::vector<std::shared_ptr<por::event::event>> S;
+		std::vector<conflicting_extension> conflicting_extensions() {
+			std::vector<conflicting_extension> S;
 			for(auto& t : _thread_heads) {
 				std::shared_ptr<por::event::event> const* e = &t.second;
 				do {
-					switch((*e)->kind()) {
-						case por::event::event_kind::lock_acquire:
-						case por::event::event_kind::wait2: {
-							auto r = cex_acquire(*e);
-							S.insert(S.end(), r.begin(), r.end());
-							break;
+					if(!_unfolding->is_visited(e->get())) {
+						switch((*e)->kind()) {
+							case por::event::event_kind::lock_acquire:
+							case por::event::event_kind::wait2: {
+								auto r = cex_acquire(*e);
+
+								if(r.empty())
+									break;
+
+								for(auto& cex : r) {
+									if(_unfolding->is_visited(cex.new_event().get()))
+										continue;
+									S.emplace_back(std::move(cex));
+								}
+
+								break;
+							}
 						}
 					}
+					_unfolding->mark_as_visited(e->get());
 					bool has_predecessor = false;
 					auto p = get_thread_predecessor(*e);
 					if(p != nullptr && p != e && (*p)->tid() == t.first) {
