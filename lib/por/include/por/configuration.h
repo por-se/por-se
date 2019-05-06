@@ -968,6 +968,7 @@ namespace por {
 			}
 
 			if(em == nullptr) {
+				// (kind(em) == lock_release || kind(em) == wait1) is included in while loop below (with correct lock predecessor)
 				result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, nullptr));
 			}
 
