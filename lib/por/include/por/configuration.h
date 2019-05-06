@@ -3,6 +3,8 @@
 #include "event/event.h"
 #include "unfolding.h"
 
+#include <util/sso_array.h>
+
 #include <cassert>
 #include <map>
 #include <set>
@@ -18,6 +20,39 @@ namespace klee {
 }
 
 namespace por {
+	class conflicting_extension {
+		std::shared_ptr<por::event::event> _new_event;
+		util::sso_array<std::shared_ptr<por::event::event>, 1> _conflicting_events;
+
+	public:
+		conflicting_extension(std::shared_ptr<por::event::event> new_event, std::shared_ptr<por::event::event> conflicting_event)
+		: _new_event(std::move(new_event))
+		, _conflicting_events{util::create_uninitialized, 1ul}
+		{
+			assert(_new_event);
+			// we perform a very small optimization by allocating the conflicts in uninitialized storage
+			new(_conflicting_events.data() + 0) std::shared_ptr<por::event::event>(std::move(conflicting_event));
+			assert(_conflicting_events[0]);
+		}
+
+		std::shared_ptr<por::event::event>& new_event() {
+			return _new_event;
+		}
+		std::shared_ptr<por::event::event> const& new_event() const {
+			return _new_event;
+		}
+
+		util::iterator_range<std::shared_ptr<por::event::event>*> conflicts() {
+			return util::make_iterator_range<std::shared_ptr<por::event::event>*>(_conflicting_events.data(), _conflicting_events.data() + _conflicting_events.size());
+		}
+		util::iterator_range<std::shared_ptr<por::event::event> const*> conflicts() const {
+			return util::make_iterator_range<std::shared_ptr<por::event::event> const*>(_conflicting_events.data(), _conflicting_events.data() + _conflicting_events.size());
+		}
+
+		std::size_t num_of_conflicts() const {
+			return _conflicting_events.size();
+		}
+	};
 
 	class configuration_root {
 		friend class configuration;
