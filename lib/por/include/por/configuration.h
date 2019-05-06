@@ -1112,14 +1112,7 @@ namespace por {
 						}
 					}
 					_unfolding->mark_as_visited(e->get());
-					bool has_predecessor = false;
-					auto p = get_thread_predecessor(*e);
-					if(p != nullptr && p != e && (*p)->tid() == t.first) {
-						// in lieu of a more sophisticated set of visited events, stop when entering another thread
-						e = p;
-						has_predecessor = true;
-					}
-					if(!has_predecessor) e = nullptr;
+					e = get_thread_predecessor(*e);
 				} while(e != nullptr);
 			}
 			return S;
