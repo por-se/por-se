@@ -126,6 +126,39 @@ namespace por {
 		auto const& lock_heads() const noexcept { return _lock_heads; }
 		auto const& cond_heads() const noexcept { return _cond_heads; }
 
+		// `previous` is the maximal configuration that was used to generate the conflict
+		configuration(configuration const& previous, conflicting_extension const& cex)
+			: _unfolding(previous._unfolding)
+			, _schedule(previous._schedule)
+			, _standby_states(previous._standby_states)
+		{
+			// create new schedule and compute common prefix,
+			// set _schedule_pos to latest theoretically possible stanbdy
+			_schedule_pos = compute_new_schedule_from_old(cex, _schedule) - 1;
+			assert(_schedule_pos < _schedule.size());
+			assert(_schedule.size() >= 2 && "there have to be at least program_init and thread_init");
+
+			// find latest available standby state
+			while(_schedule_pos > 0 && _standby_states[_schedule_pos] == nullptr) {
+				--_schedule_pos;
+			}
+			assert(_schedule_pos >= 1 && "thread_init of main thread must always have a standby state");
+
+			// remove standby states that are invalid in the new schedule
+			_standby_states.erase(std::next(_standby_states.begin(), _schedule_pos + 1), _standby_states.end());
+			assert(_standby_states.back() != nullptr);
+
+			// no need to catch up to standby state
+			++_schedule_pos;
+
+			// reset heads to values at standby
+			configuration* partial = configuration_from_execution_state(_standby_states.back());
+			assert(partial != nullptr);
+			_thread_heads = partial->thread_heads();
+			_cond_heads = partial->cond_heads();
+			_lock_heads = partial->lock_heads();
+		}
+
 		auto const& schedule() const noexcept { return _schedule; }
 		bool needs_catch_up() const noexcept { return _schedule_pos < _schedule.size(); }
 
@@ -143,10 +176,8 @@ namespace por {
 			assert(_schedule.size() > 0);
 			assert(_schedule_pos > 0);
 			_standby_states.resize(_schedule_pos, nullptr);
-			if(_schedule_pos == _schedule.size()) {
-				assert(_standby_states.back() == nullptr);
-				_standby_states.back() = s;
-			}
+			assert(_standby_states.back() == nullptr);
+			_standby_states.back() = s;
 			assert(_standby_states.back() != nullptr);
 		}
 
@@ -1028,6 +1059,31 @@ namespace por {
 			}
 
 			return result;
+		}
+
+		// returns index of first conflict, i.e. first index that deviates from given schedule
+		std::size_t compute_new_schedule_from_old(conflicting_extension const& cex, std::vector<std::shared_ptr<por::event::event>>& schedule) {
+			[[maybe_unused]] std::size_t original_size = schedule.size();
+			auto is_in_conflict = [&](auto& e) {
+				for(auto& conflict : cex.conflicts()) {
+					assert(conflict);
+					assert(e);
+					if((*conflict).is_less_than(*e) || conflict == e)
+						return true;
+				}
+				return false;
+			};
+			auto first_conflict = std::find_if(schedule.begin(), schedule.end(), is_in_conflict);
+			schedule.erase(std::remove_if(first_conflict, schedule.end(), is_in_conflict), schedule.end());
+			assert(schedule.size() <= (original_size - cex.num_of_conflicts()));
+			schedule.emplace_back(cex.new_event());
+			return std::distance(schedule.begin(), first_conflict);
+		}
+
+		std::pair<std::vector<std::shared_ptr<por::event::event>>, std::size_t> compute_new_schedule_from_current(conflicting_extension const& cex) {
+			std::vector<std::shared_ptr<por::event::event>> result = _schedule;
+			std::size_t prefix = compute_new_schedule_from_old(cex, result);
+			return std::make_pair(result, prefix);
 		}
 
 	public:
