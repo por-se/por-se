@@ -132,7 +132,7 @@ namespace por::event {
 			}
 
 			assert(this->thread_predecessor());
-			assert(this->thread_predecessor()->tid() != 0);
+			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
@@ -140,7 +140,7 @@ namespace por::event {
 			assert(std::distance(this->wait_predecessors().begin(), this->wait_predecessors().end()) == wait1_count);
 			for(auto& e : this->wait_predecessors()) {
 				assert(e->kind() == event_kind::wait1);
-				assert(e->tid() != 0);
+				assert(e->tid());
 				assert(e->tid() != this->tid());
 			}
 
@@ -264,7 +264,7 @@ namespace por::event {
 			return _num_notified_threads;
 		}
 
-		thread_id_t is_notifying_thread(thread_id_t tid) const noexcept {
+		bool is_notifying_thread(thread_id_t tid) const noexcept {
 			for(auto& e : wait_predecessors()) {
 				if(e->tid() == tid)
 					return true;

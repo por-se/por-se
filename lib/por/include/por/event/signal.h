@@ -44,13 +44,13 @@ namespace por::event {
 			new(_predecessors.data() + 1) std::shared_ptr<event>(std::move(notified_wait));
 
 			assert(this->thread_predecessor());
-			assert(this->thread_predecessor()->tid() != 0);
+			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 
 			assert(this->wait_predecessor());
-			assert(this->wait_predecessor()->tid() != 0);
+			assert(!this->wait_predecessor()->tid().empty());
 			assert(this->wait_predecessor()->tid() != this->tid());
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
 			assert(wait1_cid(this->wait_predecessor().get()) == this->cid());
@@ -89,7 +89,7 @@ namespace por::event {
 			}
 
 			assert(this->thread_predecessor());
-			assert(this->thread_predecessor()->tid() != 0);
+			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
@@ -116,7 +116,7 @@ namespace por::event {
 
 			assert(this->is_lost());
 			assert(this->num_notified() == 0);
-			assert(this->notified_thread() == 0);
+			assert(!this->notified_thread());
 		}
 
 	public:
@@ -241,7 +241,7 @@ namespace por::event {
 					return _predecessors[1]->tid();
 				}
 			}
-			return 0;
+			return thread_id();
 		}
 	};
 }

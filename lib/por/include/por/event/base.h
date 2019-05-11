@@ -10,12 +10,14 @@
 #include <string>
 #include <vector>
 
+#include <por/thread_id.h>
+
 namespace por {
 	class unfolding;
 }
 
 namespace por::event {
-	using thread_id_t = std::uint32_t;
+	using thread_id_t = por::thread_id;
 	using lock_id_t = std::uint64_t;
 	using cond_id_t = std::uint64_t;
 

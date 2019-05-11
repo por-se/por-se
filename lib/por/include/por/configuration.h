@@ -100,14 +100,23 @@ namespace por {
 		std::shared_ptr<por::unfolding> _unfolding = std::make_shared<por::unfolding>(_program_init);
 
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
-		por::event::thread_id_t _next_thread = 1;
+
+		por::event::thread_id_t _main_thread{};
+		std::size_t _spawned_child_threads = 0;
 
 	public:
 		configuration construct();
 
 		configuration_root& add_thread() {
-			auto const tid = _next_thread++;
-			assert(tid > 0);
+			thread_id tid;
+
+			if (!_main_thread) {
+				// Start with the main thread id
+				_main_thread = thread_id(1);
+				tid = _main_thread;
+			} else {
+				tid = thread_id(_main_thread, ++_spawned_child_threads);
+			}
 
 			_thread_heads.emplace(tid, event::thread_init::alloc(_unfolding, tid, _program_init));
 			_unfolding->mark_as_explored(_thread_heads[tid]);
@@ -148,6 +157,9 @@ namespace por {
 		// sequence of standby execution states along the schedule
 		std::vector<klee::ExecutionState const*> _standby_states;
 
+		// main thread id that is always available
+		por::event::thread_id_t _main_thread;
+
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -166,6 +178,9 @@ namespace por {
 			}
 			_schedule_pos = _schedule.size();
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
+
+			_main_thread = root._main_thread;
+			assert(_main_thread && "Main thread has to always be present");
 		}
 		~configuration() = default;
 
@@ -252,6 +267,8 @@ namespace por {
 			}
 		}
 
+		auto const& main_thread_id() const noexcept { return _main_thread; };
+
 		auto const& schedule() const noexcept { return _schedule; }
 		bool needs_catch_up() const noexcept { return _schedule_pos < _schedule.size(); }
 
@@ -290,10 +307,11 @@ namespace por {
 			return res;
 		}
 
-		por::event::thread_id_t active_threads() const noexcept {
+		std::size_t active_threads() const noexcept {
 			if(_thread_heads.size() == 0)
 				return 0;
-			por::event::thread_id_t res = 0;
+
+			std::size_t res = 0;
 			for(auto& e : _thread_heads) {
 				assert(!!e.second);
 				if(e.second->kind() != por::event::event_kind::thread_exit && e.second->kind() != por::event::event_kind::wait1)
@@ -325,7 +343,7 @@ namespace por {
 			source_event = event::thread_create::alloc(_unfolding, source, std::move(source_event));
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
 			_unfolding->mark_as_open(source_event, _path);
-			assert(new_tid > 0);
+			assert(new_tid);
 			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
 			_thread_heads.emplace(new_tid, event::thread_init::alloc(_unfolding, new_tid, source_event));
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
@@ -815,7 +833,7 @@ namespace por {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::signal);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
-				if(notified_thread == 0) { // lost signal
+				if(!notified_thread) { // lost signal
 					_cond_heads[cond].push_back(_schedule[_schedule_pos]);
 				} else {
 					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _schedule[_schedule_pos];
@@ -831,7 +849,7 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
 			if constexpr(optional_creation_events) {
-				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
+				if(cond_head_it == _cond_heads.end() && !notified_thread) {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
 					thread_event = por::event::signal::alloc(_unfolding, thread, cond, std::move(thread_event), nullptr, nullptr);
@@ -849,7 +867,7 @@ namespace por {
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 
-			if(notified_thread == 0) { // lost signal
+			if(!notified_thread) { // lost signal
 				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
 				thread_event = por::event::signal::alloc(_unfolding, thread, cond, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				_unfolding->stats_inc_event_created(por::event::event_kind::signal);

@@ -6,6 +6,8 @@
 #include <array>
 #include <memory>
 
+#include <iostream>
+
 namespace por::event {
 	class thread_init final : public event {
 		// predecessors:
@@ -21,9 +23,9 @@ namespace por::event {
 			assert(this->thread_creation_predecessor()->tid() != this->tid());
 			assert(
 				(this->thread_creation_predecessor()->kind() == event_kind::program_init
-					&& this->thread_creation_predecessor()->tid() == 0)
+					&& !this->thread_creation_predecessor()->tid())
 				|| (this->thread_creation_predecessor()->kind() == event_kind::thread_create
-					&& this->thread_creation_predecessor()->tid() > 0)
+					&& this->thread_creation_predecessor()->tid())
 			);
 		}
 

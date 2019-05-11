@@ -19,12 +19,12 @@ namespace por::event {
 			, _predecessors{std::move(thread_predecessor), std::move(joined_thread)}
 		{
 			assert(this->thread_predecessor());
-			assert(this->thread_predecessor()->tid() != 0);
+			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 			assert(this->joined_thread());
-			assert(this->joined_thread()->tid() != 0);
+			assert(!this->joined_thread()->tid().empty());
 			assert(this->joined_thread()->tid() != this->tid());
 			assert(this->joined_thread()->kind() == event_kind::thread_exit);
 		}

@@ -1,4 +1,5 @@
 target_sources(libpor INTERFACE
+	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/base.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/broadcast.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/condition_variable_create.h"

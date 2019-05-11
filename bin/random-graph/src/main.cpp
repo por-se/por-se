@@ -1,4 +1,5 @@
 #include <por/configuration.h>
+#include <por/thread_id.h>
 
 #include <algorithm>
 #include <cassert>
@@ -51,7 +52,7 @@ namespace {
 				done = true;
 			}
 		}
-		return 0;
+		return por::event::thread_id_t();
 	}
 
 	por::event::lock_id_t choose_lock(por::configuration const& configuration, std::mt19937_64& gen) {
@@ -67,7 +68,7 @@ namespace {
 		std::mt19937_64& gen,
 		std::bernoulli_distribution& rare_choice,
 		bool released,
-		por::event::lock_id_t locked_by_tid = 0
+		por::event::thread_id_t locked_by_tid = {}
 	) {
 		for(bool done = false; !done; ) {
 			unsigned count = 0;
@@ -142,7 +143,7 @@ int main(int argc, char** argv){
 	assert(argc > 0);
 
 	por::configuration configuration; // construct a default configuration with 1 main thread
-	por::event::thread_id_t next_thread_id = 2;
+	std::size_t spawned_thread_count = 0;
 	por::event::lock_id_t next_lock_id = 1;
 	por::event::cond_id_t next_cond_id = 1;
 
@@ -169,7 +170,7 @@ int main(int argc, char** argv){
 		if(roll < 40) {
 			// spawn new thread
 			auto source = choose_thread(configuration, gen);
-			auto tid = next_thread_id++;
+			auto tid = por::event::thread_id_t(configuration.main_thread_id(), ++spawned_thread_count);
 			configuration.spawn_thread(source, tid);
 			std::cout << "+T " << tid << " (" << source << ")\n";
 		} else if(roll < 60) {
@@ -246,7 +247,7 @@ int main(int argc, char** argv){
 			// signal single thread, if possible
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, true);
-			por::event::thread_id_t blocked_tid = 0;
+			por::event::thread_id_t blocked_tid{};
 			if(tid && cid) {
 				for(auto& w : configuration.cond_heads().at(cid)) {
 					if(w->kind() != por::event::event_kind::wait1 || w->tid() == tid)
@@ -262,7 +263,7 @@ int main(int argc, char** argv){
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
 			if(tid && cid) {
-				configuration.signal_thread(tid, cid, 0);
+				configuration.signal_thread(tid, cid, por::event::thread_id_t());
 				std::cout << "sT " << cid << ", " <<  0 << " (" << tid << ")\n";
 			}
 		} else if(roll < 800) {
@@ -434,7 +435,7 @@ int main(int argc, char** argv){
 	std::map<por::event::event const*, std::size_t> events;
 	for(auto const& t : threads) {
 		por::event::thread_id_t tid = t.first;
-		if(tid == 0) {
+		if(!tid) {
 			std::cout << "\n"
 			          << "  subgraph cluster_T0 {\n"
 			          << "    graph[style=invis]\n\n"
