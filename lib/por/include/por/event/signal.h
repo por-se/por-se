@@ -50,7 +50,7 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 
 			assert(this->wait_predecessor());
-			assert(!this->wait_predecessor()->tid().empty());
+			assert(this->wait_predecessor()->tid());
 			assert(this->wait_predecessor()->tid() != this->tid());
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
 			assert(wait1_cid(this->wait_predecessor().get()) == this->cid());

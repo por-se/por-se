@@ -52,7 +52,7 @@ namespace {
 				done = true;
 			}
 		}
-		return por::event::thread_id_t();
+		return {};
 	}
 
 	por::event::lock_id_t choose_lock(por::configuration const& configuration, std::mt19937_64& gen) {
@@ -143,9 +143,11 @@ int main(int argc, char** argv){
 	assert(argc > 0);
 
 	por::configuration configuration; // construct a default configuration with 1 main thread
-	std::size_t spawned_thread_count = 0;
 	por::event::lock_id_t next_lock_id = 1;
 	por::event::cond_id_t next_cond_id = 1;
+
+	// Count of threads that every thread has spawned
+	std::map<por::event::thread_id_t, std::uint16_t> thread_spawns{};
 
 #ifdef SEED
 	std::mt19937_64 gen(SEED);
@@ -170,7 +172,8 @@ int main(int argc, char** argv){
 		if(roll < 40) {
 			// spawn new thread
 			auto source = choose_thread(configuration, gen);
-			auto tid = por::event::thread_id_t(configuration.main_thread_id(), ++spawned_thread_count);
+			std::uint16_t local_id = ++thread_spawns[source];
+			auto tid = por::thread_id(source, local_id);
 			configuration.spawn_thread(source, tid);
 			std::cout << "+T " << tid << " (" << source << ")\n";
 		} else if(roll < 60) {
@@ -263,7 +266,7 @@ int main(int argc, char** argv){
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
 			if(tid && cid) {
-				configuration.signal_thread(tid, cid, por::event::thread_id_t());
+				configuration.signal_thread(tid, cid, {});
 				std::cout << "sT " << cid << ", " <<  0 << " (" << tid << ")\n";
 			}
 		} else if(roll < 800) {

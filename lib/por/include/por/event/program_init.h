@@ -10,7 +10,7 @@ namespace por::event {
 
 	protected:
 		program_init()
-			: event(event_kind::program_init, thread_id_t())
+			: event(event_kind::program_init, {})
 		{ }
 
 	public:

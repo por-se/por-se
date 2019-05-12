@@ -101,22 +101,11 @@ namespace por {
 
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 
-		por::event::thread_id_t _main_thread{};
-		std::size_t _spawned_child_threads = 0;
-
 	public:
 		configuration construct();
 
 		configuration_root& add_thread() {
-			thread_id tid;
-
-			if (!_main_thread) {
-				// Start with the main thread id
-				_main_thread = thread_id(1);
-				tid = _main_thread;
-			} else {
-				tid = thread_id(_main_thread, ++_spawned_child_threads);
-			}
+			event::thread_id_t tid = thread_id(_thread_heads.size() + 1);
 
 			_thread_heads.emplace(tid, event::thread_init::alloc(_unfolding, tid, _program_init));
 			_unfolding->mark_as_explored(_thread_heads[tid]);
@@ -157,9 +146,6 @@ namespace por {
 		// sequence of standby execution states along the schedule
 		std::vector<klee::ExecutionState const*> _standby_states;
 
-		// main thread id that is always available
-		por::event::thread_id_t _main_thread;
-
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -178,9 +164,6 @@ namespace por {
 			}
 			_schedule_pos = _schedule.size();
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
-
-			_main_thread = root._main_thread;
-			assert(_main_thread && "Main thread has to always be present");
 		}
 		~configuration() = default;
 
@@ -266,8 +249,6 @@ namespace por {
 				}
 			}
 		}
-
-		auto const& main_thread_id() const noexcept { return _main_thread; };
 
 		auto const& schedule() const noexcept { return _schedule; }
 		bool needs_catch_up() const noexcept { return _schedule_pos < _schedule.size(); }

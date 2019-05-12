@@ -1,7 +1,8 @@
 #pragma once
 
 #include <cstddef>
-#include <array>
+#include <cstdint>
+#include <cstring>
 #include <ostream>
 
 namespace por {

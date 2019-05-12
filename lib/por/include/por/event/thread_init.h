@@ -6,8 +6,6 @@
 #include <array>
 #include <memory>
 
-#include <iostream>
-
 namespace por::event {
 	class thread_init final : public event {
 		// predecessors:

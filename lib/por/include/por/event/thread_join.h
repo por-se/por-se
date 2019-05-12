@@ -24,7 +24,7 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 			assert(this->joined_thread());
-			assert(!this->joined_thread()->tid().empty());
+			assert(this->joined_thread()->tid());
 			assert(this->joined_thread()->tid() != this->tid());
 			assert(this->joined_thread()->kind() == event_kind::thread_exit);
 		}
