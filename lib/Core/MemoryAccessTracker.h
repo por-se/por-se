@@ -70,24 +70,24 @@ namespace klee {
       void forkCurrentEpochWhenNeeded();
 
       /// @brief returns the latest epoch of the `reference` thread that `tid` thread has a dependency to
-      std::uint64_t* getThreadSyncValueTo(ThreadId tid, ThreadId reference);
+      std::uint64_t* getThreadSyncValueTo(const ThreadId &tid, const ThreadId &reference);
 
       void testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result,
                                         std::uint64_t mid, const MemoryAccess &access,
                                         const std::shared_ptr<const EpochMemoryAccesses> &ema);
 
-      void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, ThreadId tid,
+      void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, const ThreadId &tid,
                                          std::uint64_t id, const MemoryAccess &access);
 
     public:
       MemoryAccessTracker() = default;
       MemoryAccessTracker(const MemoryAccessTracker& list) = default;
 
-      void scheduledNewThread(ThreadId tid);
+      void scheduledNewThread(const ThreadId &tid);
 
       void trackMemoryAccess(std::uint64_t id, MemoryAccess access);
 
-      void registerThreadDependency(ThreadId targetTid, ThreadId predTid, std::uint64_t epoch);
+      void registerThreadDependency(const ThreadId &targetTid, const ThreadId &predTid, std::uint64_t epoch);
 
       MemAccessSafetyResult testIfUnsafeMemoryAccess(std::uint64_t id, const MemoryAccess &access);
   };

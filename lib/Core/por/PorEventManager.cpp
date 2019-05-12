@@ -117,7 +117,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> pat
   return true;
 }
 
-bool PorEventManager::registerThreadCreate(ExecutionState &state, ThreadId tid) {
+bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId &tid) {
   assert(state.currentThreadId() != tid);
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_thread_create);
@@ -125,14 +125,14 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, ThreadId tid) 
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  state.porConfiguration->spawn_thread(state.currentThreadId(), std::move(tid));
+  state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_thread_create);
   return true;
 }
 
-bool PorEventManager::registerThreadInit(ExecutionState &state, ThreadId tid) {
+bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &tid) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_thread_init);
 
@@ -150,7 +150,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, ThreadId tid) {
   return false;
 }
 
-bool PorEventManager::registerThreadExit(ExecutionState &state, ThreadId tid) {
+bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_thread_exit);
 
@@ -164,14 +164,14 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, ThreadId tid) {
   return true;
 }
 
-bool PorEventManager::registerThreadJoin(ExecutionState &state, ThreadId joinedThread) {
+bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_thread_join);
 
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
   
-  state.porConfiguration->join_thread(state.currentThreadId(), std::move(joinedThread));
+  state.porConfiguration->join_thread(state.currentThreadId(), joinedThread);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_thread_join);
@@ -264,14 +264,14 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
   return true;
 }
 
-bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, ThreadId notifiedThread) {
+bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, const ThreadId& notifiedThread) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_signal);
 
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
 
-  state.porConfiguration->signal_thread(state.currentThreadId(), cId, std::move(notifiedThread));
+  state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_signal);

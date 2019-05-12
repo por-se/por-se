@@ -70,7 +70,7 @@ private:
     return *_currentThread;
   }
 
-  Thread &currentThread(ThreadId tid) {
+  Thread &currentThread(const ThreadId &tid) {
     auto it = threads.find(tid);
     assert(it != threads.end() && "Invalid thread ID");
     _currentThread = &it->second;
@@ -168,7 +168,7 @@ public:
 private:
   void popFrameOfThread(Thread* thread);
 
-  bool hasSameThreadState(const ExecutionState &b, ThreadId tid);
+  bool hasSameThreadState(const ExecutionState &b, const ThreadId &tid);
 
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 
@@ -204,16 +204,16 @@ public:
   void threadWaitOn(std::uint64_t lid);
 
   /// @brief wakes a specific thread up
-  void wakeUpThread(ThreadId tid);
+  void wakeUpThread(const ThreadId &tid);
 
   /// @brief will preempt the current thread for the current sync phase
-  void preemptThread(ThreadId tid);
+  void preemptThread(const ThreadId &tid);
 
   /// @brief will exit the referenced thread
-  void exitThread(ThreadId tid);
+  void exitThread(const ThreadId &tid);
 
   /// @brief update the current scheduled thread
-  void scheduleNextThread(ThreadId tid);
+  void scheduleNextThread(const ThreadId &tid);
 
   void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 

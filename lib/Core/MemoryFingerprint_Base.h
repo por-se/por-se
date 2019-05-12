@@ -267,10 +267,10 @@ void MemoryFingerprintT<D, S, V>::updateThreadId(const ThreadId& tid) {
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateLocalFragment(ThreadId threadID,
+bool MemoryFingerprintT<D, S, V>::updateLocalFragment(const ThreadId &threadID,
                                                       std::uint64_t stackFrameIndex,
                                                       const llvm::Instruction *inst,
-                                                      ref<Expr> value) {
+                                                      ref <Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(3);
@@ -291,11 +291,11 @@ bool MemoryFingerprintT<D, S, V>::updateLocalFragment(ThreadId threadID,
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(ThreadId threadID,
+bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(const ThreadId &threadID,
                                                          std::uint64_t sfIndex,
                                                          const KFunction *kf,
                                                          std::uint64_t argumentIndex,
-                                                         ref<Expr> value) {
+                                                         ref <Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(5);
@@ -318,7 +318,7 @@ bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(ThreadId threadID,
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(ThreadId threadID,
+bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(const ThreadId &threadID,
                                                                std::uint64_t sfIndex,
                                                                const llvm::Instruction *i) {
   getDerived().updateUint8(7);
@@ -329,7 +329,7 @@ bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(ThreadId threadID
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateFunctionFragment(ThreadId threadID,
+bool MemoryFingerprintT<D, S, V>::updateFunctionFragment(const ThreadId& threadID,
                                                          std::uint64_t sfIndex,
                                                          const KFunction *callee,
                                                          const KInstruction *caller) {

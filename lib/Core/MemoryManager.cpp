@@ -99,7 +99,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
                                       bool isLocal,
                                       bool isGlobal,
                                       const llvm::Value *allocSite,
-                                      ThreadId threadId,
+                                      const ThreadId &threadId,
                                       std::size_t stackframeIndex,
                                       std::size_t alignment) {
   if (size > 10 * 1024 * 1024)
@@ -162,7 +162,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
 
 MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t size,
                                            const llvm::Value *allocSite,
-                                           ThreadId threadId,
+                                           const ThreadId &threadId,
                                            std::size_t stackframeIndex) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;

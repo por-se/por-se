@@ -166,14 +166,14 @@ public:
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }
 
-  void registerArgument(ThreadId threadID,
+  void registerArgument(const ThreadId &threadID,
                         std::size_t sfIndex,
                         const KFunction *kf,
                         unsigned index, ref<Expr> value);
 
   void registerExternalFunctionCall();
 
-  void registerPushFrame(ThreadId threadID, std::size_t sfIndex,
+  void registerPushFrame(const ThreadId &threadID, std::size_t sfIndex,
                          const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(const StackFrame &sf);
 

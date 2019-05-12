@@ -197,7 +197,7 @@ Thread * ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr)
   return newThread;
 }
 
-void ExecutionState::scheduleNextThread(ThreadId tid) {
+void ExecutionState::scheduleNextThread(const ThreadId &tid) {
   Thread &thread = currentThread(tid);
 
   assert(thread.state == ThreadState::Runnable && "Cannot schedule non-runnable thread");
@@ -239,7 +239,7 @@ void ExecutionState::threadWaitOn(std::uint64_t lid) {
   thread.waitingHandle = lid;
 }
 
-void ExecutionState::preemptThread(ThreadId tid) {
+void ExecutionState::preemptThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -249,7 +249,7 @@ void ExecutionState::preemptThread(ThreadId tid) {
   runnableThreads.insert(tid);
 }
 
-void ExecutionState::wakeUpThread(ThreadId tid) {
+void ExecutionState::wakeUpThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -271,7 +271,7 @@ void ExecutionState::wakeUpThread(ThreadId tid) {
   }
 }
 
-void ExecutionState::exitThread(ThreadId tid) {
+void ExecutionState::exitThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -327,7 +327,7 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   return os;
 }
 
-bool ExecutionState::hasSameThreadState(const ExecutionState &b, ThreadId tid) {
+bool ExecutionState::hasSameThreadState(const ExecutionState &b, const ThreadId &tid) {
   auto threadA = threads.find(tid);
   auto threadB = b.threads.find(tid);
 

@@ -4959,7 +4959,7 @@ void Executor::preemptThread(ExecutionState &state) {
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  ThreadId tid = state.currentThreadId();
+  const ThreadId& tid = state.currentThreadId();
   auto mainThreadId = ThreadId(1);
 
   // needs to come before thread_exit event
@@ -5082,11 +5082,11 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     terminateStateOnUnsafeMemAccess(state, mo, racingInstruction);
   } else {
     if (!access.atomicMemoryAccess) {
-      ThreadId tid = state.currentThreadId();
+      const ThreadId& tid = state.currentThreadId();
 
       for (auto dep : result.dataDependencies) {
         uint64_t scheduleIndex = dep.second;
-        ThreadId dTid = dep.first;
+        const ThreadId& dTid = dep.first;
 
         state.memAccessTracker.registerThreadDependency(tid, dTid, scheduleIndex);
       }
@@ -5177,7 +5177,7 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newFor
       addedStates.push_back(st);
     }
 
-    ThreadId tidToSchedule = *rIt;
+    const ThreadId& tidToSchedule = *rIt;
     st->scheduleNextThread(tidToSchedule);
   }
 }

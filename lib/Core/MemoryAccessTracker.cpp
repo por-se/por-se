@@ -19,7 +19,7 @@ void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   accessLists[accessLists.size() - 1] = ema;
 }
 
-void MemoryAccessTracker::scheduledNewThread(ThreadId tid) {
+void MemoryAccessTracker::scheduledNewThread(const ThreadId &tid) {
   // So basically we have scheduled a new thread: that means
   // making sure the current epoch ends and we start a new one
 
@@ -103,7 +103,8 @@ void MemoryAccessTracker::trackMemoryAccess(std::uint64_t id, MemoryAccess acces
   accesses.emplace_back(access);
 }
 
-void MemoryAccessTracker::registerThreadDependency(ThreadId targetTid, ThreadId predTid, std::uint64_t epoch) {
+void MemoryAccessTracker::registerThreadDependency(const ThreadId &targetTid, const ThreadId &predTid,
+                                                   std::uint64_t epoch) {
   // Tries to register the following ordering: predTid > targetTid
   std::uint64_t* v = getThreadSyncValueTo(targetTid, predTid);
 
@@ -168,7 +169,7 @@ void MemoryAccessTracker::registerThreadDependency(ThreadId targetTid, ThreadId 
   }
 }
 
-std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(ThreadId tid, ThreadId reference) {
+std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(const ThreadId &tid, const ThreadId &reference) {
   assert(tid != reference && "ThreadIds have to be unequal");
   auto pair = std::make_pair(tid, reference);
 
@@ -269,7 +270,7 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
   }
 }
 
-void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, ThreadId tid,
+void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, const ThreadId &tid,
                                                         std::uint64_t id, const MemoryAccess &access) {
   auto it = lastExecutions.find(tid);
   if (it == lastExecutions.end()) {

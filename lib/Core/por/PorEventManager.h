@@ -23,10 +23,10 @@ namespace klee {
       void checkIfCatchUpIsNeeded(ExecutionState &state);
 
     public:
-      bool registerThreadCreate(ExecutionState &state, ThreadId tid);
-      bool registerThreadExit(ExecutionState &state, ThreadId tid);
-      bool registerThreadJoin(ExecutionState &state, ThreadId joinedThread);
-      bool registerThreadInit(ExecutionState &state, ThreadId tid);
+      bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
+      bool registerThreadExit(ExecutionState &state, const ThreadId &tid);
+      bool registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread);
+      bool registerThreadInit(ExecutionState &state, const ThreadId &tid);
 
       bool registerLockCreate(ExecutionState &state, std::uint64_t mId);
       bool registerLockDestroy(ExecutionState &state, std::uint64_t mId);
@@ -35,7 +35,7 @@ namespace klee {
 
       bool registerCondVarCreate(ExecutionState &state, std::uint64_t cId);
       bool registerCondVarDestroy(ExecutionState &state, std::uint64_t cId);
-      bool registerCondVarSignal(ExecutionState &state, std::uint64_t cId, ThreadId notifiedThread);
+      bool registerCondVarSignal(ExecutionState &state, std::uint64_t cId, const ThreadId &notifiedThread);
       bool registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId, const std::vector<ThreadId> &threads);
       bool registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
       bool registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);

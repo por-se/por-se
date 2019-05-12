@@ -40,11 +40,11 @@ public:
    * memory.
    */
   MemoryObject *allocate(std::uint64_t size, bool isLocal, bool isGlobal,
-                         const llvm::Value *allocSite, ThreadId threadId,
+                         const llvm::Value *allocSite, const ThreadId &threadId,
                          std::size_t stackframeIndex, std::size_t alignment);
   MemoryObject *allocateFixed(std::uint64_t address, std::uint64_t size,
                               const llvm::Value *allocSite,
-                              ThreadId threadId,
+                              const ThreadId &threadId,
                               std::size_t stackframeIndex);
   void deallocate(const MemoryObject *mo);
   void markFreed(MemoryObject *mo);

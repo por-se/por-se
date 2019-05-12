@@ -389,7 +389,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   }
 }
 
-void MemoryState::registerArgument(ThreadId threadID,
+void MemoryState::registerArgument(const ThreadId &threadID,
                                    std::size_t sfIndex,
                                    const KFunction *kf,
                                    unsigned index,
@@ -431,7 +431,7 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
   return true;
 }
 
-void MemoryState::registerPushFrame(ThreadId threadID,
+void MemoryState::registerPushFrame(const ThreadId &threadID,
                                     std::size_t sfIndex,
                                     const KFunction *callee,
                                     const KInstruction *caller) {

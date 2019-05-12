@@ -141,16 +141,16 @@ public:
   static std::string toString(const MemoryFingerprintDelta &delta);
 
   bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
-  bool updateLocalFragment(ThreadId threadID,
+  bool updateLocalFragment(const ThreadId &threadID,
                            std::uint64_t stackFrameIndex,
                            const llvm::Instruction *inst, ref<Expr> value);
-  bool updateArgumentFragment(ThreadId threadID, std::uint64_t sfIndex,
+  bool updateArgumentFragment(const ThreadId &threadID, std::uint64_t sfIndex,
                               const KFunction *kf, std::uint64_t argumentIndex,
                               ref<Expr> value);
-  bool updateProgramCounterFragment(ThreadId threadID,
+  bool updateProgramCounterFragment(const ThreadId &threadID,
                                     std::uint64_t sfIndex,
                                     const llvm::Instruction *i);
-  bool updateFunctionFragment(ThreadId threadID, std::uint64_t sfIndex,
+  bool updateFunctionFragment(const ThreadId &threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);
   bool updateExternalCallFragment(std::uint64_t externalCallCounter);
