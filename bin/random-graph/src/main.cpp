@@ -270,12 +270,12 @@ int main(int argc, char** argv){
 			// broadcast threads, if possible
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, true);
-			std::set<por::event::thread_id_t> blocked_tids;
+			std::vector<por::event::thread_id_t> blocked_tids;
 			if(tid && cid) {
 				for(auto& w : configuration.cond_heads().at(cid)) {
 					if(w->kind() != por::event::event_kind::wait1 || w->tid() == tid)
 						continue;
-					blocked_tids.insert(w->tid());
+					blocked_tids.push_back(w->tid());
 					break;
 				}
 				configuration.broadcast_threads(tid, cid, blocked_tids);

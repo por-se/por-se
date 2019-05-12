@@ -709,7 +709,7 @@ namespace por {
 		}
 
 	public:
-		void broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::set<por::event::thread_id_t> notified_threads) {
+		void broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::vector<por::event::thread_id_t> notified_threads) {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::broadcast);
 				assert(_schedule[_schedule_pos]->tid() == thread);
@@ -782,7 +782,7 @@ namespace por {
 						if(sig->is_lost())
 							continue;
 
-						if(notified_threads.count(sig->notified_thread()))
+						if(std::find(notified_threads.begin(), notified_threads.end(), sig->notified_thread()) != notified_threads.end())
 							continue;
 
 						if(sig->notified_thread() == thread)
