@@ -190,14 +190,8 @@ bool PorEventManager::handleCondVarSignal(ExecutionState &state, std::uint64_t c
   return true;
 }
 
-bool PorEventManager::handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId, std::vector<std::uint64_t> threads) {
-  std::set<Thread::ThreadId> notifiedThreads;
-
-  for (auto& tid : threads) {
-    notifiedThreads.insert(static_cast<Thread::ThreadId>(tid));
-  }
-
-  state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, notifiedThreads);
+bool PorEventManager::handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId, std::vector<Thread::ThreadId> threads) {
+  state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, threads);
   return true;
 }
 
