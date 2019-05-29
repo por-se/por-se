@@ -41,13 +41,6 @@
 using namespace llvm;
 using namespace klee;
 
-namespace {
-cl::opt<bool> DebugLogStateMerge(
-    "debug-log-state-merge", cl::init(false),
-    cl::desc("Debug information for underlying state merging (default=false)"),
-    cl::cat(MergeCat));
-}
-
 size_t ExecutionState::next_id = 0;
 
 /***/
@@ -94,10 +87,6 @@ ExecutionState::~ExecutionState() {
       delete mo;
   }
 
-  for (auto cur_mergehandler: openMergeStack){
-    cur_mergehandler->removeOpenState(this);
-  }
-
   // We have to clean up all stack frames of all threads
   for (auto& it : threads) {
     Thread thread = it.second;
@@ -138,7 +127,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
     memoryState(state.memoryState, this),
-    openMergeStack(state.openMergeStack),
     steppedInstructions(state.steppedInstructions)
 {
   // Since we copied the threads, we can use the thread id to look it up
@@ -146,9 +134,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
-
-  for (auto cur_mergehandler: openMergeStack)
-    cur_mergehandler->addOpenState(this);
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -385,179 +370,6 @@ bool ExecutionState::hasSameThreadState(const ExecutionState &b, Thread::ThreadI
   }
 
   return !(itA != curThreadA->stack.end() || itB != curThreadB->stack.end());
-}
-
-bool ExecutionState::merge(const ExecutionState &b) {
-  if (DebugLogStateMerge)
-    llvm::errs() << "-- attempting merge of A:" << this << " with B:" << &b
-                 << "--\n";
-
-  // XXX is it even possible for these to differ? does it matter? probably
-  // implies difference in object states?
-  if (symbolics!=b.symbolics)
-    return false;
-
-  if (threads.size() != b.threads.size()) {
-    return false;
-  }
-
-  for (auto threadsIt : threads) {
-    Thread::ThreadId tid = threadsIt.first;
-
-    if (!hasSameThreadState(b, tid)) {
-      return false;
-    }
-  }
-
-  std::set< ref<Expr> > aConstraints(constraints.begin(), constraints.end());
-  std::set< ref<Expr> > bConstraints(b.constraints.begin(), 
-                                     b.constraints.end());
-  std::set< ref<Expr> > commonConstraints, aSuffix, bSuffix;
-  std::set_intersection(aConstraints.begin(), aConstraints.end(),
-                        bConstraints.begin(), bConstraints.end(),
-                        std::inserter(commonConstraints, commonConstraints.begin()));
-  std::set_difference(aConstraints.begin(), aConstraints.end(),
-                      commonConstraints.begin(), commonConstraints.end(),
-                      std::inserter(aSuffix, aSuffix.end()));
-  std::set_difference(bConstraints.begin(), bConstraints.end(),
-                      commonConstraints.begin(), commonConstraints.end(),
-                      std::inserter(bSuffix, bSuffix.end()));
-  if (DebugLogStateMerge) {
-    llvm::errs() << "\tconstraint prefix: [";
-    for (std::set<ref<Expr> >::iterator it = commonConstraints.begin(),
-                                        ie = commonConstraints.end();
-         it != ie; ++it)
-      llvm::errs() << *it << ", ";
-    llvm::errs() << "]\n";
-    llvm::errs() << "\tA suffix: [";
-    for (std::set<ref<Expr> >::iterator it = aSuffix.begin(),
-                                        ie = aSuffix.end();
-         it != ie; ++it)
-      llvm::errs() << *it << ", ";
-    llvm::errs() << "]\n";
-    llvm::errs() << "\tB suffix: [";
-    for (std::set<ref<Expr> >::iterator it = bSuffix.begin(),
-                                        ie = bSuffix.end();
-         it != ie; ++it)
-      llvm::errs() << *it << ", ";
-    llvm::errs() << "]\n";
-  }
-
-  // We cannot merge if addresses would resolve differently in the
-  // states. This means:
-  // 
-  // 1. Any objects created since the branch in either object must
-  // have been free'd.
-  //
-  // 2. We cannot have free'd any pre-existing object in one state
-  // and not the other
-
-  if (DebugLogStateMerge) {
-    llvm::errs() << "\tchecking object states\n";
-    llvm::errs() << "A: " << addressSpace.objects << "\n";
-    llvm::errs() << "B: " << b.addressSpace.objects << "\n";
-  }
-    
-  std::set<const MemoryObject*> mutated;
-  MemoryMap::iterator ai = addressSpace.objects.begin();
-  MemoryMap::iterator bi = b.addressSpace.objects.begin();
-  MemoryMap::iterator ae = addressSpace.objects.end();
-  MemoryMap::iterator be = b.addressSpace.objects.end();
-  for (; ai!=ae && bi!=be; ++ai, ++bi) {
-    if (ai->first != bi->first) {
-      if (DebugLogStateMerge) {
-        if (ai->first < bi->first) {
-          llvm::errs() << "\t\tB misses binding for: " << ai->first->id << "\n";
-        } else {
-          llvm::errs() << "\t\tA misses binding for: " << bi->first->id << "\n";
-        }
-      }
-      return false;
-    }
-    if (ai->second != bi->second) {
-      if (DebugLogStateMerge)
-        llvm::errs() << "\t\tmutated: " << ai->first->id << "\n";
-      mutated.insert(ai->first);
-    }
-  }
-  if (ai!=ae || bi!=be) {
-    if (DebugLogStateMerge)
-      llvm::errs() << "\t\tmappings differ\n";
-    return false;
-  }
-  
-  // merge stack
-
-  ref<Expr> inA = ConstantExpr::alloc(1, Expr::Bool);
-  ref<Expr> inB = ConstantExpr::alloc(1, Expr::Bool);
-  for (std::set< ref<Expr> >::iterator it = aSuffix.begin(), 
-         ie = aSuffix.end(); it != ie; ++it)
-    inA = AndExpr::create(inA, *it);
-  for (std::set< ref<Expr> >::iterator it = bSuffix.begin(), 
-         ie = bSuffix.end(); it != ie; ++it)
-    inB = AndExpr::create(inB, *it);
-
-  // XXX should we have a preference as to which predicate to use?
-  // it seems like it can make a difference, even though logically
-  // they must contradict each other and so inA => !inB
-
-  for (auto& threadPair : threads) {
-    auto bThread = b.threads.find(threadPair.first);
-    if (bThread == b.threads.end()) {
-      return false;
-    }
-
-    Thread* threadOfA = &(threadPair.second);
-    const Thread* threadOfB = &(bThread->second);
-
-    auto itA = threadOfA->stack.begin();
-    auto itB = threadOfB->stack.begin();
-    for (; itA != threadOfA->stack.end(); ++itA, ++itB) {
-      StackFrame &af = *itA;
-      const StackFrame &bf = *itB;
-      for (unsigned i = 0; i < af.kf->numRegisters; i++) {
-        ref<Expr> &av = af.locals[i].value;
-        const ref<Expr> &bv = bf.locals[i].value;
-        if (av.isNull() || bv.isNull()) {
-          // if one is null then by implication (we are at same pc)
-          // we cannot reuse this local, so just ignore
-        } else {
-          av = SelectExpr::create(inA, av, bv);
-        }
-      }
-    }
-  }
-
-  for (std::set<const MemoryObject*>::iterator it = mutated.begin(), 
-         ie = mutated.end(); it != ie; ++it) {
-    const MemoryObject *mo = *it;
-    const ObjectState *os = addressSpace.findObject(mo);
-    const ObjectState *otherOS = b.addressSpace.findObject(mo);
-    assert(os && !os->readOnly && 
-           "objects mutated but not writable in merging state");
-    assert(otherOS);
-
-    if (PruneStates) {
-      memoryState.unregisterWrite(*mo, *os);
-    }
-    ObjectState *wos = addressSpace.getWriteable(mo, os);
-    for (unsigned i=0; i<mo->size; i++) {
-      ref<Expr> av = wos->read8(i);
-      ref<Expr> bv = otherOS->read8(i);
-      wos->write(i, SelectExpr::create(inA, av, bv));
-    }
-    if (PruneStates) {
-      memoryState.registerWrite(*mo, *wos);
-    }
-  }
-
-  constraints = ConstraintManager();
-  for (std::set< ref<Expr> >::iterator it = commonConstraints.begin(), 
-         ie = commonConstraints.end(); it != ie; ++it)
-    constraints.addConstraint(*it);
-  constraints.addConstraint(OrExpr::create(inA, inB));
-
-  return true;
 }
 
 void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {

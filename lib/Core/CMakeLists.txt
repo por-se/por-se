@@ -8,7 +8,6 @@
 #===------------------------------------------------------------------------===#
 set(CORE_COMPONENTS
   AddressSpace.cpp
-  MergeHandler.cpp
   CallPathManager.cpp
   Context.cpp
   CoreStats.cpp

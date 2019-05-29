@@ -15,7 +15,6 @@
 #include "StatsTracker.h"
 
 #include "klee/ExecutionState.h"
-#include "klee/MergeHandler.h"
 #include "klee/Statistics.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
@@ -297,42 +296,6 @@ RandomPathSearcher::update(ExecutionState *current,
 
 bool RandomPathSearcher::empty() { 
   return executor.states.empty(); 
-}
-
-///
-
-MergingSearcher::MergingSearcher(Executor &_executor, Searcher *_baseSearcher)
-  : executor(_executor),
-  baseSearcher(_baseSearcher){}
-
-MergingSearcher::~MergingSearcher() {
-  delete baseSearcher;
-}
-
-ExecutionState& MergingSearcher::selectState() {
-  assert(!baseSearcher->empty() && "base searcher is empty");
-
-  // Iterate through all MergeHandlers
-  for (auto cur_mergehandler: executor.mergeGroups) {
-    // Find one that has states that could be released
-    if (!cur_mergehandler->hasMergedStates()) {
-      continue;
-    }
-    // Find a state that can be prioritized
-    ExecutionState *es = cur_mergehandler->getPrioritizeState();
-    if (es) {
-      return *es;
-    } else {
-      if (DebugLogIncompleteMerge){
-        llvm::errs() << "Preemptively releasing states\n";
-      }
-      // If no state can be prioritized, they all exceeded the amount of time we
-      // are willing to wait for them. Release the states that already arrived at close_merge.
-      cur_mergehandler->releaseStates();
-    }
-  }
-  // If we were not able to prioritize a merging state, just return some state
-  return baseSearcher->selectState();
 }
 
 ///

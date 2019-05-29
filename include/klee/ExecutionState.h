@@ -14,7 +14,6 @@
 #include "klee/Expr.h"
 #include "klee/Internal/ADT/TreeStream.h"
 #include "klee/Internal/System/Time.h"
-#include "klee/MergeHandler.h"
 #include "klee/Thread.h"
 
 // FIXME: We do not want to be exposing these? :(
@@ -163,9 +162,6 @@ public:
 
   std::string getFnAlias(std::string fn);
 
-  // The objects handling the klee_open_merge calls this state ran through
-  std::vector<ref<MergeHandler> > openMergeStack;
-
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
 
@@ -228,7 +224,6 @@ public:
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
 
-  bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
   void dumpAllThreadStacks(llvm::raw_ostream &out) const;

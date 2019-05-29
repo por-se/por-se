@@ -78,7 +78,6 @@ namespace klee {
   class StatsTracker;
   class TimingSolver;
   class TreeStreamWriter;
-  class MergeHandler;
   template<class T> class ref;
 
 
@@ -93,7 +92,6 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
-  friend class MergeHandler;
   friend class MergingSearcher;
   friend class PorEventManager;
 
@@ -148,16 +146,6 @@ private:
   PTree *processTree;
 
   PorEventManager porEventManager{*this};
-
-  /// Keeps track of all currently ongoing merges.
-  /// An ongoing merge is a set of states which branched from a single state
-  /// which ran into a klee_open_merge(), and not all states in the set have
-  /// reached the corresponding klee_close_merge() yet.
-  std::vector<MergeHandler *> mergeGroups;
-
-  /// ExecutionStates currently paused from scheduling because they are
-  /// waiting to be merged in a klee_close_merge instruction
-  std::set<ExecutionState *> inCloseMerge;
 
   /// Used to track states that have been added during the current
   /// instructions step. 
