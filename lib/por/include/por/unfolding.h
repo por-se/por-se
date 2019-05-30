@@ -10,7 +10,7 @@ namespace por {
 	class configuration;
 
 	class unfolding {
-		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<por::event::event const*>> visited;
+		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::shared_ptr<por::event::event const>>> visited;
 
 		// NOTE: do not use for other purposes, only compares pointers of predecessors
 		bool compare_events(por::event::event const* a, por::event::event const* b) {
@@ -63,7 +63,7 @@ namespace por {
 
 		void mark_as_visited(por::event::event const* e) {
 			assert(e != nullptr);
-			visited[std::make_tuple(e->tid(), e->depth(), e->kind())].push_back(e);
+			visited[std::make_tuple(e->tid(), e->depth(), e->kind())].push_back(e->shared_from_this());
 			e->visited = true;
 		}
 
@@ -74,9 +74,9 @@ namespace por {
 				return true;
 			auto it = visited.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
 			if(it != visited.end()) {
-				for(por::event::event const* v : it->second) {
+				for(auto v : it->second) {
 					assert(v->visited);
-					if(compare_events(e, v))
+					if(compare_events(e, v.get()))
 						return true;
 				}
 			}
