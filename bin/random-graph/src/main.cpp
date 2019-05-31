@@ -354,7 +354,7 @@ int main(int argc, char** argv){
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
-			configuration.local(tid);
+			configuration.local(tid, {});
 			std::cout << " . (" << tid << ")\n";
 		} else {
 			assert(false && "Unexpected random choice for event to introduce");

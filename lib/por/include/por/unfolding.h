@@ -26,6 +26,14 @@ namespace por {
 			if(a->kind() != b->kind())
 				return false;
 
+			if(a->kind() == por::event::event_kind::local) {
+				auto alocal = static_cast<por::event::local const*>(a);
+				auto blocal = static_cast<por::event::local const*>(b);
+
+				if(alocal->path() != blocal->path())
+					return false;
+			}
+
 			auto a_preds = a->predecessors();
 			auto b_preds = b->predecessors();
 			std::size_t a_num_preds = std::distance(a_preds.begin(), a_preds.end());

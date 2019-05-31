@@ -5,6 +5,7 @@
 #include <cassert>
 #include <array>
 #include <memory>
+#include <vector>
 
 namespace por::event {
 	class local final : public event {
@@ -12,10 +13,14 @@ namespace por::event {
 		// 1. same-thread predecessor
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
+		// decisions taken along path since last local event
+		std::vector<bool> _path;
+
 	protected:
-		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor)
+		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::vector<bool>&& path)
 			: event(event_kind::local, tid, thread_predecessor)
 			, _predecessors{std::move(thread_predecessor)}
+			, _path{std::move(path)}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
@@ -25,8 +30,8 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<local> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
-			return std::make_shared<local>(local{tid, ::std::move(thread_predecessor)});
+		static std::shared_ptr<local> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor, std::vector<bool> path) {
+			return std::make_shared<local>(local{tid, std::move(thread_predecessor), std::move(path)});
 		}
 
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
@@ -39,5 +44,7 @@ namespace por::event {
 
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
+
+		std::vector<bool> const& path() const noexcept { return _path; }
 	};
 }

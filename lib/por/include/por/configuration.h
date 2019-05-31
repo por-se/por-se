@@ -801,13 +801,22 @@ namespace por {
 			assert(_schedule_pos == _schedule.size());
 		}
 
-		void local(event::thread_id_t thread) {
+		void local(event::thread_id_t thread, std::vector<bool> path) {
+			if(needs_catch_up()) {
+				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::local);
+				assert(_schedule[_schedule_pos]->tid() == thread);
+				[[maybe_unused]] auto& cs = static_cast<por::event::local*>(_schedule[_schedule_pos].get())->path();
+				assert(cs == path);
+				_thread_heads[thread] = _schedule[_schedule_pos];
+				++_schedule_pos;
+				return;
+			}
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			thread_event = event::local::alloc(thread, std::move(thread_event));
+			thread_event = event::local::alloc(thread, std::move(thread_event), std::move(path));
 
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
