@@ -18,6 +18,7 @@ namespace {
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
   switch (kind) {
+    case por_local: return "local";
     case por_program_init: return "program_init";
 
     case por_thread_create: return "thread_create";
@@ -78,6 +79,23 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
   }
 
   return false;
+}
+
+bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> path) {
+  state.porConfiguration->local(state.currentThreadId(), std::move(path));
+
+  // FIXME: remove duplicate code
+  if (LogPorEvents) {
+    llvm::errs() << "POR event: " << getNameOfEvent(por_local) << " with current thread " << state.currentThreadId() << "\n";
+  }
+
+  // FIXME: remove duplicate code
+  ExecutionState *newState = new ExecutionState(state);
+  newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
+  executor.standbyStates.push_back(newState);
+  state.porConfiguration->standby_execution_state(newState);
+
+  return true;
 }
 
 bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args) {

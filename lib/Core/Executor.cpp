@@ -1238,6 +1238,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         falseState->symPathOS << "0";
       }
     }
+    trueState->currentThread().pathSincePorLocal.push_back(true);
+    falseState->currentThread().pathSincePorLocal.push_back(false);
 
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
     addConstraint(*trueState, condition);
@@ -3147,6 +3149,13 @@ void Executor::updateStates(ExecutionState *current) {
     current->needsThreadScheduling = false;
   }
 
+  if (current && !current->currentThread().pathSincePorLocal.empty()) {
+    // pathSincePorLocal has to be empty in standby state attached to event
+    std::vector<bool> path = std::move(current->currentThread().pathSincePorLocal);
+    current->currentThread().pathSincePorLocal = {};
+    porEventManager.registerLocal(*current, path);
+  }
+
   if (searcher) {
     searcher->update(current, addedStates, removedStates);
   }
@@ -4841,6 +4850,14 @@ void Executor::preemptThread(ExecutionState &state) {
 
 void Executor::exitThread(ExecutionState &state) {
   Thread::ThreadId tid = state.currentThreadId();
+
+  // needs to come before thread_exit event
+  if (tid == 1 && !state.currentThread().pathSincePorLocal.empty()) {
+    // pathSincePorLocal has to be empty in standby state attached to event
+    std::vector<bool> path = std::move(state.currentThread().pathSincePorLocal);
+    state.currentThread().pathSincePorLocal = {};
+    porEventManager.registerLocal(state, path);
+  }
 
   state.exitThread(tid);
   if (tid == 1) {

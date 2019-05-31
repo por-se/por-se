@@ -58,10 +58,11 @@ namespace klee {
     friend class Executor;
     friend class ExecutionState;
     friend class MemoryState;
+    friend class PorEventManager;
     friend class StatsTracker;
     friend class Searcher;
-    friend class WeightedRandomSearcher;
     friend class SpecialFunctionHandler;
+    friend class WeightedRandomSearcher;
 
     public:
       typedef std::vector<StackFrame> stack_ty;
@@ -103,6 +104,9 @@ namespace klee {
 
       /// @brief if the thread scheduling was disabled when this thread was going into the waiting state
       bool threadSchedulingWasDisabled = false;
+
+      /// @brief Contains true / false for each decision since last por_local registration
+      std::vector<bool> pathSincePorLocal;
 
     public:
       Thread() = delete;

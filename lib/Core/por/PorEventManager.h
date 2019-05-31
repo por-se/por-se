@@ -2,10 +2,11 @@
 #define KLEE_POREVENTMANAGER_H
 
 #include "klee/Thread.h"
-#include "klee/ExecutionState.h"
 #include "klee/por/events.h"
 
 namespace klee {
+  class ExecutionState;
+
   class PorEventManager {
     Executor &executor;
     public:
@@ -13,6 +14,7 @@ namespace klee {
       PorEventManager(Executor &executor) : executor(executor) {}
 
       bool registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args);
+      bool registerLocal(ExecutionState &state, std::vector<bool> path);
 
     private:
       bool registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args);
@@ -37,4 +39,4 @@ namespace klee {
   };
 };
 
-#endif //KLEE_POREVENTMANAGER_H
+#endif /* KLEE_POREVENTMANAGER_H */
