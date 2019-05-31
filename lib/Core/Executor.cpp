@@ -419,7 +419,7 @@ cl::opt<bool> DebugCheckForImpliedValues(
     cl::cat(DebugCat));
 
 cl::opt<bool> NoScheduleForks("no-schedule-forks",
-    cl::init(false));
+    cl::init(true));
 
 } // namespace
 
