@@ -3901,7 +3901,7 @@ ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state,
   ref<Expr> res = Expr::createTempRead(array, e->getWidth());
   ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(e, res));
   llvm::errs() << "Making symbolic: " << eq << "\n";
-  state.addConstraint(eq);
+  addConstraint(state, eq);
   return res;
 }
 
@@ -4586,7 +4586,7 @@ bool Executor::getSymbolicSolution(const ExecutionState &state,
       if (!success) break;
       // If the particular constraint operated on in this iteration through
       // the loop isn't implied then add it to the list of constraints.
-      if (!mustBeTrue) tmp.addConstraint(*pi);
+      if (!mustBeTrue) addConstraint(tmp, *pi);
     }
     if (pi!=pie) break;
   }
@@ -4821,7 +4821,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     if (i == allowedChoices - 1) {
       st = &state;
     } else {
-      st = forkToNewState(state);
+      st = state.branch();
+      registerFork(state, st);
       addedStates.push_back(st);
     }
 
@@ -4940,8 +4941,7 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
         klee_warning("Solver could not complete query for offset; Skipping possible safe mem access path");
         return true;
       } else if (canBeSafe) {
-        ExecutionState* newState = forkToNewState(state);
-        addConstraint(*newState, query);
+        fork(state, query, true);
       }
     } else {
       // We were not successful, so go ahead and add the constraint
@@ -5021,14 +5021,6 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
   }
 }
 
-ExecutionState* Executor::forkToNewState(ExecutionState &state) {
-  ExecutionState* ns = state.branch();
-
-  registerFork(state, ns);
-
-  return ns;
-}
-
 void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newForkCount) {
   assert(newForkCount < state.runnableThreads.size());
 
@@ -5052,7 +5044,8 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newFor
     if (i == newForkCount) {
       st = &state;
     } else {
-      st = forkToNewState(state);
+      st = state.branch();
+      registerFork(state, st);
       addedStates.push_back(st);
     }
 

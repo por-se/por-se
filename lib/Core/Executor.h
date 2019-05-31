@@ -515,7 +515,6 @@ private:
 
   void registerForkInProcessTree(ExecutionState &existing, ExecutionState &fork);
   void registerFork(ExecutionState &state, ExecutionState* fork);
-  ExecutionState* forkToNewState(ExecutionState &state);
 
   void scheduleThreads(ExecutionState &state);
 
