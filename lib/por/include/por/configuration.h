@@ -1098,31 +1098,28 @@ namespace por {
 	public:
 		std::vector<conflicting_extension> conflicting_extensions() {
 			std::vector<conflicting_extension> S;
-			for(auto& t : _thread_heads) {
-				std::shared_ptr<por::event::event> const* e = &t.second;
-				do {
-					if(!_unfolding->is_visited(e->get())) {
-						switch((*e)->kind()) {
-							case por::event::event_kind::lock_acquire:
-							case por::event::event_kind::wait2: {
-								auto r = cex_acquire(*e);
+			for(auto it = _schedule.rbegin(), ie = _schedule.rend(); it != ie; ++it) {
+				std::shared_ptr<por::event::event> const& e = *it;
+				if(!_unfolding->is_visited(e.get())) {
+					switch(e->kind()) {
+						case por::event::event_kind::lock_acquire:
+						case por::event::event_kind::wait2: {
+							auto r = cex_acquire(e);
 
-								if(r.empty())
-									break;
-
-								for(auto& cex : r) {
-									if(_unfolding->is_visited(cex.new_event().get()))
-										continue;
-									S.emplace_back(std::move(cex));
-								}
-
+							if(r.empty())
 								break;
+
+							for(auto& cex : r) {
+								if(_unfolding->is_visited(cex.new_event().get()))
+									continue;
+								S.emplace_back(std::move(cex));
 							}
+
+							break;
 						}
 					}
-					_unfolding->mark_as_visited(e->get());
-					e = get_thread_predecessor(*e);
-				} while(e != nullptr);
+				}
+				_unfolding->mark_as_visited(e.get());
 			}
 			return S;
 		}

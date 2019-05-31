@@ -77,8 +77,9 @@ namespace por {
 
 		bool is_visited(por::event::event const* e) {
 			assert(e != nullptr);
-			assert(e->depth() > 0);
 			if(e->visited)
+				return true;
+			if(e->depth() == 0)
 				return true;
 			auto it = visited.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
 			if(it != visited.end()) {
