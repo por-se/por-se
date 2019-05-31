@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <string>
 
 namespace por::event {
 	using thread_id_t = std::uint32_t;
@@ -36,7 +37,6 @@ namespace por::event {
 		std::map<thread_id_t, event*> _cone;
 		thread_id_t _tid;
 		event_kind _kind;
-
 
 	public:
 		mutable bool visited = false;
@@ -141,6 +141,8 @@ namespace por::event {
 		{ }
 
 	public:
+		virtual std::string to_string(bool details = false) const = 0;
+
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() = 0;
 		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const = 0;
 

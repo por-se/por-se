@@ -34,6 +34,20 @@ namespace por::event {
 			return std::make_shared<local>(local{tid, std::move(thread_predecessor), std::move(path)});
 		}
 
+		virtual std::string to_string(bool details) const override {
+			if(details) {
+				std::string res = "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: local";
+				if(!path().empty())
+					res += " PATH:";
+				for(auto d: path())
+					res += " " + std::to_string(static_cast<unsigned>(d));
+				res += "]";
+				return res;
+			} else {
+				return "local";
+			}
+		}
+
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}

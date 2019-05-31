@@ -127,6 +127,12 @@ namespace por::event {
 			);
 		}
 
+		virtual std::string to_string(bool details) const override {
+			if(details)
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: signal]";
+			return "signal";
+		}
+
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
 				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());

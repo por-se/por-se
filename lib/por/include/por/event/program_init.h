@@ -18,6 +18,12 @@ namespace por::event {
 			return std::make_shared<program_init>(program_init{});
 		}
 
+		virtual std::string to_string(bool details) const override {
+			if(details)
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: program_init]";
+			return "program_init";
+		}
+
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr);
 		}

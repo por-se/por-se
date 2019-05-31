@@ -32,6 +32,12 @@ namespace por::event {
 			return std::make_shared<thread_init>(thread_init{tid, std::move(creator)});
 		}
 
+		virtual std::string to_string(bool details) const override {
+			if(details)
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: thread_init]";
+			return "thread_init";
+		}
+
 		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
