@@ -113,6 +113,11 @@ cl::OptionCategory TestGenCat("Test generation options",
 } // namespace klee
 
 namespace {
+    cl::opt<bool> LogConflictingExtensions(
+      "log-conflicting-extensions",
+      cl::desc("Log conflicting extensions that are added for multi-threaded executions with alternative interleavings (default=false)"),
+      cl::init(false));
+
   cl::opt<bool> LogStateJSON(
       "log-state-json-files",
       cl::desc("Creates two files (states.json, states_fork.json) in output directory that record relevant information about states (default=false)"),
@@ -3618,6 +3623,50 @@ void Executor::terminateStateEarly(ExecutionState &state,
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
+  if (LogConflictingExtensions) {
+    llvm::errs() << "Completed Interleaving: ";
+    for(auto& s : state.porConfiguration->schedule()) {
+      llvm::errs() << s->to_string(true);
+    }
+    llvm::errs() << "\n";
+  }
+
+  std::vector<por::conflicting_extension> cex = state.porConfiguration->conflicting_extensions();
+  for(auto& c : cex) {
+    por::configuration newSchedule(*state.porConfiguration, c);
+    const ExecutionState *standby = newSchedule.standby_execution_state();
+    ExecutionState *toExecute = new ExecutionState(*standby);
+    ++toExecute->depth;
+    toExecute->coveredNew = false;
+    toExecute->coveredLines.clear();
+
+    toExecute->porConfiguration = std::make_unique<por::configuration>(std::move(newSchedule));
+    registerFork(state, toExecute);
+    addedStates.push_back(toExecute);
+
+    toExecute->needsThreadScheduling = true;
+
+    if (LogConflictingExtensions) {
+      llvm::errs() << "New Event: " << c.new_event()->to_string(true) << "; Conflicting Event(s): ";
+      for(auto& conflict : c.conflicts()) {
+        llvm::errs() << conflict->to_string(true);
+      }
+      llvm::errs() << "\nOld Interleaving: ";
+      for(auto& s : state.porConfiguration->schedule()) {
+        llvm::errs() << s->to_string(true);
+      }
+      llvm::errs() << "\nNew Interleaving Prefix: ";
+      for(auto& s : toExecute->porConfiguration->schedule()) {
+        llvm::errs() << s->to_string(true);
+      }
+      llvm::errs() << "\n";
+    }
+  }
+
+  if (LogConflictingExtensions) {
+    llvm::errs() << "added " << cex.size() << " conflicting extension(s)\n";
+  }
+
   std::string ktest = "";
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
       (AlwaysOutputSeeds && seedMap.count(&state)))
