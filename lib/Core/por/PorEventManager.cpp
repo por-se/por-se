@@ -69,6 +69,12 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
     }
   }
 
+  if (state.porConfiguration->needs_catch_up()) {
+    // make sure we do not miss any events in case a different
+    // thread needs to be scheduled after catching up to this event
+    state.needsThreadScheduling = true;
+  }
+
   if (registerPorEventInternal(state, kind, args)) {
     ExecutionState *newState = new ExecutionState(state);
     newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
@@ -87,6 +93,13 @@ bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> pat
   // FIXME: remove duplicate code
   if (LogPorEvents) {
     llvm::errs() << "POR event: " << getNameOfEvent(por_local) << " with current thread " << state.currentThreadId() << "\n";
+  }
+
+  // FIXME: remove duplicate code
+  if (state.porConfiguration->needs_catch_up()) {
+    // make sure we do not miss any events in case a different
+    // thread needs to be scheduled after catching up to this event
+    state.needsThreadScheduling = true;
   }
 
   // FIXME: remove duplicate code

@@ -1181,6 +1181,27 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     return StatePair(0, &current);
   } else {
+    if (current.porConfiguration && current.porConfiguration->needs_catch_up()) {
+      const por::event::event* event = current.porConfiguration->peek();
+      assert(event->kind() == por::event::event_kind::local);
+      auto local = static_cast<const por::event::local*>(event);
+
+      std::size_t nextIndex = current.currentThread().pathSincePorLocal.size();
+      assert(local->path().size() > nextIndex);
+      bool branch = local->path()[nextIndex];
+
+      // add constraints
+      if (branch) {
+        addConstraint(current, condition);
+        current.currentThread().pathSincePorLocal.push_back(true);
+        return StatePair(&current, nullptr);
+      } else  {
+        addConstraint(current, Expr::createIsZero(condition));
+        current.currentThread().pathSincePorLocal.push_back(false);
+        return StatePair(nullptr, &current);
+      }
+    }
+
     TimerStatIncrementer timer(stats::forkTime);
     ExecutionState *falseState, *trueState = &current;
 
@@ -4830,10 +4851,20 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     std::vector<std::uint64_t> porData;
     porData.push_back(lid);
 
-    for (const auto &th : state.threads) {
-      if (th.second.waitingHandle == lid) {
-        state.wakeUpThread(th.first);
-        porData.push_back(th.first);
+    if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
+      const por::event::event* event = state.porConfiguration->peek();
+      assert(event->kind() == por::event::event_kind::broadcast);
+      auto broadcast = static_cast<const por::event::broadcast*>(event);
+      for (const auto &wait1 : broadcast->wait_predecessors()) {
+        state.wakeUpThread(wait1->tid());
+        porData.push_back(wait1->tid());
+      }
+    } else {
+      for (const auto &th : state.threads) {
+        if (th.second.waitingHandle == lid) {
+          state.wakeUpThread(th.first);
+          porData.push_back(th.first);
+        }
       }
     }
 
@@ -4845,9 +4876,16 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   }
 
   std::vector<Thread::ThreadId> choices;
-  for (const auto &th : state.threads) {
-    if (th.second.waitingHandle == lid) {
-      choices.push_back(th.first);
+  if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
+      const por::event::event* event = state.porConfiguration->peek();
+      assert(event->kind() == por::event::event_kind::signal);
+      auto signal = static_cast<const por::event::signal*>(event);
+      choices.push_back(signal->notified_thread());
+  } else {
+    for (const auto &th : state.threads) {
+      if (th.second.waitingHandle == lid) {
+        choices.push_back(th.first);
+      }
     }
   }
 
@@ -5163,8 +5201,20 @@ void Executor::scheduleThreads(ExecutionState &state) {
     return;
   }
 
-  uint64_t newForkCount = runnable.size() - 1;
-  forkForThreadScheduling(state, newForkCount);
+  if (NoScheduleForks) {
+    // pick arbitrary thread by default
+    Thread::ThreadId tid = *runnable.begin();
+
+    // or (if possible) pick thread that needs to catch up
+    if (state.porConfiguration->needs_catch_up()) {
+      tid = state.porConfiguration->peek()->tid();
+    }
+
+    state.scheduleNextThread(tid);
+  } else {
+    uint64_t newForkCount = runnable.size() - 1;
+    forkForThreadScheduling(state, newForkCount);
+  }
 }
 
 /// Returns the errno location in memory
