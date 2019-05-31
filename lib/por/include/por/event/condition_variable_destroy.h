@@ -13,7 +13,7 @@ namespace por::event {
 		// predecessors:
 		// 1. same-thread predecessor
 		// 2+ previous operations on same condition variable
-		//    (may not exist if only preceeded by condition_variable_create event)
+		//    (may not exist if only preceded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 1> _predecessors;
 
 	public: // FIXME: should be protected

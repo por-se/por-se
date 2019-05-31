@@ -133,7 +133,7 @@ namespace por {
 			, _standby_states(previous._standby_states)
 		{
 			// create new schedule and compute common prefix,
-			// set _schedule_pos to latest theoretically possible stanbdy
+			// set _schedule_pos to latest theoretically possible standby
 			_schedule_pos = compute_new_schedule_from_old(cex, _schedule) - 1;
 			assert(_schedule_pos < _schedule.size());
 			assert(_schedule.size() >= 2 && "there have to be at least program_init and thread_init");

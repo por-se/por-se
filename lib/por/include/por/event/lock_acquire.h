@@ -10,7 +10,7 @@ namespace por::event {
 	class lock_acquire final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
-		// 2. previous operation on same lock (may be nullptr if only preceeded by lock_create event)
+		// 2. previous operation on same lock (may be nullptr if only preceded by lock_create event)
 		std::array<std::shared_ptr<event>, 2> _predecessors;
 
 	protected:
@@ -63,9 +63,9 @@ namespace por::event {
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
-		// may return nullptr if only preceeded by lock_create event
+		// may return nullptr if only preceded by lock_create event
 		std::shared_ptr<event>      & lock_predecessor()       noexcept { return _predecessors[1]; }
-		// may return nullptr if only preceeded by lock_create event
+		// may return nullptr if only preceded by lock_create event
 		std::shared_ptr<event> const& lock_predecessor() const noexcept { return _predecessors[1]; }
 	};
 }

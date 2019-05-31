@@ -23,7 +23,7 @@ namespace por::event {
 		// OR (if broadcast is lost):
 		// 1. same-thread predecessor
 		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread (tid of this broadcast event)
-		//    (may not exist if no such events and only preceeded by condition_variable_create event)
+		//    (may not exist if no such events and only preceded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 0> _predecessors;
 
 		std::size_t num_notified_threads = 0;

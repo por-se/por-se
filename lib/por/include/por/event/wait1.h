@@ -14,7 +14,7 @@ namespace por::event {
 		// 1. same-thread predecessor
 		// 2. previous acquisition on same lock
 		// 3+ previous lost signals (or cond_create) or broadcasts on same condition variable that did not notify this thread by broadcast
-		//    (may not exist if no such events and only preceeded by condition_variable_create event)
+		//    (may not exist if no such events and only preceded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 2> _predecessors;
 
 	public: // FIXME: should be protected
