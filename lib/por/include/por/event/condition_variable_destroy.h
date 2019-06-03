@@ -104,7 +104,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: condition_variable_destroy cid: " + std::to_string(cid()) +"]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: condition_variable_destroy cid: " + std::to_string(cid()) + "]";
 			return "condition_variable_destroy";
 		}
 

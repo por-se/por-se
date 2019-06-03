@@ -132,19 +132,20 @@ namespace por {
 		explicit operator bool() const noexcept {
 			return _size > 0;
 		}
+
+		std::string to_string() const {
+			std::string res;
+			for(std::size_t i = 0; i < size(); i++) {
+				if(i > 0)
+					res += ".";
+				res += ids()[i];
+			}
+			return res;
+		}
 	};
 
-	inline std::ostream &operator<<(std::ostream &os, const thread_id &tid) {
-		os << "tid<";
-		for (std::size_t i = 0; i < tid.size(); i++) {
-			if (i > 0) {
-				os << ",";
-			}
-
-			const std::uint16_t val = tid[i];
-			os << val;
-		}
-		os << ">";
+	inline std::ostream &operator<<(std::ostream &os, thread_id const& tid) {
+		os << "tid<" << tid.to_string() << ">";
 		return os;
 	}
 }

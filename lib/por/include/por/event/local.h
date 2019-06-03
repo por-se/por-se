@@ -61,7 +61,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details) {
-				std::string res = "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: local";
+				std::string res = "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: local";
 				if(!path().empty())
 					res += " PATH:";
 				for(auto d: path())
