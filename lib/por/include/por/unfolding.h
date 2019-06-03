@@ -2,6 +2,7 @@
 
 #include "event/event.h"
 
+#include <algorithm>
 #include <map>
 #include <utility>
 #include <vector>
@@ -58,6 +59,23 @@ namespace por {
 			return true;
 		}
 
+		bool check_path_visited(por::event::event const* e, std::vector<bool> const& path) {
+			if(e->visited_paths.empty()) {
+				assert(e->visited);
+				return true; // no restrictions
+			}
+			for(auto& visited : e->visited_paths) {
+				auto visited_length = visited.size();
+				auto path_length = path.size();
+				auto mismatch = std::mismatch(visited.begin(), visited.end(), path.begin(), path.end());
+				if(mismatch.first == visited.end() && path_length >= visited_length) {
+					// all entries present in visited path match new path
+					return true;
+				}
+			}
+			return false;
+		}
+
 	public:
 		unfolding() = delete;
 		unfolding(unfolding&) = default;
@@ -69,27 +87,43 @@ namespace por {
 		}
 		~unfolding() = default;
 
-		void mark_as_visited(por::event::event const* e) {
+		void mark_as_visited(por::event::event const* e, std::vector<bool>&& path) {
 			assert(e != nullptr);
-			visited[std::make_tuple(e->tid(), e->depth(), e->kind())].push_back(e->shared_from_this());
-			e->visited = true;
+			bool already_visited = e->visited;
+			if(!already_visited) {
+				visited[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(e->shared_from_this());
+				e->visited = true;
+			}
+			if(path.empty()) {
+				// remove all restrictions
+				e->visited_paths.clear();
+			} else if(!already_visited || !e->visited_paths.empty()) {
+				e->visited_paths.emplace_back(std::move(path));
+			}
 		}
 
-		bool is_visited(por::event::event const* e) {
+		void mark_as_visited(por::event::event const* e) {
+			mark_as_visited(e, {});
+		}
+
+		// return boolean and deduplicated event
+		std::pair<bool, por::event::event const*> is_visited(por::event::event const* e, std::vector<bool> const& path) {
 			assert(e != nullptr);
 			if(e->visited)
-				return true;
+				return std::make_pair(check_path_visited(e, path), e);
 			if(e->depth() == 0)
-				return true;
+				return std::make_pair(true, e); // path is always empty
 			auto it = visited.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
 			if(it != visited.end()) {
 				for(auto v : it->second) {
 					assert(v->visited);
-					if(compare_events(e, v.get()))
-						return true;
+					if(compare_events(e, v.get())) {
+						assert(e != v.get());
+						return std::make_pair(check_path_visited(v.get(), path), v.get());
+					}
 				}
 			}
-			return false;
+			return std::make_pair(false, e);
 		}
 	};
 }

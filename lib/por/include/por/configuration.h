@@ -1098,9 +1098,36 @@ namespace por {
 	public:
 		std::vector<conflicting_extension> conflicting_extensions() {
 			std::vector<conflicting_extension> S;
+			std::vector<bool> maximal_path;
+			for(auto event : _schedule) {
+				if(event->kind() == por::event::event_kind::local) {
+					auto local = static_cast<const por::event::local*>(event.get());
+					auto &local_path = local->path();
+					maximal_path.insert(maximal_path.end(), local_path.begin(), local_path.end());
+				}
+			}
+			std::size_t path_length = maximal_path.size();
+
+			// mark new paths of previously visited events as visited
+			// NOTE: has to be done first so all paths can be found in deduplication process
 			for(auto it = _schedule.rbegin(), ie = _schedule.rend(); it != ie; ++it) {
+				auto path = std::vector<bool>(maximal_path.begin(), std::next(maximal_path.begin(), path_length));
+				assert(path.size() == path_length);
 				std::shared_ptr<por::event::event> const& e = *it;
-				if(!_unfolding->is_visited(e.get())) {
+
+				// TODO: remove duplicate code (shared with unfolding.h)
+				if(path.empty()) {
+					// remove all restrictions
+					e->visited_paths.clear();
+				} else if(!e->visited || !e->visited_paths.empty()) {
+					e->visited_paths.emplace_back(std::move(path));
+				}
+			}
+
+			for(auto it = _schedule.rbegin(), ie = _schedule.rend(); it != ie; ++it) {
+				auto path = std::vector<bool>(maximal_path.begin(), std::next(maximal_path.begin(), path_length));
+				std::shared_ptr<por::event::event> const& e = *it;
+				if(!_unfolding->is_visited(e.get(), path).first) {
 					switch(e->kind()) {
 						case por::event::event_kind::lock_acquire:
 						case por::event::event_kind::wait2: {
@@ -1110,16 +1137,41 @@ namespace por {
 								break;
 
 							for(auto& cex : r) {
-								if(_unfolding->is_visited(cex.new_event().get()))
+								// compute path for cex
+								auto cex_schedule = compute_new_schedule_from_current(cex).first;
+								std::vector<bool> cex_path;
+								for(auto event : cex_schedule) {
+									if(event->kind() == por::event::event_kind::local) {
+										auto local = static_cast<const por::event::local*>(event.get());
+										auto &local_path = local->path();
+										cex_path.insert(cex_path.end(), local_path.begin(), local_path.end());
+									}
+								}
+
+								auto deduplicated = _unfolding->is_visited(cex.new_event().get(), cex_path);
+								if(deduplicated.first)
 									continue;
-								S.emplace_back(std::move(cex));
+								if(deduplicated.second == cex.new_event().get()) {
+									S.emplace_back(std::move(cex));
+								} else {
+									assert(cex.num_of_conflicts() == 1);
+									S.emplace_back(const_cast<por::event::event*>(deduplicated.second)->shared_from_this(), *cex.conflicts().begin());
+								}
 							}
 
 							break;
 						}
 					}
+					_unfolding->mark_as_visited(e.get(), std::move(path));
 				}
-				_unfolding->mark_as_visited(e.get());
+				// remove choices made in local events from path for previous ones
+				// (as we are iterating in reverse)
+				if(e->kind() == por::event::event_kind::local) {
+					auto local = static_cast<const por::event::local*>(e.get());
+					std::size_t future_choices = local->path().size();
+					assert(path_length >= future_choices);
+					path_length -= future_choices;
+				}
 			}
 			return S;
 		}
