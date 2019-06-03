@@ -228,7 +228,7 @@ namespace por {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_join);
 				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[joined] = _schedule[_schedule_pos];
+				_thread_heads[thread] = _schedule[_schedule_pos];
 				++_schedule_pos;
 				return;
 			}
