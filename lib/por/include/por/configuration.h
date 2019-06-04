@@ -613,36 +613,40 @@ namespace por {
 			return cond_it;
 		}
 
-		std::vector<std::shared_ptr<por::event::event>> lost_predecessors_cond(
+		// extracts non-lost notification events not included in [thread_event]
+		// where thread_event is the same-thread predecessor of a signal or broadcast to be created
+		std::vector<std::shared_ptr<por::event::event>> lost_notification_predecessors_cond(
 			std::shared_ptr<por::event::event> const& thread_event,
 			std::vector<std::shared_ptr<por::event::event>> const& cond_preds
 		) {
 			por::event::thread_id_t thread = thread_event->tid();
 			std::vector<std::shared_ptr<por::event::event>> prev_notifications;
 			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-				if((*it)->kind() == por::event::event_kind::wait1)
-					continue;
-
 				if((*it)->tid() == thread)
-					continue; // excluded event is part of [thread_event]
+					continue; // excluded event must be in [thread_event]
 
-				if((*it)->kind() == por::event::event_kind::broadcast) {
+				if((*it)->kind() == por::event::event_kind::wait1) {
+					assert(0 && "signal or broadcast would not have been lost");
+				} else if((*it)->kind() == por::event::event_kind::broadcast) {
 					auto bro = static_cast<por::event::broadcast const*>(it->get());
 					if(bro->is_lost())
 						continue;
 
 					if(bro->is_notifying_thread(thread))
-						continue;
-				}
-
-				if((*it)->kind() == por::event::event_kind::signal) {
+						continue; // excluded event must be in [thread_event]
+				} else if((*it)->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(it->get());
 					if(sig->is_lost())
 						continue;
 
 					if(sig->notified_thread() == thread)
-						continue;
+						continue; // excluded event must be in [thread_event]
 				}
+
+				// exclude events that are in [thread_event], such as a non-lost broadcast
+				// event already included in the causes of a previous lost notification
+				if((*it)->is_less_than(*thread_event))
+					continue;
 
 				prev_notifications.push_back(*it);
 			}
@@ -678,14 +682,14 @@ namespace por {
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
 					assert(_schedule_pos == _schedule.size());
-					return;
+					return thread_event;
 				}
 			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 
 			if(notified_thread == 0) { // lost signal
-				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_predecessors_cond(thread_event, cond_preds);
+				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
 				thread_event = por::event::signal::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				cond_preds.push_back(thread_event);
 			} else { // notifying signal
@@ -739,14 +743,14 @@ namespace por {
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
 					assert(_schedule_pos == _schedule.size());
-					return;
+					return thread_event;
 				}
 			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
 			auto& cond_preds = cond_head_it->second;
 
 			if(notified_threads.empty()) { // lost broadcast
-				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_predecessors_cond(thread_event, cond_preds);
+				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
 				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				cond_preds.push_back(thread_event);
 			} else { // notifying broadcast
