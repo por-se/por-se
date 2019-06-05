@@ -15,6 +15,8 @@
 
 #define stat64 stat
 
+#include <sys/syscall.h>
+
 struct rlimit64;
 
 #define	__NR_syscall	SYS_syscall
@@ -134,9 +136,20 @@ struct rlimit64;
 #define	__NR_setgid	SYS_setgid
 #define	__NR_setegid	SYS_setegid
 #define	__NR_seteuid	SYS_seteuid
+#ifdef SYS_stat
 #define	__NR_stat	SYS_stat
+#else
+#define	__NR_stat	SYS_freebsd11_stat
+#endif
+#define	__NR_stat64	__NR_stat
 #define	__NR_fstat	SYS_fstat
+#define	__NR_fstat64	__NR_fstat
+#ifdef SYS_lstat
 #define	__NR_lstat	SYS_lstat
+#else
+#define	__NR_lstat	SYS_freebsd11_lstat
+#endif
+#define	__NR_lstat64	__NR_lstat
 #define	__NR_pathconf	SYS_pathconf
 #define	__NR_fpathconf	SYS_fpathconf
 #define	__NR_getrlimit	SYS_getrlimit
@@ -183,8 +196,13 @@ struct rlimit64;
 #define	__NR_aio_read	SYS_aio_read
 #define	__NR_aio_write	SYS_aio_write
 #define	__NR_lio_listio	SYS_lio_listio
+#ifdef SYS_getdents
 #define	__NR_getdents	SYS_getdents
 #define	__NR_getdents64	SYS_getdents
+#else
+#define	__NR_getdents	SYS_freebsd11_getdents
+#define	__NR_getdents64	SYS_freebsd11_getdents
+#endif
 #define	__NR_lchmod	SYS_lchmod
 #define	__NR_netbsd_lchown	SYS_netbsd_lchown
 #define	__NR_lutimes	SYS_lutimes
@@ -346,6 +364,7 @@ struct rlimit64;
 #define	__NR_lseek	SYS_lseek
 #define	__NR_truncate	SYS_truncate
 #define	__NR_ftruncate	SYS_ftruncate
+#define	__NR_ftruncate64	__NR_ftruncate
 #define	__NR_thr_kill2	SYS_thr_kill2
 #define	__NR_shm_open	SYS_shm_open
 #define	__NR_shm_unlink	SYS_shm_unlink

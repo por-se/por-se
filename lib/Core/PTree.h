@@ -30,8 +30,8 @@ namespace klee {
     typedef class PTreeNode Node;
     Node *root;
 
-    PTree(const data_type &_root);
-    ~PTree();
+    explicit PTree(const data_type &_root);
+    ~PTree() = default;
     
     std::pair<Node*,Node*> split(Node *n,
                                  const data_type &leftData,
@@ -44,16 +44,16 @@ namespace klee {
   class PTreeNode {
     friend class PTree;
   public:
-    PTreeNode *parent, *left, *right;
-    ExecutionState *data;
+    PTreeNode *parent = nullptr;
+    PTreeNode *left = nullptr;
+    PTreeNode *right = nullptr;
+    ExecutionState *data = nullptr;
 
-    // Reason why this fork exists
-    ref<Expr> condition;
     SchedulingDecision schedulingDecision;
 
   private:
-    PTreeNode(PTreeNode *_parent, ExecutionState *_data);
-    ~PTreeNode();
+    PTreeNode(PTreeNode * parent, ExecutionState * data);
+    ~PTreeNode() = default;
   };
 }
 

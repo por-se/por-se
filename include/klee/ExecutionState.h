@@ -60,8 +60,6 @@ private:
   ExecutionState() = delete;
   ExecutionState &operator=(const ExecutionState &) = delete;
 
-  std::map<std::string, std::string> fnAliases;
-
   /// @brief Pointer to the thread that is currently executed
   Thread *_currentThread = nullptr;
 
@@ -159,8 +157,6 @@ public:
   std::set<std::string> arrayNames;
 
   MemoryState memoryState;
-
-  std::string getFnAlias(std::string fn);
 
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;

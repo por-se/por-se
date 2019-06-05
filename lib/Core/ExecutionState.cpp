@@ -99,7 +99,6 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     id(next_id++),
-    fnAliases(state.fnAliases),
     currentSchedulingIndex(state.currentSchedulingIndex),
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     memAccessTracker(state.memAccessTracker),
@@ -307,14 +306,6 @@ void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset,
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
   mo->refCount++;
   symbolics.emplace_back(mo, array);
-}
-///
-
-std::string ExecutionState::getFnAlias(std::string fn) {
-  std::map < std::string, std::string >::iterator it = fnAliases.find(fn);
-  if (it != fnAliases.end())
-    return it->second;
-  else return "";
 }
 
 /**/

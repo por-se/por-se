@@ -21,10 +21,7 @@ using namespace klee;
 
   /* *** */
 
-PTree::PTree(const data_type &_root) : root(new Node(0,_root)) {
-}
-
-PTree::~PTree() {}
+PTree::PTree(const data_type &root) : root(new Node(nullptr, root)) {}
 
 std::pair<PTreeNode*, PTreeNode*>
 PTree::split(Node *n, 
@@ -42,10 +39,10 @@ void PTree::remove(Node *n) {
     Node *p = n->parent;
     if (p) {
       if (n == p->left) {
-        p->left = 0;
+        p->left = nullptr;
       } else {
         assert(n == p->right);
-        p->right = 0;
+        p->right = nullptr;
       }
     }
     delete n;
@@ -68,17 +65,11 @@ void PTree::dump(llvm::raw_ostream &os) {
   while (!stack.empty()) {
     PTree::Node *n = stack.back();
     stack.pop_back();
-    if (n->condition.isNull()) {
-      if (n->schedulingDecision.epochNumber == 0) {
-        os << "\tn" << n << " [label=\"\"";
-      } else {
-        os << "\tn" << n << " [label=\"";
-        os << n->schedulingDecision.scheduledThread << " @ ep=" << n->schedulingDecision.epochNumber;
-        os << "\",shape=pentagon";
-      }
+    if (n->schedulingDecision.epochNumber == 0) {
+      os << "\tn" << n << " [shape=diamond";
     } else {
       os << "\tn" << n << " [label=\"";
-      pp->print(n->condition);
+      os << n->schedulingDecision.scheduledThread << " @ ep=" << n->schedulingDecision.epochNumber;
       os << "\",shape=diamond";
     }
     if (n->data) {
@@ -98,17 +89,9 @@ void PTree::dump(llvm::raw_ostream &os) {
   delete pp;
 }
 
-PTreeNode::PTreeNode(PTreeNode *_parent, 
-                     ExecutionState *_data) 
-  : parent(_parent),
-    left(0),
-    right(0),
-    data(_data),
-    condition(0) {
+PTreeNode::PTreeNode(PTreeNode * parent, ExecutionState * data)
+  : parent{parent}, data{data} {
   schedulingDecision.epochNumber = 0;
   schedulingDecision.scheduledThread = 0;
-}
-
-PTreeNode::~PTreeNode() {
 }
 
