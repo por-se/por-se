@@ -205,7 +205,7 @@ int main(int argc, char** argv){
 						while(l != nullptr && (*w).is_less_than(**l)) {
 							l = configuration.get_lock_predecessor(*l);
 						}
-						if(*l == w) {
+						if(l != nullptr && *l == w) {
 							no_block_on_lock = false;
 						}
 					}
@@ -328,8 +328,11 @@ int main(int argc, char** argv){
 						while(l != nullptr && (*wait1).is_less_than(**l)) {
 							l = configuration.get_lock_predecessor(*l);
 						}
-						if(*l == wait1) {
+						if(l != nullptr && *l == wait1) {
 							lid = e.first;
+							auto currently = e.second->kind();
+							if(currently != por::event::event_kind::wait1 && currently != por::event::event_kind::lock_release)
+								lid = 0;
 						}
 					}
 					if(lid) {
