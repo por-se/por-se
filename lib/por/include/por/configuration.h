@@ -559,11 +559,14 @@ namespace por {
 			std::vector<std::shared_ptr<por::event::event>> const& cond_preds
 		) {
 			for(auto& e : cond_preds) {
-				if(e->kind() == por::event::event_kind::signal || e->kind() == por::event::event_kind::broadcast) {
-					// TODO: make search more efficient
-					if(std::find(e->predecessors().begin(), e->predecessors().end(), thread_event) != e->predecessors().end()) {
+				if(e->kind() == por::event::event_kind::broadcast) {
+					auto bro = static_cast<por::event::broadcast const*>(e.get());
+					if(bro->is_notifying_thread(thread_event->tid()))
 						return e;
-					}
+				} else if(e->kind() == por::event::event_kind::signal) {
+					auto sig = static_cast<por::event::signal const*>(e.get());
+					if(sig->notified_thread() == thread_event->tid())
+						return e;
 				}
 			}
 			assert(0 && "There has to be a notifying event before a wait2");
