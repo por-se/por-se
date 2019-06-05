@@ -1047,7 +1047,7 @@ namespace por {
 			} else {
 				assert(e->kind() == por::event::event_kind::wait2);
 				auto* w2 = static_cast<por::event::wait2 const*>(e.get());
-				es = &w2->condition_variable_predecessor();
+				es = &w2->notifying_event();
 				assert(es != nullptr && *es != nullptr);
 				while(em != nullptr && !((**em).is_less_than(**et)) && !((**em).is_less_than(**es))) {
 					// descend chain of lock events until em is in [et] \cup [es]
