@@ -662,7 +662,7 @@ namespace por {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::signal);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
-				if(notified_thread == 0) {
+				if(notified_thread == 0) { // lost signal
 					_cond_heads[cond].push_back(_schedule[_schedule_pos]);
 				} else {
 					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _schedule[_schedule_pos];
@@ -679,6 +679,7 @@ namespace por {
 			auto cond_head_it = _cond_heads.find(cond);
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
+					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
 					thread_event = por::event::signal::alloc(thread, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 
@@ -721,13 +722,12 @@ namespace por {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::broadcast);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
-				if(notified_threads.empty()) {
-					_cond_heads[cond].push_back(_schedule[_schedule_pos]);
-				} else {
+				if(!notified_threads.empty()) {
 					for(auto& nid : notified_threads) {
 						_cond_heads[cond].erase(notified_wait1_predecessor(nid, _cond_heads[cond]));
 					}
 				}
+				_cond_heads[cond].push_back(_schedule[_schedule_pos]);
 				++_schedule_pos;
 				return;
 			}
@@ -740,6 +740,7 @@ namespace por {
 			auto cond_head_it = _cond_heads.find(cond);
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
+					// only possible for lost broadcast: otherwise there would be at least a wait1 in _cond_heads
 					thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 
@@ -771,28 +772,34 @@ namespace por {
 					assert(cond_event == notified_thread_event);
 
 					prev_events.push_back(notified_thread_event);
+					// remove notified wait1 events
 					cond_preds.erase(cond_it);
 				}
 
 				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
 					if((*it)->kind() == por::event::event_kind::wait1 || (*it)->kind() == por::event::event_kind::condition_variable_create)
-						continue;
+						continue; // relevant wait1s already part of prev_events, cond_create is guaranteed to be in [thread_event]
 
 					if((*it)->tid() == thread)
-						continue; // excluded event is part of [thread_event]
+						continue; // excluded event is guaranteed to be in [thread_event]
 
 					if((*it)->kind() == por::event::event_kind::broadcast)
-						continue;
+						continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
 
 					if((*it)->kind() == por::event::event_kind::signal) {
 						auto sig = static_cast<por::event::signal const*>(it->get());
 						if(sig->is_lost())
-							continue;
-
-						if(std::find(notified_threads.begin(), notified_threads.end(), sig->notified_thread()) != notified_threads.end())
-							continue;
+							continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
 
 						if(sig->notified_thread() == thread)
+							continue; // excluded event is guaranteed to be in [thread_event]
+
+						if(std::find(notified_threads.begin(), notified_threads.end(), sig->notified_thread()) != notified_threads.end())
+							continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
+
+						// exclude events that are in [thread_event], such as a non-lost broadcast
+						// event already included in the causes of a previous lost notification
+						if((*it)->is_less_than(*thread_event))
 							continue;
 					}
 
