@@ -485,9 +485,6 @@ namespace por {
 				if((*it)->kind() == por::event::event_kind::wait1)
 					continue;
 
-				if((*it)->tid() == thread)
-					continue; // excluded event is part of [thread_event]
-
 				if((*it)->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(it->get());
 					if(!sig->is_lost())
@@ -499,6 +496,12 @@ namespace por {
 					if(bro->is_notifying_thread(thread))
 						continue;
 				}
+
+				if((*it)->tid() == thread_event->tid())
+					continue; // excluded event is in [thread_event]
+
+				if((*it)->is_less_than(*thread_event) || *it == thread_event)
+					continue; // excluded event is in [thread_event]
 
 				non_waiting.push_back(*it);
 			}
@@ -622,12 +625,8 @@ namespace por {
 			std::shared_ptr<por::event::event> const& thread_event,
 			std::vector<std::shared_ptr<por::event::event>> const& cond_preds
 		) {
-			por::event::thread_id_t thread = thread_event->tid();
 			std::vector<std::shared_ptr<por::event::event>> prev_notifications;
 			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-				if((*it)->tid() == thread)
-					continue; // excluded event must be in [thread_event]
-
 				if((*it)->kind() == por::event::event_kind::wait1) {
 					assert(0 && "signal or broadcast would not have been lost");
 				} else if((*it)->kind() == por::event::event_kind::broadcast) {
@@ -635,21 +634,22 @@ namespace por {
 					if(bro->is_lost())
 						continue;
 
-					if(bro->is_notifying_thread(thread))
-						continue; // excluded event must be in [thread_event]
+					if(bro->is_notifying_thread(thread_event->tid()))
+						continue; // excluded event is in [thread_event]
 				} else if((*it)->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(it->get());
 					if(sig->is_lost())
 						continue;
 
-					if(sig->notified_thread() == thread)
-						continue; // excluded event must be in [thread_event]
+					if(sig->notified_thread() == thread_event->tid())
+						continue; // excluded event is in [thread_event]
 				}
 
-				// exclude events that are in [thread_event], such as a non-lost broadcast
-				// event already included in the causes of a previous lost notification
-				if((*it)->is_less_than(*thread_event))
-					continue;
+				if((*it)->tid() == thread_event->tid())
+					continue; // excluded event is in [thread_event]
+
+				if((*it)->is_less_than(*thread_event) || *it == thread_event)
+					continue; // excluded event is in [thread_event]
 
 				prev_notifications.push_back(*it);
 			}
@@ -777,31 +777,32 @@ namespace por {
 				}
 
 				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-					if((*it)->kind() == por::event::event_kind::wait1 || (*it)->kind() == por::event::event_kind::condition_variable_create)
-						continue; // relevant wait1s already part of prev_events, cond_create is guaranteed to be in [thread_event]
+					if((*it)->kind() == por::event::event_kind::wait1)
+						continue; // relevant wait1s already part of prev_events
 
-					if((*it)->tid() == thread)
-						continue; // excluded event is guaranteed to be in [thread_event]
+					if((*it)->kind() == por::event::event_kind::condition_variable_create)
+						continue; // excluded event is included in wait1's causes (if it exists)
 
 					if((*it)->kind() == por::event::event_kind::broadcast)
-						continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
+						continue;
 
 					if((*it)->kind() == por::event::event_kind::signal) {
 						auto sig = static_cast<por::event::signal const*>(it->get());
 						if(sig->is_lost())
-							continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
+							continue;
 
 						if(sig->notified_thread() == thread)
-							continue; // excluded event is guaranteed to be in [thread_event]
+							continue; // excluded event is in [thread_event]
 
 						if(std::find(notified_threads.begin(), notified_threads.end(), sig->notified_thread()) != notified_threads.end())
-							continue; // excluded event cannot immediately causally precede this event: at least a wait1 in between
-
-						// exclude events that are in [thread_event], such as a non-lost broadcast
-						// event already included in the causes of a previous lost notification
-						if((*it)->is_less_than(*thread_event))
 							continue;
 					}
+
+					if((*it)->tid() == thread)
+						continue; // excluded event is in [thread_event]
+
+					if((*it)->is_less_than(*thread_event) || *it == thread_event)
+						continue; // excluded event is in [thread_event]
 
 					prev_events.push_back(*it);
 				}
