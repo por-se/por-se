@@ -72,7 +72,7 @@ namespace por::event {
 		}
 
 	private:
-		void insert_predecessor_into_cone(std::shared_ptr<event>& p) {
+		void insert_predecessor_into_cone(std::shared_ptr<event> const& p) {
 			if(!p)
 				return;
 			for(auto& pred : p->_cone) {
@@ -89,7 +89,7 @@ namespace por::event {
 			}
 		}
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>* single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const* single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
 		: _cone(immediate_predecessor->_cone)
 		, _tid(tid)
 		, _kind(kind)
@@ -126,19 +126,19 @@ namespace por::event {
 		}
 
 	protected:
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>& single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
 		: event(kind, tid, immediate_predecessor, (single_other_predecessor ? &single_other_predecessor : nullptr), other_predecessors)
 		{ }
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
 		: event(kind, tid, immediate_predecessor, nullptr, other_predecessors)
 		{ }
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>& single_other_predecessor, std::shared_ptr<event>& yet_another_predecessor)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor, std::shared_ptr<event>& yet_another_predecessor)
 		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(&yet_another_predecessor, &yet_another_predecessor + 1))
 		{ }
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor, std::shared_ptr<event>& single_other_predecessor)
+		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor)
 		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr))
 		{ }
 
