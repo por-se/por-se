@@ -129,8 +129,11 @@ namespace por {
 		// contains most recent event of ACTIVE locks
 		std::map<event::lock_id_t, std::shared_ptr<event::event>> _lock_heads;
 
-		// contains most recent event of ACTIVE condition variables for each thread
+		// contains all previous sig, bro events of ACTIVE condition variables for each thread
 		std::map<por::event::cond_id_t, std::vector<std::shared_ptr<por::event::event>>> _cond_heads;
+
+		// contains all previously used condition variable ids
+		std::set<por::event::cond_id_t> _used_cond_ids;
 
 		// sequence of events in order of their execution
 		std::vector<std::shared_ptr<por::event::event>> _schedule;
@@ -453,6 +456,7 @@ namespace por {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::condition_variable_create);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 				_cond_heads.emplace(cond, std::vector{_schedule[_schedule_pos]});
 				++_schedule_pos;
 				return;
@@ -465,9 +469,11 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			assert(cond > 0);
 			assert(_cond_heads.find(cond) == _cond_heads.end() && "Condition variable id already taken");
+			assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 
-			thread_event = por::event::condition_variable_create::alloc(thread, std::move(thread_event));
+			thread_event = por::event::condition_variable_create::alloc(thread, cond, std::move(thread_event));
 			_cond_heads.emplace(cond, std::vector{thread_event});
+			_used_cond_ids.insert(cond);
 
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
@@ -492,7 +498,8 @@ namespace por {
 			auto cond_head_it = _cond_heads.find(cond);
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end()) {
-					thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					thread_event = por::event::condition_variable_destroy::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
+					_used_cond_ids.insert(cond);
 
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
@@ -504,7 +511,7 @@ namespace por {
 			auto& cond_preds = cond_head_it->second;
 			assert(cond_preds.size() > 0);
 
-			thread_event = por::event::condition_variable_destroy::alloc(thread, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
+			thread_event = por::event::condition_variable_destroy::alloc(thread, cond, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
 			_cond_heads.erase(cond_head_it);
 
 			_schedule.emplace_back(thread_event);
@@ -569,9 +576,10 @@ namespace por {
 				if(cond_head_it == _cond_heads.end()) {
 					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 					auto& lock_event = lock_it->second;
-					thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
+					thread_event = por::event::wait1::alloc(thread, cond, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
+					_used_cond_ids.insert(cond);
 
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
@@ -585,7 +593,7 @@ namespace por {
 			auto& lock_event = lock_it->second;
 
 			std::vector<std::shared_ptr<por::event::event>> non_waiting = wait1_predecessors_cond(thread_event, cond_preds);
-			thread_event = por::event::wait1::alloc(thread, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
+			thread_event = por::event::wait1::alloc(thread, cond, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
 
@@ -637,7 +645,7 @@ namespace por {
 			auto& lock_event = lock_it->second;
 
 			auto& cond_event = wait2_predecessor_cond(thread_event, cond_preds);
-			thread_event = por::event::wait2::alloc(thread, std::move(thread_event), std::move(lock_event), cond_event);
+			thread_event = por::event::wait2::alloc(thread, cond, std::move(thread_event), std::move(lock_event), cond_event);
 			lock_event = thread_event;
 
 			_schedule.emplace_back(thread_event);
@@ -718,8 +726,9 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
-					thread_event = por::event::signal::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					thread_event = por::event::signal::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
+					_used_cond_ids.insert(cond);
 
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
@@ -732,7 +741,7 @@ namespace por {
 
 			if(notified_thread == 0) { // lost signal
 				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
-				thread_event = por::event::signal::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				thread_event = por::event::signal::alloc(thread, cond, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				cond_preds.push_back(thread_event);
 			} else { // notifying signal
 				assert(notified_thread != thread && "Thread cannot notify itself");
@@ -745,7 +754,7 @@ namespace por {
 				auto& cond_event = *notified_wait1_predecessor(notified_thread, cond_preds);
 				assert(cond_event == notified_thread_event);
 
-				thread_event = por::event::signal::alloc(thread, std::move(thread_event), std::move(cond_event));
+				thread_event = por::event::signal::alloc(thread, cond, std::move(thread_event), std::move(cond_event));
 				cond_event = thread_event;
 			}
 
@@ -779,8 +788,9 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
 					// only possible for lost broadcast: otherwise there would be at least a wait1 in _cond_heads
-					thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), nullptr, nullptr);
+					thread_event = por::event::broadcast::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
+					_used_cond_ids.insert(cond);
 
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
@@ -793,7 +803,7 @@ namespace por {
 
 			if(notified_threads.empty()) { // lost broadcast
 				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
-				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				thread_event = por::event::broadcast::alloc(thread, cond, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
 				cond_preds.push_back(thread_event);
 			} else { // notifying broadcast
 				std::vector<std::shared_ptr<por::event::event>> prev_events;
@@ -845,7 +855,7 @@ namespace por {
 					prev_events.push_back(*it);
 				}
 
-				thread_event = por::event::broadcast::alloc(thread, std::move(thread_event), prev_events.data(), prev_events.data() + prev_events.size());
+				thread_event = por::event::broadcast::alloc(thread, cond, std::move(thread_event), prev_events.data(), prev_events.data() + prev_events.size());
 				cond_preds.push_back(thread_event);
 			}
 
@@ -1141,7 +1151,8 @@ namespace por {
 						result.emplace_back(por::event::lock_acquire::alloc(e->tid(), *et, *ep), *conflict);
 					} else {
 						assert(e->kind() == por::event::event_kind::wait2);
-						result.emplace_back(por::event::wait2::alloc(e->tid(), *et, *ep, *es), *conflict);
+						auto* w2 = static_cast<por::event::wait2 const*>(e.get());
+						result.emplace_back(por::event::wait2::alloc(e->tid(), w2->cid(), *et, *ep, *es), *conflict);
 					}
 				}
 				conflict = ep;
@@ -1232,7 +1243,7 @@ namespace por {
 				}
 
 				// lock predecessor is guaranteed to be in [et] (has to be an aquire/wait2 on the same thread)
-				result.emplace_back(por::event::wait1::alloc(e->tid(), *et, w1->lock_predecessor(), N.data(), N.data() + N.size()), std::move(conflicts));
+				result.emplace_back(por::event::wait1::alloc(e->tid(), w1->cid(), *et, w1->lock_predecessor(), N.data(), N.data() + N.size()), std::move(conflicts));
 				return false; // result of concurrent_combinations not needed
 			});
 

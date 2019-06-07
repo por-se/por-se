@@ -26,17 +26,21 @@ namespace por::event {
 		//    (may not exist if no such events and only preceded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 0> _predecessors;
 
-		std::size_t num_notified_threads = 0;
+		std::size_t _num_notified_threads = 0;
+
+		cond_id_t _cid;
 
 	public: // FIXME: should be protected
 		template<typename T>
 		broadcast(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event>&& thread_predecessor,
 			T&& begin_condition_variable_predecessors,
 			T&& end_condition_variable_predecessors
 		)
 			: event(event_kind::broadcast, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			, _cid(cid)
 		{
 			// count events by type
 			std::size_t wait1_count = 0;
@@ -67,7 +71,7 @@ namespace por::event {
 				std::size_t index = 1;
 				if(wait1_count > 0) {
 					assert(create_count == 0);
-					num_notified_threads = wait1_count;
+					_num_notified_threads = wait1_count;
 					// insert wait1 events first
 					for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
 						if((*iter)->kind() == event_kind::wait1) {
@@ -155,11 +159,13 @@ namespace por::event {
 	public:
 		template<typename T>
 		static std::shared_ptr<broadcast> alloc(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
 			return std::make_shared<broadcast>(tid,
+				cid,
 				std::move(thread_predecessor),
 				std::move(begin_condition_variable_predecessors),
 				std::move(end_condition_variable_predecessors)
@@ -168,7 +174,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: broadcast]";
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: broadcast cid: " + std::to_string(cid()) +"]";
 			return "broadcast";
 		}
 
@@ -185,7 +191,7 @@ namespace por::event {
 		// may return empty range if no wait predecessor exists (broadcast is lost)
 		util::iterator_range<std::shared_ptr<event>*> wait_predecessors() noexcept {
 			if(!is_lost()) {
-				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 1, _predecessors.data() + 1 + num_notified_threads);
+				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 1, _predecessors.data() + 1 + _num_notified_threads);
 			} else {
 				return util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr);
 			}
@@ -193,7 +199,7 @@ namespace por::event {
 		// may return empty range if no wait predecessor exists (broadcast is lost)
 		util::iterator_range<std::shared_ptr<event> const*> wait_predecessors() const noexcept {
 			if(!is_lost()) {
-				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + 1 + num_notified_threads);
+				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + 1 + _num_notified_threads);
 			} else {
 				return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
 			}
@@ -208,12 +214,14 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
 		}
 
+		cond_id_t cid() const noexcept { return _cid; }
+
 		bool is_lost() const noexcept {
-			return num_notified_threads == 0;
+			return _num_notified_threads == 0;
 		}
 
 		std::size_t num_notified() const noexcept {
-			return num_notified_threads;
+			return _num_notified_threads;
 		}
 
 		thread_id_t is_notifying_thread(thread_id_t tid) const noexcept {

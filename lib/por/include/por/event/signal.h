@@ -19,13 +19,17 @@ namespace por::event {
 		//    (may be a single nullptr if no such sig/bro events exist and only predecessor is condition_variable_create event, which is optional)
 		util::sso_array<std::shared_ptr<event>, 2> _predecessors; // size = 2: optimizing for the case with a single wait1 (hence the nullptr in the latter case)
 
+		cond_id_t _cid;
+
 	public: // FIXME: should be protected
 		signal(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event>&& thread_predecessor,
 			std::shared_ptr<event>&& notified_wait
 		)
 			: event(event_kind::signal, tid, thread_predecessor, notified_wait)
 			, _predecessors{util::create_uninitialized, 2ul}
+			, _cid(cid)
 		{
 			// we perform a very small optimization by allocating the predecessors in uninitialized storage
 			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
@@ -52,12 +56,14 @@ namespace por::event {
 
 		template<typename T>
 		signal(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event>&& thread_predecessor,
 			T&& begin_condition_variable_predecessors,
 			T&& end_condition_variable_predecessors
 		)
 			: event(event_kind::signal, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			, _cid(cid)
 		{
 			// we perform a very small optimization by allocating the predecessors in uninitialized storage
 			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
@@ -104,10 +110,12 @@ namespace por::event {
 	public:
 		// notifying signal
 		static std::shared_ptr<signal> alloc(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> notified_thread_predecessor
 		) {
 			return std::make_shared<signal>(tid,
+				cid,
 				std::move(thread_predecessor),
 				std::move(notified_thread_predecessor)
 			);
@@ -116,11 +124,13 @@ namespace por::event {
 		// lost signal
 		template<typename T>
 		static std::shared_ptr<signal> alloc(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
 			return std::make_shared<signal>(tid,
+				cid,
 				std::move(thread_predecessor),
 				std::move(begin_condition_variable_predecessors),
 				std::move(end_condition_variable_predecessors)
@@ -129,7 +139,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: signal]";
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: signal cid: " + std::to_string(cid()) +"]";
 			return "signal";
 		}
 
@@ -180,6 +190,8 @@ namespace por::event {
 				return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
 			}
 		}
+
+		cond_id_t cid() const noexcept { return _cid; }
 
 		bool is_lost() const noexcept {
 			return _predecessors.size() != 2 || _predecessors[1] == nullptr || _predecessors[1]->kind() != event_kind::wait1;

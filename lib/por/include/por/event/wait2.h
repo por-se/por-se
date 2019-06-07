@@ -14,14 +14,18 @@ namespace por::event {
 		// 3. previous release of this lock
 		std::array<std::shared_ptr<event>, 3> _predecessors;
 
+		cond_id_t _cid;
+
 	protected:
 		wait2(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event>&& thread_predecessor,
 			std::shared_ptr<event>&& lock_predecessor,
 			std::shared_ptr<event>&& condition_variable_predecessor
 		)
 			: event(event_kind::wait2, tid, thread_predecessor, lock_predecessor, condition_variable_predecessor)
 			, _predecessors{std::move(thread_predecessor), std::move(condition_variable_predecessor), std::move(lock_predecessor)}
+			, _cid(cid)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid() != 0);
@@ -45,11 +49,13 @@ namespace por::event {
 
 	public:
 		static std::shared_ptr<wait2> alloc(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> lock_predecessor,
 			std::shared_ptr<event> condition_variable_predecessor
 		) {
 			return std::make_shared<wait2>(wait2{tid,
+				cid,
 				std::move(thread_predecessor),
 				std::move(lock_predecessor),
 				std::move(condition_variable_predecessor)
@@ -58,7 +64,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: wait2]";
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: wait2 cid: " + std::to_string(cid()) +"]";
 			return "wait2";
 		}
 
@@ -81,6 +87,8 @@ namespace por::event {
 		util::iterator_range<std::shared_ptr<event> const*> condition_variable_predecessors() const noexcept {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + 2);
 		}
+
+		cond_id_t cid() const noexcept { return _cid; }
 
 		std::shared_ptr<event>      & notifying_event()       noexcept { return _predecessors[1]; }
 		std::shared_ptr<event> const& notifying_event() const noexcept { return _predecessors[1]; }

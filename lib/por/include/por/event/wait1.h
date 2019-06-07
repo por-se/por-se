@@ -17,9 +17,12 @@ namespace por::event {
 		//    (may not exist if no such events and only preceded by condition_variable_create event)
 		util::sso_array<std::shared_ptr<event>, 2> _predecessors;
 
+		cond_id_t _cid;
+
 	public: // FIXME: should be protected
 		template<typename T>
 		wait1(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event>&& thread_predecessor,
 			std::shared_ptr<event>&& lock_predecessor,
 			T&& begin_condition_variable_predecessors,
@@ -27,6 +30,7 @@ namespace por::event {
 		)
 			: event(event_kind::wait1, tid, thread_predecessor, lock_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 2ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			, _cid(cid)
 		{
 			// we perform a very small optimization by allocating the predecessors in uninitialized storage
 			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
@@ -66,12 +70,14 @@ namespace por::event {
 	public:
 		template<typename T>
 		static std::shared_ptr<wait1> alloc(thread_id_t tid,
+			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> lock_predecessor,
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
 			return std::make_shared<wait1>(tid,
+				cid,
 				std::move(thread_predecessor),
 				std::move(lock_predecessor),
 				std::move(begin_condition_variable_predecessors),
@@ -81,7 +87,7 @@ namespace por::event {
 
 		virtual std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: wait1]";
+				return "[tid: " + std::to_string(tid()) + " depth: " + std::to_string(depth()) + " kind: wait1 cid: " + std::to_string(cid()) +"]";
 			return "wait1";
 		}
 
@@ -106,5 +112,7 @@ namespace por::event {
 		util::iterator_range<std::shared_ptr<event> const*> condition_variable_predecessors() const noexcept {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 2, _predecessors.data() + _predecessors.size());
 		}
+
+		cond_id_t cid() const noexcept { return _cid; }
 	};
 }
