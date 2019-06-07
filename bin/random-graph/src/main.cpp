@@ -369,10 +369,18 @@ int main(int argc, char** argv){
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& entry : cex) {
 		auto& c = entry.new_event();
-		std::cerr << c->tid() << "@" << c->depth();
+		std::cerr << c->to_string(true);
 		for(auto it = c->predecessors().begin(), ie = c->predecessors().end(); it != ie; ++it) {
 			if(it == c->predecessors().begin())
-				std::cerr << ": ";
+				std::cerr << " with predecessor(s): ";
+			std::cerr << (*it)->tid() << "@" << (*it)->depth();
+			if(std::next(it) != ie) {
+				std::cerr << " | ";
+			}
+		}
+		for(auto it = entry.conflicts().begin(), ie = entry.conflicts().end(); it != ie; ++it) {
+			if(it == entry.conflicts().begin())
+				std::cerr << " and conflict(s): ";
 			std::cerr << (*it)->tid() << "@" << (*it)->depth();
 			if(std::next(it) != ie) {
 				std::cerr << " | ";
