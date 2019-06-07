@@ -19,6 +19,31 @@ namespace klee {
 	por::configuration* configuration_from_execution_state(klee::ExecutionState const* s);
 }
 
+namespace {
+	// dummy event class to be used to compute a cone for a set of events
+	class dummy : public por::event::event {
+	public:
+		std::string to_string(bool details = false) const override { return ""; }
+		util::iterator_range<std::shared_ptr<por::event::event> const*> predecessors() const override {
+			return util::make_iterator_range<std::shared_ptr<por::event::event> const*>(nullptr, nullptr);
+		}
+		util::iterator_range<std::shared_ptr<por::event::event>*> predecessors() override {
+			return util::make_iterator_range<std::shared_ptr<por::event::event>*>(nullptr, nullptr);
+		}
+		dummy(por::event::thread_id_t tid, std::shared_ptr<por::event::event> const& immediate_predecessor, std::vector<std::shared_ptr<por::event::event>>& other_predecessors)
+		: event(por::event::event_kind::wait1, // does not matter, value is not exposed through cone
+						tid,
+						immediate_predecessor,
+						util::make_iterator_range<std::shared_ptr<por::event::event>*>(other_predecessors.data(), other_predecessors.data() + other_predecessors.size()))
+		{}
+		dummy(std::vector<std::shared_ptr<por::event::event>>& predecessors)
+		: dummy(predecessors.front()->tid(), // tid is guaranteed to be part of the cone anyways
+						*predecessors.front()->predecessors().begin(), // will not be exposed through the cone
+						predecessors)
+		{}
+	};
+}
+
 namespace por {
 	class conflicting_extension {
 		std::shared_ptr<por::event::event> _new_event;
@@ -1155,24 +1180,6 @@ namespace por {
 					return (*a)->is_less_than(**b);
 				});
 			}
-
-			// dummy event class to be used to compute a cone for a set of events
-			class dummy : public por::event::event {
-			public:
-				std::string to_string(bool details = false) const override { return ""; }
-				util::iterator_range<std::shared_ptr<por::event::event> const*> predecessors() const override {
-					return util::make_iterator_range<std::shared_ptr<por::event::event> const*>(nullptr, nullptr);
-				}
-				util::iterator_range<std::shared_ptr<por::event::event>*> predecessors() override {
-					return util::make_iterator_range<std::shared_ptr<por::event::event>*>(nullptr, nullptr);
-				}
-				dummy(por::event::thread_id_t tid, std::shared_ptr<por::event::event> const& immediate_predecessor, std::vector<std::shared_ptr<por::event::event>>& other_predecessors)
-				: event(por::event::event_kind::wait1,
-								tid,
-								immediate_predecessor,
-								util::make_iterator_range<std::shared_ptr<por::event::event>*>(other_predecessors.data(), other_predecessors.data() + other_predecessors.size()))
-				{}
-			};
 
 			concurrent_combinations(comb, [&](auto const& M) {
 				bool generate_conflict = false;
