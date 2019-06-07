@@ -941,7 +941,35 @@ namespace por {
 			return nullptr;
 		}
 
+		util::iterator_range<std::shared_ptr<por::event::event> const*> get_condition_variable_predecessors(std::shared_ptr<por::event::event> const& event) {
+			assert(event);
+			util::iterator_range<std::shared_ptr<por::event::event> const*> preds = util::make_iterator_range<std::shared_ptr<por::event::event> const*>(nullptr, nullptr);
+			switch(event->kind()) {
+				case por::event::event_kind::broadcast:
+					preds = static_cast<por::event::broadcast const*>(event.get())->condition_variable_predecessors();
+					break;
+				case por::event::event_kind::condition_variable_create:
+					break;
+				case por::event::event_kind::condition_variable_destroy:
+					preds = static_cast<por::event::condition_variable_destroy const*>(event.get())->condition_variable_predecessors();
+					break;
+				case por::event::event_kind::signal:
+					preds = static_cast<por::event::signal const*>(event.get())->condition_variable_predecessors();
+					break;
+				case por::event::event_kind::wait1:
+					preds = static_cast<por::event::wait1 const*>(event.get())->condition_variable_predecessors();
+					break;
+				case por::event::event_kind::wait2:
+					preds = static_cast<por::event::wait2 const*>(event.get())->condition_variable_predecessors();
+					break;
+				default:
+					assert(0 && "event has no condition_variable_predecessors");
+			}
+			return preds;
+		}
+
 	private:
+		// IMPORTANT: comb must be conflict-free
 		template<typename UnaryPredicate>
 		std::vector<std::vector<std::shared_ptr<por::event::event> const*>> concurrent_combinations(
 			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> &comb,
@@ -950,7 +978,7 @@ namespace por {
 			std::vector<std::vector<std::shared_ptr<por::event::event> const*>> result;
 			// compute all combinations: S \subseteq comb (where S is concurrent,
 			// i.e. there are no causal dependencies between any of its elements)
-			assert(comb.size() < 64);
+			assert(comb.size() < 64); // FIXME: can "only" be used with 64 threads
 			for(std::uint64_t mask = 0; mask < (1 << comb.size()); ++mask) {
 				std::size_t popcount = 0;
 				for(std::size_t i = 0; i < comb.size(); ++i) {
@@ -1094,6 +1122,112 @@ namespace por {
 				conflict = ep;
 				ep = get_lock_predecessor(*ep);
 			}
+
+			return result;
+		}
+
+		std::vector<conflicting_extension> cex_wait1(std::shared_ptr<por::event::event> const& e) {
+			assert(e->kind() == por::event::event_kind::wait1);
+
+			std::vector<conflicting_extension> result;
+			auto const* w1 = static_cast<por::event::wait1 const*>(e.get());
+
+			// immediate causal predecessor on same thread
+			std::shared_ptr<por::event::event> const* et = &w1->thread_predecessor();
+
+			// exclude condition variable create event from comb (if present)
+			std::shared_ptr<por::event::event> const* cond_create = nullptr;
+
+			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> comb;
+			for(auto& p : get_condition_variable_predecessors(e)) {
+				// cond predecessors contains exactly the bro and lost sig causes outside of [et] plus cond_create (if exists)
+				if(p->kind() == por::event::event_kind::condition_variable_create) {
+					cond_create = &p;
+				} else {
+					assert(p->tid() != e->tid() && !(*p).is_less_than(**et));
+					comb[p->tid()].push_back(&p);
+				}
+			}
+
+			// sort each tooth of comb
+			for(auto& [tid, tooth] : comb) {
+				std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
+					return (*a)->is_less_than(**b);
+				});
+			}
+
+			// dummy event class to be used to compute a cone for a set of events
+			class dummy : public por::event::event {
+			public:
+				std::string to_string(bool details = false) const override { return ""; }
+				util::iterator_range<std::shared_ptr<por::event::event> const*> predecessors() const override {
+					return util::make_iterator_range<std::shared_ptr<por::event::event> const*>(nullptr, nullptr);
+				}
+				util::iterator_range<std::shared_ptr<por::event::event>*> predecessors() override {
+					return util::make_iterator_range<std::shared_ptr<por::event::event>*>(nullptr, nullptr);
+				}
+				dummy(por::event::thread_id_t tid, std::shared_ptr<por::event::event> const& immediate_predecessor, std::vector<std::shared_ptr<por::event::event>>& other_predecessors)
+				: event(por::event::event_kind::wait1,
+								tid,
+								immediate_predecessor,
+								util::make_iterator_range<std::shared_ptr<por::event::event>*>(other_predecessors.data(), other_predecessors.data() + other_predecessors.size()))
+				{}
+			};
+
+			concurrent_combinations(comb, [&](auto const& M) {
+				bool generate_conflict = false;
+
+				// generate dummy event for its cone
+				std::vector<std::shared_ptr<por::event::event>> N;
+				N.reserve(M.size());
+				for(auto& m : M) {
+					N.push_back(*m);
+				}
+				if(cond_create) {
+					N.push_back(*cond_create);
+				}
+				dummy dummy(e->tid(), *et, N);
+
+				// check if [M] \cup [et] != [e] \setminus {e}
+				// NOTE: lock predecessor is an event on the same thread
+				assert(dummy.cone().size() <= e->cone().size());
+				if(dummy.cone().size() != e->cone().size()) {
+					generate_conflict = true;
+				} else {
+					for(auto& [tid, c] : e->cone()) {
+						if(dummy.cone().at(tid)->is_less_than(*c)) {
+							generate_conflict = true;
+							break;
+						}
+					}
+				}
+
+				if(!generate_conflict)
+					return false;
+
+				// compute conflicts (minimal events from comb \setminus [M])
+				std::vector<std::shared_ptr<por::event::event>> conflicts;
+				auto conflict_comb = comb;
+				for(auto& m : M) {
+					auto& tooth = conflict_comb[(*m)->tid()];
+					if(tooth.size() == 1 || (*tooth.back())->depth() == (*m)->depth()) {
+						conflict_comb.erase((*m)->tid());
+					} else {
+						auto it = std::find(tooth.begin(), tooth.end(), m);
+						assert(it != tooth.end());
+						tooth.erase(tooth.begin(), std::next(it));
+					}
+				}
+
+				for(auto& [tid, tooth] : conflict_comb) {
+					// minimal event
+					conflicts.emplace_back(*tooth.front());
+				}
+
+				// lock predecessor is guaranteed to be in [et] (has to be an aquire/wait2 on the same thread)
+				result.emplace_back(por::event::wait1::alloc(e->tid(), *et, w1->lock_predecessor(), N.data(), N.data() + N.size()), std::move(conflicts));
+				return false; // result of concurrent_combinations not needed
+			});
 
 			return result;
 		}
