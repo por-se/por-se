@@ -160,18 +160,5 @@ namespace por::event {
 			}
 			return false;
 		}
-
-		std::pair<thread_id_t, thread_id_t> cone_bounds() const {
-			if(_cone.empty()) {
-				return std::make_pair(_tid,_tid);
-			} else if(_cone.size() == 1) {
-				thread_id_t tid = _cone.begin()->first;
-				return std::make_pair(tid, tid);
-			} else {
-				thread_id_t lower = _cone.begin()->first;
-				thread_id_t upper = (--_cone.end())->first;
-				return std::make_pair(lower, upper);
-			}
-		}
 	};
 }
