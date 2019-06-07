@@ -35,6 +35,19 @@ namespace por {
 			assert(_conflicting_events[0]);
 		}
 
+		conflicting_extension(std::shared_ptr<por::event::event> new_event, std::vector<std::shared_ptr<por::event::event>> conflicting_events)
+		: _new_event(std::move(new_event))
+		, _conflicting_events{util::create_uninitialized, conflicting_events.size()}
+		{
+			assert(_new_event);
+			// we perform a very small optimization by allocating the conflicts in uninitialized storage
+			std::size_t index = 0;
+			for(auto iter = conflicting_events.begin(); iter != conflicting_events.end(); ++iter, ++index) {
+				assert(*iter != nullptr && "no nullptr in conflicting events allowed");
+				new(_conflicting_events.data() + index) std::shared_ptr<por::event::event>(std::move(*iter));
+			}
+		}
+
 		std::shared_ptr<por::event::event>& new_event() {
 			return _new_event;
 		}
