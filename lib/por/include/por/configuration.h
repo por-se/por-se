@@ -1007,6 +1007,38 @@ namespace por {
 		}
 
 	private:
+		static por::event::cond_id_t get_cid(por::event::event const* event) {
+			assert(event != nullptr);
+			por::event::cond_id_t result = 0;
+			switch(event->kind()) {
+				case por::event::event_kind::broadcast:
+					result = static_cast<por::event::broadcast const*>(event)->cid();
+					break;
+				case por::event::event_kind::condition_variable_create:
+					result = static_cast<por::event::condition_variable_create const*>(event)->cid();
+					break;
+				case por::event::event_kind::condition_variable_destroy:
+					result = static_cast<por::event::condition_variable_destroy const*>(event)->cid();
+					break;
+				case por::event::event_kind::signal:
+					result = static_cast<por::event::signal const*>(event)->cid();
+					break;
+				case por::event::event_kind::wait1:
+					result = static_cast<por::event::wait1 const*>(event)->cid();
+					break;
+				case por::event::event_kind::wait2:
+					result = static_cast<por::event::wait2 const*>(event)->cid();
+					break;
+				default:
+					assert(0 && "event has no cid");
+			}
+			return result;
+		}
+
+		static por::event::cond_id_t get_cid(std::shared_ptr<por::event::event const> const& event) {
+			return get_cid(event.get());
+		}
+
 		// IMPORTANT: comb must be conflict-free
 		template<typename UnaryPredicate>
 		std::vector<std::vector<std::shared_ptr<por::event::event> const*>> concurrent_combinations(
