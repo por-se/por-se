@@ -886,53 +886,53 @@ namespace por {
 			assert(_schedule_pos == _schedule.size());
 		}
 
-		std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event> const& event) {
+		static std::shared_ptr<por::event::event> const* get_thread_predecessor(por::event::event const* event) {
 			assert(event);
 			std::shared_ptr<por::event::event> const* pred = nullptr;
 			switch(event->kind()) {
 				case por::event::event_kind::broadcast:
-					pred = &static_cast<por::event::broadcast const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::broadcast const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::condition_variable_create:
-					pred = &static_cast<por::event::condition_variable_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::condition_variable_create const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::condition_variable_destroy:
-					pred = &static_cast<por::event::condition_variable_destroy const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::condition_variable_destroy const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::local:
-					pred = &static_cast<por::event::local const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::local const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::lock_acquire:
-					pred = &static_cast<por::event::lock_acquire const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_acquire const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::lock_create:
-					pred = &static_cast<por::event::lock_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_create const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::lock_destroy:
-					pred = &static_cast<por::event::lock_destroy const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_destroy const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::lock_release:
-					pred = &static_cast<por::event::lock_release const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::lock_release const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::signal:
-					pred = &static_cast<por::event::signal const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::signal const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::thread_create:
-					pred = &static_cast<por::event::thread_create const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::thread_create const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::thread_exit:
-					pred = &static_cast<por::event::thread_exit const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::thread_exit const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::thread_init:
 					break;
 				case por::event::event_kind::thread_join:
-					pred = &static_cast<por::event::thread_join const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::thread_join const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::wait1:
-					pred = &static_cast<por::event::wait1 const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::wait1 const*>(event)->thread_predecessor();
 					break;
 				case por::event::event_kind::wait2:
-					pred = &static_cast<por::event::wait2 const*>(event.get())->thread_predecessor();
+					pred = &static_cast<por::event::wait2 const*>(event)->thread_predecessor();
 					break;
 
 				default:
@@ -942,10 +942,13 @@ namespace por {
 				return pred;
 			}
 			return nullptr;
-
 		}
 
-		std::shared_ptr<por::event::event> const* get_lock_predecessor(std::shared_ptr<por::event::event> const& event) {
+		static std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event const> const& event) {
+			return get_thread_predecessor(event.get());
+		}
+
+		static std::shared_ptr<por::event::event> const* get_lock_predecessor(std::shared_ptr<por::event::event const> const& event) {
 			assert(event);
 			std::shared_ptr<por::event::event> const* pred = nullptr;
 			switch(event->kind()) {
@@ -976,7 +979,7 @@ namespace por {
 			return nullptr;
 		}
 
-		util::iterator_range<std::shared_ptr<por::event::event> const*> get_condition_variable_predecessors(std::shared_ptr<por::event::event> const& event) {
+		static util::iterator_range<std::shared_ptr<por::event::event> const*> get_condition_variable_predecessors(std::shared_ptr<por::event::event const> const& event) {
 			assert(event);
 			util::iterator_range<std::shared_ptr<por::event::event> const*> preds = util::make_iterator_range<std::shared_ptr<por::event::event> const*>(nullptr, nullptr);
 			switch(event->kind()) {
