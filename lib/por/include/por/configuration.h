@@ -467,7 +467,7 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
-			assert(cond > 0);
+			assert(cond > 0 && "Condition variable id must not be zero");
 			assert(_cond_heads.find(cond) == _cond_heads.end() && "Condition variable id already taken");
 			assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 
@@ -497,6 +497,7 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 			auto cond_head_it = _cond_heads.find(cond);
 			if constexpr(optional_creation_events) {
+				assert(cond > 0 && "Condition variable id must not be zero");
 				if(cond_head_it == _cond_heads.end()) {
 					thread_event = por::event::condition_variable_destroy::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
 					_used_cond_ids.insert(cond);
@@ -574,6 +575,7 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end()) {
+					assert(cond > 0 && "Condition variable id must not be zero");
 					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 					auto& lock_event = lock_it->second;
 					thread_event = por::event::wait1::alloc(thread, cond, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
@@ -726,6 +728,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_thread == 0) {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
+					assert(cond > 0 && "Condition variable id must not be zero");
 					thread_event = por::event::signal::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
@@ -788,6 +791,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
 					// only possible for lost broadcast: otherwise there would be at least a wait1 in _cond_heads
+					assert(cond > 0 && "Condition variable id must not be zero");
 					thread_event = por::event::broadcast::alloc(thread, cond, std::move(thread_event), nullptr, nullptr);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
@@ -1029,8 +1033,6 @@ namespace por {
 				case por::event::event_kind::wait2:
 					result = static_cast<por::event::wait2 const*>(event)->cid();
 					break;
-				default:
-					assert(0 && "event has no cid");
 			}
 			return result;
 		}
