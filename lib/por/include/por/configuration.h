@@ -1288,6 +1288,440 @@ namespace por {
 			return result;
 		}
 
+		static std::vector<std::shared_ptr<por::event::event>> outstanding_wait1(por::event::cond_id_t cid, por::event::event const* event) {
+			// collect threads blocked on wait1 on cond cid
+			std::vector<std::shared_ptr<por::event::event>> wait1s;
+			for(auto& [tid, c] : event->cone()) {
+				if(c->kind() == por::event::event_kind::wait1) {
+					if(get_cid(c) == cid)
+						wait1s.emplace_back(c->shared_from_this());
+				}
+			}
+
+			if(wait1s.empty())
+				return wait1s;
+
+			// sort wait1 events s.t. the first element always has the minimum depth
+			std::sort(wait1s.begin(), wait1s.end(), [](auto& a, auto& b) {
+				return a->depth() < b->depth();
+			});
+
+			// remove those that have already been notified (so just their w2 event is missing in cone)
+			for(auto& [tid, c] : event->cone()) {
+				for(auto const* e = c; e != nullptr; e = (get_thread_predecessor(e) ? get_thread_predecessor(e)->get() : nullptr)) {
+					if(wait1s.empty())
+						break; // no wait1s left
+
+					if(e->depth() < wait1s.front()->depth())
+						break; // none of the waits can be notified by a predecessor on this thread
+
+					if(e->kind() == por::event::event_kind::signal) {
+						auto const* sig = static_cast<por::event::signal const*>(e);
+						if(sig->cid() != cid)
+							continue;
+
+						if(sig->is_lost())
+							continue;
+
+						auto wait = sig->wait_predecessor();
+						wait1s.erase(std::remove(wait1s.begin(), wait1s.end(), wait), wait1s.end());
+					} else if(e->kind() == por::event::event_kind::broadcast) {
+						auto const* bro = static_cast<por::event::broadcast const*>(e);
+						if(bro->cid() != cid)
+							continue;
+
+						if(bro->is_lost())
+							continue;
+
+						wait1s.erase(std::remove_if(wait1s.begin(), wait1s.end(), [&](auto& w) {
+							for(auto& n : bro->wait_predecessors()) {
+								if(n->tid() != w->tid())
+									continue;
+
+								if(n->depth() == w->depth())
+									return true;
+							}
+							return false;
+						}), wait1s.end());
+					}
+				}
+			}
+
+			return wait1s;
+		}
+
+		static std::vector<std::shared_ptr<por::event::event>> outstanding_wait1(por::event::cond_id_t cid, std::shared_ptr<por::event::event const> const& event) {
+			return outstanding_wait1(cid, event.get());
+		}
+
+		static std::vector<std::shared_ptr<por::event::event>> outstanding_wait1(por::event::cond_id_t cid, std::vector<std::shared_ptr<por::event::event> const*> events) {
+			assert(!events.empty());
+			if(events.size() == 1) {
+				assert(events.front() != nullptr);
+				return outstanding_wait1(cid, *events.front());
+			}
+
+			// generate dummy event for its cone
+			std::vector<std::shared_ptr<por::event::event>> N;
+			N.reserve(events.size());
+			for(auto& event : events) {
+				assert(event != nullptr);
+				N.push_back(*event);
+			}
+			dummy dummy{N};
+			return outstanding_wait1(cid, &dummy);
+		}
+
+		std::vector<conflicting_extension> cex_notification(std::shared_ptr<por::event::event> const& e) {
+			assert(e->kind() == por::event::event_kind::signal || e->kind() == por::event::event_kind::broadcast);
+
+			std::vector<conflicting_extension> result;
+
+			// immediate causal predecessor on same thread
+			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
+
+			// exclude condition variable create event from comb (if present)
+			std::shared_ptr<por::event::event> const* cond_create = nullptr;
+
+			// condition variable id
+			por::event::cond_id_t cid = get_cid(e);
+
+			// calculate maximal event(s) in causes outside of [et]
+			std::vector<std::shared_ptr<por::event::event> const*> max;
+			{
+				// compute comb
+				std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> comb;
+				for(auto& p : get_condition_variable_predecessors(e)) {
+					// cond predecessors contain all causes outside of [et]
+						if(p->tid() == e->tid() || (*p).is_less_than(**et))
+							continue; // cond_create and wait1s (because of their lock relation) can be in in [et]
+					comb[p->tid()].push_back(&p);
+				}
+				// derive maximum from comb
+				for(auto& [tid, tooth] : comb) {
+					auto x = std::max_element(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
+						return (*a)->is_less_than(**b);
+					});
+					bool is_maximal_element = true;
+					for(auto it = max.begin(); it != max.end();) {
+						if((**it)->is_less_than(***x)) {
+							it = max.erase(it);
+						} else {
+							if((**x)->is_less_than(***it))
+								is_maximal_element = false;
+							++it;
+						}
+					}
+					if(is_maximal_element)
+						max.push_back(*x);
+				}
+			}
+
+			// calculate comb, containing all w1, sig, bro events on same cond outside of [et] \cup succ(e) (which contains e)
+			// we cannot use cond predecessors here as these are not complete
+			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> comb;
+			for(auto& thread_head : _thread_heads) {
+				std::shared_ptr<por::event::event> const* pred = &thread_head.second;
+				do {
+					if((*pred)->tid() == e->tid())
+						break; // all events on this thread are either in [et] or succ(e)
+
+					if(e->is_less_than(**pred))
+						break; // pred and all its predecessors are in succ(e)
+
+					if((*pred)->is_less_than(**et))
+						break; // pred and all its predecessors are in [et]
+
+					if(get_cid(*pred) == cid) {
+						// only include events on same cond
+						if((*pred)->kind() == por::event::event_kind::condition_variable_create) {
+							cond_create = pred; // exclude from comb
+						} else if((*pred)->kind() != por::event::event_kind::wait2) {
+							// also exclude wait2 events
+							comb[(*pred)->tid()].push_back(pred);
+						}
+					}
+
+					pred = get_thread_predecessor(*pred);
+				} while(pred != nullptr);
+			}
+
+			// prepare wait1_comb (sorted version of comb with only wait1 events on same cond)
+			auto wait1_comb = comb;
+			for(auto& [tid, tooth] : wait1_comb) {
+				tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [](auto& e) {
+					return (*e)->kind() != por::event::event_kind::wait1;
+				}), tooth.end());
+				std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
+					return (*a)->is_less_than(**b);
+				});
+			}
+
+			// conflicting extensions: lost notification events
+			concurrent_combinations(comb, [&](auto const& M) {
+				// ensure that M differs from max
+				if(max.size() == M.size()) {
+					bool ismax = true;
+					for(auto& m : M) {
+						for(auto& x : max) {
+							if((*m)->is_less_than(**x)) {
+								// at least one element of M is smaller than some element of max
+								ismax = false;
+								break;
+							}
+						}
+					}
+					if(ismax)
+						return false;
+				}
+
+				// ensure that there are only non-lost notifications in M
+				if(M.size() == 1 && (*M.front())->kind() == por::event::event_kind::broadcast) {
+					auto* bro = static_cast<por::event::broadcast const*>((*M.front()).get());
+					if(bro->is_lost())
+						return false;
+				} else {
+					for(auto& m : M) {
+						if((*m)->kind() != por::event::event_kind::signal)
+							return false;
+						auto* sig = static_cast<por::event::signal const*>((*m).get());
+						if(sig->is_lost())
+							return false;
+					}
+				}
+
+				// ensure that there are no outstanding wait1s on same condition variable
+				std::vector<std::shared_ptr<por::event::event> const*> M_et(M.begin(), M.end());
+				M_et.reserve(M.size() + 1);
+				M_et.push_back(et);
+
+				if(!outstanding_wait1(cid, M_et).empty())
+					return false;
+
+				// create set of cond predecessors
+				std::vector<std::shared_ptr<por::event::event>> N;
+				for(auto& m : M) {
+					// NOTE: M already contains only events that are not in [et]
+					if((*m)->kind() == por::event::event_kind::broadcast) {
+						auto bro = static_cast<por::event::broadcast const*>(m->get());
+						if(bro->is_lost())
+							continue;
+
+						if(bro->is_notifying_thread(e->tid()))
+							continue;
+					} else if((*m)->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(m->get());
+						if(sig->is_lost())
+							continue;
+
+						if(sig->notified_thread() == e->tid())
+							continue;
+					} else {
+						continue; // exclude all other events
+					}
+					N.push_back(*m);
+				}
+				if(cond_create) {
+					N.push_back(*cond_create);
+				}
+
+				// compute conflicts (minimal event from {e} or wait1s in (comb \setminus [M]))
+				// TODO: compute real minimum, not a superset
+				std::vector<std::shared_ptr<por::event::event>> conflicts;
+				auto conflict_comb = wait1_comb;
+				{ // add e to conflict_comb and sort the corresponding tooth
+					auto& e_tooth = conflict_comb[e->tid()];
+					e_tooth.push_back(&e);
+					std::sort(e_tooth.begin(), e_tooth.end(), [](auto& a, auto& b) {
+						return (*a)->is_less_than(**b);
+					});
+				}
+				for(auto& m : M) {
+					for(auto& [tid, tooth] : conflict_comb) {
+						tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
+							return (*m)->is_less_than(**e) || m == e;
+						}), tooth.end());
+						if(tooth.empty())
+							conflict_comb.erase(tid);
+					}
+				}
+				for(auto& [tid, tooth] : conflict_comb) {
+					if(tooth.empty())
+						continue;
+
+					// minimal event from this thread
+					conflicts.emplace_back(*tooth.front());
+				}
+
+				if(e->kind() == por::event::event_kind::signal) {
+					result.emplace_back(por::event::signal::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()), std::move(conflicts));
+				} else if(e->kind() == por::event::event_kind::broadcast) {
+					result.emplace_back(por::event::broadcast::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()), std::move(conflicts));
+				}
+
+				return false; // result of concurrent_combinations not needed
+			});
+
+			// conflicting extensions: signal events
+			if(e->kind() == por::event::event_kind::signal) {
+				auto sig = static_cast<por::event::signal const*>(e.get());
+
+				// generate set W with all wait1 events in comb and those that are outstanding in [et]
+				std::vector<std::shared_ptr<por::event::event>> W = outstanding_wait1(cid, *et);
+				for(auto& [tid, tooth] : wait1_comb) {
+					W.reserve(W.size() + tooth.size());
+					for(auto& e : tooth) {
+						W.push_back(*e);
+					}
+				}
+
+				// compute map from each w1 to its (non-lost) notification in comb
+				std::map<por::event::event const*, std::shared_ptr<por::event::event> const*> notification;
+				for(auto& [tid, tooth] : comb) {
+					for(auto& n : tooth) {
+						if((*n)->kind() != por::event::event_kind::signal && (*n)->kind() != por::event::event_kind::broadcast)
+							continue;
+
+						if((*n)->kind() == por::event::event_kind::signal) {
+							auto sig = static_cast<por::event::signal const*>(n->get());
+							if(sig->is_lost())
+								continue;
+
+							notification.emplace(sig->wait_predecessor().get(), n);
+						}
+
+						if((*n)->kind() == por::event::event_kind::broadcast) {
+							auto bro = static_cast<por::event::broadcast const*>(n->get());
+							if(bro->is_lost())
+								continue;
+
+							for(auto& w : bro->wait_predecessors()) {
+								notification.emplace(w.get(), n);
+							}
+						}
+					}
+				}
+
+				for(auto& w : W) {
+					if(w == sig->wait_predecessor())
+						continue;
+
+					// compute conflicts
+					std::vector<std::shared_ptr<por::event::event>> conflicts;
+					conflicts.push_back(e);
+					// because of e \in conflicts, we only need to search comb for notification
+					// (succ(e) is excluded and w cannot be woken up by an event in [et])
+					if(notification.count(w.get()))
+						conflicts.push_back(*notification.at(w.get()));
+
+					result.emplace_back(por::event::signal::alloc(e->tid(), cid, *et, w), std::move(conflicts));
+				}
+			}
+
+			// conflicting extensions: broadcast events
+			if(e->kind() == por::event::event_kind::broadcast) {
+				// compute pre-filtered conflict comb (only containing wait1, non-lost sig and lost bro events)
+				auto broadcast_conflict_comb = comb;
+				for(auto& [tid, tooth] : broadcast_conflict_comb) {
+					tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [](auto& e) {
+						if((*e)->kind() == por::event::event_kind::wait1) {
+							return false;
+						} else if((*e)->kind() == por::event::event_kind::signal) {
+							auto* sig = static_cast<por::event::signal const*>(e->get());
+							if(!sig->is_lost())
+								return false;
+						} else if((*e)->kind() == por::event::event_kind::broadcast) {
+							auto* bro = static_cast<por::event::broadcast const*>(e->get());
+							if(bro->is_lost())
+								return false;
+						}
+						return true;
+					}), tooth.end());
+					std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
+						return (*a)->is_less_than(**b);
+					});
+				}
+
+				concurrent_combinations(comb, [&](auto const& M) {
+					// ensure that M differs from max
+					if(max.size() == M.size()) {
+						bool ismax = true;
+						for(auto& m : M) {
+							for(auto& x : max) {
+								if((*m)->is_less_than(**x)) {
+									// at least one element of M is smaller than some element of max
+									ismax = false;
+									break;
+								}
+							}
+						}
+						if(ismax)
+							return false;
+					}
+
+					// ensure that M only contains non-lost signal and wait1 events
+					for(auto& m : M) {
+						if((*m)->kind() == por::event::event_kind::wait1)
+							continue;
+
+						if((*m)->kind() == por::event::event_kind::signal) {
+							auto* sig = static_cast<por::event::signal const*>((*m).get());
+							if(sig->is_lost())
+								return false;
+						}
+
+						return false;
+					}
+
+					// ensure that there are outstanding wait1s on same condition variable
+					std::vector<std::shared_ptr<por::event::event> const*> M_et(M.begin(), M.end());
+					M_et.reserve(M.size() + 1);
+					M_et.push_back(et);
+
+					auto outstanding = outstanding_wait1(cid, M_et);
+					if(outstanding.empty())
+						return false;
+
+					// create set of cond predecessors (which is exactly M)
+					// because here, it is guaranteed that contained signals do not notify any of the wait1s
+					std::vector<std::shared_ptr<por::event::event>> N;
+					N.reserve(M.size());
+					for(auto& m : M) {
+						N.push_back(*m);
+					}
+
+					// compute conflicts
+					// TODO: compute real minimum, not a superset
+					std::vector<std::shared_ptr<por::event::event>> conflicts;
+					auto conflict_comb = broadcast_conflict_comb;
+					for(auto& m : M) {
+						for(auto& [tid, tooth] : conflict_comb) {
+							tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
+								return (*m)->is_less_than(**e) || m == e;
+							}), tooth.end());
+							if(tooth.empty())
+								conflict_comb.erase(tid);
+						}
+					}
+					for(auto& [tid, tooth] : conflict_comb) {
+						if(tooth.empty())
+							continue;
+
+						// minimal event from this thread
+						conflicts.emplace_back(*tooth.front());
+					}
+					// as long as this is true, e does not have to be included itself
+					//assert(!conflicts.empty()); // FIXME: does fail for random-graph 144
+
+					// FIXME: conflicts and causes are incorrect!
+					// result.emplace_back(por::event::broadcast::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()), std::move(conflicts));
+					return false; // result of concurrent_combinations not needed
+				});
+			}
+
+			return result;
+		}
+
 		// returns index of first conflict, i.e. first index that deviates from given schedule
 		std::size_t compute_new_schedule_from_old(conflicting_extension const& cex, std::vector<std::shared_ptr<por::event::event>>& schedule) {
 			[[maybe_unused]] std::size_t original_size = schedule.size();
