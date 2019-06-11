@@ -1262,6 +1262,7 @@ namespace por {
 					return false;
 
 				// compute conflicts (minimal events from comb \setminus [M])
+				// TODO: compute real minimum, not a superset
 				std::vector<std::shared_ptr<por::event::event>> conflicts;
 				auto conflict_comb = comb;
 				for(auto& m : M) {
@@ -1274,9 +1275,8 @@ namespace por {
 						tooth.erase(tooth.begin(), std::next(it));
 					}
 				}
-
 				for(auto& [tid, tooth] : conflict_comb) {
-					// minimal event
+					// minimal event from this thread
 					conflicts.emplace_back(*tooth.front());
 				}
 
@@ -1317,7 +1317,7 @@ namespace por {
 		std::vector<conflicting_extension> conflicting_extensions() {
 			std::vector<conflicting_extension> S;
 			std::vector<bool> maximal_path;
-			for(auto event : _schedule) {
+			for(auto& event : _schedule) {
 				if(event->kind() == por::event::event_kind::local) {
 					auto local = static_cast<const por::event::local*>(event.get());
 					auto &local_path = local->path();
@@ -1358,10 +1358,10 @@ namespace por {
 								// compute path for cex
 								auto cex_schedule = compute_new_schedule_from_current(cex).first;
 								std::vector<bool> cex_path;
-								for(auto event : cex_schedule) {
+								for(auto& event : cex_schedule) {
 									if(event->kind() == por::event::event_kind::local) {
 										auto local = static_cast<const por::event::local*>(event.get());
-										auto &local_path = local->path();
+										auto& local_path = local->path();
 										cex_path.insert(cex_path.end(), local_path.begin(), local_path.end());
 									}
 								}
