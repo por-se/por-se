@@ -84,7 +84,7 @@ namespace por::event {
 			}
 
 			// p is not part of p->_cone
-			if(_cone[p->_tid]->_depth < p->_depth) {
+			if(_cone.count(p->_tid) == 0 || _cone[p->_tid]->_depth < p->_depth) {
 				_cone[p->_tid] = p.get();
 			}
 		}
