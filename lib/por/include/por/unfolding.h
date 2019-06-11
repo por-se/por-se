@@ -13,7 +13,7 @@ namespace por {
 	class unfolding {
 		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::shared_ptr<por::event::event const>>> visited;
 
-		// NOTE: do not use for other purposes, only compares pointers of predecessors
+		// NOTE: do not use for other purposes, only compares pointers of predecessors in cone
 		bool compare_events(por::event::event const* a, por::event::event const* b) {
 			if(a == b)
 				return true;
@@ -35,25 +35,12 @@ namespace por {
 					return false;
 			}
 
-			auto a_preds = a->predecessors();
-			auto b_preds = b->predecessors();
-			std::size_t a_num_preds = std::distance(a_preds.begin(), a_preds.end());
-			std::size_t b_num_preds = std::distance(b_preds.begin(), b_preds.end());
-
-			if(a_num_preds != b_num_preds)
-				return false;
-
-			auto a_it = a_preds.begin();
-			auto a_ie = a_preds.end();
-			auto b_it = b_preds.begin();
-			auto b_ie = b_preds.end();
-			for(std::size_t i = 0; i < a_num_preds; ++i) {
-				assert(a_it != a_ie);
-				assert(b_it != b_ie);
-				if(*a_it != *b_it)
+			// compare cone
+			for(auto& [tid, c] : a->cone()) {
+				if(b->cone().count(tid) == 0)
 					return false;
-				++a_it;
-				++b_it;
+				if(b->cone().at(tid) != c)
+					return false;
 			}
 
 			return true;
