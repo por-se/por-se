@@ -195,9 +195,10 @@ namespace por {
 			// reset heads to values at standby
 			configuration* partial = configuration_from_execution_state(_standby_states.back());
 			assert(partial != nullptr);
-			_thread_heads = partial->thread_heads();
-			_cond_heads = partial->cond_heads();
-			_lock_heads = partial->lock_heads();
+			_thread_heads = partial->_thread_heads;
+			_cond_heads = partial->_cond_heads;
+			_used_cond_ids = partial->_used_cond_ids;
+			_lock_heads = partial->_lock_heads;
 		}
 
 		auto const& schedule() const noexcept { return _schedule; }
