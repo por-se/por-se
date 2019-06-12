@@ -135,6 +135,9 @@ namespace por {
 		// contains all previously used condition variable ids
 		std::set<por::event::cond_id_t> _used_cond_ids;
 
+		// symbolic choices made as manifested in local events in order of their execution
+		std::vector<bool> _path;
+
 		// sequence of events in order of their execution
 		std::vector<std::shared_ptr<por::event::event>> _schedule;
 
@@ -196,9 +199,10 @@ namespace por {
 			configuration* partial = configuration_from_execution_state(_standby_states.back());
 			assert(partial != nullptr);
 			_thread_heads = partial->_thread_heads;
+			_lock_heads = partial->_lock_heads;
 			_cond_heads = partial->_cond_heads;
 			_used_cond_ids = partial->_used_cond_ids;
-			_lock_heads = partial->_lock_heads;
+			_path = partial->_path;
 		}
 
 		auto const& schedule() const noexcept { return _schedule; }
@@ -869,13 +873,14 @@ namespace por {
 			assert(_schedule_pos == _schedule.size());
 		}
 
-		void local(event::thread_id_t thread, std::vector<bool> path) {
+		void local(event::thread_id_t thread, std::vector<bool> local_path) {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::local);
 				assert(_schedule[_schedule_pos]->tid() == thread);
 				[[maybe_unused]] auto& cs = static_cast<por::event::local*>(_schedule[_schedule_pos].get())->path();
-				assert(cs == path);
+				assert(cs == local_path);
 				_thread_heads[thread] = _schedule[_schedule_pos];
+				_path.insert(_path.end(), local_path.begin(), local_path.end());
 				++_schedule_pos;
 				return;
 			}
@@ -884,8 +889,9 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			thread_event = event::local::alloc(_unfolding, thread, std::move(thread_event), std::move(path));
+			thread_event = event::local::alloc(_unfolding, thread, std::move(thread_event), std::move(local_path));
 
+			_path.insert(_path.end(), local_path.begin(), local_path.end());
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
 			assert(_schedule_pos == _schedule.size());
