@@ -25,8 +25,17 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<thread_exit> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor) {
-			return std::make_shared<thread_exit>(thread_exit{tid, std::move(thread_predecessor)});
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
+			std::shared_ptr<event> thread_predecessor
+		) {
+			return deduplicate(unfolding, std::make_shared<thread_exit>(
+				thread_exit{
+					tid,
+					std::move(thread_predecessor)
+				}
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

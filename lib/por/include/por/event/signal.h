@@ -109,32 +109,38 @@ namespace por::event {
 
 	public:
 		// notifying signal
-		static std::shared_ptr<signal> alloc(thread_id_t tid,
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
 			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> notified_thread_predecessor
 		) {
-			return std::make_shared<signal>(tid,
+			return deduplicate(unfolding, std::make_shared<signal>(
+				tid,
 				cid,
 				std::move(thread_predecessor),
 				std::move(notified_thread_predecessor)
-			);
+			));
 		}
 
 		// lost signal
 		template<typename T>
-		static std::shared_ptr<signal> alloc(thread_id_t tid,
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
 			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
-			return std::make_shared<signal>(tid,
+			return deduplicate(unfolding, std::make_shared<signal>(
+				tid,
 				cid,
 				std::move(thread_predecessor),
 				std::move(begin_condition_variable_predecessors),
 				std::move(end_condition_variable_predecessors)
-			);
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

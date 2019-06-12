@@ -32,8 +32,18 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<lock_release> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor, std::shared_ptr<event> lock_predecessor) {
-			return std::make_shared<lock_release>(lock_release{tid, std::move(thread_predecessor), std::move(lock_predecessor)});
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid, std::shared_ptr<event> thread_predecessor,
+			std::shared_ptr<event> lock_predecessor
+		) {
+			return deduplicate(unfolding, std::make_shared<lock_release>(
+				lock_release{
+					tid,
+					std::move(thread_predecessor),
+					std::move(lock_predecessor)
+				}
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

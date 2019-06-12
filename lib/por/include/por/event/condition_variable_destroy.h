@@ -59,18 +59,21 @@ namespace por::event {
 
 	public:
 		template<typename T>
-		static std::shared_ptr<condition_variable_destroy> alloc(thread_id_t tid,
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
 			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
-			return std::make_shared<condition_variable_destroy>(tid,
+			return deduplicate(unfolding, std::make_shared<condition_variable_destroy>(
+				tid,
 				cid,
 				std::move(thread_predecessor),
 				std::move(begin_condition_variable_predecessors),
 				std::move(end_condition_variable_predecessors)
-			);
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

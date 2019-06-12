@@ -28,8 +28,17 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<thread_init> alloc(thread_id_t tid, std::shared_ptr<event> creator) {
-			return std::make_shared<thread_init>(thread_init{tid, std::move(creator)});
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
+			std::shared_ptr<event> creator
+		) {
+			return deduplicate(unfolding, std::make_shared<thread_init>(
+				thread_init{
+					tid,
+					std::move(creator)
+				}
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

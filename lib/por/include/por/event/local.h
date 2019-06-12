@@ -30,8 +30,19 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<local> alloc(thread_id_t tid, std::shared_ptr<event> thread_predecessor, std::vector<bool> path) {
-			return std::make_shared<local>(local{tid, std::move(thread_predecessor), std::move(path)});
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
+			std::shared_ptr<event> thread_predecessor,
+			std::vector<bool> path
+		) {
+			return deduplicate(unfolding, std::make_shared<local>(
+				local{
+					tid,
+					std::move(thread_predecessor),
+					std::move(path)
+				}
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

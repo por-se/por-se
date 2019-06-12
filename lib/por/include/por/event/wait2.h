@@ -48,18 +48,23 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<wait2> alloc(thread_id_t tid,
+		static std::shared_ptr<event> alloc(
+			std::shared_ptr<unfolding>& unfolding,
+			thread_id_t tid,
 			cond_id_t cid,
 			std::shared_ptr<event> thread_predecessor,
 			std::shared_ptr<event> lock_predecessor,
 			std::shared_ptr<event> condition_variable_predecessor
 		) {
-			return std::make_shared<wait2>(wait2{tid,
-				cid,
-				std::move(thread_predecessor),
-				std::move(lock_predecessor),
-				std::move(condition_variable_predecessor)
-			});
+			return deduplicate(unfolding, std::make_shared<wait2>(
+				wait2{
+					tid,
+					cid,
+					std::move(thread_predecessor),
+					std::move(lock_predecessor),
+					std::move(condition_variable_predecessor)
+				}
+			));
 		}
 
 		virtual std::string to_string(bool details) const override {

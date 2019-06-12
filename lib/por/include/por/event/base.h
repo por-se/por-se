@@ -9,6 +9,10 @@
 #include <string>
 #include <vector>
 
+namespace por {
+	class unfolding;
+}
+
 namespace por::event {
 	using thread_id_t = std::uint32_t;
 	using lock_id_t = std::uint64_t;
@@ -141,6 +145,9 @@ namespace por::event {
 		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor)
 		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr))
 		{ }
+
+		// defined in unfolding.h
+		static std::shared_ptr<por::event::event> deduplicate(std::shared_ptr<por::unfolding>& unfolding, std::shared_ptr<por::event::event>&& event);
 
 	public:
 		virtual std::string to_string(bool details = false) const = 0;

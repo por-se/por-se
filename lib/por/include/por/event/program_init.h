@@ -15,6 +15,7 @@ namespace por::event {
 
 	public:
 		static std::shared_ptr<program_init> alloc() {
+			// no need for deduplication: program_init is unique per unfolding
 			return std::make_shared<program_init>(program_init{});
 		}
 

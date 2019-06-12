@@ -11,7 +11,7 @@ namespace por {
 	class configuration;
 
 	class unfolding {
-		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::shared_ptr<por::event::event const>>> visited;
+		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::shared_ptr<por::event::event>>> events;
 
 		// NOTE: do not use for other purposes, only compares pointers of predecessors in cone
 		bool compare_events(por::event::event const* a, por::event::event const* b) {
@@ -78,7 +78,7 @@ namespace por {
 			assert(e != nullptr);
 			bool already_visited = e->visited;
 			if(!already_visited) {
-				visited[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(e->shared_from_this());
+				events[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(const_cast<por::event::event*>(e)->shared_from_this());
 				e->visited = true;
 			}
 			if(path.empty()) {
@@ -112,5 +112,24 @@ namespace por {
 			}
 			return std::make_pair(false, e);
 		}
+
+		std::shared_ptr<por::event::event> deduplicate(std::shared_ptr<por::event::event>&& e) {
+			if(e->visited || e->depth() == 0)
+				return std::move(e); // already in events
+			auto it = events.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
+			if(it != events.end()) {
+				for(auto& v : it->second) {
+					if(compare_events(e.get(), v.get()))
+						return v;
+				}
+			}
+			// new event
+			events[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(e);
+			return std::move(e);
+		}
 	};
+
+	inline std::shared_ptr<por::event::event> por::event::event::deduplicate(std::shared_ptr<por::unfolding>& unfolding, std::shared_ptr<por::event::event>&& event) {
+		return unfolding->deduplicate(std::move(event));
+	}
 }
