@@ -325,7 +325,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
 
   MemoryFingerprintDelta *delta = nullptr;
   if (mo.isLocal) {
-    std::pair<std::size_t, std::size_t> alloc = mo.getAllocationStackFrame();
+    std::pair<ThreadId, std::size_t> alloc = mo.getAllocationStackFrame();
     Thread &thread = executionState->threads.at(alloc.first);
     StackFrame &sf = thread.stack.at(alloc.second);
     delta = &sf.fingerprintDelta;
@@ -389,7 +389,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   }
 }
 
-void MemoryState::registerArgument(std::uint64_t threadID,
+void MemoryState::registerArgument(ThreadId threadID,
                                    std::size_t sfIndex,
                                    const KFunction *kf,
                                    unsigned index,
@@ -431,7 +431,7 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
   return true;
 }
 
-void MemoryState::registerPushFrame(std::uint64_t threadID,
+void MemoryState::registerPushFrame(ThreadId threadID,
                                     std::size_t sfIndex,
                                     const KFunction *callee,
                                     const KInstruction *caller) {

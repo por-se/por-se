@@ -92,6 +92,6 @@ void PTree::dump(llvm::raw_ostream &os) {
 PTreeNode::PTreeNode(PTreeNode * parent, ExecutionState * data)
   : parent{parent}, data{data} {
   schedulingDecision.epochNumber = 0;
-  schedulingDecision.scheduledThread = 0;
+  schedulingDecision.scheduledThread = ThreadId{};
 }
 

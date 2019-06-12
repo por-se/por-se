@@ -114,7 +114,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_stack_trace", handleStackTrace, false),
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
-  add("klee_create_thread", handleCreateThread, true),
+  add("klee_create_thread", handleCreateThread, false),
   add("klee_preempt_thread", handlePreemptThread, false),
   add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
   add("klee_get_thread_runtime_struct_ptr", handleGetThreadRuntimeStructPtr, true),
@@ -892,10 +892,8 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
     return;
   }
 
-  Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
-
-  // has to happen last as it needs to include return value
-  executor.porEventManager.registerPorEvent(state, por_thread_create, { tid });
+  const ThreadId& tid = executor.createThread(state, kfuncPair->second, arguments[1]);
+  executor.porEventManager.registerThreadCreate(state, tid);
 }
 
 void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
@@ -1022,7 +1020,47 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
     args.push_back(cast<ConstantExpr>(expr)->getZExtValue());
   }
 
-  if (!executor.porEventManager.registerPorEvent(state, kind, std::move(args))) {
+  bool successful = false;
+  switch (kind) {
+    case por_lock_create:
+      successful = executor.porEventManager.registerLockCreate(state, args[0]);
+      break;
+
+    case por_lock_destroy:
+      successful = executor.porEventManager.registerLockDestroy(state, args[0]);
+      break;
+
+    case por_lock_release:
+      successful = executor.porEventManager.registerLockRelease(state, args[0]);
+      break;
+
+    case por_lock_acquire:
+      successful = executor.porEventManager.registerLockAcquire(state, args[0]);
+      break;
+
+    case por_condition_variable_create:
+      successful = executor.porEventManager.registerCondVarCreate(state, args[0]);
+      break;
+
+    case por_condition_variable_destroy:
+      successful = executor.porEventManager.registerCondVarDestroy(state, args[0]);
+      break;
+
+    case por_wait1:
+      successful = executor.porEventManager.registerCondVarWait1(state, args[0], args[1]);
+      break;
+
+    case por_wait2:
+      successful = executor.porEventManager.registerCondVarWait2(state, args[0], args[1]);
+      break;
+
+    default:
+      executor.terminateStateOnError(state, "klee_por_register_event", Executor::User,
+              nullptr, "Invalid por event kind specified");
+      break;
+  }
+
+  if (!successful) {
     executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
   }
 }
@@ -1038,7 +1076,7 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
     return;
   }
 
-  Thread::ThreadId tid;
+  ThreadId tid;
   bool found = false;
 
   // For now we assume that the runtime struct ptr is unique for every pthread object in the runtime.
@@ -1056,8 +1094,8 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
     return;
   }
 
-  if (!executor.porEventManager.registerPorEvent(state, por_thread_join, { tid })) {
-    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
+  if (!executor.porEventManager.registerThreadJoin(state, tid)) {
+    executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
   }
 }
 
@@ -1066,7 +1104,7 @@ void SpecialFunctionHandler::handlePorThreadExit(ExecutionState &state,
                                                  std::vector<klee::ref<klee::Expr>> &arguments) {
   assert(arguments.empty() && "invalid number of arguments to klee_por_thread_exit");
 
-  if (!executor.porEventManager.registerPorEvent(state, por_thread_exit, { state.currentThreadId() })) {
+  if (!executor.porEventManager.registerThreadExit(state, state.currentThreadId())) {
     executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
   }
 }

@@ -27,6 +27,15 @@ void MemoryFingerprint_StringSet::updateUint8(const std::uint8_t value) {
   current += std::to_string(static_cast<unsigned>(value));
 }
 
+void MemoryFingerprint_StringSet::updateUint16(const std::uint16_t value) {
+  if (first) {
+    first = false;
+  } else {
+    current += " ";
+  }
+  current += std::to_string(static_cast<unsigned>(value));
+}
+
 void MemoryFingerprint_StringSet::updateUint64(const std::uint64_t value) {
   if (first) {
     first = false;

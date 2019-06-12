@@ -9,12 +9,15 @@
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/MemoryFingerprint.h"
 
+#include "ThreadId.h"
+
 #include <vector>
 #include <unordered_map>
 
 namespace klee {
   class Array;
   class CallPathNode;
+  class ThreadNode;
 
   struct StackFrame {
     KInstIterator caller;
@@ -67,9 +70,6 @@ namespace klee {
     public:
       typedef std::vector<StackFrame> stack_ty;
 
-      /// @brief Type for all thread ids
-      typedef std::uint32_t ThreadId;
-
     private:
       /// @brief Pointer to instruction to be executed after the current
       /// instruction
@@ -107,6 +107,9 @@ namespace klee {
 
       /// @brief Contains true / false for each decision since last por_local registration
       std::vector<bool> pathSincePorLocal;
+
+      /// @brief counts how many threads this thread already created
+      std::uint16_t spawnedThreads = 0;
 
     public:
       Thread() = delete;

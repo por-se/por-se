@@ -590,7 +590,7 @@ public:
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
 
-  Thread::ThreadId createThread(ExecutionState &state,
+  ThreadId createThread(ExecutionState &state,
                                 KFunction *startRoutine,
                                 ref<Expr> runtimeStructPtr);
   void threadWaitOn(ExecutionState &state, std::uint64_t lid);

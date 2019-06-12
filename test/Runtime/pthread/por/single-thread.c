@@ -6,6 +6,6 @@ int main(void) {
   return 0;
 
 
-  // CHECK: POR event: thread_init with current thread [[M_TID:[0-9]+]] and args: [[M_TID]]
-  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and args: [[M_TID]]
+  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 }

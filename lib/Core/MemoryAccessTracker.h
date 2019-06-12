@@ -27,7 +27,7 @@ namespace klee {
     MemoryAccess racingAccess;
 
     std::vector<MemoryAccess> possibleCandidates;
-    std::map<Thread::ThreadId, std::uint64_t> dataDependencies;
+    std::map<ThreadId, std::uint64_t> dataDependencies;
 
     MemAccessSafetyResult() = default;
     MemAccessSafetyResult(const MemAccessSafetyResult& sr) = default;
@@ -44,9 +44,9 @@ namespace klee {
       struct EpochMemoryAccesses {
         /// @brief a reference to the entity that is allowed to write to this possibly shared object
         // Note: in the case that the epoch is finished (therefore finished -> write protected), this becomes nullptr
-        void* cowOwner;
-        Thread::ThreadId tid;
-        std::uint64_t scheduleIndex;
+        void* cowOwner = nullptr;
+        ThreadId tid;
+        std::uint64_t scheduleIndex = 0;
 
         /// @brief index in the scheduling history that this epoch was executed the last time
         // Note: this is not a pointer to the previous one since that might keep around this fragment
@@ -60,34 +60,34 @@ namespace klee {
 
       std::vector<std::shared_ptr<EpochMemoryAccesses>> accessLists;
 
-      std::map<std::pair<Thread::ThreadId,Thread::ThreadId>, std::uint64_t> threadSyncs;
+      std::map<std::pair<ThreadId,ThreadId>, std::uint64_t> threadSyncs;
 
-      std::set<Thread::ThreadId> knownThreads;
-      std::map<Thread::ThreadId, std::uint64_t> lastExecutions;
+      std::set<ThreadId> knownThreads;
+      std::map<ThreadId, std::uint64_t> lastExecutions;
 
       std::uint64_t globalTrackingMinimum = 0;
 
       void forkCurrentEpochWhenNeeded();
 
       /// @brief returns the latest epoch of the `reference` thread that `tid` thread has a dependency to
-      std::uint64_t* getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference);
+      std::uint64_t* getThreadSyncValueTo(ThreadId tid, ThreadId reference);
 
       void testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result,
                                         std::uint64_t mid, const MemoryAccess &access,
                                         const std::shared_ptr<const EpochMemoryAccesses> &ema);
 
-      void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
+      void testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, ThreadId tid,
                                          std::uint64_t id, const MemoryAccess &access);
 
     public:
       MemoryAccessTracker() = default;
       MemoryAccessTracker(const MemoryAccessTracker& list) = default;
 
-      void scheduledNewThread(Thread::ThreadId tid);
+      void scheduledNewThread(ThreadId tid);
 
       void trackMemoryAccess(std::uint64_t id, MemoryAccess access);
 
-      void registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, std::uint64_t epoch);
+      void registerThreadDependency(ThreadId targetTid, ThreadId predTid, std::uint64_t epoch);
 
       MemAccessSafetyResult testIfUnsafeMemoryAccess(std::uint64_t id, const MemoryAccess &access);
   };

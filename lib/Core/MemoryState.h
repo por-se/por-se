@@ -4,6 +4,7 @@
 #include "Memory.h"
 #include "MemoryFingerprint.h"
 #include "klee/StatePruningCmdLine.h"
+#include "klee/ThreadId.h"
 
 #include <cstdint>
 #include <vector>
@@ -165,14 +166,14 @@ public:
     unregisterWrite(mo.getBaseExpr(), mo, os, os.size);
   }
 
-  void registerArgument(std::uint64_t threadID,
-                        std::size_t stackFrameIndex,
+  void registerArgument(ThreadId threadID,
+                        std::size_t sfIndex,
                         const KFunction *kf,
                         unsigned index, ref<Expr> value);
 
   void registerExternalFunctionCall();
 
-  void registerPushFrame(std::uint64_t threadID, std::size_t stackFrameIndex,
+  void registerPushFrame(ThreadId threadID, std::size_t sfIndex,
                          const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(const StackFrame &sf);
 

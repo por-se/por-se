@@ -6,6 +6,8 @@
 #include "klee/util/ExprHashMap.h"
 #include "klee/util/ExprPPrinter.h"
 
+#include "klee/ThreadId.h"
+
 #include "llvm/Support/raw_ostream.h"
 
 #ifndef __cpp_rtti
@@ -36,8 +38,8 @@ class Instruction;
 } // namespace llvm
 
 namespace klee {
-class KFunction;
-class KInstruction;
+struct KFunction;
+struct KInstruction;
 
 class MemoryFingerprintDelta;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
@@ -96,6 +98,8 @@ private:
     bufferSymbolicReferences.clear();
   }
 
+  void updateThreadId(const ThreadId& tid);
+
 public:
   MemoryFingerprintT() = default;
   MemoryFingerprintT(const MemoryFingerprintT &) = default;
@@ -137,16 +141,16 @@ public:
   static std::string toString(const MemoryFingerprintDelta &delta);
 
   bool updateWriteFragment(std::uint64_t address, ref<Expr> value);
-  bool updateLocalFragment(std::uint64_t threadID,
+  bool updateLocalFragment(ThreadId threadID,
                            std::uint64_t stackFrameIndex,
                            const llvm::Instruction *inst, ref<Expr> value);
-  bool updateArgumentFragment(std::uint64_t threadID, std::uint64_t sfIndex,
+  bool updateArgumentFragment(ThreadId threadID, std::uint64_t sfIndex,
                               const KFunction *kf, std::uint64_t argumentIndex,
                               ref<Expr> value);
-  bool updateProgramCounterFragment(std::uint64_t threadID,
+  bool updateProgramCounterFragment(ThreadId threadID,
                                     std::uint64_t sfIndex,
                                     const llvm::Instruction *i);
-  bool updateFunctionFragment(std::uint64_t threadID, std::uint64_t sfIndex,
+  bool updateFunctionFragment(ThreadId threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);
   bool updateExternalCallFragment(std::uint64_t externalCallCounter);

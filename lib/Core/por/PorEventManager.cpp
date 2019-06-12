@@ -64,64 +64,16 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
   }
 }
 
-bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> args) {
-  if (LogPorEvents) {
-    llvm::errs() << "POR event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId() << " and args: ";
-
-    for (const auto& arg : args) {
-      llvm::errs() << arg  << " ";
-    }
-
-    llvm::errs() << "\n";
-  }
-
-  // Make sure that we always have the correct number of arguments
-  if (kind == por_wait1 || kind == por_wait2) {
-    if (args.size() != 2) {
-      return false;
-    }
-  } else if (kind == por_signal || kind == por_broadcast) {
-    if (args.empty()) {
-      return false;
-    }
-  } else {
-    // Every other event type requires exactly one parameter
-    if (args.size() != 1) {
-      return false;
-    }
-  }
-
-  if (state.porConfiguration->needs_catch_up()) {
-    // make sure we do not miss any events in case a different
-    // thread needs to be scheduled after catching up to this event
-    state.needsThreadScheduling = true;
-  }
-
-  if (registerPorEventInternal(state, kind, args)) {
-    registerStandbyState(state, kind);
-    return true;
-  }
-
-  return false;
+void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_event_t kind) {
+  llvm::errs() << "POR event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId();
 }
 
-bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> path) {
-  state.porConfiguration->local(state.currentThreadId(), std::move(path));
-
-  // FIXME: remove duplicate code
-  if (LogPorEvents) {
-    llvm::errs() << "POR event: " << getNameOfEvent(por_local) << " with current thread " << state.currentThreadId() << "\n";
-  }
-
-  // FIXME: remove duplicate code
+void PorEventManager::checkIfCatchUpIsNeeded(ExecutionState &state) {
   if (state.porConfiguration->needs_catch_up()) {
     // make sure we do not miss any events in case a different
     // thread needs to be scheduled after catching up to this event
     state.needsThreadScheduling = true;
   }
-
-  registerStandbyState(state, por_local);
-  return true;
 }
 
 void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t kind) {
@@ -149,127 +101,226 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
   }
 }
 
-bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args) {
-  switch (kind) {
-    case por_thread_create:
-      return handleThreadCreate(state, static_cast<Thread::ThreadId>(args[0]));
 
-    case por_thread_init: {
-      auto tid = static_cast<Thread::ThreadId>(args[0]);
-      if (tid == 1) {
-        // main thread only: event already present in configuration
-        return true;
-      }
-      assert(0 && "thread_init can only be registered as part of thread_create");
-      return false;
-    }
+bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> path) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_local);
 
-    case por_thread_join:
-      return handleThreadJoin(state, static_cast<Thread::ThreadId>(args[0]));
-
-    case por_thread_exit:
-      return handleThreadExit(state, static_cast<Thread::ThreadId>(args[0]));
-
-    case por_lock_create:
-      return handleLockCreate(state, args[0]);
-
-    case por_lock_destroy:
-      return handleLockDestroy(state, args[0]);
-
-    case por_lock_release:
-      return handleLockRelease(state, args[0]);
-
-    case por_lock_acquire:
-      return handleLockAcquire(state, args[0]);
-
-    case por_condition_variable_create:
-      return handleCondVarCreate(state, args[0]);
-
-    case por_condition_variable_destroy:
-      return handleCondVarDestroy(state, args[0]);
-
-    case por_signal:
-      return handleCondVarSignal(state, args[0], static_cast<Thread::ThreadId>(args[1]));
-
-    case por_broadcast:
-      return handleCondVarBroadcast(state, args[0], { args.begin() + 1, args.end() });
-
-    case por_wait1:
-      return handleCondVarWait1(state, args[0], args[1]);
-
-    case por_wait2:
-      return handleCondVarWait2(state, args[0], args[1]);
-
-    default:
-      return false;
+    llvm::errs() << "\n";
   }
+
+  state.porConfiguration->local(state.currentThreadId(), std::move(path));
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_local);
+
+  return true;
 }
 
-
-bool PorEventManager::handleThreadCreate(ExecutionState &state, Thread::ThreadId tid) {
+bool PorEventManager::registerThreadCreate(ExecutionState &state, ThreadId tid) {
   assert(state.currentThreadId() != tid);
-  state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_thread_create);
+
+    llvm::errs() << " and created thread " << tid << "\n";
+  }
+
+  state.porConfiguration->spawn_thread(state.currentThreadId(), std::move(tid));
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_thread_create);
   return true;
 }
 
-bool PorEventManager::handleThreadExit(ExecutionState &state, Thread::ThreadId tid) {
+bool PorEventManager::registerThreadInit(ExecutionState &state, ThreadId tid) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_thread_init);
+
+    llvm::errs() << " and initialized thread " << tid << "\n";
+  }
+
+  if (tid == ThreadId(1)) {
+    // main thread only: event already present in configuration
+    checkIfCatchUpIsNeeded(state);
+    registerStandbyState(state, por_thread_init);
+    return true;
+  }
+
+  assert(0 && "thread_init can only be registered as part of thread_create");
+  return false;
+}
+
+bool PorEventManager::registerThreadExit(ExecutionState &state, ThreadId tid) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_thread_exit);
+
+    llvm::errs() << " and exited thread " << tid << "\n";
+  }
+  
   state.porConfiguration->exit_thread(tid);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_thread_exit);
   return true;
 }
 
-bool PorEventManager::handleThreadJoin(ExecutionState &state, Thread::ThreadId joinedThread) {
-  state.porConfiguration->join_thread(state.currentThreadId(), joinedThread);
+bool PorEventManager::registerThreadJoin(ExecutionState &state, ThreadId joinedThread) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_thread_join);
+
+    llvm::errs() << " and joined thread " << joinedThread << "\n";
+  }
+  
+  state.porConfiguration->join_thread(state.currentThreadId(), std::move(joinedThread));
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_thread_join);
   return true;
 }
 
 
-bool PorEventManager::handleLockCreate(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_lock_create);
+
+    llvm::errs() << " on mutex " << mId << "\n";
+  }
+  
   state.porConfiguration->create_lock(state.currentThreadId(), mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_lock_create);
   return true;
 }
 
-bool PorEventManager::handleLockDestroy(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_lock_destroy);
+
+    llvm::errs() << " on mutex " << mId << "\n";
+  }
+
   state.porConfiguration->destroy_lock(state.currentThreadId(), mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_lock_destroy);
   return true;
 }
 
-bool PorEventManager::handleLockAcquire(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_lock_acquire);
+
+    llvm::errs() << " on mutex " << mId << "\n";
+  }
+
   state.porConfiguration->acquire_lock(state.currentThreadId(), mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_lock_acquire);
   return true;
 }
 
-bool PorEventManager::handleLockRelease(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_lock_release);
+
+    llvm::errs() << " on mutex " << mId << "\n";
+  }
+
   state.porConfiguration->release_lock(state.currentThreadId(), mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_lock_release);
   return true;
 }
 
 
-bool PorEventManager::handleCondVarCreate(ExecutionState &state, std::uint64_t cId) {
+bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t cId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_condition_variable_create);
+
+    llvm::errs() << " on cond. var " << cId << "\n";
+  }
+
   state.porConfiguration->create_cond(state.currentThreadId(), cId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_condition_variable_create);
   return true;
 }
 
-bool PorEventManager::handleCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
+bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_condition_variable_destroy);
+
+    llvm::errs() << " on cond. var " << cId << "\n";
+  }
+
   state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_condition_variable_destory);
   return true;
 }
 
-bool PorEventManager::handleCondVarSignal(ExecutionState &state, std::uint64_t cId, Thread::ThreadId notifiedThread) {
-  state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
+bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, ThreadId notifiedThread) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_signal);
+
+    llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
+  }
+
+  state.porConfiguration->signal_thread(state.currentThreadId(), cId, std::move(notifiedThread));
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_signal);
   return true;
 }
 
-bool PorEventManager::handleCondVarBroadcast(ExecutionState &state, std::uint64_t cId, std::vector<Thread::ThreadId> threads) {
+bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId,
+                                               const std::vector<ThreadId> &threads) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_broadcast);
+
+    llvm::errs() << " on cond. var " << cId << " and broadcasted threads:";
+    for (const auto& tid : threads) {
+      llvm::errs() << " " << tid;
+    }
+    llvm::errs() << "\n";
+  }
+
   state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, threads);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_broadcast);
   return true;
 }
 
-bool PorEventManager::handleCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_wait1);
+
+    llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
+  }
+
   state.porConfiguration->wait1(state.currentThreadId(), cId, mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_wait1);
   return true;
 }
 
-bool PorEventManager::handleCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
+  if (LogPorEvents) {
+    logEventThreadAndKind(state, por_wait2);
+
+    llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
+  }
+
   state.porConfiguration->wait2(state.currentThreadId(), cId, mId);
+
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_wait2);
   return true;
 }

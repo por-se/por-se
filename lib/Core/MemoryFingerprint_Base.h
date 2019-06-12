@@ -258,14 +258,23 @@ bool MemoryFingerprintT<D, S, V>::updateWriteFragment(std::uint64_t address,
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateLocalFragment(std::uint64_t threadID,
+void MemoryFingerprintT<D, S, V>::updateThreadId(const ThreadId& tid) {
+  getDerived().updateUint64(tid.size());
+  for (std::size_t i = 0; i < tid.size(); i++) {
+    const std::uint16_t v = tid.ids()[i];
+    getDerived().updateUint16(v);
+  }
+}
+
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateLocalFragment(ThreadId threadID,
                                                       std::uint64_t stackFrameIndex,
                                                       const llvm::Instruction *inst,
                                                       ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(3);
-    getDerived().updateUint64(threadID);
+    updateThreadId(threadID);
     getDerived().updateUint64(stackFrameIndex);
     getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(inst));
     getDerived().updateConstantExpr(*constant);
@@ -273,7 +282,7 @@ bool MemoryFingerprintT<D, S, V>::updateLocalFragment(std::uint64_t threadID,
   } else {
     // symbolic value
     getDerived().updateUint8(4);
-    getDerived().updateUint64(threadID);
+    updateThreadId(threadID);
     getDerived().updateUint64(stackFrameIndex);
     getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(inst));
     getDerived().updateExpr(value);
@@ -282,7 +291,7 @@ bool MemoryFingerprintT<D, S, V>::updateLocalFragment(std::uint64_t threadID,
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(std::uint64_t threadID,
+bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(ThreadId threadID,
                                                          std::uint64_t sfIndex,
                                                          const KFunction *kf,
                                                          std::uint64_t argumentIndex,
@@ -290,7 +299,7 @@ bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(std::uint64_t threadID,
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(5);
-    getDerived().updateUint64(threadID);
+    updateThreadId(threadID);
     getDerived().updateUint64(sfIndex);
     getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(kf));
     getDerived().updateUint64(argumentIndex);
@@ -299,7 +308,7 @@ bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(std::uint64_t threadID,
   } else {
     // symbolic value
     getDerived().updateUint8(6);
-    getDerived().updateUint64(threadID);
+    updateThreadId(threadID);
     getDerived().updateUint64(sfIndex);
     getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(kf));
     getDerived().updateUint64(argumentIndex);
@@ -309,23 +318,23 @@ bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(std::uint64_t threadID,
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(std::uint64_t threadID,
+bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(ThreadId threadID,
                                                                std::uint64_t sfIndex,
                                                                const llvm::Instruction *i) {
   getDerived().updateUint8(7);
-  getDerived().updateUint64(threadID);
+  updateThreadId(threadID);
   getDerived().updateUint64(sfIndex);
   getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(i));
   return false;
 }
 
 template <typename D, std::size_t S, typename V>
-bool MemoryFingerprintT<D, S, V>::updateFunctionFragment(std::uint64_t threadID,
+bool MemoryFingerprintT<D, S, V>::updateFunctionFragment(ThreadId threadID,
                                                          std::uint64_t sfIndex,
                                                          const KFunction *callee,
                                                          const KInstruction *caller) {
   getDerived().updateUint8(8);
-  getDerived().updateUint64(threadID);
+  updateThreadId(threadID);
   getDerived().updateUint64(sfIndex);
   getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(caller));
   getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(callee));
