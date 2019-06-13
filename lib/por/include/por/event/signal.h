@@ -8,6 +8,11 @@
 #include <cassert>
 #include <memory>
 
+namespace {
+	// defined in wait1.h
+	por::event::cond_id_t wait1_cid(por::event::event const*);
+}
+
 namespace por::event {
 	class signal final : public event {
 		// predecessors:
@@ -47,6 +52,7 @@ namespace por::event {
 			assert(this->wait_predecessor()->tid() != 0);
 			assert(this->wait_predecessor()->tid() != this->tid());
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
+			assert(wait1_cid(this->wait_predecessor().get()) == this->cid());
 
 			assert(std::distance(this->condition_variable_predecessors().begin(), this->condition_variable_predecessors().end()) == 1);
 			assert(*this->condition_variable_predecessors().begin() == this->wait_predecessor());
@@ -95,12 +101,15 @@ namespace por::event {
 					auto sig = static_cast<signal const*>(e.get());
 					assert(!sig->is_lost());
 					assert(sig->notified_thread() != this->tid());
+					assert(sig->cid() == this->cid());
 				} else if(e->kind() == event_kind::broadcast) {
 					auto bro = static_cast<broadcast const*>(e.get());
 					assert(!bro->is_lost());
 					assert(!bro->is_notifying_thread(this->tid()));
+					assert(bro->cid() == this->cid());
 				} else {
 					assert(e->kind() == event_kind::condition_variable_create);
+					assert(static_cast<condition_variable_create const*>(e.get())->cid() == this->cid());
 				}
 			}
 
@@ -234,14 +243,21 @@ namespace por::event {
 }
 
 namespace {
-	// wrapper functions for broadcast.h
+	// wrapper function for broadcast.h
 	bool signal_is_lost(por::event::event const* e) {
 		assert(e->kind() == por::event::event_kind::signal);
 		return static_cast<por::event::signal const*>(e)->is_lost();
 	}
 
+	// wrapper function for broadcast.h
 	por::event::thread_id_t signal_notified_thread(por::event::event const* e) {
 		assert(e->kind() == por::event::event_kind::signal);
 		return static_cast<por::event::signal const*>(e)->notified_thread();
+	}
+
+	// wrapper function for broadcast.h, condition_variable_destroy.h
+	por::event::cond_id_t signal_cid(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::signal);
+		return static_cast<por::event::signal const*>(e)->cid();
 	}
 }

@@ -62,3 +62,11 @@ namespace por::event {
 		cond_id_t cid() const noexcept { return _cid; }
 	};
 }
+
+namespace {
+	// wrapper function for broadcast.h
+	por::event::cond_id_t cond_create_cid(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::condition_variable_create);
+		return static_cast<por::event::condition_variable_create const*>(e)->cid();
+	}
+}

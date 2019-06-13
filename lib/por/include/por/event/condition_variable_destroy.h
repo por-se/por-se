@@ -8,6 +8,14 @@
 #include <cassert>
 #include <memory>
 
+namespace {
+	// defined in signal.h
+	por::event::cond_id_t signal_cid(por::event::event const*);
+
+	// defined in wait2.h
+	por::event::cond_id_t wait2_cid(por::event::event const*);
+}
+
 namespace por::event {
 	class condition_variable_destroy final : public event {
 		// predecessors:
@@ -49,11 +57,25 @@ namespace por::event {
 
 			assert(std::distance(this->condition_variable_predecessors().begin(), this->condition_variable_predecessors().end()) == _predecessors.size() - 1);
 			for(auto& e : this->condition_variable_predecessors()) {
-				assert(e->kind() != event_kind::wait1 && "destroying a cond that a thread is blocked on is UB");
-				assert(e->kind() == event_kind::broadcast
-				       || e->kind() == event_kind::signal
-				       || e->kind() == event_kind::wait2
-				       || e->kind() == event_kind::condition_variable_create);
+				switch(e->kind()) {
+					case event_kind::condition_variable_create:
+						assert(static_cast<condition_variable_create const*>(e.get())->cid() == this->cid());
+						break;
+					case event_kind::broadcast:
+						assert(static_cast<broadcast const*>(e.get())->cid() == this->cid());
+						break;
+					case event_kind::signal:
+						assert(signal_cid(e.get()) == this->cid());
+						break;
+					case event_kind::wait1:
+						assert(0 && "destroying a cond that a thread is blocked on is UB");
+						break;
+					case event_kind::wait2:
+						assert(wait2_cid(e.get()) == this->cid());
+						break;
+					default:
+						assert(0 && "unexpected event kind in cond predecessors");
+				}
 			}
 		}
 

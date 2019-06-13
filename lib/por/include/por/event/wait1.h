@@ -60,11 +60,14 @@ namespace por::event {
 				if(e->kind() == event_kind::signal) {
 					auto sig = static_cast<signal const*>(e.get());
 					assert(sig->is_lost());
+					assert(sig->cid() == this->cid());
 				} else if(e->kind() == event_kind::broadcast) {
 					auto bro = static_cast<broadcast const*>(e.get());
 					assert(!bro->is_notifying_thread(this->tid()));
+					assert(bro->cid() == this->cid());
 				} else {
 					assert(e->kind() == event_kind::condition_variable_create);
+					assert(static_cast<condition_variable_create const*>(e.get())->cid() == this->cid());
 				}
 			}
 		}
@@ -133,4 +136,12 @@ namespace por::event {
 
 		cond_id_t cid() const noexcept { return _cid; }
 	};
+}
+
+namespace {
+	// wrapper function for broadcast.h, signal.h
+	por::event::cond_id_t wait1_cid(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::wait1);
+		return static_cast<por::event::wait1 const*>(e)->cid();
+	}
 }

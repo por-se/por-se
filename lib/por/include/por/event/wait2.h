@@ -42,10 +42,12 @@ namespace por::event {
 			if(this->notifying_event()->kind() == event_kind::signal) {
 				auto sig = static_cast<signal const*>(this->notifying_event().get());
 				assert(sig->notified_thread() == this->tid());
+				assert(sig->cid() == this->cid());
 			} else {
 				assert(this->notifying_event()->kind() == event_kind::broadcast);
 				auto bro = static_cast<broadcast const*>(this->notifying_event().get());
 				assert(bro->is_notifying_thread(this->tid()));
+				assert(bro->cid() == this->cid());
 			}
 		}
 
@@ -113,4 +115,12 @@ namespace por::event {
 		std::shared_ptr<event>      & notifying_event()       noexcept { return _predecessors[1]; }
 		std::shared_ptr<event> const& notifying_event() const noexcept { return _predecessors[1]; }
 	};
+}
+
+namespace {
+	// wrapper function for broadcast.h, condition_variable_destroy.h
+	por::event::cond_id_t wait2_cid(por::event::event const* e) {
+		assert(e->kind() == por::event::event_kind::wait2);
+		return static_cast<por::event::wait2 const*>(e)->cid();
+	}
 }

@@ -9,9 +9,19 @@
 #include <memory>
 
 namespace {
-	// signal header is not available yet and cannot be included (circular dependency)
+	// defined in condition_variable_create.h
+	por::event::cond_id_t cond_create_cid(por::event::event const*);
+
+	// defined in signal.h
 	bool signal_is_lost(por::event::event const*);
 	por::event::thread_id_t signal_notified_thread(por::event::event const*);
+	por::event::cond_id_t signal_cid(por::event::event const*);
+
+	// defined in wait1.h
+	por::event::cond_id_t wait1_cid(por::event::event const*);
+
+	// defined in wait2.h
+	por::event::cond_id_t wait2_cid(por::event::event const*);
 }
 
 namespace por::event {
@@ -54,15 +64,23 @@ namespace por::event {
 					assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
 					switch((*iter)->kind()) {
 						case event_kind::condition_variable_create:
+							assert(cond_create_cid((*iter).get()) == this->cid());
 							++create_count;
 							break;
 						case event_kind::wait1:
+							assert(wait1_cid((*iter).get()) == this->cid());
 							++wait1_count;
 							break;
 						case event_kind::signal:
+							++sigbro_count;
+							assert(signal_cid((*iter).get()) == this->cid());
+							break;
 						case event_kind::broadcast:
 							++sigbro_count;
+							assert(static_cast<broadcast const*>((*iter).get())->cid() == this->cid());
 							break;
+						default:
+							assert(0 && "unexpected event kind in cond predecessors");
 					}
 				}
 			}
