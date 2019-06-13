@@ -13,6 +13,8 @@ namespace por::event {
 		// 2. previous operation on same lock (may be nullptr if only preceded by lock_create event)
 		std::array<std::shared_ptr<event>, 2> _predecessors;
 
+		exploration_info _info;
+
 	protected:
 		lock_acquire(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& lock_predecessor)
 			: event(event_kind::lock_acquire, tid, thread_predecessor, lock_predecessor)
@@ -47,6 +49,19 @@ namespace por::event {
 					std::move(lock_predecessor)
 				}
 			));
+		}
+
+		virtual void mark_as_open(path_t const& path) const override {
+			_info.mark_as_open(path);
+		}
+		virtual void mark_as_explored(path_t const& path) const override {
+			_info.mark_as_explored(path);
+		}
+		virtual bool is_present(path_t const& path) const override {
+			return _info.is_present(path);
+		}
+		virtual bool is_explored(path_t const& path) const override {
+			return _info.is_explored(path);
 		}
 
 		virtual std::string to_string(bool details) const override {

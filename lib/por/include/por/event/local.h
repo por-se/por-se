@@ -16,6 +16,8 @@ namespace por::event {
 		// decisions taken along path since last local event
 		std::vector<bool> _path;
 
+		exploration_info _info;
+
 	protected:
 		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::vector<bool>&& path)
 			: event(event_kind::local, tid, thread_predecessor)
@@ -43,6 +45,19 @@ namespace por::event {
 					std::move(path)
 				}
 			));
+		}
+
+		virtual void mark_as_open(path_t const& path) const override {
+			_info.mark_as_open(path);
+		}
+		virtual void mark_as_explored(path_t const& path) const override {
+			_info.mark_as_explored(path);
+		}
+		virtual bool is_present(path_t const& path) const override {
+			return _info.is_present(path);
+		}
+		virtual bool is_explored(path_t const& path) const override {
+			return _info.is_explored(path);
 		}
 
 		virtual std::string to_string(bool details) const override {

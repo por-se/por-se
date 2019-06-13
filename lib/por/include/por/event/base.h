@@ -2,6 +2,7 @@
 
 #include <util/iterator_range.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <map>
@@ -17,6 +18,8 @@ namespace por::event {
 	using thread_id_t = std::uint32_t;
 	using lock_id_t = std::uint64_t;
 	using cond_id_t = std::uint64_t;
+
+	using path_t = std::vector<bool>;
 
 	enum class event_kind : std::uint8_t {
 		local,
@@ -37,11 +40,56 @@ namespace por::event {
 		broadcast,
 	};
 
+
+	class exploration_info {
+		mutable std::vector<path_t> open_paths;
+		mutable std::vector<path_t> explored_paths;
+
+	public:
+		void mark_as_open(path_t const& path) const {
+			open_paths.emplace_back(path);
+		}
+
+		void mark_as_explored(path_t const& path) const {
+			auto it = std::find(open_paths.begin(), open_paths.end(), path);
+			assert(it != open_paths.end());
+			explored_paths.emplace_back(std::move(*it));
+			open_paths.erase(it);
+		}
+
+		bool is_explored(path_t const& path) const {
+			auto it = std::find(explored_paths.begin(), explored_paths.end(), path);
+			return it != explored_paths.end();
+		}
+
+		bool is_present(path_t const& path) const {
+			auto it = std::find(explored_paths.begin(), explored_paths.end(), path);
+			if(it != explored_paths.end())
+				return true;
+			it = std::find(open_paths.begin(), open_paths.end(), path);
+			return it != open_paths.end();
+		}
+	};
+
 	class event : public std::enable_shared_from_this<event> {
 		std::size_t _depth;
 		std::map<thread_id_t, event*> _cone;
 		thread_id_t _tid;
-		event_kind _kind;
+		const event_kind _kind;
+
+		bool is_explorable() const {
+			switch(_kind) {
+				case por::event::event_kind::local:
+				case por::event::event_kind::lock_acquire:
+				case por::event::event_kind::wait1:
+				case por::event::event_kind::wait2:
+				case por::event::event_kind::signal:
+				case por::event::event_kind::broadcast:
+					return true;
+				default:
+					return false;
+			}
+		}
 
 	public:
 		mutable bool visited = false;
@@ -51,6 +99,21 @@ namespace por::event {
 		thread_id_t tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
 		std::map<thread_id_t, event*> const& cone() const noexcept { return _cone; }
+
+		virtual void mark_as_open(path_t const& path) const {
+			assert(!is_explorable() && "method must be overriden in explorable events!");
+		}
+		virtual void mark_as_explored(path_t const& path) const {
+			assert(!is_explorable() && "method must be overriden in explorable events!");
+		}
+		virtual bool is_present(path_t const& path) const {
+			assert(!is_explorable() && "method must be overriden in explorable events!");
+			return true;
+		}
+		virtual bool is_explored(path_t const& path) const {
+			assert(!is_explorable() && "method must be overriden in explorable events!");
+			return true;
+		}
 
 	protected:
 		event(event_kind kind, thread_id_t tid)
