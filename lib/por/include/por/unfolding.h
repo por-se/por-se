@@ -46,76 +46,45 @@ namespace por {
 			return true;
 		}
 
-		bool check_path_visited(por::event::event const* e, std::vector<bool> const& path) {
-			if(e->visited_paths.empty()) {
-				assert(e->visited);
-				return true; // no restrictions
-			}
-			for(auto& visited : e->visited_paths) {
-				auto visited_length = visited.size();
-				auto path_length = path.size();
-				auto mismatch = std::mismatch(visited.begin(), visited.end(), path.begin(), path.end());
-				if(mismatch.first == visited.end() && path_length >= visited_length) {
-					// all entries present in visited path match new path
-					return true;
-				}
-			}
-			return false;
-		}
-
 	public:
 		unfolding() = delete;
 		unfolding(unfolding&) = default;
 		unfolding& operator=(unfolding&) = default;
 		unfolding(unfolding&&) = default;
 		unfolding& operator=(unfolding&&) = default;
-		unfolding(por::event::event const* root) {
-			mark_as_visited(root);
+		unfolding(std::shared_ptr<por::event::event> root) {
+			events[std::make_tuple(root->tid(), root->depth(), root->kind())].emplace_back(root);
+			mark_as_explored(root);
 		}
 		~unfolding() = default;
 
-		void mark_as_visited(por::event::event const* e, std::vector<bool>&& path) {
+		void mark_as_open(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
 			assert(e != nullptr);
-			bool already_visited = e->visited;
-			if(!already_visited) {
-				events[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(const_cast<por::event::event*>(e)->shared_from_this());
-				e->visited = true;
-			}
-			if(path.empty()) {
-				// remove all restrictions
-				e->visited_paths.clear();
-			} else if(!already_visited || !e->visited_paths.empty()) {
-				e->visited_paths.emplace_back(std::move(path));
-			}
+			e->mark_as_open(path);
 		}
 
-		void mark_as_visited(por::event::event const* e) {
-			mark_as_visited(e, {});
+		void mark_as_explored(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
+			assert(e != nullptr);
+			e->mark_as_explored(path);
 		}
 
-		// return boolean and deduplicated event
-		std::pair<bool, por::event::event const*> is_visited(por::event::event const* e, std::vector<bool> const& path) {
+		void mark_as_explored(std::shared_ptr<por::event::event> const& e) {
 			assert(e != nullptr);
-			if(e->visited)
-				return std::make_pair(check_path_visited(e, path), e);
-			if(e->depth() == 0)
-				return std::make_pair(true, e); // path is always empty
-			auto it = visited.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
-			if(it != visited.end()) {
-				for(auto v : it->second) {
-					assert(v->visited);
-					if(compare_events(e, v.get())) {
-						assert(e != v.get());
-						return std::make_pair(check_path_visited(v.get(), path), v.get());
-					}
-				}
-			}
-			return std::make_pair(false, e);
+			static por::event::path_t empty;
+			e->mark_as_explored(empty);
+		}
+
+		bool is_present(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
+			assert(e != nullptr);
+			return e->is_present(path);
+		}
+
+		bool is_explored(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
+			assert(e != nullptr);
+			return e->is_explored(path);
 		}
 
 		std::shared_ptr<por::event::event> deduplicate(std::shared_ptr<por::event::event>&& e) {
-			if(e->visited || e->depth() == 0)
-				return std::move(e); // already in events
 			auto it = events.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
 			if(it != events.end()) {
 				for(auto& v : it->second) {

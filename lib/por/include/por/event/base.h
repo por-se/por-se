@@ -92,8 +92,6 @@ namespace por::event {
 		}
 
 	public:
-		mutable bool visited = false;
-		mutable std::vector<std::vector<bool>> visited_paths;
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t tid() const noexcept { return _tid; }

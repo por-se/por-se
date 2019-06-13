@@ -5,7 +5,6 @@
 #include <cassert>
 #include <array>
 #include <memory>
-#include <vector>
 
 namespace por::event {
 	class local final : public event {
@@ -14,12 +13,12 @@ namespace por::event {
 		std::array<std::shared_ptr<event>, 1> _predecessors;
 
 		// decisions taken along path since last local event
-		std::vector<bool> _path;
+		path_t _path;
 
 		exploration_info _info;
 
 	protected:
-		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::vector<bool>&& path)
+		local(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, path_t&& path)
 			: event(event_kind::local, tid, thread_predecessor)
 			, _predecessors{std::move(thread_predecessor)}
 			, _path{std::move(path)}
@@ -36,7 +35,7 @@ namespace por::event {
 			std::shared_ptr<unfolding>& unfolding,
 			thread_id_t tid,
 			std::shared_ptr<event> thread_predecessor,
-			std::vector<bool> path
+			path_t path
 		) {
 			return deduplicate(unfolding, std::make_shared<local>(
 				local{
@@ -85,6 +84,6 @@ namespace por::event {
 		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
 
-		std::vector<bool> const& path() const noexcept { return _path; }
+		path_t const& path() const noexcept { return _path; }
 	};
 }

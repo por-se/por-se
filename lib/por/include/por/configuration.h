@@ -97,7 +97,7 @@ namespace por {
 
 		std::shared_ptr<por::event::program_init> _program_init = event::program_init::alloc();
 
-		std::shared_ptr<por::unfolding> _unfolding = std::make_shared<por::unfolding>(_program_init.get());
+		std::shared_ptr<por::unfolding> _unfolding = std::make_shared<por::unfolding>(_program_init);
 
 		std::map<por::event::thread_id_t, std::shared_ptr<event::event>> _thread_heads;
 		por::event::thread_id_t _next_thread = 1;
@@ -110,7 +110,7 @@ namespace por {
 			assert(tid > 0);
 
 			_thread_heads.emplace(tid, event::thread_init::alloc(_unfolding, tid, _program_init));
-			_unfolding->mark_as_visited(_thread_heads[tid].get());
+			_unfolding->mark_as_explored(_thread_heads[tid]);
 
 			return *this;
 		}
@@ -136,7 +136,7 @@ namespace por {
 		std::set<por::event::cond_id_t> _used_cond_ids;
 
 		// symbolic choices made as manifested in local events in order of their execution
-		std::vector<bool> _path;
+		por::event::path_t _path;
 
 		// sequence of events in order of their execution
 		std::vector<std::shared_ptr<por::event::event>> _schedule;
@@ -203,6 +203,10 @@ namespace por {
 			_cond_heads = partial->_cond_heads;
 			_used_cond_ids = partial->_used_cond_ids;
 			_path = partial->_path;
+
+			// already mark conflicting extension event as open so the same cex
+			// is not generated again before this configuration has caught up
+			_unfolding->mark_as_open(_schedule.back(), _path);
 		}
 
 		auto const& schedule() const noexcept { return _schedule; }
@@ -260,9 +264,11 @@ namespace por {
 			assert(source_event->kind() != por::event::event_kind::wait1 && "Source thread must not be blocked");
 
 			source_event = event::thread_create::alloc(_unfolding, source, std::move(source_event));
+			_unfolding->mark_as_open(source_event, _path);
 			assert(new_tid > 0);
 			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
 			_thread_heads.emplace(new_tid, event::thread_init::alloc(_unfolding, new_tid, source_event));
+			_unfolding->mark_as_open(_thread_heads[new_tid], _path);
 
 			_schedule.emplace_back(source_event);
 			_schedule.emplace_back(_thread_heads[new_tid]);
@@ -290,6 +296,7 @@ namespace por {
 			assert(joined_event->kind() == por::event::event_kind::thread_exit && "Joined thread must be exited");
 
 			thread_event = event::thread_join::alloc(_unfolding, thread, std::move(thread_event), joined_event);
+			_unfolding->mark_as_open(thread_event, _path);
 
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
@@ -313,6 +320,7 @@ namespace por {
 
 			assert(active_threads() > 0);
 			thread_event = event::thread_exit::alloc(_unfolding, thread, std::move(thread_event));
+			_unfolding->mark_as_open(thread_event, _path);
 
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
@@ -339,6 +347,7 @@ namespace por {
 			assert(_lock_heads.find(lock) == _lock_heads.end() && "Lock id already taken");
 
 			thread_event = event::lock_create::alloc(_unfolding, thread, std::move(thread_event));
+			_unfolding->mark_as_open(thread_event, _path);
 			_lock_heads.emplace(lock, thread_event);
 
 			_schedule.emplace_back(thread_event);
@@ -365,6 +374,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
 					thread_event = event::lock_destroy::alloc(_unfolding, thread, std::move(thread_event), nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
@@ -375,6 +385,7 @@ namespace por {
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_destroy::alloc(_unfolding, thread, std::move(thread_event), std::move(lock_event));
+			_unfolding->mark_as_open(thread_event, _path);
 			_lock_heads.erase(lock_it);
 
 			_schedule.emplace_back(thread_event);
@@ -401,6 +412,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(lock_it == _lock_heads.end()) {
 					thread_event = event::lock_acquire::alloc(_unfolding, thread, std::move(thread_event), nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					_lock_heads.emplace(lock, thread_event);
 
 					_schedule.emplace_back(thread_event);
@@ -412,6 +424,7 @@ namespace por {
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_acquire::alloc(_unfolding, thread, std::move(thread_event), std::move(lock_event));
+			_unfolding->mark_as_open(thread_event, _path);
 			lock_event = thread_event;
 
 			_schedule.emplace_back(thread_event);
@@ -438,6 +451,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
 					thread_event = event::lock_release::alloc(_unfolding, thread, std::move(thread_event), nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					_lock_heads.emplace(lock, thread_event);
 
 					_schedule.emplace_back(thread_event);
@@ -449,6 +463,7 @@ namespace por {
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
 			thread_event = event::lock_release::alloc(_unfolding, thread, std::move(thread_event), std::move(lock_event));
+			_unfolding->mark_as_open(thread_event, _path);
 			lock_event = thread_event;
 
 			_schedule.emplace_back(thread_event);
@@ -477,6 +492,7 @@ namespace por {
 			assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 
 			thread_event = por::event::condition_variable_create::alloc(_unfolding, thread, cond, std::move(thread_event));
+			_unfolding->mark_as_open(thread_event, _path);
 			_cond_heads.emplace(cond, std::vector{thread_event});
 			_used_cond_ids.insert(cond);
 
@@ -505,6 +521,7 @@ namespace por {
 				assert(cond > 0 && "Condition variable id must not be zero");
 				if(cond_head_it == _cond_heads.end()) {
 					thread_event = por::event::condition_variable_destroy::alloc(_unfolding, thread, cond, std::move(thread_event), nullptr, nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					_used_cond_ids.insert(cond);
 
 					_schedule.emplace_back(thread_event);
@@ -518,6 +535,7 @@ namespace por {
 			assert(cond_preds.size() > 0);
 
 			thread_event = por::event::condition_variable_destroy::alloc(_unfolding, thread, cond, std::move(thread_event), cond_preds.data(), cond_preds.data() + cond_preds.size());
+			_unfolding->mark_as_open(thread_event, _path);
 			_cond_heads.erase(cond_head_it);
 
 			_schedule.emplace_back(thread_event);
@@ -584,6 +602,7 @@ namespace por {
 					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 					auto& lock_event = lock_it->second;
 					thread_event = por::event::wait1::alloc(_unfolding, thread, cond, std::move(thread_event), std::move(lock_event), nullptr, nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
@@ -601,6 +620,7 @@ namespace por {
 
 			std::vector<std::shared_ptr<por::event::event>> non_waiting = wait1_predecessors_cond(thread_event, cond_preds);
 			thread_event = por::event::wait1::alloc(_unfolding, thread, cond, std::move(thread_event), std::move(lock_event), non_waiting.data(), non_waiting.data() + non_waiting.size());
+			_unfolding->mark_as_open(thread_event, _path);
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
 
@@ -653,6 +673,7 @@ namespace por {
 
 			auto& cond_event = wait2_predecessor_cond(thread_event, cond_preds);
 			thread_event = por::event::wait2::alloc(_unfolding, thread, cond, std::move(thread_event), std::move(lock_event), cond_event);
+			_unfolding->mark_as_open(thread_event, _path);
 			lock_event = thread_event;
 
 			_schedule.emplace_back(thread_event);
@@ -735,6 +756,7 @@ namespace por {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
 					thread_event = por::event::signal::alloc(_unfolding, thread, cond, std::move(thread_event), nullptr, nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
@@ -750,6 +772,7 @@ namespace por {
 			if(notified_thread == 0) { // lost signal
 				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
 				thread_event = por::event::signal::alloc(_unfolding, thread, cond, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				_unfolding->mark_as_open(thread_event, _path);
 				cond_preds.push_back(thread_event);
 			} else { // notifying signal
 				assert(notified_thread != thread && "Thread cannot notify itself");
@@ -763,6 +786,7 @@ namespace por {
 				assert(cond_event == notified_thread_event);
 
 				thread_event = por::event::signal::alloc(_unfolding, thread, cond, std::move(thread_event), std::move(cond_event));
+				_unfolding->mark_as_open(thread_event, _path);
 				cond_event = thread_event;
 			}
 
@@ -798,6 +822,7 @@ namespace por {
 					// only possible for lost broadcast: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
 					thread_event = por::event::broadcast::alloc(_unfolding, thread, cond, std::move(thread_event), nullptr, nullptr);
+					_unfolding->mark_as_open(thread_event, _path);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
@@ -813,6 +838,7 @@ namespace por {
 			if(notified_threads.empty()) { // lost broadcast
 				std::vector<std::shared_ptr<por::event::event>> prev_notifications = lost_notification_predecessors_cond(thread_event, cond_preds);
 				thread_event = por::event::broadcast::alloc(_unfolding, thread, cond, std::move(thread_event), prev_notifications.data(), prev_notifications.data() + prev_notifications.size());
+				_unfolding->mark_as_open(thread_event, _path);
 				cond_preds.push_back(thread_event);
 			} else { // notifying broadcast
 				std::vector<std::shared_ptr<por::event::event>> prev_events;
@@ -865,6 +891,7 @@ namespace por {
 				}
 
 				thread_event = por::event::broadcast::alloc(_unfolding, thread, cond, std::move(thread_event), prev_events.data(), prev_events.data() + prev_events.size());
+				_unfolding->mark_as_open(thread_event, _path);
 				cond_preds.push_back(thread_event);
 			}
 
@@ -873,7 +900,7 @@ namespace por {
 			assert(_schedule_pos == _schedule.size());
 		}
 
-		void local(event::thread_id_t thread, std::vector<bool> local_path) {
+		void local(event::thread_id_t thread, event::path_t local_path) {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::local);
 				assert(_schedule[_schedule_pos]->tid() == thread);
@@ -889,9 +916,10 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			thread_event = event::local::alloc(_unfolding, thread, std::move(thread_event), std::move(local_path));
-
 			_path.insert(_path.end(), local_path.begin(), local_path.end());
+			thread_event = event::local::alloc(_unfolding, thread, std::move(thread_event), std::move(local_path));
+			_unfolding->mark_as_open(thread_event, _path);
+
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
 			assert(_schedule_pos == _schedule.size());
@@ -1756,74 +1784,50 @@ namespace por {
 	public:
 		std::vector<conflicting_extension> conflicting_extensions() {
 			std::vector<conflicting_extension> S;
-			std::vector<bool> maximal_path;
-			for(auto& event : _schedule) {
-				if(event->kind() == por::event::event_kind::local) {
-					auto local = static_cast<const por::event::local*>(event.get());
-					auto &local_path = local->path();
-					maximal_path.insert(maximal_path.end(), local_path.begin(), local_path.end());
-				}
-			}
-			std::size_t path_length = maximal_path.size();
-
-			// mark new paths of previously visited events as visited
-			// NOTE: has to be done first so all paths can be found in deduplication process
+			por::event::path_t path = _path;
 			for(auto it = _schedule.rbegin(), ie = _schedule.rend(); it != ie; ++it) {
-				auto path = std::vector<bool>(maximal_path.begin(), std::next(maximal_path.begin(), path_length));
-				assert(path.size() == path_length);
 				std::shared_ptr<por::event::event> const& e = *it;
-
-				// TODO: remove duplicate code (shared with unfolding.h)
-				if(path.empty()) {
-					// remove all restrictions
-					e->visited_paths.clear();
-				} else if(!e->visited || !e->visited_paths.empty()) {
-					e->visited_paths.emplace_back(std::move(path));
-				}
-			}
-
-			for(auto it = _schedule.rbegin(), ie = _schedule.rend(); it != ie; ++it) {
-				auto path = std::vector<bool>(maximal_path.begin(), std::next(maximal_path.begin(), path_length));
-				std::shared_ptr<por::event::event> const& e = *it;
-				if(!_unfolding->is_visited(e.get(), path).first) {
+				if(!_unfolding->is_explored(e, path)) {
+					std::vector<conflicting_extension> candidates;
 					switch(e->kind()) {
 						case por::event::event_kind::lock_acquire:
-						case por::event::event_kind::wait2: {
-							auto r = cex_acquire(e);
-
-							if(r.empty())
-								break;
-
-							for(auto& cex : r) {
-								// compute path for cex
-								auto cex_schedule = compute_new_schedule_from_current(cex).first;
-								std::vector<bool> cex_path;
-								for(auto& event : cex_schedule) {
-									if(event->kind() == por::event::event_kind::local) {
-										auto local = static_cast<const por::event::local*>(event.get());
-										auto& local_path = local->path();
-										cex_path.insert(cex_path.end(), local_path.begin(), local_path.end());
-									}
-								}
-
-								auto visited = _unfolding->is_visited(cex.new_event().get(), cex_path);
-								if(visited.first)
-									continue;
-								S.emplace_back(std::move(cex));
-							}
-
+						case por::event::event_kind::wait2:
+							candidates = std::move(cex_acquire(e));
 							break;
-						}
+						case por::event::event_kind::wait1:
+							candidates = std::move(cex_wait1(e));
+							break;
+						case por::event::event_kind::signal:
+						case por::event::event_kind::broadcast:
+							candidates = std::move(cex_notification(e));
+							break;
 					}
-					_unfolding->mark_as_visited(e.get(), std::move(path));
+					for(auto& cex : candidates) {
+						// compute path for cex
+						auto cex_schedule = compute_new_schedule_from_current(cex).first;
+						por::event::path_t cex_path;
+						for(auto& event : cex_schedule) {
+							if(event->kind() == por::event::event_kind::local) {
+								auto local = static_cast<const por::event::local*>(event.get());
+								auto& local_path = local->path();
+								cex_path.insert(cex_path.end(), local_path.begin(), local_path.end());
+							}
+						}
+
+						if(_unfolding->is_present(cex.new_event(), cex_path))
+							continue;
+						S.emplace_back(std::move(cex));
+					}
+					_unfolding->mark_as_explored(e, path);
 				}
 				// remove choices made in local events from path for previous ones
 				// (as we are iterating in reverse)
 				if(e->kind() == por::event::event_kind::local) {
 					auto local = static_cast<const por::event::local*>(e.get());
-					std::size_t future_choices = local->path().size();
-					assert(path_length >= future_choices);
-					path_length -= future_choices;
+					for(std::size_t i = 0; i < local->path().size(); ++i) {
+						assert(!path.empty());
+						path.pop_back();
+					}
 				}
 			}
 			return S;
