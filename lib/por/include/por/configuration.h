@@ -1178,7 +1178,7 @@ namespace por {
 			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
 			// maximal event concerning same lock in history of e
 			std::shared_ptr<por::event::event> const* er = get_lock_predecessor(e);
-			// maximal event concerning same lock in [et]
+			// maximal event concerning same lock in [et] (acq) or [et] \cup [es] (wait2)
 			std::shared_ptr<por::event::event> const* em = er;
 			// immediate successor of em / ep operating on same lock
 			std::shared_ptr<por::event::event> const* conflict = &e;
@@ -1188,7 +1188,7 @@ namespace por {
 			assert(et != nullptr);
 
 			if(e->kind() == por::event::event_kind::lock_acquire) {
-				while(em != nullptr && !((**em).is_less_than(**et))) {
+				while(em != nullptr && !(**em).is_less_than_eq(**et)) {
 					// descend chain of lock events until em is in [et]
 					conflict = em;
 					em = get_lock_predecessor(*em);
@@ -1198,7 +1198,7 @@ namespace por {
 				auto* w2 = static_cast<por::event::wait2 const*>(e.get());
 				es = &w2->notifying_event();
 				assert(es != nullptr && *es != nullptr);
-				while(em != nullptr && !((**em).is_less_than(**et)) && !((**em).is_less_than(**es))) {
+				while(em != nullptr && !(**em).is_less_than_eq(**et) && !(**em).is_less_than(**es)) {
 					// descend chain of lock events until em is in [et] \cup [es]
 					conflict = em;
 					em = get_lock_predecessor(*em);
@@ -1211,13 +1211,14 @@ namespace por {
 
 			if(em == nullptr) {
 				// (kind(em) == lock_release || kind(em) == wait1) is included in while loop below (with correct lock predecessor)
+				assert(e->kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
 				result.emplace_back(por::event::lock_acquire::alloc(_unfolding, e->tid(), *et, nullptr), *conflict);
 			}
 
 			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
-			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er);
+			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er); // lock events in K \ {r}
 			conflict = er;
-			while(ep != nullptr && em != nullptr && ((**em).is_less_than(**ep) || em == ep)) {
+			while(ep != nullptr && (em == nullptr || !(**ep).is_less_than_eq(**em)) && (es == nullptr || !(**ep).is_less_than_eq(**es))) {
 				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
 					if(e->kind() == por::event::event_kind::lock_acquire) {
 						result.emplace_back(por::event::lock_acquire::alloc(_unfolding, e->tid(), *et, *ep), *conflict);
