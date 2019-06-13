@@ -763,7 +763,7 @@ namespace por {
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
 					assert(_schedule_pos == _schedule.size());
-					return thread_event;
+					return;
 				}
 			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
@@ -829,7 +829,7 @@ namespace por {
 					_schedule.emplace_back(thread_event);
 					++_schedule_pos;
 					assert(_schedule_pos == _schedule.size());
-					return thread_event;
+					return;
 				}
 			}
 			assert(cond_head_it != _cond_heads.end() && "Condition variable must (still) exist");
