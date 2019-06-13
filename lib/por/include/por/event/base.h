@@ -228,5 +228,9 @@ namespace por::event {
 			}
 			return false;
 		}
+
+		bool is_less_than_eq(event const& rhs) const {
+			return (&rhs == this) || is_less_than(rhs);
+		}
 	};
 }

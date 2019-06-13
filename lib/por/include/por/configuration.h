@@ -569,7 +569,7 @@ namespace por {
 				if((*it)->tid() == thread_event->tid())
 					continue; // excluded event is in [thread_event]
 
-				if((*it)->is_less_than(*thread_event) || *it == thread_event)
+				if((*it)->is_less_than_eq(*thread_event))
 					continue; // excluded event is in [thread_event]
 
 				non_waiting.push_back(*it);
@@ -722,7 +722,7 @@ namespace por {
 				if((*it)->tid() == thread_event->tid())
 					continue; // excluded event is in [thread_event]
 
-				if((*it)->is_less_than(*thread_event) || *it == thread_event)
+				if((*it)->is_less_than_eq(*thread_event))
 					continue; // excluded event is in [thread_event]
 
 				prev_notifications.push_back(*it);
@@ -884,7 +884,7 @@ namespace por {
 					if((*it)->tid() == thread)
 						continue; // excluded event is in [thread_event]
 
-					if((*it)->is_less_than(*thread_event) || *it == thread_event)
+					if((*it)->is_less_than_eq(*thread_event))
 						continue; // excluded event is in [thread_event]
 
 					prev_events.push_back(*it);
@@ -1573,7 +1573,7 @@ namespace por {
 				for(auto& m : M) {
 					for(auto& [tid, tooth] : conflict_comb) {
 						tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
-							return (*m)->is_less_than(**e) || m == e;
+							return (*m)->is_less_than_eq(**e);
 						}), tooth.end());
 						if(tooth.empty())
 							conflict_comb.erase(tid);
@@ -1731,7 +1731,7 @@ namespace por {
 					for(auto& m : M) {
 						for(auto& [tid, tooth] : conflict_comb) {
 							tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
-								return (*m)->is_less_than(**e) || m == e;
+								return (*m)->is_less_than_eq(**e);
 							}), tooth.end());
 							if(tooth.empty())
 								conflict_comb.erase(tid);
@@ -1763,7 +1763,7 @@ namespace por {
 				for(auto& conflict : cex.conflicts()) {
 					assert(conflict);
 					assert(e);
-					if((*conflict).is_less_than(*e) || conflict == e)
+					if((*conflict).is_less_than_eq(*e))
 						return true;
 				}
 				return false;
