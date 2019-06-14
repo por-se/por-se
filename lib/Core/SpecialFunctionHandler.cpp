@@ -305,7 +305,7 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
                            KInstruction *target,
                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
-  executor.terminateStateOnExit(state);
+  executor.exitThread(state);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,

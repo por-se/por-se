@@ -3653,7 +3653,9 @@ void Executor::terminateState(ExecutionState &state) {
     registerFork(state, toExecute);
     addedStates.push_back(toExecute);
 
+    // thread of last event may not be runnable or lead to wrong event
     toExecute->needsThreadScheduling = true;
+    scheduleThreads(*toExecute);
 
     if (LogConflictingExtensions) {
       llvm::errs() << "New Event: " << c.new_event()->to_string(true) << "; Conflicting Event(s): ";
@@ -5193,6 +5195,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     for (auto& threadIt : state.threads) {
       if (threadIt.second.state != ThreadState::Exited) {
         allExited = false;
+        break;
       }
     }
 
