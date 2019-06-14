@@ -3174,16 +3174,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::updateStates(ExecutionState *current) {
-  if (current && current->needsThreadScheduling) {
-    scheduleThreads(*current);
-    current->needsThreadScheduling = false;
-  }
-
   if (current && !current->currentThread().pathSincePorLocal.empty()) {
     // pathSincePorLocal has to be empty in standby state attached to event
     std::vector<bool> path = std::move(current->currentThread().pathSincePorLocal);
     current->currentThread().pathSincePorLocal = {};
     porEventManager.registerLocal(*current, path);
+  }
+
+  if (current && current->needsThreadScheduling) {
+    scheduleThreads(*current);
+    current->needsThreadScheduling = false;
   }
 
   if (searcher) {
