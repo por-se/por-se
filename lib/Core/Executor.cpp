@@ -3632,22 +3632,6 @@ void Executor::terminateState(ExecutionState &state) {
 
   interpreterHandler->incPathsExplored();
 
-  terminateStateSilently(state);
-}
-
-void Executor::terminateStateEarly(ExecutionState &state, 
-                                   const Twine &message) {
-  std::string ktest = "";
-  if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
-      (AlwaysOutputSeeds && seedMap.count(&state)))
-    ktest = interpreterHandler->processTestCase(state,
-                                                (message + "\n").str().c_str(),
-                                                "early");
-  updateStatesJSON(nullptr, state, ktest, "early");
-  terminateState(state);
-}
-
-void Executor::terminateStateOnExit(ExecutionState &state) {
   if (LogConflictingExtensions) {
     llvm::errs() << "Completed Interleaving: ";
     for(auto& s : state.porConfiguration->schedule()) {
@@ -3692,6 +3676,22 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
     llvm::errs() << "added " << cex.size() << " conflicting extension(s)\n";
   }
 
+  terminateStateSilently(state);
+}
+
+void Executor::terminateStateEarly(ExecutionState &state,
+                                   const Twine &message) {
+  std::string ktest = "";
+  if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
+      (AlwaysOutputSeeds && seedMap.count(&state)))
+    ktest = interpreterHandler->processTestCase(state,
+                                                (message + "\n").str().c_str(),
+                                                "early");
+  updateStatesJSON(nullptr, state, ktest, "early");
+  terminateState(state);
+}
+
+void Executor::terminateStateOnExit(ExecutionState &state) {
   std::string ktest = "";
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
       (AlwaysOutputSeeds && seedMap.count(&state)))
