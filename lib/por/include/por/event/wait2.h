@@ -43,11 +43,20 @@ namespace por::event {
 				auto sig = static_cast<signal const*>(this->notifying_event().get());
 				assert(sig->notified_thread() == this->tid());
 				assert(sig->cid() == this->cid());
+				assert(sig->wait_predecessor() == this->thread_predecessor());
 			} else {
 				assert(this->notifying_event()->kind() == event_kind::broadcast);
 				auto bro = static_cast<broadcast const*>(this->notifying_event().get());
 				assert(bro->is_notifying_thread(this->tid()));
 				assert(bro->cid() == this->cid());
+				[[maybe_unused]] bool wait1_found = false;
+				for(auto& e : bro->wait_predecessors()) {
+					if(e == this->thread_predecessor()) {
+						wait1_found = true;
+						break;
+					}
+				}
+				assert(wait1_found && "notifying broadcast must wake up corresponding wait1");
 			}
 		}
 

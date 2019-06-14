@@ -637,11 +637,13 @@ namespace por {
 			for(auto& e : cond_preds) {
 				if(e->kind() == por::event::event_kind::broadcast) {
 					auto bro = static_cast<por::event::broadcast const*>(e.get());
-					if(bro->is_notifying_thread(thread_event->tid()))
-						return e;
+					for(auto& w1 : bro->wait_predecessors()) {
+						if(w1 == thread_event)
+							return e;
+					}
 				} else if(e->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(e.get());
-					if(sig->notified_thread() == thread_event->tid())
+					if(sig->wait_predecessor() == thread_event)
 						return e;
 				}
 			}
