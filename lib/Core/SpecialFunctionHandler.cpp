@@ -127,7 +127,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
 
-  add("puts", handlePuts, false),
+  add("puts", handlePuts, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -1040,4 +1040,6 @@ void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,
 
   llvm::outs() << readStringAtAddress(state, arguments[0]) << "\n";
   llvm::outs().flush();
+
+  executor.bindLocal(target, state, ConstantExpr::create(0, Expr::Int32));
 }
