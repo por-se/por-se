@@ -189,9 +189,7 @@ cl::opt<ExternalCallPolicy> ExternalCalls(
     cl::values(
         clEnumValN(
             ExternalCallPolicy::None, "none",
-            "No external function calls are allowed.  Note that KLEE always "
-            "allows some external calls with concrete arguments to go through "
-            "(in particular printf and puts), regardless of this option."),
+            "No external function calls are allowed."),
         clEnumValN(ExternalCallPolicy::Concrete, "concrete",
                    "Only external function calls with concrete arguments are "
                    "allowed (default)"),
@@ -3821,15 +3819,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
     haltExecution = true;
 }
 
-// XXX shoot me
-static const char *okExternalsList[] = { "printf", 
-                                         "fprintf", 
-                                         "puts",
-                                         "getpid" };
-static std::set<std::string> okExternals(okExternalsList,
-                                         okExternalsList + 
-                                         (sizeof(okExternalsList)/sizeof(okExternalsList[0])));
-
 void Executor::callExternalFunction(ExecutionState &state,
                                     KInstruction *target,
                                     Function *function,
@@ -3838,8 +3827,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   if (specialFunctionHandler->handle(state, function, target, arguments))
     return;
 
-  if (ExternalCalls == ExternalCallPolicy::None
-      && !okExternals.count(function->getName())) {
+  if (ExternalCalls == ExternalCallPolicy::None) {
     klee_warning("Disallowed call to external function: %s\n",
                function->getName().str().c_str());
     terminateStateOnError(state, "external calls disallowed", User);
