@@ -17,6 +17,7 @@ namespace klee {
       bool registerLocal(ExecutionState &state, std::vector<bool> path);
 
     private:
+      void registerStandbyState(ExecutionState &state, por_event_t kind);
       bool registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args);
 
       static std::string getNameOfEvent(por_event_t kind);

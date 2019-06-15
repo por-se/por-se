@@ -14,6 +14,27 @@ namespace {
   llvm::cl::opt<bool>
   LogPorEvents("log-por-events",
                llvm::cl::init(false));
+
+  enum class StandbyStatePolicy { Minimal, Half, Third, All };
+
+  llvm::cl::opt<StandbyStatePolicy> StandbyStates(
+    "standby-states",
+    llvm::cl::desc("Specify the standby state policy"),
+    llvm::cl::values(
+        clEnumValN(
+          StandbyStatePolicy::Minimal, "minimal",
+          "Only record standby states for thread_init of the main thread."),
+        clEnumValN(
+          StandbyStatePolicy::Half, "half",
+          "Only record standby states for at most every second event (per configuration)."),
+        clEnumValN(
+          StandbyStatePolicy::Third, "third",
+          "Only record standby states for at most every third event (per configuration)."),
+        clEnumValN(
+          StandbyStatePolicy::All, "all",
+          "Record standby states for all events (default).")
+        KLEE_LLVM_CL_VAL_END),
+    llvm::cl::init(StandbyStatePolicy::All));
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -76,11 +97,7 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
   }
 
   if (registerPorEventInternal(state, kind, args)) {
-    ExecutionState *newState = new ExecutionState(state);
-    newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
-    executor.standbyStates.push_back(newState);
-
-    state.porConfiguration->standby_execution_state(newState);
+    registerStandbyState(state, kind);
     return true;
   }
 
@@ -102,13 +119,32 @@ bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> pat
     state.needsThreadScheduling = true;
   }
 
-  // FIXME: remove duplicate code
-  ExecutionState *newState = new ExecutionState(state);
-  newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
-  executor.standbyStates.push_back(newState);
-  state.porConfiguration->standby_execution_state(newState);
-
+  registerStandbyState(state, por_local);
   return true;
+}
+
+void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t kind) {
+  assert(state.porConfiguration != nullptr);
+
+  bool registerStandbyState = true;
+  if (StandbyStates != StandbyStatePolicy::All) {
+    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == 1);
+    if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
+      auto dist = state.porConfiguration->distance_to_last_standby_state(&state);
+      if (StandbyStates == StandbyStatePolicy::Half) {
+        registerStandbyState = (dist >= 2);
+      } else if (StandbyStates == StandbyStatePolicy::Third) {
+        registerStandbyState = (dist >= 3);
+      }
+    }
+  }
+
+  if (registerStandbyState) {
+    ExecutionState *newState = new ExecutionState(state);
+    executor.standbyStates.push_back(newState);
+    newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
+    state.porConfiguration->standby_execution_state(newState);
+  }
 }
 
 bool PorEventManager::registerPorEventInternal(ExecutionState &state, por_event_t kind, std::vector<std::uint64_t> &args) {
