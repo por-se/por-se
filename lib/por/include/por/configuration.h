@@ -182,14 +182,20 @@ namespace por {
 			assert(_schedule_pos < _schedule.size());
 			assert(_schedule.size() >= 2 && "there have to be at least program_init and thread_init");
 
+			// there may not be a standby state for every schedule position
+			if(_schedule_pos >= _standby_states.size())
+				_schedule_pos = _standby_states.size() - 1;
+
 			// find latest available standby state
 			while(_schedule_pos > 0 && _standby_states[_schedule_pos] == nullptr) {
 				--_schedule_pos;
 			}
 			assert(_schedule_pos >= 1 && "thread_init of main thread must always have a standby state");
+			assert(_standby_states[_schedule_pos] != nullptr);
 
 			// remove standby states that are invalid in the new schedule
 			_standby_states.erase(std::next(_standby_states.begin(), _schedule_pos + 1), _standby_states.end());
+			assert(_standby_states.size() - 1 == _schedule_pos);
 			assert(_standby_states.back() != nullptr);
 
 			// no need to catch up to standby state
