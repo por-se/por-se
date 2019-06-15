@@ -56,7 +56,9 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
 
   kpr_list_create(&thread->cleanupStack);
 
+  klee_toggle_thread_scheduling(0);
   thread->tid = klee_create_thread(kpr_wrapper, thread);
+  klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
 
   return 0;
