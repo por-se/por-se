@@ -237,6 +237,22 @@ namespace por {
 			assert(_standby_states.back() != nullptr);
 		}
 
+		std::size_t distance_to_last_standby_state(klee::ExecutionState const* s) {
+			assert(s != nullptr);
+			assert(_schedule.size() > 0);
+			assert(_schedule_pos > 0);
+			std::size_t res = 0;
+			for(auto it = _standby_states.rbegin(); it != _standby_states.rend(); ++it) {
+				if(*it != nullptr) {
+					res = _schedule_pos - std::distance(it, _standby_states.rend());
+					break;
+				} else {
+					++res;
+				}
+			}
+			return res;
+		}
+
 		por::event::thread_id_t active_threads() const noexcept {
 			if(_thread_heads.size() == 0)
 				return 0;
