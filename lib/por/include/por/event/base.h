@@ -52,9 +52,13 @@ namespace por::event {
 
 		void mark_as_explored(path_t const& path) const {
 			auto it = std::find(open_paths.begin(), open_paths.end(), path);
-			assert(it != open_paths.end());
-			explored_paths.emplace_back(std::move(*it));
-			open_paths.erase(it);
+			if(it != open_paths.end()) {
+				explored_paths.emplace_back(std::move(*it));
+				open_paths.erase(it);
+				return;
+			}
+			if(!is_explored(path))
+				explored_paths.emplace_back(path);
 		}
 
 		bool is_explored(path_t const& path) const {
