@@ -4890,6 +4890,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
 
     if (registerAsNotificationEvent) {
       porEventManager.registerPorEvent(state, por_broadcast, porData);
+      if (porData.size() == 1)
+        ++state.lostNotifications; // first entry is cond id
     }
 
     return;
@@ -4914,6 +4916,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     // this is a lost signal (signalled thread id == 0)
     if (registerAsNotificationEvent) {
       porEventManager.registerPorEvent(state, por_signal, { lid, 0 });
+      ++state.lostNotifications;
     }
 
     return;

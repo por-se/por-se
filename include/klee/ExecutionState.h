@@ -54,6 +54,8 @@ protected:
 public:
   const size_t id;
 
+  std::size_t lostNotifications = 0;
+
   typedef std::map<Thread::ThreadId, Thread> threads_ty;
 
 private:

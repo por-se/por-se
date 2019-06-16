@@ -998,6 +998,9 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
   }
 
   executor.threadWakeUpWaiting(state, lid, releaseSingle, registerAsNotificationEvent);
+  if (registerAsNotificationEvent && state.lostNotifications >= 3) {
+      executor.terminateStateOnError(state, "Three lost notifications, terminating to avoid infinite loop", Executor::Unhandled);
+  }
 }
 
 void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,

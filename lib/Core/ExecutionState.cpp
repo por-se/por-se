@@ -99,6 +99,7 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     id(next_id++),
+    lostNotifications(state.lostNotifications),
     currentSchedulingIndex(state.currentSchedulingIndex),
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     memAccessTracker(state.memAccessTracker),
