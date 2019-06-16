@@ -329,6 +329,14 @@ cl::opt<bool> MaxMemoryInhibit(
     cl::init(true),
     cl::cat(TerminationCat));
 
+  cl::opt<bool> ExitOnMaxMemory(
+    "exit-on-max-memory",
+    cl::desc(
+        "Instead of killing states or inhibiting forking, exit KLEE once memory cap was hit (default=false)"),
+    cl::init(false),
+    cl::cat(TerminationCat));
+
+
 cl::opt<unsigned> RuntimeMaxStackFrames(
     "max-stack-frames",
     cl::desc("Terminate a state after this many stack frames.  Set to 0 to "
@@ -3303,7 +3311,10 @@ void Executor::checkMemoryUsage() {
                    (memory->getUsedDeterministicSize() >> 20);
 
     if (mbs > MaxMemory) {
-      if (mbs > MaxMemory + 100) {
+      if (ExitOnMaxMemory) {
+        haltExecution = true;
+        klee_warning("halting KLEE (over memory cap)");
+      } else if (mbs > MaxMemory + 100) {
         // just guess at how many to kill
         unsigned numStates = states.size();
         unsigned toKill = std::max(1U, numStates - numStates * MaxMemory / mbs);
