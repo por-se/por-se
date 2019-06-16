@@ -5227,7 +5227,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   if (NoScheduleForks) {
     // pick arbitrary thread by default
-    Thread::ThreadId tid = *runnable.begin();
+    Thread::ThreadId tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
 
     // or (if possible) pick thread that needs to catch up
     if (state.porConfiguration->needs_catch_up()) {
