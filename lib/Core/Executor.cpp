@@ -291,6 +291,8 @@ cl::list<Executor::TerminateReason> ExitOnErrorType(
         clEnumValN(Executor::ReportError, "ReportError",
                    "klee_report_error called"),
         clEnumValN(Executor::User, "User", "Wrong klee_* functions invocation"),
+        clEnumValN(Executor::Deadlock, "Deadlock", "At least two threads are in a deadlock state"),
+        clEnumValN(Executor::UnsafeMemoryAccess, "UnsafeMemoryAccess", "A data race was detected"),
         clEnumValN(Executor::Unhandled, "Unhandled",
                    "Unhandled instruction hit") KLEE_LLVM_CL_VAL_END),
     cl::ZeroOrMore,
