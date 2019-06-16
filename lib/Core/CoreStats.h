@@ -47,6 +47,9 @@ namespace stats {
   /// distance to a function return.
   extern Statistic minDistToReturn;
 
+  extern Statistic catchUpInstructions;
+  extern Statistic standbyStates;
+  extern Statistic maxConfigurations;
 }
 }
 

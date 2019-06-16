@@ -1516,6 +1516,9 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
+  if(state.porConfiguration->needs_catch_up())
+    ++stats::catchUpInstructions;
+
   Thread &thread = state.currentThread();
 
   ++stats::instructions;
@@ -3711,6 +3714,7 @@ void Executor::terminateStateOnExit(ExecutionState &state) {
     ktest = interpreterHandler->processTestCase(state, 0, 0);
 
   updateStatesJSON(nullptr, state, ktest);
+  ++stats::maxConfigurations;
   terminateState(state);
 }
 
@@ -4576,6 +4580,8 @@ void Executor::runFunctionAsMain(Function *f,
   // to ensure that all data structures are properly set up
   porEventManager.registerPorEvent(*state, por_thread_init, { thread.getThreadId() });
 
+  std::shared_ptr<por::unfolding> unfolding = state->porConfiguration->unfolding();
+
   run(*state);
   delete processTree;
   processTree = 0;
@@ -4593,6 +4599,13 @@ void Executor::runFunctionAsMain(Function *f,
 
   if (statsTracker)
     statsTracker->done();
+
+  // FIXME: find a more appropriate place for this
+  unfolding->print_statistics();
+  llvm::outs() << "\n";
+  llvm::outs() << "KLEE: done: instructions during catch-up = " << stats::catchUpInstructions << "\n";
+  llvm::outs() << "KLEE: done: standby states = " << stats::standbyStates << "\n";
+  llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
 }
 
 unsigned Executor::getPathStreamID(const ExecutionState &state) {

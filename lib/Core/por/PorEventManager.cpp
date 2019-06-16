@@ -1,4 +1,5 @@
 #include "PorEventManager.h"
+#include "../CoreStats.h"
 #include "../Executor.h"
 
 #include "por/configuration.h"
@@ -144,6 +145,7 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
     executor.standbyStates.push_back(newState);
     newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
     state.porConfiguration->standby_execution_state(newState);
+    ++stats::standbyStates;
   }
 }
 

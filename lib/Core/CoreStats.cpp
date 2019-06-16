@@ -27,3 +27,7 @@ Statistic stats::solverTime("SolverTime", "Stime");
 Statistic stats::states("States", "States");
 Statistic stats::trueBranches("TrueBranches", "Bt");
 Statistic stats::uncoveredInstructions("UncoveredInstructions", "Iuncov");
+
+Statistic stats::catchUpInstructions("CatchUpInstructions", "Icup");
+Statistic stats::standbyStates("StandbyStates", "Standby");
+Statistic stats::maxConfigurations("MaximalConfigurations", "Mconf");
