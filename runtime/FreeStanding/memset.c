@@ -9,7 +9,7 @@
 
 #include <stdlib.h>
 
-void *memset(void *dst, int s, size_t count) {
+__attribute__((optnone)) void *memset(void *dst, int s, size_t count) {
   char *a = dst;
   while (count-- > 0)
     *a++ = s;
