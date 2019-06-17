@@ -4890,7 +4890,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
 
     if (registerAsNotificationEvent) {
       porEventManager.registerCondVarBroadcast(state, lid, notifiedThreads);
-      if (porData.size() == 1)
+      if (notifiedThreads.empty())
         ++state.lostNotifications; // first entry is cond id
     }
 

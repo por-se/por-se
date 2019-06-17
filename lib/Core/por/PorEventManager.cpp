@@ -81,7 +81,7 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
 
   bool registerStandbyState = true;
   if (StandbyStates != StandbyStatePolicy::All) {
-    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == 1);
+    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == ThreadId(1));
     if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
       auto dist = state.porConfiguration->distance_to_last_standby_state(&state);
       if (StandbyStates == StandbyStatePolicy::Half) {
@@ -260,7 +260,7 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
   state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_condition_variable_destory);
+  registerStandbyState(state, por_condition_variable_destroy);
   return true;
 }
 
