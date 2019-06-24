@@ -5,6 +5,7 @@
 #include <util/distance.h>
 #include <util/sso_array.h>
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 
@@ -186,6 +187,9 @@ namespace por::event {
 			T begin_condition_variable_predecessors,
 			T end_condition_variable_predecessors
 		) {
+			if constexpr(!std::is_same_v<std::decay_t<T>, decltype(nullptr)>) {
+				std::sort(begin_condition_variable_predecessors, end_condition_variable_predecessors);
+			}
 			return deduplicate(unfolding, std::make_shared<broadcast>(
 				tid,
 				cid,
