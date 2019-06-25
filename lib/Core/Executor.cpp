@@ -3684,7 +3684,8 @@ void Executor::terminateState(ExecutionState &state) {
       for(auto& s : toExecute->porConfiguration->schedule()) {
         llvm::errs() << s->to_string(true);
       }
-      llvm::errs() << "\n";
+      llvm::errs() << "\nPeek: ";
+      llvm::errs() << toExecute->porConfiguration->peek()->to_string(true) << "\n";
     }
   }
 
