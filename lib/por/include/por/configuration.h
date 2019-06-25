@@ -228,9 +228,28 @@ namespace por {
 
 			_unfolding->stats_inc_cex_inserted();
 
-			// already mark conflicting extension event as open so the same cex
-			// is not generated again before this configuration has caught up
-			_unfolding->mark_as_open(_schedule.back(), _path);
+			auto new_path = _path;
+			bool modified = false;
+			for(std::size_t i = _schedule_pos; i < _schedule.size(); ++i) {
+				auto const& new_event = _schedule[i];
+				if(!modified && new_event->kind() != por::event::event_kind::local) {
+					if(i != _schedule.size() - 1)
+						continue;
+				}
+
+				// already mark events with potentially modified path as open so
+				// that none of them are generated as cex before catch up is done
+				if(!_unfolding->is_present(new_event, new_path)) {
+					_unfolding->mark_as_open(new_event, new_path);
+				}
+
+				if(new_event->kind() == por::event::event_kind::local) {
+					modified = true; // at least potentially
+					auto local = static_cast<const por::event::local*>(new_event.get());
+					auto& local_path = local->path();
+					new_path.insert(new_path.end(), local_path.begin(), local_path.end());
+				}
+			}
 		}
 
 		auto const& schedule() const noexcept { return _schedule; }
