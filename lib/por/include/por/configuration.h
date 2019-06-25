@@ -1000,10 +1000,11 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
+			auto old_path = _path;
 			_path.insert(_path.end(), local_path.begin(), local_path.end());
 			thread_event = event::local::alloc(_unfolding, thread, std::move(thread_event), std::move(local_path));
 			_unfolding->stats_inc_event_created(por::event::event_kind::local);
-			_unfolding->mark_as_open(thread_event, _path);
+			_unfolding->mark_as_open(thread_event, std::move(old_path));
 
 			_schedule.emplace_back(thread_event);
 			++_schedule_pos;
