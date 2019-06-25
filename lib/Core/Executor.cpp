@@ -434,6 +434,28 @@ cl::opt<bool> DebugCheckForImpliedValues(
 cl::opt<bool> NoScheduleForks("no-schedule-forks",
     cl::init(true));
 
+enum class ThreadSchedulingPolicy {
+  First, // first runnable thread (by id)
+  Last, // last runnable thread (by id)
+  Random, // random runnable thread
+};
+
+cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
+    "thread-scheduling",
+    cl::desc("Specify the thread scheduling policy (only applies outside of catch-up phases)"),
+    cl::values(
+        clEnumValN(
+          ThreadSchedulingPolicy::First, "first",
+          "Pick the first runnable thread (determined by its id): main thread if runnable, thread with next lowest id otherwise."),
+        clEnumValN(
+          ThreadSchedulingPolicy::Last, "last",
+          "Pick the last runnable thread (determined by its id): most recent runnable thread."),
+        clEnumValN(
+          ThreadSchedulingPolicy::Random, "random",
+          "Pick a random thread (default).")
+        KLEE_LLVM_CL_VAL_END),
+    cl::init(ThreadSchedulingPolicy::Random));
+
 } // namespace
 
 namespace klee {
@@ -5227,8 +5249,19 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   if (NoScheduleForks) {
-    // pick arbitrary thread by default
-    Thread::ThreadId tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
+    // pick thread according to policy by default
+    Thread::ThreadId tid;
+    switch (ThreadScheduling) {
+        case ThreadSchedulingPolicy::First:
+            tid = *runnable.begin();
+            break;
+        case ThreadSchedulingPolicy::Last:
+            tid = *std::prev(runnable.end());
+            break;
+        case ThreadSchedulingPolicy::Random:
+            tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
+            break;
+    }
 
     // or (if possible) pick thread that needs to catch up
     if (state.porConfiguration->needs_catch_up()) {
