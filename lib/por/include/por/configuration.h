@@ -1662,12 +1662,16 @@ namespace por {
 					});
 				}
 				for(auto& m : M) {
-					for(auto& [tid, tooth] : conflict_comb) {
+					auto it = conflict_comb.begin();
+					while(it != conflict_comb.end()) {
+						auto& tooth = it->second;
 						tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
 							return (*m)->is_less_than_eq(**e);
 						}), tooth.end());
 						if(tooth.empty())
-							conflict_comb.erase(tid);
+							it = conflict_comb.erase(it);
+						else
+							++it;
 					}
 				}
 				for(auto& [tid, tooth] : conflict_comb) {
@@ -1823,12 +1827,16 @@ namespace por {
 					std::vector<std::shared_ptr<por::event::event>> conflicts;
 					auto conflict_comb = broadcast_conflict_comb;
 					for(auto& m : M) {
-						for(auto& [tid, tooth] : conflict_comb) {
+						auto it = conflict_comb.begin();
+						while(it != conflict_comb.end()) {
+							auto& tooth = it->second;
 							tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
 								return (*m)->is_less_than_eq(**e);
 							}), tooth.end());
 							if(tooth.empty())
-								conflict_comb.erase(tid);
+								it = conflict_comb.erase(it);
+							else
+								++it;
 						}
 					}
 					for(auto& [tid, tooth] : conflict_comb) {
