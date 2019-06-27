@@ -947,15 +947,26 @@ void SpecialFunctionHandler::handleGetThreadRuntimeStructPtr(klee::ExecutionStat
 void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
                                           KInstruction *target,
                                           std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 1 && "invalid number of arguments to klee_wait_on");
-  ref<Expr> lid = executor.toUnique(state, arguments[0]);
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_wait_on");
+  ref<Expr> handleExpr = executor.toUnique(state, arguments[0]);
+  ref<Expr> wait1LockExpr = executor.toUnique(state, arguments[1]);
 
-  if (!isa<ConstantExpr>(lid)) {
+  if (!isa<ConstantExpr>(handleExpr)) {
     executor.terminateStateOnError(state, "klee_wait_on", Executor::User);
     return;
   }
 
-  executor.threadWaitOn(state, cast<ConstantExpr>(lid)->getZExtValue());
+  if (!isa<ConstantExpr>(wait1LockExpr)) {
+    executor.terminateStateOnError(state, "klee_wait_on", Executor::User);
+    return;
+  }
+
+  std::uint64_t handle_id = cast<ConstantExpr>(handleExpr)->getZExtValue();
+  std::uint64_t wait1Lock = cast<ConstantExpr>(wait1LockExpr)->getZExtValue();
+  executor.threadWaitOn(state, handle_id);
+  if (wait1Lock > 0) {
+    executor.porEventManager.registerPorEvent(state, por_wait1, { handle_id, wait1Lock });
+  }
 }
 
 void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,

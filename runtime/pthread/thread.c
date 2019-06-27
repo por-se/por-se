@@ -114,7 +114,7 @@ void pthread_exit(void* arg) {
     // We have to wait on another thread that will wake us up
     if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
       thread->joinState = KPR_THREAD_JSTATE_WAIT_FOR_JOIN;
-      klee_wait_on(thread);
+      klee_wait_on(thread, 0);
     }
   }
 
@@ -154,7 +154,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     alreadyPreemptedByWaiting = 1;
     thread->joinState = KPR_THREAD_JSTATE_JOINED;
 
-    klee_wait_on(thread);
+    klee_wait_on(thread, 0);
   } else if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
     thread->joinState = KPR_THREAD_JSTATE_JOINED;
     klee_release_waiting(thread, KLEE_RELEASE_SINGLE);

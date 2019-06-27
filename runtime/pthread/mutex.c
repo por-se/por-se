@@ -87,7 +87,7 @@ int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept) {
       *hasSlept = 1;
     }
 
-    klee_wait_on(mutex);
+    klee_wait_on(mutex, 0);
   }
 
   return result;

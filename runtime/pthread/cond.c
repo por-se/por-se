@@ -51,10 +51,8 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
     }
   }
 
-  klee_por_register_event(por_wait1, lock, m);
-
   lock->waitingCount++;
-  klee_wait_on(lock);
+  klee_wait_on(lock, m); // registers wait1 event
 
   result = kpr_mutex_lock_internal(m, NULL);
 

@@ -168,7 +168,7 @@ extern "C" {
 
   void klee_toggle_thread_scheduling(int enabled);
 
-  void klee_wait_on(void* address);
+  void klee_wait_on(void* handle, void* wait1_mutex);
 
   void klee_por_register_event(por_event_t evt, ...);
 
