@@ -5267,7 +5267,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (state.porConfiguration->needs_catch_up()) {
       tid = state.porConfiguration->peek()->tid();
 
-      if (state.threadSchedulingEnabled) {
+      if (!state.threadSchedulingEnabled) {
         state.threadSchedulingEnabled = true;
         state.currentThread().threadSchedulingWasDisabled = true;
       }
