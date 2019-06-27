@@ -1098,7 +1098,7 @@ namespace por {
 				default:
 					assert(0 && "event has no lock_predecessor");
 			}
-			if(pred != nullptr && *pred != nullptr && (*pred)->kind() != por::event::event_kind::lock_create) {
+			if(pred != nullptr && *pred != nullptr) {
 				return pred;
 			}
 			return nullptr;
@@ -1306,12 +1306,13 @@ namespace por {
 			std::shared_ptr<por::event::event> const* ep = get_lock_predecessor(*er); // lock events in K \ {r}
 			conflict = er;
 			while(ep != nullptr && (em == nullptr || !(**ep).is_less_than_eq(**em)) && (es == nullptr || !(**ep).is_less_than_eq(**es))) {
-				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1) {
+				if((*ep)->kind() == por::event::event_kind::lock_release || (*ep)->kind() == por::event::event_kind::wait1 || (*ep)->kind() == por::event::event_kind::lock_create) {
 					if(e->kind() == por::event::event_kind::lock_acquire) {
 						result.emplace_back(por::event::lock_acquire::alloc(_unfolding, e->tid(), *et, *ep), *conflict);
 						_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					} else {
 						assert(e->kind() == por::event::event_kind::wait2);
+						assert((*ep)->kind() != por::event::event_kind::lock_create);
 						auto* w2 = static_cast<por::event::wait2 const*>(e.get());
 						result.emplace_back(por::event::wait2::alloc(_unfolding, e->tid(), w2->cid(), *et, *ep, *es), *conflict);
 						_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
