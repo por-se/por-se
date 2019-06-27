@@ -4925,7 +4925,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       const por::event::event* event = state.porConfiguration->peek();
       assert(event->kind() == por::event::event_kind::signal);
       auto signal = static_cast<const por::event::signal*>(event);
-      choices.push_back(signal->notified_thread());
+      if (!signal->is_lost())
+        choices.push_back(signal->notified_thread());
   } else {
     for (const auto &th : state.threads) {
       if (th.second.waitingHandle == lid) {
