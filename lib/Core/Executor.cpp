@@ -5206,7 +5206,7 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newFor
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
-  if (!state.threadSchedulingEnabled) {
+  if (!state.threadSchedulingEnabled && !state.porConfiguration->needs_catch_up()) {
     // So now we have to check if the current thread may be scheduled
     // or if we have a deadlock
 
@@ -5266,6 +5266,11 @@ void Executor::scheduleThreads(ExecutionState &state) {
     // or (if possible) pick thread that needs to catch up
     if (state.porConfiguration->needs_catch_up()) {
       tid = state.porConfiguration->peek()->tid();
+
+      if (state.threadSchedulingEnabled) {
+        state.threadSchedulingEnabled = true;
+        state.currentThread().threadSchedulingWasDisabled = true;
+      }
     }
 
     state.scheduleNextThread(tid);
