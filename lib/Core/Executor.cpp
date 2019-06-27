@@ -4912,9 +4912,9 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     }
 
     if (registerAsNotificationEvent) {
-      porEventManager.registerPorEvent(state, por_broadcast, porData);
       if (porData.size() == 1)
         ++state.lostNotifications; // first entry is cond id
+      porEventManager.registerPorEvent(state, por_broadcast, porData);
     }
 
     return;
@@ -4939,8 +4939,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     // So if we have no choices, but this should be a signal, then
     // this is a lost signal (signalled thread id == 0)
     if (registerAsNotificationEvent) {
-      porEventManager.registerPorEvent(state, por_signal, { lid, 0 });
       ++state.lostNotifications;
+      porEventManager.registerPorEvent(state, por_signal, { lid, 0 });
     }
 
     return;
@@ -4969,11 +4969,11 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       addedStates.push_back(st);
     }
 
+    st->wakeUpThread(choices[i]);
+
     if (registerAsNotificationEvent) {
       porEventManager.registerPorEvent(*st, por_signal, { lid, choices[i] });
     }
-
-    st->wakeUpThread(choices[i]);
   }
 }
 
@@ -4994,13 +4994,12 @@ void Executor::exitThread(ExecutionState &state) {
   }
 
   state.exitThread(tid);
+  state.needsThreadScheduling = true;
   if (tid == 1) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
     porEventManager.registerPorEvent(state, por_thread_exit, { tid });
   }
-
-  state.needsThreadScheduling = true;
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
