@@ -24,7 +24,7 @@ namespace {
     llvm::cl::values(
         clEnumValN(
           StandbyStatePolicy::Minimal, "minimal",
-          "Only record standby states for thread_init of the main thread."),
+          "Only record standby states for thread_init of the main thread and any condition_variable_create."),
         clEnumValN(
           StandbyStatePolicy::Half, "half",
           "Only record standby states for at most every second event (per configuration)."),
@@ -129,7 +129,7 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
 
   bool registerStandbyState = true;
   if (StandbyStates != StandbyStatePolicy::All) {
-    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == 1);
+    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == 1) || (kind == por_condition_variable_create);
     if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
       auto dist = state.porConfiguration->distance_to_last_standby_state(&state);
       if (StandbyStates == StandbyStatePolicy::Half) {
