@@ -91,7 +91,7 @@ bool PorEventManager::registerPorEvent(ExecutionState &state, por_event_t kind, 
     }
   }
 
-  if (state.porConfiguration->needs_catch_up()) {
+  if (state.porConfiguration->needs_catch_up() || roundRobin) {
     // make sure we do not miss any events in case a different
     // thread needs to be scheduled after catching up to this event
     state.needsThreadScheduling = true;
@@ -114,7 +114,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> pat
   }
 
   // FIXME: remove duplicate code
-  if (state.porConfiguration->needs_catch_up()) {
+  if (state.porConfiguration->needs_catch_up() || roundRobin) {
     // make sure we do not miss any events in case a different
     // thread needs to be scheduled after catching up to this event
     state.needsThreadScheduling = true;

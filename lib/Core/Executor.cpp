@@ -437,6 +437,7 @@ cl::opt<bool> NoScheduleForks("no-schedule-forks",
 enum class ThreadSchedulingPolicy {
   First, // first runnable thread (by id)
   Last, // last runnable thread (by id)
+  RoundRobin, // switch threads after each event registration
   Random, // random runnable thread
 };
 
@@ -450,6 +451,9 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
         clEnumValN(
           ThreadSchedulingPolicy::Last, "last",
           "Pick the last runnable thread (determined by its id): most recent runnable thread."),
+        clEnumValN(
+          ThreadSchedulingPolicy::RoundRobin, "round-robin",
+          "Picks runnable threads in a determined order, changes on event registration."),
         clEnumValN(
           ThreadSchedulingPolicy::Random, "random",
           "Pick a random thread (default).")
@@ -4603,6 +4607,10 @@ void Executor::runFunctionAsMain(Function *f,
   // to ensure that all data structures are properly set up
   porEventManager.registerPorEvent(*state, por_thread_init, { thread.getThreadId() });
 
+  if (ThreadScheduling == ThreadSchedulingPolicy::RoundRobin) {
+    porEventManager.enableRoundRobinMode();
+  }
+
   std::shared_ptr<por::unfolding> unfolding = state->porConfiguration->unfolding();
 
   run(*state);
@@ -5261,6 +5269,10 @@ void Executor::scheduleThreads(ExecutionState &state) {
         case ThreadSchedulingPolicy::Random:
             tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
             break;
+        case ThreadSchedulingPolicy::RoundRobin: {
+            tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
+            break;
+        }
     }
 
     // or (if possible) pick thread that needs to catch up
