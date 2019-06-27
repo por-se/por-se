@@ -545,6 +545,7 @@ namespace por {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::condition_variable_create);
 				assert(_schedule[_schedule_pos]->tid() == thread);
+				assert(static_cast<por::event::condition_variable_create const*>(_schedule[_schedule_pos].get())->cid() == cond);
 				_thread_heads[thread] = _schedule[_schedule_pos];
 				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 				_cond_heads.emplace(cond, std::vector{_schedule[_schedule_pos]});
