@@ -58,7 +58,8 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
 
   // assignment happens after the new thread (that can also write to thread) has been created
   klee_toggle_thread_scheduling(0);
-  thread->tid = klee_create_thread(kpr_wrapper, thread);
+  int t = klee_create_thread(kpr_wrapper, thread, &thread->tid);
+  assert(t == thread->tid);
   klee_toggle_thread_scheduling(1);
 
   klee_preempt_thread();
@@ -101,6 +102,7 @@ void pthread_exit(void* arg) {
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
   thread->state = KPR_THREAD_STATE_DEAD;
 
+  assert(thread->tid != 0);
   klee_por_register_event(por_thread_exit, thread->tid);
 
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
