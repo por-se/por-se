@@ -872,11 +872,11 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
 void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
                                                 KInstruction *target,
                                                 std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size() == 3 && "invalid number of arguments to klee_create_thread");
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_create_thread");
 
   // We only handle const function pointers
   if (!isa<ConstantExpr>(arguments[0])) {
-    executor.terminateStateOnError(state, "klee_create_thread0", Executor::User);
+    executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
     return;
   }
 
@@ -887,39 +887,12 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   llvm::Function* funcPointer = reinterpret_cast<llvm::Function*>(funcAddress);
   auto kfuncPair = executor.kmodule->functionMap.find(funcPointer);
   if (kfuncPair == executor.kmodule->functionMap.end()) {
-    executor.terminateStateOnError(state, "klee_create_thread1", Executor::User);
+    executor.terminateStateOnError(state, "klee_create_thread", Executor::User);
     return;
   }
-
-
-  ref<Expr> threadAddressExpr = executor.toUnique(state, arguments[1]);
-  if (!isa<ConstantExpr>(threadAddressExpr)) {
-    executor.terminateStateOnError(state, "klee_create_thread2", Executor::User);
-    return;
-  }
-
-  ref<Expr> tidAddressExpr = executor.toUnique(state, arguments[2]);
-  if (!isa<ConstantExpr>(tidAddressExpr)) {
-    executor.terminateStateOnError(state, "klee_create_thread3", Executor::User);
-    return;
-  }
-
-  ObjectPair op;
-  if(!state.addressSpace.resolveOne(cast<ConstantExpr>(tidAddressExpr), op)) {
-    executor.terminateStateOnError(state, "klee_create_thread4", Executor::User);
-    return;
-  }
-
-  const MemoryObject *mo = op.first;
-  ref<Expr> offset = mo->getOffsetExpr(tidAddressExpr);
-  const ObjectState *os = op.second;
-  ObjectState *wos = state.addressSpace.getWriteable(mo, os);
 
   Thread::ThreadId tid = executor.createThread(state, kfuncPair->second, arguments[1]);
   executor.bindLocal(target, state, ConstantExpr::create(tid, Expr::Int32));
-
-  assert(sizeof(Thread::ThreadId) == sizeof(std::uint32_t));
-  wos->write(offset, ConstantExpr::create(tid, Expr::Int32));
 
   // has to happen last as it needs to include return value
   executor.porEventManager.registerPorEvent(state, por_thread_create, { tid });
