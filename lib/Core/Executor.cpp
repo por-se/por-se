@@ -772,7 +772,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
                                            bool isReadOnly) {
   Thread &thread = state.currentThread();
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
-                                  size, nullptr, thread.getThreadId(),
+                                  size, nullptr, thread,
                                   thread.stack.size() - 1);
   ObjectState *os = bindObjectInState(state, mo, false);
   for (unsigned i = 0; i < size; i++) {
@@ -898,7 +898,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread.getThreadId(),
+                                          thread,
                                           thread.stack.size() - 1,
                                           /*alignment=*/globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
@@ -930,7 +930,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
       MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
                                           /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread.getThreadId(),
+                                          thread,
                                           thread.stack.size() - 1,
                                           /*alignment=*/globalObjectAlignment);
       if (!mo)
@@ -1772,7 +1772,7 @@ void Executor::executeCall(ExecutionState &state,
 
       MemoryObject *mo = sf.varargs =
           memory->allocate(size, true, false, thread.prevPc->inst,
-                           thread.getThreadId(),
+                           thread,
                            thread.stack.size() - 1,
                            (requires16ByteAlignment ? 16 : 8));
       if (!mo && size) {
@@ -3983,6 +3983,8 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
+  memory->markMemoryRegionsAsUnneeded();
+
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
@@ -4070,7 +4072,7 @@ void Executor::executeAlloc(ExecutionState &state,
     }
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
-                         allocSite, thread.getThreadId(),
+                         allocSite, thread,
                          thread.stack.size() - 1,
                          allocationAlignment);
     if (!mo) {
@@ -4101,6 +4103,7 @@ void Executor::executeAlloc(ExecutionState &state,
         }
         processMemoryAccess(state, reallocatedObject, nullptr, MemoryAccessTracker::FREE_ACCESS);
         state.addressSpace.unbindObject(reallocatedObject);
+        reallocatedObject->parent->deallocate(reallocatedObject, thread);
       }
 
       if (PruneStates) {
@@ -4221,6 +4224,8 @@ void Executor::executeFree(ExecutionState &state,
         processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
 
         it->second->addressSpace.unbindObject(mo);
+        mo->parent->deallocate(mo, state.currentThread());
+
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
       }
@@ -4508,6 +4513,18 @@ void Executor::runFunctionAsMain(Function *f,
   // force deterministic initialization of memory objects
   srand(1);
   srandom(1);
+
+  // We have to create the initial state as one of the first actions since otherwise
+  // we cannot correctly initialize / allocate the needed memory regions
+  auto *state = new ExecutionState(kmodule->functionMap[f]);
+
+  // This creates a new configuration with one thread (aka our main thread)
+  state->porConfiguration = std::make_unique<por::configuration>();
+
+  // By default the state should create the main thread
+  Thread &thread = state->currentThread();
+  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_HEAP);
+  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_STACK);
   
   MemoryObject *argvMO = nullptr;
 
@@ -4530,7 +4547,7 @@ void Executor::runFunctionAsMain(Function *f,
       argvMO =
           memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
                            /*isLocal=*/false, /*isGlobal=*/true,
-                           /*allocSite=*/first, /*threadId=*/ ThreadId(1),
+                           /*allocSite=*/first, /*thread=*/ thread,
                            /*stackframeIndex=*/0, /*alignment=*/8);
 
       if (!argvMO)
@@ -4548,19 +4565,11 @@ void Executor::runFunctionAsMain(Function *f,
     }
   }
 
-    if (DebugPrintCalls) {
-      std::stringstream tmp;
-      tmp << "[state: " << std::setw(6) << 0 << " thread: " << std::setw(2) << 0 << "] ";
-      llvm::errs() << tmp.str() << f->getName() << "\n";
-    }
-
-  ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
-
-  // This creates a new configuration with one thread (aka our main thread)
-  state->porConfiguration = std::make_unique<por::configuration>();
-
-  // By default the state should create the main thread
-  Thread &thread = state->currentThread();
+  if (DebugPrintCalls) {
+    std::stringstream tmp;
+    tmp << "[state: " << std::setw(6) << 0 << " thread: " << std::setw(2) << 0 << "] ";
+    llvm::errs() << tmp.str() << f->getName() << "\n";
+  }
 
   if (pathWriter) 
     state->pathOS = pathWriter->open();
@@ -4591,7 +4600,7 @@ void Executor::runFunctionAsMain(Function *f,
         MemoryObject *arg =
             memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
                              /*allocSite=*/thread.pc->inst,
-                             thread.getThreadId(),
+                             /*thread=*/thread,
                              thread.stack.size() - 1,
                              /*alignment=*/8);
         if (!arg)
@@ -4878,14 +4887,16 @@ ThreadId Executor::createThread(ExecutionState &state,
 
   threadStartFrame->locals[startRoutine->getArgRegister(0)].value = runtimeStructPtr;
 
-  // If we create a thread, then we also have to create the TLS objects
+  // If we create a thread, then we also have to create the memory region and the TLS objects
+  thread->threadHeapAlloc = memory->createThreadAllocator(thread->getThreadId(), MemoryManager::REGION_HEAP);
+  thread->threadStackAlloc = memory->createThreadAllocator(thread->getThreadId(), MemoryManager::REGION_STACK);
 
   // Errno is one of the tls objects
   std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
   MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst,
-    thread->getThreadId(), thread->stack.size() - 1, alignment);
+    *thread, thread->stack.size() - 1, alignment);
   if (thErrno == nullptr) {
     klee_error("Could not allocate memory for thread local objects");
   }

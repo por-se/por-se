@@ -22,6 +22,8 @@
 #include <sys/mman.h>
 #include <utility>
 
+#include <unistd.h>
+
 using namespace klee;
 
 namespace {
@@ -57,114 +59,142 @@ llvm::cl::opt<unsigned long long> DeterministicStartAddress(
     llvm::cl::desc("Start address for deterministic allocation. Has to be page "
                    "aligned (default=0x7ff30000000)"),
     llvm::cl::init(0x7ff30000000), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<unsigned> ThreadHeapSize(
+    "allocate-thread-heap-size",
+    llvm::cl::desc(
+            "Reserved memory for every threads heap in GB (default=50)"),
+    llvm::cl::init(50), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<unsigned> ThreadStackSize(
+      "allocate-thread-stack-size",
+      llvm::cl::desc(
+              "Reserved memory for every threads stack size in GB (default=10)"),
+      llvm::cl::init(10), llvm::cl::cat(MemoryCat));
 } // namespace
 
 /***/
 MemoryManager::MemoryManager(ArrayCache *_arrayCache)
-    : arrayCache(_arrayCache), deterministicSpace(0), nextFreeSlot(0),
-      spaceSize(DeterministicAllocationSize.getValue() * 1024 * 1024) {
+    : arrayCache(_arrayCache) {
+
+  pageSize = sysconf(_SC_PAGE_SIZE);
+
+  threadHeapSize = static_cast<uintptr_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
+  threadStackSize = static_cast<uintptr_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
+
+  if ((threadHeapSize & (pageSize - 1)) != 0) {
+    klee_error("-allocate-thread-heap-size must be a multiple of the page size");
+  }
+
+  if ((threadStackSize & (pageSize - 1)) != 0) {
+    klee_error("-allocate-thread-stack-size must be a multiple of the page size");
+  }
+
   if (DeterministicAllocation) {
+    // If the user request a deterministic start address,
+    // then we want to request the mapping of the main thread tid<1> eagerly
+    // Note: this will only place the objects of the main thread into this address section
+
     // Page boundary
-    void *expectedAddress = (void *)DeterministicStartAddress.getValue();
+    auto expectedAddress = reinterpret_cast<void *>(DeterministicStartAddress.getValue());
+    initThreadMemoryMapping(ThreadId(1), expectedAddress);
 
-    char *newSpace =
-        (char *)mmap(expectedAddress, spaceSize, PROT_READ | PROT_WRITE,
-                     MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    auto mainThreadMappingIt = threadMemoryMappings.find(ThreadId(1));
+    assert(mainThreadMappingIt != threadMemoryMappings.end());
 
-    if (newSpace == MAP_FAILED) {
-      klee_error("Couldn't mmap() memory for deterministic allocations");
-    }
-    if (expectedAddress != newSpace && expectedAddress != 0) {
+    auto receivedAddress = mainThreadMappingIt->second.heap.base;
+    if (expectedAddress != receivedAddress && expectedAddress != nullptr) {
       klee_error("Could not allocate memory deterministically");
     }
 
-    klee_message("Deterministic memory allocation starting from %p", newSpace);
-    deterministicSpace = newSpace;
-    nextFreeSlot = newSpace;
+    klee_message("Deterministic memory allocation starting from %p", receivedAddress);
   }
 }
 
 MemoryManager::~MemoryManager() {
   while (!objects.empty()) {
     MemoryObject *mo = *objects.begin();
-    if (!mo->isFixed && !DeterministicAllocation)
-      free((void *)mo->address);
     objects.erase(mo);
     delete mo;
   }
 
-  if (DeterministicAllocation)
-    munmap(deterministicSpace, spaceSize);
+  for (auto& it : threadMemoryMappings) {
+    pseudoalloc::pseudoalloc_dontneed(&it.second.heap);
+    pseudoalloc::pseudoalloc_dontneed(&it.second.stack);
+  }
+}
+
+void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress) {
+  assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
+
+  pseudoalloc::Mapping threadHeapMapping{};
+  if (requestedAddress != nullptr) {
+    threadHeapMapping = pseudoalloc::pseudoalloc_new_mapping(requestedAddress, threadHeapSize);
+  } else {
+    threadHeapMapping = pseudoalloc::pseudoalloc_default_mapping(threadHeapSize);
+  }
+
+  pseudoalloc::Mapping threadStackMapping{};
+  if (requestedAddress != nullptr) {
+    auto stackAddress = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(requestedAddress) + threadHeapSize);
+
+    threadStackMapping = pseudoalloc::pseudoalloc_new_mapping(stackAddress, threadStackSize);
+  } else {
+    threadStackMapping = pseudoalloc::pseudoalloc_default_mapping(threadStackSize);
+  }
+
+  ThreadMemorySegments segment{};
+  segment.heap = threadHeapMapping;
+  segment.stack = threadStackMapping;
+
+  auto insertOpRes = threadMemoryMappings.insert(std::make_pair(tid, segment));
+  assert(insertOpRes.second && "Mapping should always be able to be registered");
 }
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,
                                       bool isLocal,
                                       bool isGlobal,
                                       const llvm::Value *allocSite,
-                                      const ThreadId &threadId,
+                                      const Thread &thread,
                                       std::size_t stackframeIndex,
                                       std::size_t alignment) {
   if (size > 10 * 1024 * 1024)
-    klee_warning_once(0, "Large alloc: %" PRIu64
-                         " bytes.  KLEE may run out of memory.",
-                      size);
+    klee_warning_once(nullptr, "Large alloc: %" PRIu64
+                               " bytes.  KLEE may run out of memory.",
+                               size);
 
   // Return NULL if size is zero, this is equal to error during allocation
   if (NullOnZeroMalloc && size == 0)
-    return 0;
+    return nullptr;
 
   if (!llvm::isPowerOf2_64(alignment)) {
     klee_warning("Only alignment of power of two is supported");
-    return 0;
+    return nullptr;
   }
 
-  uint64_t address = 0;
-  if (DeterministicAllocation) {
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 9)
-    address = llvm::alignTo((uint64_t)nextFreeSlot + alignment - 1, alignment);
-#else
-    address = llvm::RoundUpToAlignment((uint64_t)nextFreeSlot + alignment - 1,
-                                       alignment);
-#endif
-
-    // Handle the case of 0-sized allocations as 1-byte allocations.
-    // This way, we make sure we have this allocation between its own red zones
-    size_t alloc_size = std::max(size, (uint64_t)1);
-    if ((char *)address + alloc_size < deterministicSpace + spaceSize) {
-      nextFreeSlot = (char *)address + alloc_size + RedzoneSize;
-    } else {
-      klee_warning_once(0, "Couldn't allocate %" PRIu64
-                           " bytes. Not enough deterministic space left.",
-                        size);
-      address = 0;
-    }
+  void* allocAddress;
+  if (isLocal) {
+    allocAddress = pseudoalloc::pseudoalloc_alloc_aligned(thread.threadStackAlloc, size, alignment);
   } else {
-    // Use malloc for the standard case
-    if (alignment <= 8)
-      address = (uint64_t)malloc(size);
-    else {
-      int res = posix_memalign((void **)&address, alignment, size);
-      if (res < 0) {
-        klee_warning("Allocating aligned memory failed.");
-        address = 0;
-      }
-    }
+    allocAddress = pseudoalloc::pseudoalloc_alloc_aligned(thread.threadHeapAlloc, size, alignment);
   }
+
+  auto address = reinterpret_cast<std::uint64_t>(allocAddress);
 
   if (!address)
-    return 0;
+    return nullptr;
 
   ++stats::allocations;
   MemoryObject *res =
     new MemoryObject(address, size, isLocal, isGlobal, false, allocSite,
-                     std::make_pair(threadId, stackframeIndex), this);
+                     std::make_pair(thread.getThreadId(), stackframeIndex), this);
   objects.insert(res);
   return res;
 }
 
 MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t size,
                                            const llvm::Value *allocSite,
-                                           const ThreadId &threadId,
+                                           const Thread &thread,
                                            std::size_t stackframeIndex) {
 #ifndef NDEBUG
   for (objects_ty::iterator it = objects.begin(), ie = objects.end(); it != ie;
@@ -178,21 +208,49 @@ MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t 
   ++stats::allocations;
   MemoryObject *res =
     new MemoryObject(address, size, false, true, true, allocSite,
-                     std::make_pair(threadId, stackframeIndex), this);
+                     std::make_pair(thread.getThreadId(), stackframeIndex), this);
   objects.insert(res);
   return res;
 }
 
-void MemoryManager::deallocate(const MemoryObject *mo) { assert(0); }
+void MemoryManager::deallocate(const MemoryObject *mo, const Thread &thread) {
+  // so we have to pass this info to the allocator
+  auto address = reinterpret_cast<void*>(mo->address);
+  if (mo->isLocal) {
+    pseudoalloc::pseudoalloc_dealloc(thread.threadStackAlloc, address);
+  } else {
+    pseudoalloc::pseudoalloc_dealloc(thread.threadHeapAlloc, address);
+  }
+}
 
 void MemoryManager::markFreed(MemoryObject *mo) {
   if (objects.find(mo) != objects.end()) {
-    if (!mo->isFixed && !DeterministicAllocation)
-      free((void *)mo->address);
     objects.erase(mo);
   }
 }
 
 size_t MemoryManager::getUsedDeterministicSize() {
-  return nextFreeSlot - deterministicSpace;
+  // TODO: needs support in pseudoalloc
+  return 0;
+}
+
+pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, AllocatorRegion region) {
+  // So first of all, check if we already have a mapping for that thread
+  auto it = threadMemoryMappings.find(tid);
+
+  if (it == threadMemoryMappings.end()) {
+    initThreadMemoryMapping(tid, nullptr);
+
+    it = threadMemoryMappings.find(tid);
+    assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");
+  }
+
+  return pseudoalloc::pseudoalloc_new(region == REGION_STACK ? it->second.stack : it->second.heap);
+}
+
+void MemoryManager::markMemoryRegionsAsUnneeded() {
+  for (auto& it : threadMemoryMappings) {
+    pseudoalloc::pseudoalloc_dontneed(&it.second.heap);
+    pseudoalloc::pseudoalloc_dontneed(&it.second.stack);
+  }
 }

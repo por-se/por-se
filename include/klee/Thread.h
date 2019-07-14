@@ -13,6 +13,7 @@
 
 #include <vector>
 #include <unordered_map>
+#include <pseudoalloc.h>
 
 namespace klee {
   class Array;
@@ -60,6 +61,7 @@ namespace klee {
     friend class Executor;
     friend class ExecutionState;
     friend class MemoryState;
+    friend class MemoryManager;
     friend class PorEventManager;
     friend class StatsTracker;
     friend class Searcher;
@@ -110,9 +112,15 @@ namespace klee {
       /// @brief counts how many threads this thread already created
       std::uint16_t spawnedThreads = 0;
 
+      pseudoalloc::Alloc* threadHeapAlloc = nullptr;
+
+      pseudoalloc::Alloc* threadStackAlloc = nullptr;
+
     public:
       Thread() = delete;
+      Thread(const Thread &thread);
       Thread(ThreadId tid, KFunction* threadStartRoutine);
+      ~Thread();
 
       ThreadId getThreadId() const;
       ref<Expr> getRuntimeStructPtr() const;

@@ -162,12 +162,15 @@ ObjectState::~ObjectState() {
   delete[] knownSymbolics;
   delete[] concreteStore;
 
-  if (object)
-  {
+  if (object) {
     assert(object->refCount > 0);
+    // We have to make sure that the `MemoryManager` marks the allocation
+    // area again as free or no longer used
+    // object->parent->
+
+    // Now clear the internal stuff
     object->refCount--;
-    if (object->refCount == 0)
-    {
+    if (object->refCount == 0) {
       delete object;
     }
   }

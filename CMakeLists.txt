@@ -356,6 +356,19 @@ if (VERIFIED_FINGERPRINTS)
 endif()
 
 ################################################################################
+# Support for pseudo allocations (via pseudoalloc library)
+################################################################################
+find_package(PseudoAlloc)
+if (PSEUDOALLOC_FOUND)
+  message(STATUS "pseudoalloc found")
+  set(TARGET_LIBS ${TARGET_LIBS} pseudoalloc)
+  list(APPEND KLEE_COMPONENT_EXTRA_LIBRARIES ${PSEUDOALLOC_LIBRARIES})
+  list(APPEND KLEE_COMPONENT_EXTRA_INCLUDE_DIRS ${PSEUDOALLOC_INCLUDE_DIRS})
+else()
+  message(FATAL_ERROR "pseudoalloc is required but could not be found")
+endif()
+
+################################################################################
 # Partial Order Reduction Library (from Simulator)
 ################################################################################
 

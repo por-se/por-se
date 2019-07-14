@@ -22,6 +22,7 @@
 #include "Memory.h"
 #include "MemoryAccessTracker.h"
 #include "MemoryState.h"
+#include "MemoryManager.h"
 #include "PTree.h"
 
 #include "llvm/IR/Function.h"
@@ -158,6 +159,10 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
 
   for (auto &it : sf.allocas) {
     addressSpace.unbindObject(it);
+
+    // TODO: once we have a proper way to free stack memory objects
+    //       use that functionality here
+    it->parent->deallocate(it, *thread);
   }
 
   if (PruneStates) {

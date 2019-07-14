@@ -761,7 +761,7 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
   MemoryObject *mo = executor.memory->allocateFixed(address, size,
                                                     thread.prevPc->inst,
-                                                    thread.getThreadId(),
+                                                    thread,
                                                     thread.stack.size() - 1);
   ObjectState *os = executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
