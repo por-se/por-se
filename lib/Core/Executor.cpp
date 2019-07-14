@@ -4519,7 +4519,7 @@ void Executor::runFunctionAsMain(Function *f,
       argvMO =
           memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
                            /*isLocal=*/false, /*isGlobal=*/true,
-                           /*allocSite=*/first, /*threadId=*/1,
+                           /*allocSite=*/first, /*threadId=*/ ThreadId(1),
                            /*stackframeIndex=*/0, /*alignment=*/8);
 
       if (!argvMO)
@@ -4550,7 +4550,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
-  
+
   if (pathWriter) 
     state->pathOS = pathWriter->open();
   if (symPathWriter) 
@@ -4605,7 +4605,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   // register thread_init event for main thread at last possible moment
   // to ensure that all data structures are properly set up
-  porEventManager.registerPorEvent(*state, por_thread_init, { thread.getThreadId() });
+  porEventManager.registerThreadInit(*state, thread.getThreadId());
 
   if (ThreadScheduling == ThreadSchedulingPolicy::RoundRobin) {
     porEventManager.enableRoundRobinMode();
@@ -4856,9 +4856,10 @@ void Executor::prepareForEarlyExit() {
   }
 }
 
-Thread::ThreadId Executor::createThread(ExecutionState &state,
+ThreadId Executor::createThread(ExecutionState &state,
                                         KFunction *startRoutine,
                                         ref<Expr> runtimeStructPtr) {
+
   Thread* thread = state.createThread(startRoutine, runtimeStructPtr);
   StackFrame* threadStartFrame = &thread->stack.back();
 
@@ -4899,8 +4900,7 @@ void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
 
 void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent) {
   if (!onlyOne) {
-    std::vector<std::uint64_t> porData;
-    porData.push_back(lid);
+    std::vector<ThreadId> notifiedThreads;
 
     if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
       const por::event::event* event = state.porConfiguration->peek();
@@ -4908,27 +4908,27 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
       auto broadcast = static_cast<const por::event::broadcast*>(event);
       for (const auto &wait1 : broadcast->wait_predecessors()) {
         state.wakeUpThread(wait1->tid());
-        porData.push_back(wait1->tid());
+        notifiedThreads.push_back(wait1->tid());
       }
     } else {
       for (const auto &th : state.threads) {
         if (th.second.waitingHandle == lid) {
           state.wakeUpThread(th.first);
-          porData.push_back(th.first);
+          notifiedThreads.push_back(th.first);
         }
       }
     }
 
     if (registerAsNotificationEvent) {
-      if (porData.size() == 1)
-        ++state.lostNotifications; // first entry is cond id
-      porEventManager.registerPorEvent(state, por_broadcast, porData);
+      if (notifiedThreads.size() == 1)
+        ++state.lostNotifications;
+      porEventManager.registerCondVarBroadcast(state, lid, notifiedThreads);
     }
 
     return;
   }
 
-  std::vector<Thread::ThreadId> choices;
+  std::vector<ThreadId> choices;
   if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
       const por::event::event* event = state.porConfiguration->peek();
       assert(event->kind() == por::event::event_kind::signal);
@@ -4948,11 +4948,12 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     // this is a lost signal (signalled thread id == 0)
     if (registerAsNotificationEvent) {
       ++state.lostNotifications;
-      porEventManager.registerPorEvent(state, por_signal, { lid, 0 });
+      porEventManager.registerCondVarSignal(state, lid, {});
     }
 
     return;
   }
+
 
   size_t allowedChoices = choices.size();
 
@@ -4980,7 +4981,7 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     st->wakeUpThread(choices[i]);
 
     if (registerAsNotificationEvent) {
-      porEventManager.registerPorEvent(*st, por_signal, { lid, choices[i] });
+      porEventManager.registerCondVarSignal(*st, lid, choices[i]);
     }
   }
 }
@@ -4991,10 +4992,11 @@ void Executor::preemptThread(ExecutionState &state) {
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  Thread::ThreadId tid = state.currentThreadId();
+  const ThreadId& tid = state.currentThreadId();
+  auto mainThreadId = ThreadId(1);
 
   // needs to come before thread_exit event
-  if (tid == 1 && !state.currentThread().pathSincePorLocal.empty()) {
+  if (tid == mainThreadId && !state.currentThread().pathSincePorLocal.empty()) {
     // pathSincePorLocal has to be empty in standby state attached to event
     std::vector<bool> path = std::move(state.currentThread().pathSincePorLocal);
     state.currentThread().pathSincePorLocal = {};
@@ -5003,10 +5005,10 @@ void Executor::exitThread(ExecutionState &state) {
 
   state.exitThread(tid);
   state.needsThreadScheduling = true;
-  if (tid == 1) {
+  if (tid == mainThreadId) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
-    porEventManager.registerPorEvent(state, por_thread_exit, { tid });
+    porEventManager.registerThreadExit(state, tid);
   }
 }
 
@@ -5112,11 +5114,11 @@ bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo
     terminateStateOnUnsafeMemAccess(state, mo, racingInstruction);
   } else {
     if (!access.atomicMemoryAccess) {
-      Thread::ThreadId tid = state.currentThreadId();
+      const ThreadId& tid = state.currentThreadId();
 
       for (auto dep : result.dataDependencies) {
         uint64_t scheduleIndex = dep.second;
-        uint64_t dTid = dep.first;
+        const ThreadId& dTid = dep.first;
 
         state.memAccessTracker.registerThreadDependency(tid, dTid, scheduleIndex);
       }
@@ -5207,7 +5209,8 @@ void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newFor
       addedStates.push_back(st);
     }
 
-    st->scheduleNextThread(*rIt);
+    const ThreadId& tidToSchedule = *rIt;
+    st->scheduleNextThread(tidToSchedule);
   }
 }
 
@@ -5234,7 +5237,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     state.threadSchedulingEnabled = true;
   }
 
-  std::set<Thread::ThreadId>& runnable = state.runnableThreads;
+  std::set<ThreadId>& runnable = state.runnableThreads;
 
   // Another point of we cannot schedule any other thread
   if (runnable.empty()) {
@@ -5258,7 +5261,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   if (NoScheduleForks) {
     // pick thread according to policy by default
-    Thread::ThreadId tid;
+    ThreadId tid;
     switch (ThreadScheduling) {
         case ThreadSchedulingPolicy::First:
             tid = *runnable.begin();

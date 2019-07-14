@@ -92,6 +92,11 @@ class VerifiedMemoryFingerprint
     hashFingerprint.updateUint8(value);
   }
 
+  void updateUint16(const std::uint16_t value) {
+    stringSetFingerprint.updateUint16(value);
+    hashFingerprint.updateUint16(value);
+  }
+
   void updateUint64(const std::uint64_t value) {
     stringSetFingerprint.updateUint64(value);
     hashFingerprint.updateUint64(value);

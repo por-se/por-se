@@ -16,6 +16,8 @@
 
 #include "llvm/ADT/StringExtras.h"
 
+#include "klee/ThreadId.h"
+
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -43,7 +45,7 @@ private:
   mutable unsigned refCount;
 
   /// id of thread and index of stack frame in which this memory object was allocated.
-  std::pair<std::size_t, std::size_t> allocationStackFrame{};
+  std::pair<ThreadId, std::size_t> allocationStackFrame{};
 
 public:
   uint64_t id;
@@ -90,10 +92,10 @@ public:
       allocSite(0) {
   }
 
-  MemoryObject(uint64_t _address, unsigned _size, 
+  MemoryObject(uint64_t _address, unsigned _size,
                bool _isLocal, bool _isGlobal, bool _isFixed,
                const llvm::Value *_allocSite,
-               std::pair<std::size_t, std::size_t> _allocationStackFrame,
+               std::pair<ThreadId, size_t> _allocationStackFrame,
                MemoryManager *_parent)
     : refCount(0),
       allocationStackFrame(_allocationStackFrame),
@@ -156,7 +158,7 @@ public:
     }
   }
 
-  const std::pair<std::size_t, std::size_t> &getAllocationStackFrame() const {
+  const std::pair<ThreadId, size_t> & getAllocationStackFrame() const {
     return allocationStackFrame;
   }
 };

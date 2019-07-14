@@ -4,6 +4,7 @@
 #include <sched.h>
 #include <time.h>
 
+#include <sys/types.h>
 #include <stdint.h>
 
 #define _USING_PORSE_PTHREAD (1)
@@ -103,9 +104,7 @@ enum
 #define PTHREAD_SCOPE_PROCESS   PTHREAD_SCOPE_PROCESS
 };
 
-// Why this indirection?
 typedef struct {
-  uint32_t tid;
   uint8_t state;
   uint8_t mode;
   uint8_t joinState;

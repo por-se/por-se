@@ -5,18 +5,18 @@
 #include <pthread.h>
 
 int main(void) {
-  // CHECK: POR event: thread_init with current thread 1 and args: 1
+  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
   pthread_cond_t cond;
 
-  // CHECK-NEXT: POR event: condition_variable_create with current thread 1 and args: [[COND:[0-9]+]]
+  // CHECK-NEXT: POR event: condition_variable_create with current thread [[M_TID]] on cond. var [[COND:[0-9]+]]
   pthread_cond_init(&cond, NULL);
 
-  // CHECK-NEXT: POR event: signal with current thread 1 and args: [[COND]] 0
+  // CHECK-NEXT: POR event: signal with current thread [[M_TID]] on cond. var [[COND]] and signalled thread tid<>
   pthread_cond_signal(&cond);
 
-  // CHECK-NEXT: POR event: condition_variable_destroy with current thread 1 and args: [[COND]]
+  // CHECK-NEXT: POR event: condition_variable_destroy with current thread [[M_TID]] on cond. var [[COND]]
   pthread_cond_destroy(&cond);
 
   return 0;
-  // CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 }

@@ -19,7 +19,7 @@ namespace klee {
   class ExecutionState;
 
   typedef struct {
-    Thread::ThreadId scheduledThread;
+    ThreadId scheduledThread;
     uint64_t epochNumber;
   } SchedulingDecision;
 

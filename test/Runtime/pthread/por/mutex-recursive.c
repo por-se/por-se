@@ -6,37 +6,37 @@
 #include <stdio.h>
 
 int main(void) {
-  // CHECK: POR event: thread_init with current thread 1 and args: 1
+  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
   pthread_mutex_t mutex;
 
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 
-  // CHECK-NEXT: POR event: lock_create with current thread 1 and args: [[LID:[0-9]+]]
+  // CHECK-NEXT: POR event: lock_create with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
   pthread_mutex_init(&mutex, &attr);
 
   pthread_mutexattr_destroy(&attr);
 
-  // CHECK-NEXT: POR event: lock_acquire with current thread 1 and args: [[LID]]
+  // CHECK-NEXT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_lock(&mutex);
 
-  // CHECK-NOT: POR event: lock_acquire with current thread 1 and args: [[LID]]
+  // CHECK-NOT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_lock(&mutex);
 
-  // CHECK-NOT: POR event: lock_release with current thread 1 and args: [[LID]]
+  // CHECK-NOT: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_unlock(&mutex);
 
   // This is placed in between, so that we can differ between both releases
   // CHECK-NEXT: MARKER
   puts("MARKER");
 
-  // CHECK-NEXT: POR event: lock_release with current thread 1 and args: [[LID]]
+  // CHECK-NEXT: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_unlock(&mutex);
 
-  // CHECK-NEXT: POR event: lock_destroy with current thread 1 and args: [[LID]]
+  // CHECK-NEXT: POR event: lock_destroy with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_destroy(&mutex);
 
   return 0;
-  // CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 }

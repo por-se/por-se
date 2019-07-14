@@ -13,6 +13,11 @@ void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint8(const std::uint8_t value) {
   blake2b.Update(&value, 1);
 }
 
+void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint16(const std::uint16_t value) {
+  static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
+  blake2b.Update(reinterpret_cast<const std::uint8_t *>(&value), 2);
+}
+
 void MemoryFingerprint_CryptoPP_BLAKE2b::updateUint64(const std::uint64_t value) {
   static_assert(sizeof(CryptoPP::byte) == sizeof(std::uint8_t));
   blake2b.Update(reinterpret_cast<const std::uint8_t *>(&value), 8);

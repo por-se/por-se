@@ -35,7 +35,23 @@ StackFrame::~StackFrame() {
 
 /***/
 
-Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(tid) {
+llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const ThreadId &tid) {
+  os << "tid<";
+  for (std::size_t i = 0; i < tid.size(); i++) {
+    if (i > 0) {
+      os << ",";
+    }
+
+    const std::uint16_t val = tid[i];
+    os << val;
+  }
+  os << ">";
+  return os;
+}
+
+/***/
+
+Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(std::move(tid)) {
   assert(threadStartRoutine && "A thread has to start somewhere");
 
   // in case of main thread, this is the program's entry point, e.g. main()
@@ -44,9 +60,11 @@ Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(tid) {
   // initialize program counters
   this->prevPc = threadStartRoutine->instructions;
   this->pc = this->prevPc;
+
+  this->runtimeStructPtr = ConstantExpr::createPointer(0);
 }
 
-Thread::ThreadId Thread::getThreadId() const {
+ThreadId Thread::getThreadId() const {
   return tid;
 }
 

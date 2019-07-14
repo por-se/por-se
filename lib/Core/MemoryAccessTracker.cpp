@@ -3,8 +3,6 @@
 
 using namespace klee;
 
-static const std::uint64_t NOT_EXECUTED = ~((std::uint64_t) 0);
-
 void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   if (accessLists.empty()) {
     return;
@@ -21,7 +19,7 @@ void MemoryAccessTracker::forkCurrentEpochWhenNeeded() {
   accessLists[accessLists.size() - 1] = ema;
 }
 
-void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
+void MemoryAccessTracker::scheduledNewThread(const ThreadId &tid) {
   // So basically we have scheduled a new thread: that means
   // making sure the current epoch ends and we start a new one
 
@@ -36,16 +34,12 @@ void MemoryAccessTracker::scheduledNewThread(Thread::ThreadId tid) {
   ema->tid = tid;
   ema->scheduleIndex = accessLists.size();
 
-  if (tid > lastExecutions.size()) {
-    lastExecutions.resize(tid, NOT_EXECUTED);
+  auto it = lastExecutions.find(tid);
+  if (it != lastExecutions.end()) {
+    ema->preThreadAccess = accessLists[it->second];
   }
 
-  std::uint64_t exec = lastExecutions[tid - 1];
-  if (exec != NOT_EXECUTED) {
-    ema->preThreadAccess = accessLists[exec];
-  }
-
-  lastExecutions[tid - 1] = ema->scheduleIndex;
+  lastExecutions[tid] = ema->scheduleIndex;
   accessLists.emplace_back(ema);
 
   knownThreads.insert(tid);
@@ -109,7 +103,8 @@ void MemoryAccessTracker::trackMemoryAccess(std::uint64_t id, MemoryAccess acces
   accesses.emplace_back(access);
 }
 
-void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, Thread::ThreadId predTid, std::uint64_t epoch) {
+void MemoryAccessTracker::registerThreadDependency(const ThreadId &targetTid, const ThreadId &predTid,
+                                                   std::uint64_t epoch) {
   // Tries to register the following ordering: predTid > targetTid
   std::uint64_t* v = getThreadSyncValueTo(targetTid, predTid);
 
@@ -121,7 +116,7 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   *v = epoch;
 
   // Two threads can also synchronize through a third one
-  for (std::uint64_t thirdTid = 0; thirdTid < knownThreads.size(); thirdTid++) {
+  for (const auto thirdTid : knownThreads) {
     if (thirdTid == targetTid || thirdTid == predTid) {
       // We want to find a third thread, therefore we can ignore these
       continue;
@@ -152,8 +147,8 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   // Everything before that is basically no longer needed and can be unreferenced.
   std::uint64_t keepAllAfter = accessLists.size();
 
-  for (std::uint64_t i = 0; i < knownThreads.size(); i++) {
-    for (std::uint64_t j = 0; j < knownThreads.size(); j++) {
+  for (const auto& i : knownThreads) {
+    for (const auto& j : knownThreads) {
       if (i == j) {
         continue;
       }
@@ -174,26 +169,25 @@ void MemoryAccessTracker::registerThreadDependency(Thread::ThreadId targetTid, T
   }
 }
 
-std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(Thread::ThreadId tid, Thread::ThreadId reference) {
+std::uint64_t* MemoryAccessTracker::getThreadSyncValueTo(const ThreadId &tid, const ThreadId &reference) {
   assert(tid != reference && "ThreadIds have to be unequal");
-  std::uint64_t max = std::max(tid, reference);
+  auto pair = std::make_pair(tid, reference);
 
-  // Skip the combination of reference == tid by offsetting the indexes by 1 correspondingly
-  if (max + 1 > threadSyncs.size()) {
-    threadSyncs.resize(max + 1);
+  auto it = threadSyncs.find(pair);
+  if (it == threadSyncs.end()) {
+    auto insertIt = threadSyncs.insert(std::make_pair(pair, 0));
+    assert(insertIt.second);
 
-    for (auto &threadSync : threadSyncs) {
-      threadSync.resize(max + 1, 0);
-    }
+    return &(insertIt.first->second);
   }
 
-  return &threadSyncs[tid][reference];
+  return &it->second;
 }
 
 void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &result, std::uint64_t mid,
                                                        const MemoryAccess &access,
                                                        const std::shared_ptr<const EpochMemoryAccesses> &ema) {
-  Thread::ThreadId tid = ema->tid;
+  ThreadId tid = ema->tid;
 
   bool isRead = (access.type & READ_ACCESS);
   bool isFree = (access.type & FREE_ACCESS);
@@ -276,17 +270,17 @@ void MemoryAccessTracker::testIfUnsafeMemAccessByEpoch(MemAccessSafetyResult &re
   }
 }
 
-void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, Thread::ThreadId tid,
+void MemoryAccessTracker::testIfUnsafeMemAccessByThread(MemAccessSafetyResult &result, const ThreadId &tid,
                                                         std::uint64_t id, const MemoryAccess &access) {
-  std::uint64_t exec = lastExecutions[tid - 1];
-  if (exec == NOT_EXECUTED) {
+  auto it = lastExecutions.find(tid);
+  if (it == lastExecutions.end()) {
     return;
   }
 
-  Thread::ThreadId curTid = accessLists.back()->tid;
+  ThreadId curTid = accessLists.back()->tid;
 
   std::uint64_t sync = *getThreadSyncValueTo(curTid, tid);
-  std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[exec];
+  std::shared_ptr<const EpochMemoryAccesses> ema = accessLists[it->second];
 
   while (ema != nullptr && sync < ema->scheduleIndex) {
     assert(ema->tid == tid);
@@ -316,7 +310,7 @@ MemAccessSafetyResult MemoryAccessTracker::testIfUnsafeMemoryAccess(std::uint64_
   result.wasSafe = true;
 
   auto epochIterator = accessLists.rbegin();
-  Thread::ThreadId curTid = (*epochIterator)->tid;
+  ThreadId curTid = (*epochIterator)->tid;
 
   // Loop through all threads to find data races
   for (auto& tid : knownThreads) {

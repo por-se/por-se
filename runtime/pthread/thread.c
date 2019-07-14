@@ -12,12 +12,14 @@
 
 static kpr_thread mainThread;
 pthread_t pthread_self(void) {
-  if (klee_get_thread_id() == 1) {
+  void* d = klee_get_thread_runtime_struct_ptr();
+
+  if (d == NULL) {
     // Main thread will not have any start argument so make sure that we pass the correct one
     return &mainThread;
   }
 
-  return (pthread_t) klee_get_thread_runtime_struct_ptr();
+  return (pthread_t) d;
 }
 
 int pthread_equal(pthread_t th1, pthread_t th2) {
@@ -57,7 +59,7 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   kpr_list_create(&thread->cleanupStack);
 
   // assignment happens after the new thread (that can also write to thread) has been created
-  thread->tid = klee_create_thread(kpr_wrapper, thread);
+  klee_create_thread(kpr_wrapper, thread);
   klee_preempt_thread();
 
   return 0;
@@ -98,7 +100,7 @@ void pthread_exit(void* arg) {
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
   thread->state = KPR_THREAD_STATE_DEAD;
 
-  klee_por_register_event(por_thread_exit, thread->tid);
+  klee_por_thread_exit();
 
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
     thread->returnValue = arg;
@@ -123,7 +125,7 @@ void pthread_exit(void* arg) {
     pthread_cleanup_pop(1);
   }
 
-  kpr_key_clear_data_of_thread(thread->tid);
+  kpr_key_clear_data_of_thread(thread);
   klee_exit_thread();
 }
 
@@ -136,7 +138,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     return EINVAL;
   }
 
-  if (klee_get_thread_id() == thread->tid) { // We refer to our own thread
+  if (pthread_self() == pthread) { // We refer to our own thread
     klee_toggle_thread_scheduling(1);
     return EDEADLK;
   }
@@ -157,7 +159,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
-  klee_por_register_event(por_thread_join, thread->tid);
+  klee_por_thread_join(thread);
 
   if (ret != NULL) {
     // if (thread->cancelSignalReceived == 1) {

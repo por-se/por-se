@@ -60,7 +60,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     memoryState(this),
     steppedInstructions(0)
 {
-    Thread::ThreadId mainThreadId = 1;
+    ThreadId mainThreadId(1);
 
     // Thread 1 is reserved for program's main thread (executing kf)
     auto result = threads.emplace(std::piecewise_construct,
@@ -172,8 +172,11 @@ void ExecutionState::popFrameOfCurrentThread() {
   popFrameOfThread(&currentThread());
 }
 
-Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
-  Thread::ThreadId tid = threads.size() + 1;
+Thread * ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
+  auto& curThread = currentThread();
+
+  ThreadId tid = ThreadId(curThread.tid, ++curThread.spawnedThreads);
+
   auto result = threads.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(tid),
                                 std::forward_as_tuple(tid, kf));
@@ -194,7 +197,7 @@ Thread* ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
   return newThread;
 }
 
-void ExecutionState::scheduleNextThread(Thread::ThreadId tid) {
+void ExecutionState::scheduleNextThread(const ThreadId &tid) {
   Thread &thread = currentThread(tid);
 
   assert(thread.state == ThreadState::Runnable && "Cannot schedule non-runnable thread");
@@ -236,7 +239,7 @@ void ExecutionState::threadWaitOn(std::uint64_t lid) {
   thread.waitingHandle = lid;
 }
 
-void ExecutionState::preemptThread(Thread::ThreadId tid) {
+void ExecutionState::preemptThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -246,7 +249,7 @@ void ExecutionState::preemptThread(Thread::ThreadId tid) {
   runnableThreads.insert(tid);
 }
 
-void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
+void ExecutionState::wakeUpThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -268,7 +271,7 @@ void ExecutionState::wakeUpThread(Thread::ThreadId tid) {
   }
 }
 
-void ExecutionState::exitThread(Thread::ThreadId tid) {
+void ExecutionState::exitThread(const ThreadId &tid) {
   auto pair = threads.find(tid);
   assert(pair != threads.end() && "Could not find thread by id");
 
@@ -324,7 +327,7 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   return os;
 }
 
-bool ExecutionState::hasSameThreadState(const ExecutionState &b, Thread::ThreadId tid) {
+bool ExecutionState::hasSameThreadState(const ExecutionState &b, const ThreadId &tid) {
   auto threadA = threads.find(tid);
   auto threadB = b.threads.find(tid);
 

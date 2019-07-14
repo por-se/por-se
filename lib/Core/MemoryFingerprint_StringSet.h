@@ -20,6 +20,7 @@ class MemoryFingerprint_StringSet
   void generateHash();
   void clearHash();
   void updateUint8(const std::uint8_t value);
+  void updateUint16(const std::uint16_t value);
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
 

@@ -34,19 +34,19 @@ int main(void) {
 }
 
 
-// CHECK: POR event: thread_init with current thread 1 and args: 1
-// CHECK-NEXT: POR event: lock_acquire with current thread 1 and args: [[LID:[0-9]+]]
-// CHECK: POR event: thread_create with current thread 1 and args: 2
-// CHECK-NEXT: POR event: wait1 with current thread 1 and args: [[COND:[0-9]+]] [[LID]]
+// CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
+// CHECK-NEXT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
+// CHECK: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
+// CHECK-NEXT: POR event: wait1 with current thread [[M_TID]] on cond. var [[COND:[0-9]+]] and mutex [[LID]]
 
-// CHECK-NEXT: POR event: lock_acquire with current thread 2 and args: [[LID]]
-// CHECK-NEXT: POR event: signal with current thread 2 and args: [[COND]] 1
-// CHECK-NEXT: POR event: lock_release with current thread 2 and args: [[LID]]
+// CHECK-NEXT: POR event: lock_acquire with current thread [[SEC_TID]] on mutex [[LID]]
+// CHECK-NEXT: POR event: signal with current thread [[SEC_TID]] on cond. var [[COND]] and signalled thread [[M_TID]]
+// CHECK-NEXT: POR event: lock_release with current thread [[SEC_TID]] on mutex [[LID]]
 
-// CHECK-NEXT: POR event: wait2 with current thread 1 and args: [[COND]] [[LID]]
-// CHECK-NEXT: POR event: lock_release with current thread 1 and args: [[LID]]
+// CHECK-NEXT: POR event: wait2 with current thread [[M_TID]] on cond. var [[COND]] and mutex [[LID]]
+// CHECK-NEXT: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
 
-// CHECK-NEXT: POR event: thread_exit with current thread 2 and args: 2
+// CHECK-NEXT: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 
-// CHECK-NEXT: POR event: thread_join with current thread 1 and args: 2
-// CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+// CHECK-NEXT: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
+// CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]

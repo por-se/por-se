@@ -11,17 +11,17 @@ static void* noop(void* arg) {
 int main(void) {
   pthread_t thread;
 
-  // CHECK: POR event: thread_init with current thread 1 and args: 1
+  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
   // This next check is not check-next, since there is a malloc line in between
-  // CHECK: POR event: thread_create with current thread 1 and args: 2
+  // CHECK: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
   pthread_create(&thread, NULL, noop, NULL);
 
-  // CHECK-NEXT: POR event: thread_exit with current thread 2 and args: 2
+  // CHECK-NEXT: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 
   pthread_join(thread, NULL);
 
-  // CHECK-NEXT: POR event: thread_join with current thread 1 and args: 2
-  // CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+  // CHECK-NEXT: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 
   return 0;
 }

@@ -5,15 +5,15 @@
 #include <pthread.h>
 
 int main(void) {
-  // CHECK: POR event: thread_init with current thread 1 and args: 1
+  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-  // CHECK-NEXT: POR event: lock_acquire with current thread 1 and args: [[LID:[0-9]+]]
+  // CHECK-NEXT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
   pthread_mutex_lock(&mutex);
 
-  // CHECK-NEXT: POR event: lock_release with current thread 1 and args: [[LID]]
+  // CHECK-NEXT: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
   pthread_mutex_unlock(&mutex);
 
   return 0;
-  // CHECK-NEXT: POR event: thread_exit with current thread 1 and args: 1
+  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 }

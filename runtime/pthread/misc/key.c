@@ -25,7 +25,7 @@ int pthread_key_create(pthread_key_t *k, void (*destructor) (void*)) {
 }
 
 static kpr_key_data* kpr_get_data(pthread_key_t k) {
-  uint32_t tid = klee_get_thread_id();
+  pthread_t th = pthread_self();
 
   kpr_key* key = *((kpr_key**) k);
 
@@ -33,7 +33,7 @@ static kpr_key_data* kpr_get_data(pthread_key_t k) {
   while(kpr_list_iterator_valid(it)) {
     kpr_key_data* d = kpr_list_iterator_value(it);
 
-    if (d->thread == tid) {
+    if (d->thread == th) {
       return d;
     }
 
@@ -42,7 +42,7 @@ static kpr_key_data* kpr_get_data(pthread_key_t k) {
 
   kpr_key_data* d = (kpr_key_data*) malloc(sizeof(kpr_key_data));
   memset(d, 0, sizeof(kpr_key_data));
-  d->thread = tid;
+  d->thread = th;
   d->value = NULL;
 
   kpr_list_push(&key->values, d);
@@ -97,12 +97,12 @@ static void kpr_clear_thread_key(kpr_key* key, kpr_key_data* d) {
   }
 }
 
-static void kpr_clear_thread(kpr_key* key, uint32_t tid) {
+static void kpr_clear_thread(kpr_key* key, pthread_t th) {
   kpr_list_iterator it = kpr_list_iterate(&key->values);
   while(kpr_list_iterator_valid(it)) {
     kpr_key_data* d = kpr_list_iterator_value(it);
 
-    if (d->thread == tid) {
+    if (d->thread == th) {
       kpr_clear_thread_key(key, d);
 
       kpr_list_erase(&key->values, &it);
@@ -115,12 +115,12 @@ static void kpr_clear_thread(kpr_key* key, uint32_t tid) {
 
 // this is an internal method for the runtime to invoke all destructors that are associated with the
 // keys that this thread created/used
-void kpr_key_clear_data_of_thread(uint32_t tid) {
+void kpr_key_clear_data_of_thread(pthread_t th) {
   kpr_list_iterator it = kpr_list_iterate(&knownKeys);
   while(kpr_list_iterator_valid(it)) {
     kpr_key* k = kpr_list_iterator_value(it);
 
-    kpr_clear_thread(k, tid);
+    kpr_clear_thread(k, th);
 
     kpr_list_iterator_next(&it);
   }
