@@ -954,7 +954,7 @@ void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
   std::uint64_t wait1Lock = cast<ConstantExpr>(wait1LockExpr)->getZExtValue();
   executor.threadWaitOn(state, handle_id);
   if (wait1Lock > 0) {
-    executor.porEventManager.registerPorEvent(state, por_wait1, { handle_id, wait1Lock });
+    executor.porEventManager.registerCondVarWait1(state, handle_id, wait1Lock);
   }
 }
 
