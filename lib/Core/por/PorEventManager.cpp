@@ -81,7 +81,7 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
 
   bool registerStandbyState = true;
   if (StandbyStates != StandbyStatePolicy::All) {
-    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == ThreadId(1))|| (kind == por_condition_variable_create);
+    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == ThreadId(1)) || (kind == por_condition_variable_create);
 
     if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
       auto dist = state.porConfiguration->distance_to_last_standby_state(&state);

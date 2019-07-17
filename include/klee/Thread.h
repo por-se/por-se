@@ -17,7 +17,6 @@
 namespace klee {
   class Array;
   class CallPathNode;
-  class ThreadNode;
 
   struct StackFrame {
     KInstIterator caller;

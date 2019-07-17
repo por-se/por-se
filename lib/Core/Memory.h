@@ -95,7 +95,7 @@ public:
   MemoryObject(uint64_t _address, unsigned _size,
                bool _isLocal, bool _isGlobal, bool _isFixed,
                const llvm::Value *_allocSite,
-               std::pair<ThreadId, size_t> _allocationStackFrame,
+               std::pair<ThreadId, std::size_t> _allocationStackFrame,
                MemoryManager *_parent)
     : refCount(0),
       allocationStackFrame(_allocationStackFrame),
@@ -158,7 +158,7 @@ public:
     }
   }
 
-  const std::pair<ThreadId, size_t> & getAllocationStackFrame() const {
+  const std::pair<ThreadId, std::size_t> &getAllocationStackFrame() const {
     return allocationStackFrame;
   }
 };

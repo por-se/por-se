@@ -4,7 +4,7 @@
 #include <sched.h>
 #include <time.h>
 
-#include <sys/types.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define _USING_PORSE_PTHREAD (1)

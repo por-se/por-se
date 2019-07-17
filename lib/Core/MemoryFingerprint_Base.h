@@ -270,7 +270,7 @@ template <typename D, std::size_t S, typename V>
 bool MemoryFingerprintT<D, S, V>::updateLocalFragment(const ThreadId &threadID,
                                                       std::uint64_t stackFrameIndex,
                                                       const llvm::Instruction *inst,
-                                                      ref <Expr> value) {
+                                                      ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(3);
@@ -295,7 +295,7 @@ bool MemoryFingerprintT<D, S, V>::updateArgumentFragment(const ThreadId &threadI
                                                          std::uint64_t sfIndex,
                                                          const KFunction *kf,
                                                          std::uint64_t argumentIndex,
-                                                         ref <Expr> value) {
+                                                         ref<Expr> value) {
   if (ConstantExpr *constant = dyn_cast<ConstantExpr>(value)) {
     // concrete value
     getDerived().updateUint8(5);

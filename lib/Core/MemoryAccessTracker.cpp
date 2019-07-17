@@ -116,7 +116,7 @@ void MemoryAccessTracker::registerThreadDependency(const ThreadId &targetTid, co
   *v = epoch;
 
   // Two threads can also synchronize through a third one
-  for (const auto thirdTid : knownThreads) {
+  for (const auto &thirdTid : knownThreads) {
     if (thirdTid == targetTid || thirdTid == predTid) {
       // We want to find a third thread, therefore we can ignore these
       continue;

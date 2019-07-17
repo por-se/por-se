@@ -155,7 +155,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
   ++stats::allocations;
   MemoryObject *res =
     new MemoryObject(address, size, isLocal, isGlobal, false, allocSite,
-                     std::make_pair(std::move(threadId), stackframeIndex), this);
+                     std::make_pair(threadId, stackframeIndex), this);
   objects.insert(res);
   return res;
 }
@@ -176,7 +176,7 @@ MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t 
   ++stats::allocations;
   MemoryObject *res =
     new MemoryObject(address, size, false, true, true, allocSite,
-                     std::make_pair(std::move(threadId), stackframeIndex), this);
+                     std::make_pair(threadId, stackframeIndex), this);
   objects.insert(res);
   return res;
 }

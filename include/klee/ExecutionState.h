@@ -191,7 +191,7 @@ public:
   }
 
   /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
-  ThreadId currentThreadId() const {
+  const ThreadId &currentThreadId() const {
     return _currentThread->tid;
   }
 
