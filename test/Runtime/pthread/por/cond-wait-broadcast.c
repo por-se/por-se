@@ -1,6 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --pthread-runtime --exit-on-error --no-schedule-forks --log-por-events %t.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --pthread-runtime --exit-on-error --no-schedule-forks --thread-scheduling=first --log-por-events %t.bc 2>&1 | FileCheck %s
 
 #include <pthread.h>
 
@@ -33,6 +33,7 @@ int main(void) {
   return 0;
 }
 
+// FIXME: this only tests with "first" thread scheduling as these checks rely on specific order of events
 
 // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
 // CHECK-NEXT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
