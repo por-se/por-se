@@ -1,0 +1,25 @@
+variables:
+  WS_JOBS: 3 # the (required) runner only allows 3 cores to be used per job
+  DOCKER_REGISTRY: eyrie.comsys.rwth-aachen.de
+  IMAGE_NAME: $DOCKER_REGISTRY/$CI_PROJECT_PATH_SLUG
+
+stages:
+  - test
+
+test:
+  stage: test
+  image: kleenet.comsys.rwth-aachen.de/concurrent-symbolic-execution-workspace:latest-prebuilt
+  artifacts:
+    when: always
+    paths:
+      - build.log
+    expire_in: 1 day
+  script:
+    - rm -rf /workspace/porse
+    - cp -r . /workspace/porse
+    - /workspace/ws build >build.log 2>&1
+    - |
+        /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
+          cd "$(dirname "$(which klee)")/.."
+          cmake --build . --target check
+        '
