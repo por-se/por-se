@@ -36,23 +36,10 @@ llvm::cl::opt<bool> DeterministicAllocation(
     llvm::cl::desc("Allocate memory deterministically (default=false)"),
     llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 
-llvm::cl::opt<unsigned> DeterministicAllocationSize(
-    "allocate-determ-size",
-    llvm::cl::desc(
-        "Preallocated memory for deterministic allocation in MB (default=100)"),
-    llvm::cl::init(100), llvm::cl::cat(MemoryCat));
-
 llvm::cl::opt<bool> NullOnZeroMalloc(
     "return-null-on-zero-malloc",
     llvm::cl::desc("Returns NULL if malloc(0) is called (default=false)"),
     llvm::cl::init(false), llvm::cl::cat(MemoryCat));
-
-llvm::cl::opt<unsigned> RedzoneSize(
-    "redzone-size",
-    llvm::cl::desc("Set the size of the redzones to be added after each "
-                   "allocation (in bytes). This is important to detect "
-                   "out-of-bounds accesses (default=10)"),
-    llvm::cl::init(10), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<unsigned long long> DeterministicStartAddress(
     "allocate-determ-start-address",
