@@ -1,3 +1,4 @@
+// XFAIL: *
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee  --pthread-runtime --output-dir=%t.klee-out %t.bc 2>&1
