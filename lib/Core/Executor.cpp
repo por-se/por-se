@@ -382,6 +382,8 @@ cl::opt<double> MaxStaticCPSolvePct(
 
 llvm::cl::opt<bool> DebugPrintCalls("debug-print-calls", cl::init(false), cl::cat(DebugCat));
 
+llvm::cl::opt<bool> DebugPrintPorStats("debug-print-por-statistics", cl::init(false), cl::cat(DebugCat));
+
 /// The different query logging solvers that can switched on/off
 enum PrintDebugInstructionsType {
   STDERR_ALL, ///
@@ -4632,11 +4634,13 @@ void Executor::runFunctionAsMain(Function *f,
     statsTracker->done();
 
   // FIXME: find a more appropriate place for this
-  unfolding->print_statistics();
-  llvm::outs() << "\n";
-  llvm::outs() << "KLEE: done: instructions during catch-up = " << stats::catchUpInstructions << "\n";
-  llvm::outs() << "KLEE: done: standby states = " << stats::standbyStates << "\n";
-  llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
+  if (DebugPrintPorStats) {
+    unfolding->print_statistics();
+    llvm::outs() << "\n";
+    llvm::outs() << "KLEE: done: instructions during catch-up = " << stats::catchUpInstructions << "\n";
+    llvm::outs() << "KLEE: done: standby states = " << stats::standbyStates << "\n";
+    llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
+  }
 }
 
 unsigned Executor::getPathStreamID(const ExecutionState &state) {
