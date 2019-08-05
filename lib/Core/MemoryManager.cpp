@@ -147,6 +147,18 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
   segment.heap = threadHeapMapping;
   segment.stack = threadStackMapping;
 
+#ifndef NDEBUG
+  {
+    if (threadHeapMapping.len != threadHeapSize) {
+      klee_error("Allocator failed to create the heap mapping with the requested size: requested size=%lu, returned size=%lu", threadHeapSize, threadHeapMapping.len);
+    }
+
+    if (threadStackMapping.len != threadStackSize) {
+      klee_error("Allocator failed to create the stack mapping with the requested size: requested size=%lu, returned size=%lu", threadStackSize, threadStackMapping.len);
+    }
+  }
+#endif // NDEBUG
+
   auto insertOpRes = threadMemoryMappings.insert(std::make_pair(tid, segment));
   assert(insertOpRes.second && "Mapping should always be able to be registered");
 }
@@ -180,6 +192,20 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
   }
 
   auto address = reinterpret_cast<std::uint64_t>(allocAddress);
+
+#ifndef NDEBUG
+  {
+    auto segmentIt = threadMemoryMappings.find(thread.getThreadId());
+    assert(segmentIt != threadMemoryMappings.end() && "Thread has no known memory mapping");
+
+    const auto& seg = isLocal ? segmentIt->second.stack : segmentIt->second.heap;
+    auto base = reinterpret_cast<std::uint64_t>(seg.base);
+
+    if (address < base || address > base + seg.len) {
+      klee_error("Allocator returned an invalid address: address=0x%llx, start address of segment=0x%llx, length of segment=%lu", address, base, seg.len);
+    }
+  }
+#endif // NDEBUG
 
   if (!address)
     return nullptr;
