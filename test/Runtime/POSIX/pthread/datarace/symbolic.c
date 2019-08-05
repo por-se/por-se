@@ -17,11 +17,11 @@
 
 #include <klee/klee.h>
 
-static int num[3];
+static volatile int num[3];
 
 static void* test(void* arg) {
   int* refIndex = (int*) arg;
-  num[*refIndex]++;
+  num[*refIndex] = num[*refIndex] + 1;
   return NULL;
 }
 
@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
 
   // CHECK-NOT: ASSERTION FAIL
   assert(index1 != index2);
+  assert(num[0] + num[1] + num[2] == 2 && "all paths without data race perform exactly one increment per thread");
 
   return 0;
 }
