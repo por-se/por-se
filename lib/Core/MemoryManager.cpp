@@ -23,6 +23,8 @@
 #include <utility>
 
 #include <unistd.h>
+#include <fstream>
+#include <iostream>
 
 using namespace klee;
 
@@ -31,21 +33,10 @@ namespace {
 llvm::cl::OptionCategory MemoryCat("Memory management options",
                                    "These options control memory management.");
 
-llvm::cl::opt<bool> DeterministicAllocation(
-    "allocate-determ",
-    llvm::cl::desc("Allocate memory deterministically (default=false)"),
-    llvm::cl::init(false), llvm::cl::cat(MemoryCat));
-
 llvm::cl::opt<bool> NullOnZeroMalloc(
     "return-null-on-zero-malloc",
     llvm::cl::desc("Returns NULL if malloc(0) is called (default=false)"),
     llvm::cl::init(false), llvm::cl::cat(MemoryCat));
-
-llvm::cl::opt<unsigned long long> DeterministicStartAddress(
-    "allocate-determ-start-address",
-    llvm::cl::desc("Start address for deterministic allocation. Has to be page "
-                   "aligned (default=0x7ff30000000)"),
-    llvm::cl::init(0x7ff30000000), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<unsigned> ThreadHeapSize(
     "allocate-thread-heap-size",
@@ -58,13 +49,18 @@ llvm::cl::opt<unsigned> ThreadStackSize(
       llvm::cl::desc(
               "Reserved memory for every threads stack size in GB (default=10)"),
       llvm::cl::init(10), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<std::string> ThreadSegmentsFile(
+      "allocate-thread-segments-file",
+      llvm::cl::desc("File that specifies the start addresses of thread segments"),
+      llvm::cl::init(""), llvm::cl::cat(MemoryCat));
 } // namespace
 
 /***/
 MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     : arrayCache(_arrayCache) {
 
-  pageSize = sysconf(_SC_PAGE_SIZE);
+  auto pageSize = sysconf(_SC_PAGE_SIZE);
 
   threadHeapSize = static_cast<uintptr_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
   threadStackSize = static_cast<uintptr_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
@@ -77,24 +73,8 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     klee_error("-allocate-thread-stack-size must be a multiple of the page size");
   }
 
-  if (DeterministicAllocation) {
-    // If the user request a deterministic start address,
-    // then we want to request the mapping of the main thread tid<1> eagerly
-    // Note: this will only place the objects of the main thread into this address section
-
-    // Page boundary
-    auto expectedAddress = reinterpret_cast<void *>(DeterministicStartAddress.getValue());
-    initThreadMemoryMapping(ThreadId(1), expectedAddress);
-
-    auto mainThreadMappingIt = threadMemoryMappings.find(ThreadId(1));
-    assert(mainThreadMappingIt != threadMemoryMappings.end());
-
-    auto receivedAddress = mainThreadMappingIt->second.heap.base;
-    if (expectedAddress != receivedAddress && expectedAddress != nullptr) {
-      klee_error("Could not allocate memory deterministically");
-    }
-
-    klee_message("Deterministic memory allocation starting from %p", receivedAddress);
+  if (!ThreadSegmentsFile.empty()) {
+    loadRequestedThreadMemoryMappingsFromFile();
   }
 }
 
@@ -111,8 +91,63 @@ MemoryManager::~MemoryManager() {
   }
 }
 
+void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
+  std::ifstream segmentsFile(ThreadSegmentsFile);
+  if (!segmentsFile.is_open()) {
+    klee_error("Could not open the segments file specified by -allocate-thread-segments-file") ;
+  }
+
+  std::string line;
+  while (getline(segmentsFile, line)) {
+    // Remove leading white space
+    line.erase(std::remove_if(line.begin(), line.end(), isspace), line.end());
+
+    if(line[0] == '#' || line.empty())
+      continue;
+
+    auto delimiterPos = line.find('=');
+    auto tidAsString = line.substr(0, delimiterPos);
+    auto addressAsString = line.substr(delimiterPos + 1);
+
+    auto forTid = ThreadId::from_string(tidAsString);
+    if (!forTid) {
+      klee_error("ThreadId in -allocate-thread-segments-file malformed. Exiting.");
+    }
+
+    std::uint64_t address = std::stoull(addressAsString, nullptr, 16);
+    if (!address) {
+      klee_error("Address specified in -allocate-thread-segments-file may not be zero. Exiting.");
+    }
+
+    initThreadMemoryMapping(*forTid, reinterpret_cast<void*>(address));
+  }
+}
+
 void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
+
+#ifndef NDEBUG
+  {
+    // Test that we do not place overlapping mappings
+    auto start = reinterpret_cast<std::uint64_t>(requestedAddress);
+    auto end = start + threadHeapSize + threadStackSize;
+
+    for (const auto& seg : threadMemoryMappings) {
+      // If new one is after the already created one
+      if (seg.second.startAddress + seg.second.allocatedSize < start) {
+        continue;
+      }
+
+      // if the new one is before the already created one
+      if (end < seg.second.startAddress) {
+        continue;
+      }
+
+      // We overlap in some area - fail for now since otherwise threads can override the other threads data
+      klee_error("Overlapping thread memory segments for tid1=%s and tid2=%s - Exiting.", seg.first.to_string().c_str(), tid.to_string().c_str());
+    }
+  }
+#endif // NDEBUG
 
   pseudoalloc::Mapping threadHeapMapping{};
   if (requestedAddress != nullptr) {
@@ -131,23 +166,37 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
   }
 
   ThreadMemorySegments segment{};
+  segment.startAddress = reinterpret_cast<std::uint64_t>(threadHeapMapping.base);
+  segment.allocatedSize = threadHeapSize + threadStackSize;
+
   segment.heap = threadHeapMapping;
   segment.stack = threadStackMapping;
 
 #ifndef NDEBUG
   {
+    if (requestedAddress && threadHeapMapping.base != requestedAddress) {
+      klee_error("Could not allocate memory deterministically for tid<%s> at %p - received %p", tid.to_string().c_str(),
+                 requestedAddress, threadHeapMapping.base);
+    }
+
     if (threadHeapMapping.len != threadHeapSize) {
-      klee_error("Allocator failed to create the heap mapping with the requested size: requested size=%lu, returned size=%lu", threadHeapSize, threadHeapMapping.len);
+      klee_error(
+              "Allocator failed to create the heap mapping with the requested size: requested size=%lu, returned size=%lu",
+              threadHeapSize, threadHeapMapping.len);
     }
 
     if (threadStackMapping.len != threadStackSize) {
-      klee_error("Allocator failed to create the stack mapping with the requested size: requested size=%lu, returned size=%lu", threadStackSize, threadStackMapping.len);
+      klee_error(
+              "Allocator failed to create the stack mapping with the requested size: requested size=%lu, returned size=%lu",
+              threadStackSize, threadStackMapping.len);
     }
   }
 #endif // NDEBUG
 
   auto insertOpRes = threadMemoryMappings.insert(std::make_pair(tid, segment));
   assert(insertOpRes.second && "Mapping should always be able to be registered");
+
+  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), threadHeapMapping.base);
 }
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,

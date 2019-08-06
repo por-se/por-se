@@ -37,6 +37,9 @@ private:
   typedef std::set<MemoryObject *> objects_ty;
 
   struct ThreadMemorySegments {
+    std::uint64_t startAddress;
+    std::size_t allocatedSize;
+
     pseudoalloc::Mapping heap;
     pseudoalloc::Mapping stack;
   };
@@ -46,7 +49,6 @@ private:
 
   std::map<ThreadId, ThreadMemorySegments> threadMemoryMappings;
 
-  std::size_t pageSize;
   std::uintptr_t threadHeapSize;
   std::uintptr_t threadStackSize;
 
@@ -56,6 +58,8 @@ private:
    * that address, otherwise the mapping at a random location
    */
   void initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress);
+
+  void loadRequestedThreadMemoryMappingsFromFile();
 
 public:
   MemoryManager(ArrayCache *arrayCache);
