@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
+#include <optional>
+#include <sstream>
 
 namespace por {
 	class thread_id {
@@ -138,10 +140,31 @@ namespace por {
 			std::string res;
 			for(std::size_t i = 0; i < size(); i++) {
 				if(i > 0)
-					res += ".";
-				res += ids()[i];
+					res += ',';
+				res += std::to_string(ids()[i]);
 			}
 			return res;
+		}
+
+		static std::optional<thread_id> from_string(std::string tidAsString) {
+			std::istringstream sstream(tidAsString);
+			thread_id tid{};
+
+			while (!sstream.eof()) {
+				std::uint16_t lid = 0;
+
+				if (!(sstream >> lid)) {
+					return {};
+				}
+
+				if (!sstream.eof() && sstream.get() != ',') {
+					return {};
+				}
+
+				tid = thread_id(tid, lid);
+			}
+
+			return tid;
 		}
 	};
 
