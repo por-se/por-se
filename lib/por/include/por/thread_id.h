@@ -137,31 +137,48 @@ namespace por {
 		}
 
 		std::string to_string() const {
-			std::string res;
+			std::ostringstream buffer;
+
 			for(std::size_t i = 0; i < size(); i++) {
 				if(i > 0)
-					res += ',';
-				res += std::to_string(ids()[i]);
+					buffer << ',';
+
+				buffer << ids()[i];
 			}
-			return res;
+
+			return buffer.str();
 		}
 
 		static std::optional<thread_id> from_string(std::string tidAsString) {
 			std::istringstream sstream(tidAsString);
+			if (!sstream) {
+				return {};
+			}
+
 			thread_id tid{};
 
-			while (!sstream.eof()) {
+			for (;;) {
+				// First read the local identifier
 				std::uint16_t lid = 0;
+				sstream >> lid;
 
-				if (!(sstream >> lid)) {
-					return {};
-				}
-
-				if (!sstream.eof() && sstream.get() != ',') {
+				// If the stream either fails or it was not possible to read a correct lid, then
+				// return an empty optional
+				if (sstream.fail() || sstream.bad() || lid == 0) {
 					return {};
 				}
 
 				tid = thread_id(tid, lid);
+
+				if (sstream.eof()) {
+					break;
+				}
+
+				// If the stream did not end and after the lid and no colon is present, then
+				// the tid has to be in an invalid format -> failure
+				if (sstream.get() != ',') {
+					return {};
+				}
 			}
 
 			return tid;
