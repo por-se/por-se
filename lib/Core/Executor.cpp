@@ -4643,7 +4643,8 @@ void Executor::runFunctionAsMain(Function *f,
 
   // hack to clear memory objects
   delete memory;
-  memory = new MemoryManager(NULL);
+  memory = nullptr;
+  // memory = new MemoryManager(NULL);
 
   globalObjects.clear();
   globalAddresses.clear();
