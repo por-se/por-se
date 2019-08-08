@@ -28,3 +28,6 @@ add_subdirectory(bin)
 export(TARGETS libpor libutil
 	FILE libpor-targets.cmake
 )
+
+enable_testing()
+add_subdirectory(tests)

@@ -158,6 +158,12 @@ namespace por {
 			thread_id tid{};
 
 			for (;;) {
+				char nextChar = sstream.peek();
+				if (nextChar < '0' || nextChar > '9') {
+					// We expected the start of a local id but this is not a number
+					return {};
+				}
+
 				// First read the local identifier
 				std::uint16_t lid = 0;
 				sstream >> lid;
