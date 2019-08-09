@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_ARRAYEXPRVISITOR_H_
-#define KLEE_ARRAYEXPRVISITOR_H_
+#ifndef KLEE_ARRAYEXPRVISITOR_H
+#define KLEE_ARRAYEXPRVISITOR_H
 
-#include "klee/ExprBuilder.h"
+#include "klee/Expr/ExprBuilder.h"
+#include "klee/Expr/ExprVisitor.h"
 #include "klee/SolverCmdLine.h"
-#include "klee/util/ExprVisitor.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -140,4 +140,4 @@ public:
 };
 } // namespace klee
 
-#endif
+#endif /* KLEE_ARRAYEXPRVISITOR_H */

@@ -1,4 +1,4 @@
-//===-- Executor.h ----------------------------------------------*- C++ -*-===//
+//===-- ExecutorTimerInfo.h -------------------------------------*- C++ -*-===//
 //
 //                     The KLEE Symbolic Virtual Machine
 //
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef EXECUTORTIMERINFO_H_
-#define EXECUTORTIMERINFO_H_
+#ifndef KLEE_EXECUTORTIMERINFO_H
+#define KLEE_EXECUTORTIMERINFO_H
 
 #include "klee/Internal/System/Time.h"
 
@@ -39,4 +39,4 @@ public:
 }
 
 
-#endif /* EXECUTORTIMERINFO_H_ */
+#endif /* KLEE_EXECUTORTIMERINFO_H */

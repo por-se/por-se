@@ -10,7 +10,7 @@
 #ifndef KLEE_CONTEXT_H
 #define KLEE_CONTEXT_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 
 namespace klee {
 
@@ -43,4 +43,4 @@ namespace klee {
   
 } // End klee namespace
 
-#endif
+#endif /* KLEE_CONTEXT_H */

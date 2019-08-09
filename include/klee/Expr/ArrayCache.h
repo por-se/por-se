@@ -7,11 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_ARRAY_CACHE_H
-#define KLEE_ARRAY_CACHE_H
+#ifndef KLEE_ARRAYCACHE_H
+#define KLEE_ARRAYCACHE_H
 
-#include "klee/Expr.h"
-#include "klee/util/ArrayExprHash.h" // For klee::ArrayHashFn
+#include "klee/Expr/Expr.h"
+#include "klee/Expr/ArrayExprHash.h" // For klee::ArrayHashFn
 
 // FIXME: Remove this hack when we switch to C++11
 #ifdef _LIBCPP_VERSION
@@ -78,4 +78,4 @@ private:
 
 #undef unordered_set
 
-#endif /* KLEE_ARRAY_CACHE__H */
+#endif /* KLEE_ARRAYCACHE_H */

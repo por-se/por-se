@@ -10,7 +10,7 @@
 #ifndef KLEE_EXPRRANGEEVALUATOR_H
 #define KLEE_EXPRRANGEEVALUATOR_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/util/Bits.h"
 
 namespace klee {
@@ -282,4 +282,4 @@ T ExprRangeEvaluator<T>::evaluate(const ref<Expr> &e) {
 
 }
 
-#endif
+#endif /* KLEE_EXPRRANGEEVALUATOR_H */

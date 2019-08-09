@@ -2,9 +2,9 @@
 #define KLEE_MEMORYFINGERPRINT_H
 
 #include "klee/Config/config.h"
-#include "klee/Expr.h"
-#include "klee/util/ExprHashMap.h"
-#include "klee/util/ExprPPrinter.h"
+#include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprHashMap.h"
+#include "klee/Expr/ExprPPrinter.h"
 
 #include "klee/ThreadId.h"
 

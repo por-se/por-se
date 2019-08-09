@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_TIME_H
-#define KLEE_UTIL_TIME_H
+#ifndef KLEE_TIME_H
+#define KLEE_TIME_H
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -117,4 +117,4 @@ namespace klee {
   } // time
 } // klee
 
-#endif
+#endif /* KLEE_TIME_H */

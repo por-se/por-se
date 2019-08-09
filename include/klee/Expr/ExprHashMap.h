@@ -10,7 +10,7 @@
 #ifndef KLEE_EXPRHASHMAP_H
 #define KLEE_EXPRHASHMAP_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -38,4 +38,4 @@ using ExprHashSet =
 
 } // namespace klee
 
-#endif
+#endif /* KLEE_EXPRHASHMAP_H */

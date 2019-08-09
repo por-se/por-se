@@ -7,12 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __UTIL_STPBUILDER_H__
-#define __UTIL_STPBUILDER_H__
+#ifndef KLEE_STPBUILDER_H
+#define KLEE_STPBUILDER_H
 
-#include "klee/util/ExprHashMap.h"
-#include "klee/util/ArrayExprHash.h"
 #include "klee/Config/config.h"
+#include "klee/Expr/ArrayExprHash.h"
+#include "klee/Expr/ExprHashMap.h"
 
 #include <vector>
 
@@ -128,4 +128,4 @@ public:
 
 }
 
-#endif
+#endif /* KLEE_STPBUILDER_H */

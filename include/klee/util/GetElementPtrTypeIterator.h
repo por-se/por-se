@@ -1,4 +1,4 @@
-//===- klee/util/GetElementPtrTypeIterator.h --------------------*- C++ -*-===//
+//===-- GetElementPtrTypeIterator.h -----------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -15,8 +15,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_GETELEMENTPTRTYPE_H
-#define KLEE_UTIL_GETELEMENTPTRTYPE_H
+#ifndef KLEE_GETELEMENTPTRTYPEITERATOR_H
+#define KLEE_GETELEMENTPTRTYPEITERATOR_H
 
 #include "llvm/IR/User.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -151,4 +151,4 @@ class generic_gep_type_iterator
   }
 } // end namespace klee
 
-#endif
+#endif /* KLEE_GETELEMENTPTRTYPEITERATOR_H */

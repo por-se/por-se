@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __UTIL_TREESTREAM_H__
-#define __UTIL_TREESTREAM_H__
+#ifndef KLEE_TREESTREAM_H
+#define KLEE_TREESTREAM_H
 
 #include <string>
 #include <vector>
@@ -73,4 +73,4 @@ namespace klee {
   };
 }
 
-#endif
+#endif /* KLEE_TREESTREAM_H */

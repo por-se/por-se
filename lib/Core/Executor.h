@@ -16,12 +16,12 @@
 #define KLEE_EXECUTOR_H
 
 #include "klee/ExecutionState.h"
-#include "klee/Interpreter.h"
+#include "klee/Expr/ArrayCache.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/System/Time.h"
-#include "klee/util/ArrayCache.h"
+#include "klee/Interpreter.h"
 
 #include "klee/por/events.h"
 #include "por/PorEventManager.h"
@@ -29,6 +29,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "../Expr/ArrayExprOptimizer.h"
 
@@ -601,4 +602,4 @@ public:
 };
 } // End klee namespace
 
-#endif
+#endif /* KLEE_EXECUTOR_H */

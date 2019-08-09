@@ -13,7 +13,7 @@
 #include "TimingSolver.h"
 
 #include "klee/ExecutionState.h"
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/StatePruningCmdLine.h"
 #include "klee/TimerStatIncrementer.h"
 

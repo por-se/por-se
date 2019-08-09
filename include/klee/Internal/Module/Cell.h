@@ -10,7 +10,7 @@
 #ifndef KLEE_CELL_H
 #define KLEE_CELL_H
 
-#include <klee/Expr.h>
+#include "klee/Expr/Expr.h"
 
 namespace klee {
   class MemoryObject;
@@ -20,4 +20,4 @@ namespace klee {
   };
 }
 
-#endif
+#endif /* KLEE_CELL_H */

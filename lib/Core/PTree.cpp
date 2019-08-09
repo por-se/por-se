@@ -9,8 +9,8 @@
 
 #include "PTree.h"
 
-#include <klee/Expr.h>
-#include <klee/util/ExprPPrinter.h>
+#include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprPPrinter.h"
 
 #include <vector>
 #include <iterator>
@@ -18,8 +18,6 @@
 #include <klee/ExecutionState.h>
 
 using namespace klee;
-
-  /* *** */
 
 PTree::PTree(const data_type &root) : root(new Node(nullptr, root)) {}
 

@@ -7,12 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __UTIL_Z3BUILDER_H__
-#define __UTIL_Z3BUILDER_H__
+#ifndef KLEE_Z3BUILDER_H
+#define KLEE_Z3BUILDER_H
 
 #include "klee/Config/config.h"
-#include "klee/util/ArrayExprHash.h"
-#include "klee/util/ExprHashMap.h"
+#include "klee/Expr/ArrayExprHash.h"
+#include "klee/Expr/ExprHashMap.h"
+
 #include <unordered_map>
 #include <z3.h>
 
@@ -190,4 +191,4 @@ public:
 };
 }
 
-#endif
+#endif /* KLEE_Z3BUILDER_H */

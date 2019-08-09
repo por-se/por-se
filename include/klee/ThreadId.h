@@ -3,6 +3,8 @@
 
 #include <por/thread_id.h>
 
+#include "llvm/Support/raw_ostream.h"
+
 // This file is basically only a forward definition of the por threadid
 namespace klee {
   typedef por::thread_id ThreadId;

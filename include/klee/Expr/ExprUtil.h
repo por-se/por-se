@@ -10,7 +10,8 @@
 #ifndef KLEE_EXPRUTIL_H
 #define KLEE_EXPRUTIL_H
 
-#include "klee/util/ExprVisitor.h"
+#include "klee/Expr/ExprVisitor.h"
+
 #include <vector>
 
 namespace klee {
@@ -48,4 +49,4 @@ namespace klee {
   };
 }
 
-#endif
+#endif /* KLEE_EXPRUTIL_H */

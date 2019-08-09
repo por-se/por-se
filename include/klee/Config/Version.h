@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_CONFIG_VERSION_H
-#define KLEE_CONFIG_VERSION_H
+#ifndef KLEE_VERSION_H
+#define KLEE_VERSION_H
 
 #include "klee/Config/config.h"
 
@@ -27,4 +27,4 @@
 #  define KLEE_LLVM_GOIF_TERMINATOR , NULL
 #endif
 
-#endif
+#endif /* KLEE_VERSION_H */

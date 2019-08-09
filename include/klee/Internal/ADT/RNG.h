@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_RNG_H
-#define KLEE_UTIL_RNG_H
+#ifndef KLEE_RNG_H
+#define KLEE_RNG_H
 
 namespace klee {
   class RNG {
@@ -47,4 +47,4 @@ namespace klee {
   };
 }
 
-#endif
+#endif /* KLEE_RNG_H */

@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_INTEVALUATION_H
-#define KLEE_UTIL_INTEVALUATION_H
+#ifndef KLEE_INTEVALUATION_H
+#define KLEE_INTEVALUATION_H
 
 #include "klee/util/Bits.h"
 
@@ -161,4 +161,4 @@ inline uint64_t sge(uint64_t l, uint64_t r, unsigned inWidth) {
 } // end namespace ints
 } // end namespace klee
 
-#endif 
+#endif /* KLEE_INTEVALUATION_H */

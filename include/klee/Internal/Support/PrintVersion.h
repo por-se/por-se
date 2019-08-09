@@ -1,4 +1,4 @@
-//===-- Version.h -----------------------------------------------*- C++ -*-===//
+//===-- PrintVersion.h ------------------------------------------*- C++ -*-===//
 //
 //                     The KLEE Symbolic Virtual Machine
 //
@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_PRINT_VERSION_H
-#define KLEE_PRINT_VERSION_H
+#ifndef KLEE_PRINTVERSION_H
+#define KLEE_PRINTVERSION_H
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -22,4 +22,4 @@ namespace klee {
 #endif
 }
 
-#endif
+#endif /* KLEE_PRINTVERSION_H */

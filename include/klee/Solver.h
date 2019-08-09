@@ -10,7 +10,7 @@
 #ifndef KLEE_SOLVER_H
 #define KLEE_SOLVER_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/SolverCmdLine.h"
 #include "klee/Internal/System/Time.h"
 
@@ -270,4 +270,4 @@ namespace klee {
   Solver *createCoreSolver(CoreSolverType cst);
 }
 
-#endif
+#endif /* KLEE_SOLVER_H */

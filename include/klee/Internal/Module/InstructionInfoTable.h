@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_LIB_INSTRUCTIONINFOTABLE_H
-#define KLEE_LIB_INSTRUCTIONINFOTABLE_H
+#ifndef KLEE_INSTRUCTIONINFOTABLE_H
+#define KLEE_INSTRUCTIONINFOTABLE_H
 
 #include <memory>
 #include <string>
@@ -106,4 +106,4 @@ class KInstruction;
 
 }
 
-#endif
+#endif /* KLEE_INSTRUCTIONINFOTABLE_H */

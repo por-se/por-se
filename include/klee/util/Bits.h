@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_BITS_H
-#define KLEE_UTIL_BITS_H
+#ifndef KLEE_BITS_H
+#define KLEE_BITS_H
 
 #include "klee/Config/Version.h"
 #include "llvm/Support/DataTypes.h"
@@ -111,4 +111,4 @@ namespace klee {
   }
 } // End klee namespace
 
-#endif
+#endif /* KLEE_BITS_H */

@@ -7,14 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_UTIL_ASSIGNMENT_H
-#define KLEE_UTIL_ASSIGNMENT_H
+#ifndef KLEE_ASSIGNMENT_H
+#define KLEE_ASSIGNMENT_H
+
+#include "klee/Expr/ExprEvaluator.h"
 
 #include <map>
-
-#include "klee/util/ExprEvaluator.h"
-
-// FIXME: Rename?
 
 namespace klee {
   class Array;
@@ -98,4 +96,4 @@ namespace klee {
   }
 }
 
-#endif
+#endif /* KLEE_ASSIGNMENT_H */

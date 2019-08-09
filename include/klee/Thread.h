@@ -1,7 +1,7 @@
 #ifndef KLEE_THREAD_H
 #define KLEE_THREAD_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/Internal/Module/KModule.h"

@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef KLEE_EXPROPTIMIZER_H
-#define KLEE_EXPROPTIMIZER_H
+#ifndef KLEE_ARRAYEXPROPTIMIZER_H
+#define KLEE_ARRAYEXPROPTIMIZER_H
 
 #include <cstdint>
 #include <map>
@@ -17,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/util/Ref.h"
 
 namespace klee {
@@ -61,4 +61,4 @@ private:
 };
 } // namespace klee
 
-#endif
+#endif /* KLEE_ARRAYEXPROPTIMIZER_H */

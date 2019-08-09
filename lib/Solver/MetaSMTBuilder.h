@@ -7,22 +7,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-/*
- * MetaSMTBuilder.h
- *
- *  Created on: 8 Aug 2012
- *      Author: hpalikar
- */
+#ifndef KLEE_METASMTBUILDER_H
+#define KLEE_METASMTBUILDER_H
 
-#ifndef METASMTBUILDER_H_
-#define METASMTBUILDER_H_
+#include "ConstantDivision.h"
 
 #include "klee/Config/config.h"
-#include "klee/Expr.h"
-#include "klee/util/ExprPPrinter.h"
-#include "klee/util/ArrayExprHash.h"
-#include "klee/util/ExprHashMap.h"
-#include "ConstantDivision.h"
+#include "klee/Expr/ArrayExprHash.h"
+#include "klee/Expr/Expr.h"
+#include "klee/Expr/ExprHashMap.h"
+#include "klee/Expr/ExprPPrinter.h"
 
 #ifdef ENABLE_METASMT
 
@@ -1200,4 +1194,4 @@ MetaSMTBuilder<SolverContext>::constructActual(ref<Expr> e, int *width_out) {
 
 #endif /* ENABLE_METASMT */
 
-#endif /* METASMTBUILDER_H_ */
+#endif /* KLEE_METASMTBUILDER_H */

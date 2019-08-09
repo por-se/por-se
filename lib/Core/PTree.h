@@ -7,13 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef __UTIL_PTREE_H__
-#define __UTIL_PTREE_H__
+#ifndef KLEE_PTREE_H
+#define KLEE_PTREE_H
 
-#include <klee/Expr.h>
-#include <klee/Thread.h>
-
-#include <set>
+#include "klee/Expr/Expr.h"
+#include "klee/Thread.h"
 
 namespace klee {
   class ExecutionState;
@@ -57,4 +55,4 @@ namespace klee {
   };
 }
 
-#endif
+#endif /* KLEE_PTREE_H */

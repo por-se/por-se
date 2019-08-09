@@ -10,7 +10,7 @@
 #ifndef KLEE_CONSTRAINTS_H
 #define KLEE_CONSTRAINTS_H
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 
 // FIXME: Currently we use ConstraintManager for two things: to pass
 // sets of constraints around, and to optimize constraints. We should
@@ -19,59 +19,47 @@
 namespace klee {
 
 class ExprVisitor;
-  
+
 class ConstraintManager {
 public:
-  typedef std::vector< ref<Expr> > constraints_ty;
-  typedef constraints_ty::iterator iterator;
-  typedef constraints_ty::const_iterator const_iterator;
+  using constraints_ty = std::vector<ref<Expr>>;
+  using iterator = constraints_ty::iterator;
+  using const_iterator = constraints_ty::const_iterator;
 
-  ConstraintManager() {}
+  ConstraintManager() = default;
+  ConstraintManager(const ConstraintManager &cs) = default;
+  ConstraintManager &operator=(const ConstraintManager &cs) = default;
+  ConstraintManager(ConstraintManager &&cs) = default;
+  ConstraintManager &operator=(ConstraintManager &&cs) = default;
 
   // create from constraints with no optimization
-  explicit
-  ConstraintManager(const std::vector< ref<Expr> > &_constraints) :
-    constraints(_constraints) {}
+  explicit ConstraintManager(const std::vector<ref<Expr>> &_constraints)
+      : constraints(_constraints) {}
 
-  ConstraintManager(const ConstraintManager &cs) : constraints(cs.constraints) {}
-
-  ConstraintManager &operator=(const ConstraintManager &rhs) {
-    constraints = rhs.constraints;
-    return *this;
-  }
-
-  typedef std::vector< ref<Expr> >::const_iterator constraint_iterator;
-
-  // given a constraint which is known to be valid, attempt to 
+  // given a constraint which is known to be valid, attempt to
   // simplify the existing constraint set
   void simplifyForValidConstraint(ref<Expr> e);
 
   ref<Expr> simplifyExpr(ref<Expr> e) const;
 
   void addConstraint(ref<Expr> e);
-  
-  bool empty() const {
-    return constraints.empty();
-  }
-  ref<Expr> back() const {
-    return constraints.back();
-  }
-  constraint_iterator begin() const {
-    return constraints.begin();
-  }
-  constraint_iterator end() const {
-    return constraints.end();
-  }
-  size_t size() const {
-    return constraints.size();
-  }
+
+  bool empty() const noexcept { return constraints.empty(); }
+  ref<Expr> back() const { return constraints.back(); }
+  const_iterator begin() const { return constraints.cbegin(); }
+  const_iterator end() const { return constraints.cend(); }
+  std::size_t size() const noexcept { return constraints.size(); }
 
   bool operator==(const ConstraintManager &other) const {
     return constraints == other.constraints;
   }
-  
+
+  bool operator!=(const ConstraintManager &other) const {
+    return constraints != other.constraints;
+  }
+
 private:
-  std::vector< ref<Expr> > constraints;
+  std::vector<ref<Expr>> constraints;
 
   // returns true iff the constraints were modified
   bool rewriteConstraints(ExprVisitor &visitor);
@@ -79,6 +67,6 @@ private:
   void addConstraintInternal(ref<Expr> e);
 };
 
-}
+} // namespace klee
 
 #endif /* KLEE_CONSTRAINTS_H */

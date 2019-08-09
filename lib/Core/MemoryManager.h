@@ -10,6 +10,8 @@
 #ifndef KLEE_MEMORYMANAGER_H
 #define KLEE_MEMORYMANAGER_H
 
+#include "klee/ThreadId.h"
+
 #include <cstddef>
 #include <set>
 
@@ -58,4 +60,4 @@ public:
 
 } // End klee namespace
 
-#endif
+#endif /* KLEE_MEMORYMANAGER_H */

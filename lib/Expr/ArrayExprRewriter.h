@@ -7,14 +7,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LIB_EXPRREWRITER_H_
-#define LIB_EXPRREWRITER_H_
+#ifndef KLEE_ARRAYEXPRREWRITER_H
+#define KLEE_ARRAYEXPRREWRITER_H
 
 #include <iterator>
 #include <map>
 #include <vector>
 
-#include "klee/Expr.h"
+#include "klee/Expr/Expr.h"
 #include "klee/util/Ref.h"
 
 namespace klee {
@@ -44,4 +44,4 @@ private:
 };
 } // namespace klee
 
-#endif /* LIB_EXPRREWRITER_H_ */
+#endif /* KLEE_ARRAYEXPRREWRITER_H */

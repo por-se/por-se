@@ -10,8 +10,8 @@
 
 #include "klee/Solver.h"
 
-#include "klee/Constraints.h"
-#include "klee/Expr.h"
+#include "klee/Expr/Constraints.h"
+#include "klee/Expr/Expr.h"
 #include "klee/IncompleteSolver.h"
 #include "klee/SolverImpl.h"
 
@@ -53,15 +53,15 @@ private:
       return constraints==b.constraints && *query.get()==*b.query.get();
     }
   };
-  
+
   struct CacheEntryHash {
     unsigned operator()(const CacheEntry &ce) const {
       unsigned result = ce.query->hash();
-      
-      for (ConstraintManager::constraint_iterator it = ce.constraints.begin();
-           it != ce.constraints.end(); ++it)
-        result ^= (*it)->hash();
-      
+
+      for (auto const &constraint : ce.constraints) {
+        result ^= constraint->hash();
+      }
+
       return result;
     }
   };

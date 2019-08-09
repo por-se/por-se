@@ -7,15 +7,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "CoreStats.h"
-#include "Memory.h"
 #include "MemoryManager.h"
 
-#include "klee/Expr.h"
+#include "CoreStats.h"
+#include "Memory.h"
+
+#include "klee/Expr/Expr.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <sys/mman.h>
 #include <utility>
