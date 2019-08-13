@@ -102,6 +102,8 @@ static void testParsingOfThreadIds(void) {
 }
 
 int main(void) {
+	testBasicFunctions();
+
 	testOperatorOverloads();
 
 	testFormattingOfThreadIds();
