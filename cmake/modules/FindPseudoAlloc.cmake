@@ -11,7 +11,6 @@ include(FindPackageHandleStandardArgs)
 find_library(PSEUDOALLOC_LIBRARIES
   NAMES pseudoalloc libpseudoalloc
   DOC "pseudoalloc libraries"
-  HINTS "${CMAKE_PREFIX_PATH}/target/debug"
 )
 if (PSEUDOALLOC_LIBRARIES)
   message(STATUS "Found pseudoalloc libraries: \"${PSEUDOALLOC_LIBRARIES}\"")
