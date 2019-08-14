@@ -25,6 +25,7 @@
 
 #include "klee/por/events.h"
 #include "por/PorEventManager.h"
+#include "GlobalObjectsMap.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -177,13 +178,10 @@ private:
   /// happens with other states (that don't satisfy the seeds) depends
   /// on as-yet-to-be-determined flags.
   std::map<ExecutionState*, std::vector<SeedInfo> > seedMap;
-  
-  /// Map of globals to their representative memory object.
-  std::map<const llvm::GlobalValue*, MemoryObject*> globalObjects;
 
   /// Map of globals to their bound address. This also includes
   /// globals that have no representative object (i.e. functions).
-  std::map<const llvm::GlobalValue*, ref<ConstantExpr> > globalAddresses;
+  GlobalObjectsMap* globalObjectsMap;
 
   /// The set of legal function addresses, used to validate function
   /// pointers. We use the actual Function* address as the function address.
@@ -271,9 +269,8 @@ private:
   MemoryObject *addExternalObject(ExecutionState &state, void *addr, 
                                   unsigned size, bool isReadOnly);
 
-  void initializeGlobalObject(ExecutionState &state, ObjectState *os, 
-			      const llvm::Constant *c,
-			      unsigned offset);
+  void initializeGlobalObject(ExecutionState &state, ObjectState *os, const llvm::Constant *c,
+                              unsigned offset, const ThreadId &byTid);
   void initializeGlobals(ExecutionState &state);
 
   void stepInstruction(ExecutionState &state);
@@ -387,7 +384,7 @@ private:
   ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e);
 
   const Cell& eval(KInstruction *ki, unsigned index, 
-                   ExecutionState &state) const;
+                   ExecutionState &state);
 
   Cell& getArgumentCell(ExecutionState &state,
                         KFunction *kf,
@@ -410,17 +407,17 @@ private:
                     ExecutionState &state,
                     ref<Expr> value);
 
+  bool canBeConstantFolded(const llvm::Constant *c, const ThreadId &byTd, const KInstruction *ki = NULL);
+
   /// Evaluates an LLVM constant expression.  The optional argument ki
   /// is the instruction where this constant was encountered, or NULL
   /// if not applicable/unavailable.
-  ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *c,
-					   const KInstruction *ki = NULL);
+  ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *c, const ThreadId &byTid, const KInstruction *ki = NULL);
 
   /// Evaluates an LLVM constant.  The optional argument ki is the
   /// instruction where this constant was encountered, or NULL if
   /// not applicable/unavailable.
-  ref<klee::ConstantExpr> evalConstant(const llvm::Constant *c,
-				       const KInstruction *ki = NULL);
+  ref<klee::ConstantExpr> evalConstant(const llvm::Constant *c, const ThreadId &byTid, const KInstruction *ki = NULL);
 
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single

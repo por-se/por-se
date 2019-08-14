@@ -463,7 +463,15 @@ static int getOperandNum(Value *v,
     return -1;
   } else {
     assert(isa<Constant>(v));
-    Constant *c = cast<Constant>(v);
+    auto *c = cast<Constant>(v);
+
+    // Special case: although an llvm::Constant, that is thread dependent, is technically a constant
+    //               we do not want to handle it as such. The reason is, that if we try to constant fold
+    //               the 'constant', then we do not honor the actual thread.
+    if (c->isThreadDependent()) {
+      return -1; // Same as another argument
+    }
+
     return -(km->getConstantID(c, ki) + 2);
   }
 }
@@ -486,18 +494,16 @@ KFunction::KFunction(llvm::Function *_function,
 
   // The first arg_size() registers are reserved for formals.
   unsigned rnum = numArgs;
-  for (llvm::Function::iterator bbit = function->begin(), 
-         bbie = function->end(); bbit != bbie; ++bbit) {
-    for (llvm::BasicBlock::iterator it = bbit->begin(), ie = bbit->end();
+  for (auto& bbit : *function) {
+    for (llvm::BasicBlock::iterator it = bbit.begin(), ie = bbit.end();
          it != ie; ++it)
       registerMap[&*it] = rnum++;
   }
   numRegisters = rnum;
   
   unsigned i = 0;
-  for (llvm::Function::iterator bbit = function->begin(), 
-         bbie = function->end(); bbit != bbie; ++bbit) {
-    for (llvm::BasicBlock::iterator it = bbit->begin(), ie = bbit->end();
+  for (auto& bbit : *function) {
+    for (llvm::BasicBlock::iterator it = bbit.begin(), ie = bbit.end();
          it != ie; ++it) {
       KInstruction *ki;
 

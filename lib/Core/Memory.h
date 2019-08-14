@@ -58,6 +58,7 @@ public:
   bool isLocal;
   mutable bool isGlobal;
   bool isFixed;
+  bool isThreadLocal;
 
   bool isUserSpecified;
 
@@ -88,14 +89,13 @@ public:
       address(_address),
       size(0),
       isFixed(true),
+      isThreadLocal(false),
       parent(NULL),
       allocSite(0) {
   }
 
-  MemoryObject(uint64_t _address, unsigned _size,
-               bool _isLocal, bool _isGlobal, bool _isFixed,
-               const llvm::Value *_allocSite,
-               std::pair<ThreadId, std::size_t> _allocationStackFrame,
+  MemoryObject(uint64_t _address, unsigned _size, bool _isLocal, bool _isGlobal, bool _isFixed, bool _isThreadLocal,
+               const llvm::Value *_allocSite, std::pair<ThreadId, std::size_t> _allocationStackFrame,
                MemoryManager *_parent)
     : refCount(0),
       allocationStackFrame(_allocationStackFrame),
@@ -106,9 +106,12 @@ public:
       isLocal(_isLocal),
       isGlobal(_isGlobal),
       isFixed(_isFixed),
+      isThreadLocal(_isThreadLocal),
       isUserSpecified(false),
       parent(_parent), 
       allocSite(_allocSite) {
+
+    assert((!isThreadLocal || isGlobal) && "thread local memory objects have to always be globals");
   }
 
   ~MemoryObject();

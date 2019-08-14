@@ -698,15 +698,15 @@ Executor::~Executor() {
 /***/
 
 void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
-                                      const Constant *c, 
-                                      unsigned offset) {
+                                      const Constant *c, unsigned offset,
+                                      const ThreadId &byTid) {
   const auto targetData = kmodule->targetData.get();
   if (const ConstantVector *cp = dyn_cast<ConstantVector>(c)) {
     unsigned elementSize =
       targetData->getTypeStoreSize(cp->getType()->getElementType());
     for (unsigned i=0, e=cp->getNumOperands(); i != e; ++i)
-      initializeGlobalObject(state, os, cp->getOperand(i), 
-			     offset + i*elementSize);
+      initializeGlobalObject(state, os, cp->getOperand(i),
+                             offset + i * elementSize, byTid);
   } else if (isa<ConstantAggregateZero>(c)) {
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
     for (i=0; i<size; i++)
@@ -721,24 +721,24 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     unsigned elementSize =
       targetData->getTypeStoreSize(ca->getType()->getElementType());
     for (unsigned i=0, e=ca->getNumOperands(); i != e; ++i)
-      initializeGlobalObject(state, os, ca->getOperand(i), 
-			     offset + i*elementSize);
+      initializeGlobalObject(state, os, ca->getOperand(i),
+                             offset + i * elementSize, byTid);
   } else if (const ConstantStruct *cs = dyn_cast<ConstantStruct>(c)) {
     const StructLayout *sl =
       targetData->getStructLayout(cast<StructType>(cs->getType()));
     for (unsigned i=0, e=cs->getNumOperands(); i != e; ++i)
-      initializeGlobalObject(state, os, cs->getOperand(i), 
-			     offset + sl->getElementOffset(i));
+      initializeGlobalObject(state, os, cs->getOperand(i),
+                             offset + sl->getElementOffset(i), byTid);
   } else if (const ConstantDataSequential *cds =
                dyn_cast<ConstantDataSequential>(c)) {
     unsigned elementSize =
       targetData->getTypeStoreSize(cds->getElementType());
     for (unsigned i=0, e=cds->getNumElements(); i != e; ++i)
       initializeGlobalObject(state, os, cds->getElementAsConstant(i),
-                             offset + i*elementSize);
+                             offset + i * elementSize, byTid);
   } else if (!isa<UndefValue>(c) && !isa<MetadataAsValue>(c)) {
     unsigned StoreBits = targetData->getTypeStoreSizeInBits(c->getType());
-    ref<ConstantExpr> C = evalConstant(c);
+    ref<ConstantExpr> C = evalConstant(c, byTid, nullptr);
 
     // Extend the constant if necessary;
     assert(StoreBits >= C->getWidth() && "Invalid store size!");
@@ -791,17 +791,18 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
 extern void *__dso_handle __attribute__ ((__weak__));
 
 void Executor::initializeGlobals(ExecutionState &state) {
-  Thread &thread = state.currentThread();
   Module *m = kmodule->module.get();
 
-  if (m->getModuleInlineAsm() != "")
+  globalObjectsMap = new GlobalObjectsMap(memory);
+
+  if (!m->getModuleInlineAsm().empty())
     klee_warning("executable has module level assembly (ignoring)");
   // represent function globals using the address of the actual llvm function
   // object. given that we use malloc to allocate memory in states this also
   // ensures that we won't conflict. we don't need to allocate a memory object
   // since reading/writing via a function pointer is unsupported anyway.
-  for (Module::iterator i = m->begin(), ie = m->end(); i != ie; ++i) {
-    Function *f = &*i;
+  for (auto &i : *m) {
+    Function *f = &i;
     ref<ConstantExpr> addr(0);
 
     // If the symbol has external weak linkage then it is implicitly
@@ -814,8 +815,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
       addr = Expr::createPointer(reinterpret_cast<std::uint64_t>(f));
       legalFunctions.insert(reinterpret_cast<std::uint64_t>(f));
     }
-    
-    globalAddresses.insert(std::make_pair(f, addr));
+
+    globalObjectsMap->registerFunction(f, addr);
   }
 
 #ifndef WINDOWS
@@ -864,7 +865,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
          e = m->global_end();
        i != e; ++i) {
     const GlobalVariable *v = &*i;
-    size_t globalObjectAlignment = getAllocationAlignment(v);
+
     if (i->isDeclaration()) {
       // FIXME: We have no general way of handling unknown external
       // symbols. If we really cared about making external stuff work
@@ -896,14 +897,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
 			(int)i->getName().size(), i->getName().data());
       }
 
-      MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
-                                          /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread,
-                                          thread.stack.size() - 1,
-                                          /*alignment=*/globalObjectAlignment);
+      auto *mo = globalObjectsMap->registerGlobalData(v, size);
       ObjectState *os = bindObjectInState(state, mo, false);
-      globalObjects.insert(std::make_pair(v, mo));
-      globalAddresses.insert(std::make_pair(v, mo->getBaseExpr()));
 
       // Program already running = object already initialized.  Read
       // concrete value and write it to our copy.
@@ -928,16 +923,13 @@ void Executor::initializeGlobals(ExecutionState &state) {
     } else {
       Type *ty = i->getType()->getElementType();
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
-      MemoryObject *mo = memory->allocate(size, /*isLocal=*/false,
-                                          /*isGlobal=*/true, /*allocSite=*/v,
-                                          thread,
-                                          thread.stack.size() - 1,
-                                          /*alignment=*/globalObjectAlignment);
+
+      auto mo = globalObjectsMap->registerGlobalData(v, size);
+
       if (!mo)
         llvm::report_fatal_error("out of memory");
+
       ObjectState *os = bindObjectInState(state, mo, false);
-      globalObjects.insert(std::make_pair(v, mo));
-      globalAddresses.insert(std::make_pair(v, mo->getBaseExpr()));
 
       if (!i->hasInitializer()) {
         os->initializeToRandom();
@@ -961,7 +953,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       alias = ga;
     }
 
-    globalAddresses.insert(std::make_pair(&*i, evalConstant(alias->getAliasee())));
+    globalObjectsMap->registerAlias(&*i, evalConstant(alias->getAliasee(), state.currentThreadId()));
   }
 
   // once all objects are allocated, do the actual initialization
@@ -970,11 +962,13 @@ void Executor::initializeGlobals(ExecutionState &state) {
        i != e; ++i) {
     if (i->hasInitializer()) {
       const GlobalVariable *v = &*i;
-      MemoryObject *mo = globalObjects.find(v)->second;
+
+      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, state.currentThreadId());
+
       const ObjectState *os = state.addressSpace.findObject(mo);
       assert(os);
       ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-      initializeGlobalObject(state, wos, i->getInitializer(), 0);
+      initializeGlobalObject(state, wos, i->getInitializer(), 0, state.currentThreadId());
       // if(i->isConstant()) os->setReadOnly(true);
     }
   }
@@ -1357,12 +1351,36 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
 }
 
 const Cell& Executor::eval(KInstruction *ki, unsigned index, 
-                           ExecutionState &state) const {
+                           ExecutionState &state) {
   assert(index < ki->inst->getNumOperands());
   int vnumber = ki->operands[index];
 
-  assert(vnumber != -1 &&
-         "Invalid operand to eval(), not a value or constant!");
+  if (vnumber == -1) {
+    Value *v = nullptr;
+    if (isa<CallInst>(ki->inst) || isa<InvokeInst>(ki->inst)) {
+      CallSite cs(ki->inst);
+      v = cs.getArgument(index);
+    } else {
+      v = ki->inst->getOperand(index);
+    }
+
+    assert(isa<Constant>(v) && "Invalid type for ad-hoc constant evaluation");
+    auto *c = cast<Constant>(v);
+
+    assert(c->isThreadDependent() && "If a constant is not thread dependent, then the constant should have been folded earlier");
+
+    // instructions is null since we want to mimic the behavior during constant folding
+    // see: bindModuleConstants
+    auto value = evalConstant(c, state.currentThreadId(), nullptr);
+
+    // TODO: This is not really a great way to achieve this ...
+    // Since we are returning a reference here we cannot return a stack allocated variable.
+    // Every invocation of eval directly extracts the value out of the `Cell` and then ignores
+    // the actual cell object. Therefore, we should be safe for now ...
+    static Cell hackCell;
+    hackCell.value = value;
+    return hackCell;
+  }
 
   // Determine if this is a constant or not.
   if (vnumber < 0) {
@@ -2145,7 +2163,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       // Iterate through all non-default cases and order them by expressions
       for (auto i : si->cases()) {
-        ref<Expr> value = evalConstant(i.getCaseValue());
+        ref<Expr> value = evalConstant(i.getCaseValue(), state.currentThreadId());
 
         BasicBlock *caseSuccessor = i.getCaseSuccessor();
         expressionOrder.insert(std::make_pair(value, caseSuccessor));
@@ -3276,8 +3294,8 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
         kmodule->targetData->getTypeStoreSize(set->getElementType());
       Value *operand = ii.getOperand();
       if (Constant *c = dyn_cast<Constant>(operand)) {
-        ref<ConstantExpr> index = 
-          evalConstant(c)->SExt(Context::get().getPointerWidth());
+        ref<ConstantExpr> index =
+                evalConstant(c, ThreadId(1))->SExt(Context::get().getPointerWidth());
         ref<ConstantExpr> addend = 
           index->Mul(ConstantExpr::alloc(elementSize,
                                          Context::get().getPointerWidth()));
@@ -3291,7 +3309,7 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
         kmodule->targetData->getTypeStoreSize(ptr->getElementType());
       auto operand = ii.getOperand();
       if (auto c = dyn_cast<Constant>(operand)) {
-        auto index = evalConstant(c)->SExt(Context::get().getPointerWidth());
+        auto index = evalConstant(c, ThreadId(1))->SExt(Context::get().getPointerWidth());
         auto addend = index->Mul(ConstantExpr::alloc(elementSize,
                                          Context::get().getPointerWidth()));
         constantOffset = constantOffset->Add(addend);
@@ -3331,7 +3349,7 @@ void Executor::bindModuleConstants() {
       std::unique_ptr<Cell[]>(new Cell[kmodule->constants.size()]);
   for (unsigned i=0; i<kmodule->constants.size(); ++i) {
     Cell &c = kmodule->constantTable[i];
-    c.value = evalConstant(kmodule->constants[i]);
+    c.value = evalConstant(kmodule->constants[i], ThreadId(1), nullptr);
   }
 }
 
@@ -4059,8 +4077,6 @@ void Executor::executeAlloc(ExecutionState &state,
                             bool zeroMemory,
                             const ObjectState *reallocFrom,
                             size_t allocationAlignment) {
-  // TODO: Here we should assign the ownership over the memory region to the
-  //       current thread
   Thread &thread = state.currentThread();
 
   size = toUnique(state, size);
@@ -4544,10 +4560,8 @@ void Executor::runFunctionAsMain(Function *f,
     if (++ai!=ae) {
       Instruction *first = &*(f->begin()->begin());
       argvMO =
-          memory->allocate((argc + 1 + envc + 1 + 1) * NumPtrBytes,
-                           /*isLocal=*/false, /*isGlobal=*/true,
-                           /*allocSite=*/first, /*thread=*/ thread,
-                           /*stackframeIndex=*/0, /*alignment=*/8);
+          memory->allocateGlobal((argc + 1 + envc + 1 + 1) * NumPtrBytes,
+                           /*allocSite=*/first, /*threadId=*/ thread.getThreadId(),/*alignment=*/8);
 
       if (!argvMO)
         klee_error("Could not allocate memory for function arguments");
@@ -4597,10 +4611,9 @@ void Executor::runFunctionAsMain(Function *f,
         int j, len = strlen(s);
 
         MemoryObject *arg =
-            memory->allocate(len + 1, /*isLocal=*/false, /*isGlobal=*/true,
+            memory->allocateGlobal(len + 1,
                              /*allocSite=*/thread.pc->inst,
-                             /*thread=*/thread,
-                             thread.stack.size() - 1,
+                             /*tid=*/thread.getThreadId(),
                              /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
@@ -4640,12 +4653,12 @@ void Executor::runFunctionAsMain(Function *f,
     delete state;
   }
 
+  delete globalObjectsMap;
+  globalObjectsMap = nullptr;
+
   // hack to clear memory objects
   delete memory;
   memory = new MemoryManager(NULL);
-
-  globalObjects.clear();
-  globalAddresses.clear();
 
   if (statsTracker)
     statsTracker->done();
@@ -4894,8 +4907,7 @@ ThreadId Executor::createThread(ExecutionState &state,
   std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
-  MemoryObject* thErrno = memory->allocate(size, false, true, thread.prevPc->inst,
-    thread, thread.stack.size() - 1, alignment);
+  MemoryObject* thErrno = memory->allocateGlobal(size, thread.prevPc->inst, thread.getThreadId(), alignment);
   if (thErrno == nullptr) {
     klee_error("Could not allocate memory for thread local objects");
   }
@@ -4903,11 +4915,28 @@ ThreadId Executor::createThread(ExecutionState &state,
   thread.errnoMo = thErrno;
 
   // And initialize the errno
-  ObjectState *os = bindObjectInState(state, thErrno, false);
-  os->initializeToRandom();
-
+  ObjectState *errNoOs = bindObjectInState(state, thErrno, false);
+  errNoOs->initializeToRandom();
   if (PruneStates) {
-    state.memoryState.registerWrite(*thErrno, *os);
+    state.memoryState.registerWrite(*thErrno, *errNoOs);
+  }
+
+  // Now all the other TLS objects have to be initialized (e.g. the globals)
+  // once all objects are allocated, do the actual initialization
+  auto m = kmodule->module.get();
+  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
+    if (i->hasInitializer()) {
+      const GlobalVariable *v = &*i;
+
+      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, thread->getThreadId());
+
+      ObjectState *os = bindObjectInState(state, mo, false);
+      initializeGlobalObject(state, os, i->getInitializer(), 0, thread->getThreadId());
+
+      if (PruneStates) {
+        state.memoryState.registerWrite(*mo, *os);
+      }
+    }
   }
 
   if (statsTracker)
@@ -5032,6 +5061,22 @@ void Executor::exitThread(ExecutionState &state) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
     porEventManager.registerThreadExit(state, tid);
+  }
+
+  auto m = kmodule->module.get();
+  for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
+    const GlobalVariable *v = &*i;
+
+    auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, tid);
+
+    if (PruneStates) {
+      auto os = state.addressSpace.findObject(mo);
+      state.memoryState.unregisterWrite(*mo, *os);
+    }
+
+    processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+
+    state.addressSpace.unbindObject(mo);
   }
 }
 

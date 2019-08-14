@@ -16,6 +16,7 @@ set(CORE_COMPONENTS
   ExecutorTimers.cpp
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
+  GlobalObjectsMap.cpp
   ImpliedValue.cpp
   Memory.cpp
   MemoryManager.cpp

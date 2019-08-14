@@ -33,8 +33,12 @@ using namespace llvm;
 
 namespace klee {
 
-  ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c,
-                                                 const KInstruction *ki) {
+  bool Executor::canBeConstantFolded(const llvm::Constant *c, const ThreadId &byTd, const KInstruction *ki) {
+    return true;
+  }
+
+  ref <klee::ConstantExpr>
+  Executor::evalConstant(const llvm::Constant *c, const ThreadId &byTid, const KInstruction *ki) {
     if (!ki) {
       KConstant* kc = kmodule->getKConstant(c);
       if (kc)
@@ -42,14 +46,14 @@ namespace klee {
     }
 
     if (const llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
-      return evalConstantExpr(ce, ki);
+      return evalConstantExpr(ce, byTid, ki);
     } else {
       if (const ConstantInt *ci = dyn_cast<ConstantInt>(c)) {
         return ConstantExpr::alloc(ci->getValue());
       } else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c)) {
         return ConstantExpr::alloc(cf->getValueAPF().bitcastToAPInt());
       } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
-        return globalAddresses.find(gv)->second;
+        return globalObjectsMap->lookupGlobal(gv, byTid);
       } else if (isa<ConstantPointerNull>(c)) {
         return Expr::createPointer(0);
       } else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c)) {
@@ -66,7 +70,7 @@ namespace klee {
         // the last element the highest
         std::vector<ref<Expr> > kids;
         for (unsigned i = cds->getNumElements(); i != 0; --i) {
-          ref<Expr> kid = evalConstant(cds->getElementAsConstant(i - 1), ki);
+          ref<Expr> kid = evalConstant(cds->getElementAsConstant(i - 1), byTid, ki);
           kids.push_back(kid);
         }
         assert(Context::get().isLittleEndian() &&
@@ -78,7 +82,7 @@ namespace klee {
         llvm::SmallVector<ref<Expr>, 4> kids;
         for (unsigned i = cs->getNumOperands(); i != 0; --i) {
           unsigned op = i-1;
-          ref<Expr> kid = evalConstant(cs->getOperand(op), ki);
+          ref<Expr> kid = evalConstant(cs->getOperand(op), byTid, ki);
 
           uint64_t thisOffset = sl->getElementOffsetInBits(op),
             nextOffset = (op == cs->getNumOperands() - 1)
@@ -99,7 +103,7 @@ namespace klee {
         llvm::SmallVector<ref<Expr>, 4> kids;
         for (unsigned i = ca->getNumOperands(); i != 0; --i) {
           unsigned op = i-1;
-          ref<Expr> kid = evalConstant(ca->getOperand(op), ki);
+          ref<Expr> kid = evalConstant(ca->getOperand(op), byTid, ki);
           kids.push_back(kid);
         }
         assert(Context::get().isLittleEndian() &&
@@ -111,7 +115,7 @@ namespace klee {
         const size_t numOperands = cv->getNumOperands();
         kids.reserve(numOperands);
         for (unsigned i = numOperands; i != 0; --i) {
-          kids.push_back(evalConstant(cv->getOperand(i - 1), ki));
+          kids.push_back(evalConstant(cv->getOperand(i - 1), byTid, ki));
         }
         assert(Context::get().isLittleEndian() &&
                "FIXME:Broken for big endian");
@@ -134,19 +138,19 @@ namespace klee {
     }
   }
 
-  ref<ConstantExpr> Executor::evalConstantExpr(const llvm::ConstantExpr *ce,
-                                               const KInstruction *ki) {
-    llvm::Type *type = ce->getType();
+  ref <klee::ConstantExpr>
+  Executor::evalConstantExpr(const llvm::ConstantExpr *c, const ThreadId &byTid, const KInstruction *ki) {
+    llvm::Type *type = c->getType();
 
     ref<ConstantExpr> op1(0), op2(0), op3(0);
-    int numOperands = ce->getNumOperands();
+    int numOperands = c->getNumOperands();
 
-    if (numOperands > 0) op1 = evalConstant(ce->getOperand(0), ki);
-    if (numOperands > 1) op2 = evalConstant(ce->getOperand(1), ki);
-    if (numOperands > 2) op3 = evalConstant(ce->getOperand(2), ki);
+    if (numOperands > 0) op1 = evalConstant(c->getOperand(0), byTid, ki);
+    if (numOperands > 1) op2 = evalConstant(c->getOperand(1), byTid, ki);
+    if (numOperands > 2) op3 = evalConstant(c->getOperand(2), byTid, ki);
 
     /* Checking for possible errors during constant folding */
-    switch (ce->getOpcode()) {
+    switch (c->getOpcode()) {
     case Instruction::SDiv:
     case Instruction::UDiv:
     case Instruction::SRem:
@@ -172,9 +176,9 @@ namespace klee {
     std::string msg("Unknown ConstantExpr type");
     llvm::raw_string_ostream os(msg);
 
-    switch (ce->getOpcode()) {
+    switch (c->getOpcode()) {
     default :
-      os << "'" << *ce << "' at location "
+      os << "'" << *c << "' at location "
          << (ki ? ki->getSourceLocation() : "[unknown]");
       klee_error("%s", os.str().c_str());
 
@@ -205,10 +209,10 @@ namespace klee {
 
     case Instruction::GetElementPtr: {
       ref<ConstantExpr> base = op1->ZExt(Context::get().getPointerWidth());
-      for (gep_type_iterator ii = gep_type_begin(ce), ie = gep_type_end(ce);
+      for (gep_type_iterator ii = gep_type_begin(c), ie = gep_type_end(c);
            ii != ie; ++ii) {
         ref<ConstantExpr> indexOp =
-            evalConstant(cast<Constant>(ii.getOperand()), ki);
+                evalConstant(cast<Constant>(ii.getOperand()), byTid, ki);
         if (indexOp->isZero())
           continue;
 
@@ -238,7 +242,7 @@ namespace klee {
     }
       
     case Instruction::ICmp: {
-      switch(ce->getPredicate()) {
+      switch(c->getPredicate()) {
       default: assert(0 && "unhandled ICmp predicate");
       case ICmpInst::ICMP_EQ:  return op1->Eq(op2);
       case ICmpInst::ICMP_NE:  return op1->Ne(op2);

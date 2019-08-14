@@ -51,6 +51,10 @@ private:
 
   std::size_t threadHeapSize;
   std::size_t threadStackSize;
+  std::size_t globalSegmentSize;
+
+  pseudoalloc::Mapping globalMemorySegment;
+  pseudoalloc::Alloc* globalAllocator;
 
   /**
    * Requested a memory mapping for `tid`.
@@ -58,6 +62,8 @@ private:
    * that address, otherwise the mapping at a random location
    */
   void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
+
+  pseudoalloc::Mapping createMapping(std::size_t size, void* requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
 
@@ -72,10 +78,14 @@ public:
   MemoryObject *allocate(std::uint64_t size, bool isLocal, bool isGlobal,
                          const llvm::Value *allocSite, const Thread &thread,
                          std::size_t stackframeIndex, std::size_t alignment);
+
   MemoryObject *allocateFixed(std::uint64_t address, std::uint64_t size,
                               const llvm::Value *allocSite,
                               const Thread &thread,
                               std::size_t stackframeIndex);
+
+  MemoryObject *allocateGlobal(std::uint64_t size, const llvm::Value *allocSite,
+                               const ThreadId& byTid, std::size_t alignment);
 
   /**
    * Deallocates the memory at address `mo->address` in the allocator.
