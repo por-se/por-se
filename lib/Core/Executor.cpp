@@ -1359,7 +1359,12 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
     Value *v = nullptr;
     if (isa<CallInst>(ki->inst) || isa<InvokeInst>(ki->inst)) {
       CallSite cs(ki->inst);
-      v = cs.getArgument(index);
+
+      if (index == 0) {
+        v = cs.getCalledValue();
+      } else {
+        v = cs.getArgument(index - 1);
+      }
     } else {
       v = ki->inst->getOperand(index);
     }
@@ -4925,9 +4930,9 @@ ThreadId Executor::createThread(ExecutionState &state,
   // once all objects are allocated, do the actual initialization
   auto m = kmodule->module.get();
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
-    if (i->hasInitializer()) {
-      const GlobalVariable *v = &*i;
+    const GlobalVariable *v = &*i;
 
+    if (i->hasInitializer() && i->isThreadLocal()) {
       auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, thread->getThreadId());
 
       ObjectState *os = bindObjectInState(state, mo, false);
@@ -5067,16 +5072,18 @@ void Executor::exitThread(ExecutionState &state) {
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     const GlobalVariable *v = &*i;
 
-    auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, tid);
+    if (v->isThreadLocal()) {
+      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, tid);
 
-    if (PruneStates) {
-      auto os = state.addressSpace.findObject(mo);
-      state.memoryState.unregisterWrite(*mo, *os);
+      if (PruneStates) {
+        auto os = state.addressSpace.findObject(mo);
+        state.memoryState.unregisterWrite(*mo, *os);
+      }
+
+      processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+
+      state.addressSpace.unbindObject(mo);
     }
-
-    processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
-
-    state.addressSpace.unbindObject(mo);
   }
 }
 

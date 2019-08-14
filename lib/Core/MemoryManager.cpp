@@ -216,7 +216,7 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
 
   pseudoalloc::Mapping threadHeapMapping = createMapping(threadHeapSize, requestedAddress);
 
-  auto stackAddress = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(requestedAddress) + threadHeapSize);
+  auto stackAddress = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(threadHeapMapping.base) + threadHeapSize);
   pseudoalloc::Mapping threadStackMapping = createMapping(threadStackSize, stackAddress);
 
   ThreadMemorySegments segment{};
