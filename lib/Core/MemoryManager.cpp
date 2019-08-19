@@ -47,7 +47,7 @@ llvm::cl::opt<unsigned> ThreadStackSize(
       "allocate-thread-stack-size",
       llvm::cl::desc(
               "Reserved memory for every threads stack size in GB (default=10)"),
-      llvm::cl::init(10), llvm::cl::cat(MemoryCat));
+      llvm::cl::init(20), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<std::string> ThreadSegmentsFile(
       "allocate-thread-segments-file",
@@ -84,10 +84,7 @@ MemoryManager::~MemoryManager() {
     delete mo;
   }
 
-  for (auto& it : threadMemoryMappings) {
-    pseudoalloc::pseudoalloc_dontneed(&it.second.heap);
-    pseudoalloc::pseudoalloc_dontneed(&it.second.stack);
-  }
+  markMemoryRegionsAsUnneeded();
 }
 
 void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
@@ -338,7 +335,13 @@ pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, Al
     assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");
   }
 
-  return pseudoalloc::pseudoalloc_new(region == REGION_STACK ? it->second.stack : it->second.heap);
+  auto allocator = pseudoalloc::pseudoalloc_new(region == REGION_STACK ? it->second.stack : it->second.heap);
+
+  if (allocator == nullptr) {
+    klee_error("Failed to create an allocator for tid=%s\n", tid.to_string().c_str());
+  }
+
+  return allocator;
 }
 
 void MemoryManager::markMemoryRegionsAsUnneeded() {

@@ -11,13 +11,13 @@
 #define KLEE_MEMORYMANAGER_H
 
 #include "klee/ThreadId.h"
+#include "klee/Thread.h"
+
+#include "pseudoalloc.h"
 
 #include <cstddef>
 #include <set>
 #include <map>
-
-#include <pseudoalloc.h>
-#include <klee/Thread.h>
 
 namespace llvm {
 class Value;

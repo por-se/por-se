@@ -9,11 +9,11 @@
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/MemoryFingerprint.h"
 
+#include "pseudoalloc.h"
 #include "ThreadId.h"
 
 #include <vector>
 #include <unordered_map>
-#include <pseudoalloc.h>
 
 namespace klee {
   class Array;
