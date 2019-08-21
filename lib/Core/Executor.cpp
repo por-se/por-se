@@ -468,6 +468,10 @@ namespace klee {
   RNG theRNG;
 }
 
+// XXX hack
+extern "C" unsigned dumpStates, dumpPTree;
+unsigned dumpStates = 0, dumpPTree = 0;
+
 const char *Executor::TerminateReasonNames[] = {
   [ Abort ] = "abort",
   [ Assert ] = "assert",
@@ -3417,6 +3421,8 @@ void Executor::run(ExecutionState &initialState) {
 
       executeInstruction(state, ki);
       processTimers(&state, maxInstructionTime * numSeeds);
+      if (::dumpStates) dumpStates();
+      if (::dumpPTree) dumpPTree();
       updateStates(&state);
 
       if ((stats::instructions % 1000) == 0) {
@@ -3484,6 +3490,9 @@ void Executor::run(ExecutionState &initialState) {
       (*statesJSONFile) << "  }";
     }
     updateStatesJSON(ki, state);
+
+    if (::dumpStates) dumpStates();
+    if (::dumpPTree) dumpPTree();
 
     checkMemoryUsage();
 
@@ -5317,6 +5326,72 @@ int *Executor::getErrnoLocation(const ExecutionState &state) const {
 #else
   return __error();
 #endif
+}
+
+
+void Executor::dumpPTree() {
+  if (!::dumpPTree) return;
+
+  char name[32];
+  snprintf(name, sizeof(name),"ptree%08d.dot", (int) stats::instructions);
+  auto os = interpreterHandler->openOutputFile(name);
+  if (os) {
+    processTree->dump(*os);
+  }
+
+  ::dumpPTree = 0;
+}
+
+void Executor::dumpStates() {
+  if (!::dumpStates) return;
+
+  auto os = interpreterHandler->openOutputFile("states.txt");
+
+  if (os) {
+    for (ExecutionState *es : states) {
+      *os << "(" << es << ",";
+      *os << "[";
+      Thread &thread = es->currentThread();
+      if (thread.state == ThreadState::Exited) {
+        // FIXME: find more appropriate way to handle this (instead of skipping state entirely)
+        continue;
+      }
+      auto next = thread.stack.begin();
+      ++next;
+      for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end();
+            sfIt != sf_ie; ++sfIt) {
+        *os << "('" << sfIt->kf->function->getName().str() << "',";
+        if (next == thread.stack.end()) {
+          *os << thread.prevPc->info->line << "), ";
+        } else {
+          *os << next->caller->info->line << "), ";
+          ++next;
+        }
+      }
+      *os << "], ";
+
+      StackFrame &sf = thread.stack.back();
+      uint64_t md2u = computeMinDistToUncovered(thread.pc,
+                                                sf.minDistToUncoveredOnReturn);
+      uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions,
+                                                            thread.pc->info->id);
+      uint64_t cpicnt = sf.callPathNode->statistics.getValue(stats::instructions);
+
+      *os << "{";
+      *os << "'depth' : " << es->depth << ", ";
+      *os << "'weight' : " << es->weight << ", ";
+      *os << "'queryCost' : " << es->queryCost << ", ";
+      *os << "'coveredNew' : " << es->coveredNew << ", ";
+      *os << "'instsSinceCovNew' : " << es->instsSinceCovNew << ", ";
+      *os << "'md2u' : " << md2u << ", ";
+      *os << "'icnt' : " << icnt << ", ";
+      *os << "'CPicnt' : " << cpicnt << ", ";
+      *os << "}";
+      *os << ")\n";
+    }
+  }
+
+  ::dumpStates = 0;
 }
 
 ///

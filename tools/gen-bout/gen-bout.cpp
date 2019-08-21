@@ -49,23 +49,15 @@ static void push_range(KTest *b, const char *name, unsigned value) {
 
 void print_usage_and_exit(char *program_name) {
   fprintf(stderr,
-          "%s: Tool for generating a ktest file from concrete input, "
-          "e.g., for using a concrete crashing input as a ktest seed.\n"
-          "Usage: %s <arguments>\n"
-          "       <arguments> are the command-line arguments of the "
-          "program, with the following treated as special:\n"
-          "       --bout-file <filename>      - Specifying the output "
-          "file name for the ktest file (default: file.bout).\n"
-          "       --sym-stdin <filename>      - Specifying a file that "
-          "is the content of stdin (only once).\n"
-          "       --sym-stdout <filename>     - Specifying a file that "
-          "is the content of stdout (only once).\n"
-          "       --sym-file <filename>       - Specifying a file that "
-          "is the content of a file named A provided for the program "
-          "(only once).\n"
-          "   Ex: %s -o -p -q file1 --sym-stdin file2 --sym-file file3 "
-          "--sym-stdout file4\n",
-          program_name, program_name, program_name);
+    "%s: Tool for generating a ktest file from concrete input, e.g., for using a concrete crashing input as a ktest seed.\n"
+    "Usage: %s <arguments>\n"
+    "       <arguments> are the command-line arguments of the program, with the following treated as special:\n"
+    "       --bout-file <filename>      - Specifying the output file name for the ktest file (default: file.bout).\n"
+    "       --sym-stdin <filename>      - Specifying a file that is the content of stdin (only once).\n"
+    "       --sym-stdout <filename>     - Specifying a file that is the content of stdout (only once).\n"
+    "       --sym-file <filename>       - Specifying a file that is the content of a file named A provided for the program (only once).\n"
+    "   Ex: %s -o -p -q file1 --sym-stdin file2 --sym-file file3 --sym-stdout file4\n",
+    program_name, program_name, program_name);
   exit(1);
 }
 
@@ -134,13 +126,13 @@ int main(int argc, char *argv[]) {
       static int total_args = 0;
 
       char arg[1024];
-      sprintf(arg, "arg%d", total_args++);
+      snprintf(arg, sizeof(arg), "arg%d", total_args++);
       push_obj(&b, (const char *)arg, nbytes, (unsigned char *)argv[i]);
 
       char *buf1 = (char *)malloc(1024);
       char *buf2 = (char *)malloc(1024);
       strcpy(buf1, "-sym-arg");
-      sprintf(buf2, "%ld", nbytes - 1);
+      snprintf(buf2, 1024, "%ld", nbytes - 1);
       argv_copy[argv_copy_idx++] = buf1;
       argv_copy[argv_copy_idx++] = buf2;
     }
@@ -163,7 +155,7 @@ int main(int argc, char *argv[]) {
 
     unsigned char *file_content, *fptr;
     if ((file_content = (unsigned char *)malloc(nbytes)) == NULL) {
-      fprintf(stderr, "Memory allocation failure\n");
+      fputs("Memory allocation failure\n", stderr);
       exit(1);
     }
 
@@ -182,9 +174,9 @@ int main(int argc, char *argv[]) {
     char *buf1 = (char *)malloc(1024);
     char *buf2 = (char *)malloc(1024);
     char *buf3 = (char *)malloc(1024);
-    sprintf(buf1, "-sym-files");
-    sprintf(buf2, "1");
-    sprintf(buf3, "%ld", nbytes);
+    snprintf(buf1, 1024, "-sym-files");
+    snprintf(buf2, 1024, "1");
+    snprintf(buf3, 1024, "%ld", nbytes);
     argv_copy[argv_copy_idx++] = buf1;
     argv_copy[argv_copy_idx++] = buf2;
     argv_copy[argv_copy_idx++] = buf3;
@@ -204,7 +196,7 @@ int main(int argc, char *argv[]) {
 
     unsigned char *file_content, *fptr;
     if ((file_content = (unsigned char *)malloc(file_stat.st_size)) == NULL) {
-      fprintf(stderr, "Memory allocation failure\n");
+      fputs("Memory allocation failure\n", stderr);
       exit(1);
     }
 
@@ -222,8 +214,8 @@ int main(int argc, char *argv[]) {
 
     char *buf1 = (char *)malloc(1024);
     char *buf2 = (char *)malloc(1024);
-    sprintf(buf1, "-sym-stdin");
-    sprintf(buf2, "%ld", file_stat.st_size);
+    snprintf(buf1, 1024, "-sym-stdin");
+    snprintf(buf2, 1024, "%ld", file_stat.st_size);
     argv_copy[argv_copy_idx++] = buf1;
     argv_copy[argv_copy_idx++] = buf2;
   }
@@ -257,7 +249,7 @@ int main(int argc, char *argv[]) {
     push_obj(&b, statname, sizeof(struct stat64), (unsigned char *)&file_stat);
 
     char *buf = (char *)malloc(1024);
-    sprintf(buf, "-sym-stdout");
+    snprintf(buf, 1024, "-sym-stdout");
     argv_copy[argv_copy_idx++] = buf;
   }
 

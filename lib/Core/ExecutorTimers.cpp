@@ -62,10 +62,6 @@ public:
 static const time::Span kMilliSecondsPerTick(time::milliseconds(100));
 static volatile unsigned timerTicks = 0;
 
-// XXX hack
-extern "C" unsigned dumpStates, dumpPTree;
-unsigned dumpStates = 0, dumpPTree = 0;
-
 static void onAlarm(int) {
   ++timerTicks;
 }
@@ -114,68 +110,7 @@ void Executor::processTimers(ExecutionState *current,
     ticks = 1;
   }
 
-  if (ticks || dumpPTree || dumpStates) {
-    if (dumpPTree) {
-      char name[32];
-      sprintf(name, "ptree%08d.dot", (int) stats::instructions);
-      auto os = interpreterHandler->openOutputFile(name);
-      if (os) {
-        processTree->dump(*os);
-      }
-
-      dumpPTree = 0;
-    }
-
-    if (dumpStates) {
-      auto os = interpreterHandler->openOutputFile("states.txt");
-
-      if (os) {
-        for (ExecutionState *es : states) {
-          *os << "(" << es << ",";
-          *os << "[";
-          Thread &thread = es->currentThread();
-          if (thread.state == ThreadState::Exited) {
-            // FIXME: find more appropriate way to handle this (instead of skipping state entirely)
-            continue;
-          }
-          auto next = thread.stack.begin();
-          ++next;
-          for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end();
-               sfIt != sf_ie; ++sfIt) {
-            *os << "('" << sfIt->kf->function->getName().str() << "',";
-            if (next == thread.stack.end()) {
-              *os << thread.prevPc->info->line << "), ";
-            } else {
-              *os << next->caller->info->line << "), ";
-              ++next;
-            }
-          }
-          *os << "], ";
-
-          StackFrame &sf = thread.stack.back();
-          uint64_t md2u = computeMinDistToUncovered(thread.pc,
-                                                    sf.minDistToUncoveredOnReturn);
-          uint64_t icnt = theStatisticManager->getIndexedValue(stats::instructions,
-                                                               thread.pc->info->id);
-          uint64_t cpicnt = sf.callPathNode->statistics.getValue(stats::instructions);
-
-          *os << "{";
-          *os << "'depth' : " << es->depth << ", ";
-          *os << "'weight' : " << es->weight << ", ";
-          *os << "'queryCost' : " << es->queryCost << ", ";
-          *os << "'coveredNew' : " << es->coveredNew << ", ";
-          *os << "'instsSinceCovNew' : " << es->instsSinceCovNew << ", ";
-          *os << "'md2u' : " << md2u << ", ";
-          *os << "'icnt' : " << icnt << ", ";
-          *os << "'CPicnt' : " << cpicnt << ", ";
-          *os << "}";
-          *os << ")\n";
-        }
-      }
-
-      dumpStates = 0;
-    }
-
+  if (ticks) {
     if (maxInstTime && current &&
         std::find(removedStates.begin(), removedStates.end(), current) ==
             removedStates.end()) {
@@ -188,10 +123,10 @@ void Executor::processTimers(ExecutionState *current,
     if (!timers.empty()) {
       auto time = time::getWallTime();
 
-      for (std::vector<TimerInfo*>::iterator it = timers.begin(), 
+      for (std::vector<TimerInfo*>::iterator it = timers.begin(),
              ie = timers.end(); it != ie; ++it) {
         TimerInfo *ti = *it;
-        
+
         if (time >= ti->nextFireTime) {
           ti->timer->run();
           ti->nextFireTime = time + ti->rate;
