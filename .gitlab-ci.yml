@@ -28,5 +28,6 @@ test:
     - |
         /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
           cd "$(dirname "$(which klee)")/.."
+          klee -version
           cmake --build . --target check -j ${WS_JOBS}
         '
