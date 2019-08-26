@@ -35,7 +35,6 @@ class KInstruction;
   private:
     KInstruction *ki = nullptr;
     std::vector<const KInstruction *> liveLocals;
-    bool hasValidLiveLocals = false;
 
   public:
     InstructionInfo(unsigned _id, const std::string &_file, unsigned _line,
@@ -59,14 +58,11 @@ class KInstruction;
     /// @brief Set which locals are live *after* executing this instruction.
     void setLiveLocals(std::vector<const KInstruction *> &&set) {
       liveLocals = std::move(set);
-      hasValidLiveLocals = true;
     }
 
     /// @brief Get set of locals live *after* executing this instruction.
-    const std::vector<const KInstruction *> *getLiveLocals() const {
-      if (!hasValidLiveLocals)
-        return nullptr;
-      return &liveLocals;
+    const std::vector<const KInstruction *> &getLiveLocals() const {
+      return liveLocals;
     }
   };
 

@@ -449,8 +449,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
 
   // add locals and symbolic references to stackframe fingerprint
   // these will be automatically removed when the stack frame is popped
-  assert(caller->info->getLiveLocals() != nullptr);
-  for (const KInstruction *ki : *caller->info->getLiveLocals()) {
+  for (const KInstruction *ki : caller->info->getLiveLocals()) {
     // NOTE: It is ok here to only consider locals that are live after the
     //       caller instruction, as the only locals that might be dead in
     //       comparison to the previous instruction are the ones passed as
@@ -518,7 +517,7 @@ MemoryFingerprint::value_t MemoryState::getFingerprint() const {
     } else {
       assert(liveInst == thread.prevPc->inst);
 
-      liveSet = thread.liveSetPc->info->getLiveLocals();
+      liveSet = &thread.liveSetPc->info->getLiveLocals();
     }
 
     assert(liveSet != nullptr);
