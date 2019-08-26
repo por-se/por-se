@@ -10,31 +10,31 @@ using namespace klee;
 //
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::Function* f, ref<ConstantExpr> addr)
-        : type(RefFunction), value(f), address(addr) {}
+        : type(ReferencedType::Function), value(f), address(addr) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr)
-        : type(RefAlias), value(a), address(addr) {}
+        : type(ReferencedType::Alias), value(a), address(addr) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalValue* v, std::size_t size)
-        : type(RefData), value(v), address(0), size(size) {}
+        : type(ReferencedType::Data), value(v), address(0), size(size) {}
 
 const llvm::Function* GlobalObjectsMap::GlobalObjectReference::getFunction() {
-  assert(type == RefFunction && "Calling on invalid type");
+  assert(type == ReferencedType::Function && "Calling on invalid type");
   return static_cast<const llvm::Function*>(value);
 }
 
 const llvm::GlobalAlias* GlobalObjectsMap::GlobalObjectReference::getAlias() {
-  assert(type == RefAlias && "Calling on invalid type");
+  assert(type == ReferencedType::Alias && "Calling on invalid type");
   return static_cast<const llvm::GlobalAlias*>(value);
 }
 
 const llvm::GlobalValue* GlobalObjectsMap::GlobalObjectReference::getGlobalValue() {
-  assert(type == RefData && "Calling on invalid type");
+  assert(type == ReferencedType::Data && "Calling on invalid type");
   return static_cast<const llvm::GlobalValue*>(value);
 }
 
 MemoryObject* GlobalObjectsMap::GlobalObjectReference::getMemoryObject(const ThreadId& tid) {
-  assert(type == RefData && "Calling on invalid type");
+  assert(type == ReferencedType::Data && "Calling on invalid type");
 
   auto it = threadLocalMemory.find(tid);
   if (it != threadLocalMemory.end()) {
@@ -91,7 +91,7 @@ const MemoryObject* GlobalObjectsMap::lookupGlobalMemoryObject(const llvm::Globa
     return nullptr;
   }
 
-  assert(globalObject->type == RefData);
+  assert(globalObject->type == ReferencedType::Data);
 
   // Now we have to check whether the value is actually depending on the thread
   // that is calling
@@ -118,7 +118,7 @@ ref<ConstantExpr> GlobalObjectsMap::lookupGlobal(const llvm::GlobalValue* gv, co
   }
 
   // All other types do not change based on the calling thread
-  if (globalObject->type != RefData || !gv->isThreadLocal()) {
+  if (globalObject->type != ReferencedType::Data || !gv->isThreadLocal()) {
     return globalObject->address;
   }
 

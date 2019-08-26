@@ -48,6 +48,12 @@ llvm::cl::opt<unsigned> ThreadStackSize(
               "Reserved memory for every threads stack size in GB (default=20)"),
       llvm::cl::init(20), llvm::cl::cat(MemoryCat));
 
+llvm::cl::opt<unsigned> GlobalSegmentSize(
+      "allocate-global-segment-size",
+      llvm::cl::desc(
+              "Reserved memory for globals in GB (default=20)"),
+      llvm::cl::init(20), llvm::cl::cat(MemoryCat));
+
 llvm::cl::opt<std::string> ThreadSegmentsFile(
       "allocate-thread-segments-file",
       llvm::cl::desc("File that specifies the start addresses of thread segments"),
@@ -62,7 +68,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
 
   threadHeapSize = static_cast<std::size_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
   threadStackSize = static_cast<std::size_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
-  globalSegmentSize = static_cast<std::size_t>(20) * 1024 * 1024 * 1024;
+  globalSegmentSize = static_cast<std::size_t>(GlobalSegmentSize.getValue()) * 1024 * 1024 * 1024;
 
   globalMemorySegment.base = nullptr;
   globalMemorySegment.len = 0;
@@ -81,7 +87,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
   }
 
   if (globalMemorySegment.base == nullptr) {
-    globalMemorySegment = createMapping(globalSegmentSize, nullptr);
+    globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
   globalAllocator = pseudoalloc::pseudoalloc_new(globalMemorySegment);
@@ -147,7 +153,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
     }
 
     if (tidAsString == "global") {
-      globalMemorySegment = createMapping(globalSegmentSize, reinterpret_cast<void *>(address));
+      globalMemorySegment = createMapping(globalSegmentSize, address);
       klee_message("Created thread memory mapping for globals at %p", globalMemorySegment.base);
     } else {
       auto forTid = ThreadId::from_string(tidAsString);
@@ -157,12 +163,14 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
       assert(forTid->to_string() == tidAsString && "Parsed tid should be identical to the input one");
 
-      initThreadMemoryMapping(*forTid, reinterpret_cast<void *>(address));
+      initThreadMemoryMapping(*forTid, address);
     }
   }
 }
 
-pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, uintptr_t requestedAddress) {
+pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, std::uintptr_t requestedAddress) {
+  auto reqAddressAsPointer = reinterpret_cast<void*>(requestedAddress);
+
   // Test that we do not place overlapping mappings by checking the requestedAddress
   // against the already existing mappings
   if (requestedAddress != 0) {
@@ -180,24 +188,23 @@ pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, uintptr_t re
       }
 
       // We overlap in some area - fail for now since otherwise threads can override the other threads data
-      klee_error("Overlapping mapping requested=%p and other=%p - Exiting.", requestedAddress,
+      klee_error("Overlapping mapping requested=%p and other=%p - Exiting.", reqAddressAsPointer,
                  reinterpret_cast<void *>(seg.second.startAddress));
     }
   }
 
   pseudoalloc::Mapping mapping{};
-  if (requestedAddress != nullptr) {
+  if (requestedAddress != 0) {
     mapping = pseudoalloc::pseudoalloc_new_mapping(requestedAddress, size);
   } else {
     mapping = pseudoalloc::pseudoalloc_default_mapping(size);
   }
 
   if (mapping.base == nullptr) {
-    klee_error("Could not allocate a mapping at %p - error: %s", requestedAddress, strerror(errno));
+    klee_error("Could not allocate a mapping at %p - error: %s", reqAddressAsPointer, strerror(errno));
   }
 
   // Now check that the address is correct and that our mappings are of the correct size
-  auto reqAddressAsPointer = reinterpret_cast<void*>(requestedAddress);
   if (requestedAddress && mapping.base != reqAddressAsPointer) {
     klee_error("Could not allocate a mapping at %p - received %p", reqAddressAsPointer, mapping.base);
   }
@@ -211,12 +218,12 @@ pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, uintptr_t re
   return mapping;
 }
 
-void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress) {
+void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
   pseudoalloc::Mapping threadHeapMapping = createMapping(threadHeapSize, requestedAddress);
 
-  auto stackAddress = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(threadHeapMapping.base) + threadHeapSize);
+  auto stackAddress = reinterpret_cast<std::uintptr_t>(threadHeapMapping.base) + threadHeapSize;
   pseudoalloc::Mapping threadStackMapping = createMapping(threadStackSize, stackAddress);
 
   ThreadMemorySegments segment{};

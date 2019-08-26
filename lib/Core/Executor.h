@@ -181,7 +181,7 @@ private:
 
   /// Map of globals to their bound address. This also includes
   /// globals that have no representative object (i.e. functions).
-  GlobalObjectsMap* globalObjectsMap;
+  std::unique_ptr<GlobalObjectsMap> globalObjectsMap;
 
   /// The set of legal function addresses, used to validate function
   /// pointers. We use the actual Function* address as the function address.
@@ -406,8 +406,6 @@ private:
                     unsigned index,
                     ExecutionState &state,
                     ref<Expr> value);
-
-  bool canBeConstantFolded(const llvm::Constant *c, const ThreadId &byTd, const KInstruction *ki = NULL);
 
   /// Evaluates an LLVM constant expression.  The optional argument ki
   /// is the instruction where this constant was encountered, or NULL

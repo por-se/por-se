@@ -1,5 +1,5 @@
-#ifndef KLEE_GLOBALADDRESS_H
-#define KLEE_GLOBALADDRESS_H
+#ifndef KLEE_GLOBALOBJECTSMAP_H
+#define KLEE_GLOBALOBJECTSMAP_H
 
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
@@ -15,14 +15,16 @@
 namespace klee {
   class GlobalObjectsMap {
     private:
-      enum ReferencedType {
-        RefAlias,
-        RefFunction,
-        RefData
+      enum class ReferencedType {
+        Alias,
+        Function,
+        Data
       };
 
       // Wrapper object that is added for every global that klee keeps track of
-      struct GlobalObjectReference {
+      class GlobalObjectReference {
+        friend class GlobalObjectsMap;
+
         ReferencedType type;
         const llvm::GlobalValue* value;
 
@@ -62,4 +64,4 @@ namespace klee {
   };
 }
 
-#endif //KLEE_GLOBALADDRESS_H
+#endif // KLEE_GLOBALOBJECTSMAP_H

@@ -33,10 +33,6 @@ using namespace llvm;
 
 namespace klee {
 
-  bool Executor::canBeConstantFolded(const llvm::Constant *c, const ThreadId &byTd, const KInstruction *ki) {
-    return true;
-  }
-
   ref <klee::ConstantExpr>
   Executor::evalConstant(const llvm::Constant *c, const ThreadId &byTid, const KInstruction *ki) {
     if (!ki) {

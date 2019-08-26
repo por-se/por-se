@@ -793,7 +793,7 @@ extern void *__dso_handle __attribute__ ((__weak__));
 void Executor::initializeGlobals(ExecutionState &state) {
   Module *m = kmodule->module.get();
 
-  globalObjectsMap = new GlobalObjectsMap(memory);
+  globalObjectsMap = std::make_unique<GlobalObjectsMap>(memory);
 
   if (!m->getModuleInlineAsm().empty())
     klee_warning("executable has module level assembly (ignoring)");
@@ -4658,8 +4658,8 @@ void Executor::runFunctionAsMain(Function *f,
     delete state;
   }
 
-  delete globalObjectsMap;
-  globalObjectsMap = nullptr;
+  auto globalMap = globalObjectsMap.release();
+  delete globalMap;
 
   // hack to clear memory objects
   delete memory;
@@ -4933,10 +4933,10 @@ ThreadId Executor::createThread(ExecutionState &state,
     const GlobalVariable *v = &*i;
 
     if (i->hasInitializer() && i->isThreadLocal()) {
-      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, thread->getThreadId());
+      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, thread.getThreadId());
 
       ObjectState *os = bindObjectInState(state, mo, false);
-      initializeGlobalObject(state, os, i->getInitializer(), 0, thread->getThreadId());
+      initializeGlobalObject(state, os, i->getInitializer(), 0, thread.getThreadId());
 
       if (PruneStates) {
         state.memoryState.registerWrite(*mo, *os);

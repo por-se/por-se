@@ -63,7 +63,7 @@ private:
    */
   void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
 
-  pseudoalloc::Mapping createMapping(std::size_t size, void* requestedAddress);
+  pseudoalloc::Mapping createMapping(std::size_t size, std::uintptr_t requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
 
