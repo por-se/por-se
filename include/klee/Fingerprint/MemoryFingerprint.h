@@ -186,4 +186,8 @@ public:
 
 #undef INCLUDE_FROM_MEMORYFINGERPRINT_H
 
+namespace klee {
+  using MemoryFingerprintValue = MemoryFingerprint::value_t;
+}
+
 #endif
