@@ -22,7 +22,9 @@
 #include "../../lib/Core/MemoryState.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
+#include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -193,6 +195,18 @@ public:
   /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
   const ThreadId &currentThreadId() const {
     return _currentThread->tid;
+  }
+
+  std::optional<std::reference_wrapper<Thread>> getThreadById(const ThreadId &tid) {
+    auto it = threads.find(tid);
+    if (it == threads.end())
+      return {};
+
+    return it->second;
+  }
+
+  std::optional<std::reference_wrapper<const Thread>> getThreadById(const ThreadId &tid) const {
+    return getThreadById(tid);
   }
 
   /// @brief will create a new thread
