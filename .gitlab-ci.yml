@@ -26,7 +26,7 @@ test:
     - cp -r . /workspace/simulator
     - /workspace/ws build --until simulator >build.log 2>&1
     - |
-        echo 'set -e ; set -u ; set -o pipefail
-          cd-build simulator
+        /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
+          cd "$(dirname "$(which random-graph)")/../.."
           cmake --build . --target check -j ${WS_JOBS}
-        ' | /workspace/ws shell -s bash
+        '
