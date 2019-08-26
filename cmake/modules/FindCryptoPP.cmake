@@ -3,8 +3,8 @@
 #
 # Once done this will define
 #  CRYPTOPP_FOUND - BOOL: System has the CryptoPP library installed
-#  CRYPTOPP_INCLUDE_DIRS - LIST:The GMP include directories
-#  CRYPTOPP_LIBRARIES - LIST:The libraries needed to use CryptoPP
+#  CRYPTOPP_INCLUDE_DIRS - LIST: The CryptoPP include directories
+#  CRYPTOPP_LIBRARIES - LIST: The libraries needed to use CryptoPP
 include(FindPackageHandleStandardArgs)
 
 # Try to find libraries

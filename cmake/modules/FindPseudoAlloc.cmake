@@ -3,8 +3,8 @@
 #
 # Once done this will define
 #  PSEUDOALLOC_FOUND - BOOL: System has the pseudoalloc library installed
-#  PSEUDOALLOC_INCLUDE_DIRS - LIST:The GMP include directories
-#  PSEUDOALLOC_LIBRARIES - LIST:The libraries needed to use pseudoalloc
+#  PSEUDOALLOC_INCLUDE_DIRS - LIST: The pseudoalloc include directories
+#  PSEUDOALLOC_LIBRARIES - LIST: The libraries needed to use pseudoalloc
 include(FindPackageHandleStandardArgs)
 
 # Try to find libraries

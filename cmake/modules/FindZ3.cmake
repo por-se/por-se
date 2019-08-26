@@ -2,8 +2,8 @@
 #
 # Once done this will define
 #  Z3_FOUND - BOOL: System has the Z3 library installed
-#  Z3_INCLUDE_DIRS - LIST:The GMP include directories
-#  Z3_LIBRARIES - LIST:The libraries needed to use Z3
+#  Z3_INCLUDE_DIRS - LIST: The Z3 include directories
+#  Z3_LIBRARIES - LIST: The libraries needed to use Z3
 include(FindPackageHandleStandardArgs)
 
 # Try to find libraries
