@@ -57,7 +57,7 @@ private:
    * If `requestedAddress` is unequal to `nullptr`, then the memory mapping is requested at
    * that address, otherwise the mapping at a random location
    */
-  void initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress);
+  void initThreadMemoryMapping(const ThreadId& tid, uintptr_t requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
 

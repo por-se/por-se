@@ -139,22 +139,21 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
                  lineNumber);
     }
 
-    initThreadMemoryMapping(*forTid, reinterpret_cast<void *>(address));
+    initThreadMemoryMapping(*forTid, address);
   }
 }
 
-void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requestedAddress) {
+void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, uintptr_t requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
   // Test that we do not place overlapping mappings by checking the requestedAddress
   // against the already existing mappings
-  if (requestedAddress != nullptr) {
-    auto start = reinterpret_cast<std::uint64_t>(requestedAddress);
-    auto end = start + threadHeapSize + threadStackSize;
+  if (requestedAddress != 0) {
+    auto end = requestedAddress + threadHeapSize + threadStackSize;
 
     for (const auto &seg : threadMemoryMappings) {
       // If new one is after the already created one
-      if (seg.second.startAddress + seg.second.allocatedSize < start) {
+      if (seg.second.startAddress + seg.second.allocatedSize < requestedAddress) {
         continue;
       }
 
@@ -170,7 +169,7 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
   }
 
   pseudoalloc::Mapping threadHeapMapping{};
-  if (requestedAddress != nullptr) {
+  if (requestedAddress != 0) {
     threadHeapMapping = pseudoalloc::pseudoalloc_new_mapping(requestedAddress, threadHeapSize);
   } else {
     threadHeapMapping = pseudoalloc::pseudoalloc_default_mapping(threadHeapSize);
@@ -182,8 +181,8 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
   }
 
   pseudoalloc::Mapping threadStackMapping{};
-  if (requestedAddress != nullptr) {
-    auto stackAddress = reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(requestedAddress) + threadHeapSize);
+  if (requestedAddress != 0) {
+    auto stackAddress = reinterpret_cast<uintptr_t>(requestedAddress) + threadHeapSize;
 
     threadStackMapping = pseudoalloc::pseudoalloc_new_mapping(stackAddress, threadStackSize);
   } else {
@@ -203,9 +202,9 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, void* requested
   segment.stack = threadStackMapping;
 
   // Now check that the address is correct and that our mappings are of the correct size
-  if (requestedAddress && threadHeapMapping.base != requestedAddress) {
+  if (requestedAddress && segment.startAddress != requestedAddress) {
     klee_error("Could not allocate memory deterministically for tid<%s> at %p - received %p", tid.to_string().c_str(),
-               requestedAddress, threadHeapMapping.base);
+               reinterpret_cast<void*>(requestedAddress), threadHeapMapping.base);
   }
 
   if (threadHeapMapping.len != threadHeapSize) {
@@ -329,7 +328,7 @@ pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, Al
   auto it = threadMemoryMappings.find(tid);
 
   if (it == threadMemoryMappings.end()) {
-    initThreadMemoryMapping(tid, nullptr);
+    initThreadMemoryMapping(tid, 0);
 
     it = threadMemoryMappings.find(tid);
     assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");
