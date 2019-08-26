@@ -170,8 +170,6 @@ public:
 private:
   void popFrameOfThread(Thread* thread);
 
-  bool hasSameThreadState(const ExecutionState &b, const ThreadId &tid);
-
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 
 public:

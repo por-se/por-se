@@ -327,46 +327,6 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   return os;
 }
 
-bool ExecutionState::hasSameThreadState(const ExecutionState &b, const ThreadId &tid) {
-  auto threadA = threads.find(tid);
-  auto threadB = b.threads.find(tid);
-
-  if ((threadA != threads.end()) ^ (threadB != b.threads.end())) {
-    // This means at least one of the states does not have it and the other had the thread
-    return false;
-  }
-
-  if (threadA == threads.end()) {
-    // No such thread exists. So probably right to return false?
-    return false;
-  }
-
-  Thread* curThreadA = &(threadA->second);
-  const Thread* curThreadB = &(threadB->second);
-
-  if (curThreadA->state != curThreadB->state) {
-    return false;
-  }
-
-  if (curThreadA->pc != curThreadB->pc) {
-    return false;
-  }
-
-  // TODO: should we compare at which sync point we are actually? And what about memory accesses
-
-  std::vector<StackFrame>::const_iterator itA = curThreadA->stack.begin();
-  std::vector<StackFrame>::const_iterator itB = curThreadB->stack.begin();
-  while (itA != curThreadA->stack.end() && itB != curThreadB->stack.end()) {
-    // XXX vaargs?
-    if (itA->caller != itB->caller || itA->kf != itB->kf)
-      return false;
-    ++itA;
-    ++itB;
-  }
-
-  return !(itA != curThreadA->stack.end() || itB != curThreadB->stack.end());
-}
-
 void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
   out << "Thread scheduling:\n";
   for (const auto& threadId : threads) {
