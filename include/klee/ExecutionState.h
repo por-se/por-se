@@ -195,10 +195,8 @@ public:
     return _currentThread->tid;
   }
 
-  // The method below is a bit 'unstable' with regards to the thread id
-  // -> probably at a later state the thread id will be created by the ExecutionState
-  /// @brief will create a new thread with the given thread id
-  Thread *createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
+  /// @brief will create a new thread
+  Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
   //// @brief
   void threadWaitOn(std::uint64_t lid);

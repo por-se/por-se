@@ -4878,29 +4878,29 @@ void Executor::prepareForEarlyExit() {
 }
 
 ThreadId Executor::createThread(ExecutionState &state,
-                                        KFunction *startRoutine,
-                                        ref<Expr> runtimeStructPtr) {
+                                KFunction *startRoutine,
+                                ref<Expr> runtimeStructPtr) {
 
-  Thread* thread = state.createThread(startRoutine, runtimeStructPtr);
-  StackFrame* threadStartFrame = &thread->stack.back();
+  Thread &thread = state.createThread(startRoutine, runtimeStructPtr);
+  StackFrame *threadStartFrame = &thread.stack.back();
 
   threadStartFrame->locals[startRoutine->getArgRegister(0)].value = runtimeStructPtr;
 
   // If we create a thread, then we also have to create the memory region and the TLS objects
-  thread->threadHeapAlloc = memory->createThreadAllocator(thread->getThreadId(), MemoryManager::REGION_HEAP);
-  thread->threadStackAlloc = memory->createThreadAllocator(thread->getThreadId(), MemoryManager::REGION_STACK);
+  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_HEAP);
+  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_STACK);
 
   // Errno is one of the tls objects
   std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
-  MemoryObject* thErrno = memory->allocate(size, false, true, thread->prevPc->inst,
-    *thread, thread->stack.size() - 1, alignment);
+  MemoryObject* thErrno = memory->allocate(size, false, true, thread.prevPc->inst,
+    thread, thread.stack.size() - 1, alignment);
   if (thErrno == nullptr) {
     klee_error("Could not allocate memory for thread local objects");
   }
 
-  thread->errnoMo = thErrno;
+  thread.errnoMo = thErrno;
 
   // And initialize the errno
   ObjectState *os = bindObjectInState(state, thErrno, false);
@@ -4911,9 +4911,9 @@ ThreadId Executor::createThread(ExecutionState &state,
   }
 
   if (statsTracker)
-    statsTracker->framePushed(&thread->stack.back(), nullptr);
+    statsTracker->framePushed(threadStartFrame, nullptr);
 
-  return thread->getThreadId();
+  return thread.getThreadId();
 }
 
 void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
