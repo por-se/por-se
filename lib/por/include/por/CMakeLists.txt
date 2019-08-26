@@ -1,3 +1,18 @@
+# Copied from the klee source code
+if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+	# Get information from git. We use third-party code to do this. The nice
+	# thing about this code is it will trigger a re-configure if the HEAD changes
+	# which means when we build the simulator, it should always have the correct
+	# git information.
+	include(${CMAKE_SOURCE_DIR}/cmake/GetGitRevisionDescription.cmake)
+	get_git_head_revision(_NOT_USED_POR_GIT_REFSPEC POR_GIT_SHA1HASH)
+	message(STATUS "POR_GIT_SHA1HASH: ${POR_GIT_SHA1HASH}")
+else()
+	set(POR_GIT_SHA1HASH "unknown")
+endif()
+set(AUTO_GEN_MSG "AUTOMATICALLY GENERATED. DO NOT EDIT!")
+configure_file(${CMAKE_CURRENT_LIST_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h)
+
 target_sources(libpor INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/base.h"
@@ -19,4 +34,8 @@ target_sources(libpor INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait1.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait2.h"
 	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
+
+	"${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h"
 )
+
+target_include_directories(libpor INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/include")
