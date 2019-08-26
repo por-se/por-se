@@ -2,7 +2,7 @@
 #define KLEE_MEMORYSTATE_H
 
 #include "Memory.h"
-#include "MemoryFingerprint.h"
+#include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/StatePruningCmdLine.h"
 #include "klee/ThreadId.h"
 

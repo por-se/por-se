@@ -1,5 +1,4 @@
-#include "MemoryFingerprint.h"
-
+#include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 

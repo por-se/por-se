@@ -2,13 +2,10 @@
 #define KLEE_THREAD_H
 
 #include "klee/Expr/Expr.h"
+#include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/Internal/Module/KModule.h"
-
-// FIXME: We do not want to be exposing these? :(
-#include "../../lib/Core/MemoryFingerprint.h"
-
 #include "pseudoalloc.h"
 #include "ThreadId.h"
 

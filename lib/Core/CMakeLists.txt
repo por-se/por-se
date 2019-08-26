@@ -18,7 +18,6 @@ set(CORE_COMPONENTS
   ExternalDispatcher.cpp
   ImpliedValue.cpp
   Memory.cpp
-  MemoryFingerprint_CryptoPP_BLAKE2b.cpp
   MemoryManager.cpp
   MemoryState.cpp
   PTree.cpp
@@ -32,10 +31,6 @@ set(CORE_COMPONENTS
   UserSearcher.cpp
   por/PorEventManager.cpp
 )
-
-if (VERIFIED_FINGERPRINTS)
-  list(APPEND CORE_COMPONENTS MemoryFingerprint_StringSet.cpp)
-endif()
 
 klee_add_component(kleeCore ${CORE_COMPONENTS})
 
@@ -53,6 +48,7 @@ klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
 target_link_libraries(kleeCore PUBLIC ${LLVM_LIBS} ${SQLITE3_LIBRARIES} libpor)
 target_link_libraries(kleeCore PRIVATE
   kleeBasic
+  kleeFingerprint
   kleeModule
   kleaverSolver
   kleaverExpr

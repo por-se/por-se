@@ -172,17 +172,17 @@ public:
 
 #define INCLUDE_FROM_MEMORYFINGERPRINT_H
 
-#include "MemoryFingerprint_CryptoPP_BLAKE2b.h"
+#include "bits/MemoryFingerprint_CryptoPP_BLAKE2b.h"
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
-#include "MemoryFingerprint_StringSet.h"
-#include "MemoryFingerprint_Verified.h"
+#include "bits/MemoryFingerprint_StringSet.h"
+#include "bits/MemoryFingerprint_Verified.h"
 #endif // ENABLE_VERIFIED_FINGERPRINTS
 
 // NOTE: MemoryFingerprint needs to be a complete type
-#include "MemoryFingerprintDelta.h"
+#include "bits/MemoryFingerprintDelta.h"
 
 // NOTE: MemoryFingerprintDelta needs to be a complete type
-#include "MemoryFingerprint_Base.h"
+#include "bits/MemoryFingerprint_Base.h"
 
 #undef INCLUDE_FROM_MEMORYFINGERPRINT_H
 
