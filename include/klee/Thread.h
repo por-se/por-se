@@ -131,4 +131,4 @@ namespace klee {
   };
 }
 
-#endif //KLEE_THREAD_H
+#endif // KLEE_THREAD_H

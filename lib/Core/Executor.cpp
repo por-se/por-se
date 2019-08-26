@@ -5296,8 +5296,8 @@ void Executor::scheduleThreads(ExecutionState &state) {
             tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
             break;
         case ThreadSchedulingPolicy::RoundRobin: {
-            tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
-            break;
+          tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
+          break;
         }
     }
 

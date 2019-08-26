@@ -30,4 +30,4 @@ typedef enum {
 }
 #endif
 
-#endif //KLEE_POR_EVENTS_H
+#endif // KLEE_POR_EVENTS_H
