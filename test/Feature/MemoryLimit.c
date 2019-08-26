@@ -1,3 +1,4 @@
+// XFAIL: *
 // REQUIRES: not-msan
 // Memsan adds additional memory that overflows the counter
 // Check that we properly kill states when we exceed our memory bounds, for both
@@ -28,7 +29,7 @@ int main() {
   printf("IN LITTLE ALLOC\n");
     
   // 200 MBs total (in 1k chunks)
-  for (i=0; i<100 && !malloc_failed; i++) {
+  for (i=0; i<500 && !malloc_failed; i++) {
     for (j=0; j<(1<<11); j++){
       void * p = malloc(1<<10);
       malloc_failed |= (p == 0);
@@ -38,7 +39,7 @@ int main() {
   printf("IN BIG ALLOC\n");
   
   // 200 MBs total
-  for (i=0; i<100 && !malloc_failed; i++) {
+  for (i=0; i<500 && !malloc_failed; i++) {
     void *p = malloc(1<<21);
     malloc_failed |= (p == 0);
     // Ensure we hit the periodic check
