@@ -245,28 +245,24 @@ void ExecutionState::threadWaitOn(std::uint64_t lid) {
 }
 
 void ExecutionState::preemptThread(const ThreadId &tid) {
-  auto pair = threads.find(tid);
-  assert(pair != threads.end() && "Could not find thread by id");
+  auto thread = getThreadById(tid);
+  assert(thread && "Could not find thread with given id");
 
-  Thread* thread = &pair->second;
-  thread->state = ThreadState::Runnable;
-
+  thread->get().state = ThreadState::Runnable;
   runnableThreads.insert(tid);
 }
 
 void ExecutionState::wakeUpThread(const ThreadId &tid) {
-  auto pair = threads.find(tid);
-  assert(pair != threads.end() && "Could not find thread by id");
+  auto thread = getThreadById(tid);
+  assert(thread && "Could not find thread with given id");
 
-  Thread* thread = &pair->second;
-
-  runnableThreads.insert(thread->getThreadId());
+  runnableThreads.insert(tid);
 
   // We should only wake up threads that are actually waiting
-  if (thread->state == ThreadState::Waiting) {
-    thread->state = ThreadState::Runnable;
+  if (thread->get().state == ThreadState::Waiting) {
+    thread->get().state = ThreadState::Runnable;
 
-    thread->waitingHandle = 0;
+    thread->get().waitingHandle = 0;
 
     // One thread has woken up another one so make sure we remember that they
     // are at sync in this moment
@@ -277,22 +273,21 @@ void ExecutionState::wakeUpThread(const ThreadId &tid) {
 }
 
 void ExecutionState::exitThread(const ThreadId &tid) {
-  auto pair = threads.find(tid);
-  assert(pair != threads.end() && "Could not find thread by id");
+  auto thread = getThreadById(tid);
+  assert(thread && "Could not find thread with given id");
 
-  Thread* thread = &pair->second;
-  thread->state = ThreadState::Exited;
-  runnableThreads.erase(thread->getThreadId());
+  thread->get().state = ThreadState::Exited;
+  runnableThreads.erase(tid);
 
-  if (currentThreadId() != thread->getThreadId()) {
+  if (currentThreadId() != tid) {
     memAccessTracker.registerThreadDependency(tid,
                                               currentThreadId(),
                                               currentSchedulingIndex);
   }
 
    // Now remove all stack frames
-   while (!thread->stack.empty()) {
-    popFrameOfThread(thread);
+   while (!thread->get().stack.empty()) {
+    popFrameOfThread(&thread->get());
   }
 }
 
