@@ -3342,8 +3342,7 @@ void Executor::checkMemoryUsage() {
     // We need to avoid calling GetTotalMallocUsage() often because it
     // is O(elts on freelist). This is really bad since we start
     // to pummel the freelist once we hit the memory cap.
-    unsigned mbs = (util::GetTotalMallocUsage() >> 20) +
-                   (memory->getUsedDeterministicSize() >> 20);
+    unsigned mbs = (util::GetTotalMallocUsage() >> 20);
 
     if (mbs > MaxMemory) {
       if (ExitOnMaxMemory) {

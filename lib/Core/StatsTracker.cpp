@@ -559,7 +559,7 @@ void StatsTracker::writeStatsLine() {
   sqlite3_bind_int64(insertStmt, 4, numBranches);
   sqlite3_bind_int64(insertStmt, 5, time::getUserTime().toMicroseconds());
   sqlite3_bind_int64(insertStmt, 6, executor.states.size());
-  sqlite3_bind_int64(insertStmt, 7, util::GetTotalMallocUsage() + executor.memory->getUsedDeterministicSize());
+  sqlite3_bind_int64(insertStmt, 7, util::GetTotalMallocUsage());
   sqlite3_bind_int64(insertStmt, 8, stats::queries);
   sqlite3_bind_int64(insertStmt, 9, stats::queryConstructs);
   sqlite3_bind_int64(insertStmt, 10, 0);  // was numObjects

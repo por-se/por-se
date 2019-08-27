@@ -34,7 +34,7 @@ if (PSEUDOALLOC_LIBRARIES AND PSEUDOALLOC_INCLUDE_DIRS)
   set(CMAKE_REQUIRED_INCLUDES "${PSEUDOALLOC_INCLUDE_DIRS}")
   set(CMAKE_REQUIRED_LIBRARIES "${PSEUDOALLOC_LIBRARIES}")
   check_cxx_source_compiles("
-    #include <pseudoalloc.h>
+    #include \"pseudoalloc.h\"
     int main() {
       pseudoalloc::pseudoalloc_new_mapping(0, 64);
       return 0;

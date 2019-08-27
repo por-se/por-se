@@ -19,11 +19,10 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <utility>
-
-#include <unistd.h>
-#include <fstream>
 #include <algorithm>
+#include <fstream>
+#include <unistd.h>
+#include <utility>
 
 using namespace klee;
 
@@ -46,7 +45,7 @@ llvm::cl::opt<unsigned> ThreadHeapSize(
 llvm::cl::opt<unsigned> ThreadStackSize(
       "allocate-thread-stack-size",
       llvm::cl::desc(
-              "Reserved memory for every threads stack size in GB (default=10)"),
+              "Reserved memory for every threads stack size in GB (default=20)"),
       llvm::cl::init(20), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<std::string> ThreadSegmentsFile(
@@ -61,9 +60,10 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
 
   auto pageSize = sysconf(_SC_PAGE_SIZE);
 
-  threadHeapSize = static_cast<uintptr_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
-  threadStackSize = static_cast<uintptr_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
+  threadHeapSize = static_cast<std::size_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
+  threadStackSize = static_cast<std::size_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
 
+  // this assumes that the pagesize is a power of 2
   if ((threadHeapSize & (pageSize - 1)) != 0) {
     klee_error("-allocate-thread-heap-size must be a multiple of the page size");
   }
@@ -143,7 +143,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
   }
 }
 
-void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, uintptr_t requestedAddress) {
+void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
   // Test that we do not place overlapping mappings by checking the requestedAddress
@@ -316,11 +316,6 @@ void MemoryManager::markFreed(MemoryObject *mo) {
   if (objects.find(mo) != objects.end()) {
     objects.erase(mo);
   }
-}
-
-size_t MemoryManager::getUsedDeterministicSize() {
-  // TODO: needs support in pseudoalloc
-  return 0;
 }
 
 pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, AllocatorRegion region) {

@@ -49,15 +49,15 @@ private:
 
   std::map<ThreadId, ThreadMemorySegments> threadMemoryMappings;
 
-  std::uintptr_t threadHeapSize;
-  std::uintptr_t threadStackSize;
+  std::size_t threadHeapSize;
+  std::size_t threadStackSize;
 
   /**
    * Requested a memory mapping for `tid`.
    * If `requestedAddress` is unequal to `nullptr`, then the memory mapping is requested at
    * that address, otherwise the mapping at a random location
    */
-  void initThreadMemoryMapping(const ThreadId& tid, uintptr_t requestedAddress);
+  void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
 
@@ -86,11 +86,6 @@ public:
 
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
-
-  /*
-   * Returns the size used by deterministic allocation in bytes
-   */
-  size_t getUsedDeterministicSize();
 
   /**
    * Constructs a new thread allocator in the threads reserved
