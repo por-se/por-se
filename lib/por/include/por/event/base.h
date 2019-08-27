@@ -12,6 +12,10 @@
 
 #include <por/thread_id.h>
 
+#ifdef LIBPOR_IN_KLEE
+#include "klee/Fingerprint/MemoryFingerprint.h"
+#endif // LIBPOR_IN_KLEE
+
 namespace por {
 	class unfolding;
 }
@@ -98,6 +102,10 @@ namespace por::event {
 		}
 
 	public:
+#ifdef LIBPOR_IN_KLEE
+		klee::MemoryFingerprintValue _fingerprint;
+		klee::MemoryFingerprintDelta _thread_delta;
+#endif // LIBPOR_IN_KLEE
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t tid() const noexcept { return _tid; }
