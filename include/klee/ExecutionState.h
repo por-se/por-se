@@ -204,7 +204,11 @@ public:
   }
 
   std::optional<std::reference_wrapper<const Thread>> getThreadById(const ThreadId &tid) const {
-    return getThreadById(tid);
+    auto it = threads.find(tid);
+    if (it == threads.end())
+      return {};
+
+    return it->second;
   }
 
   /// @brief will create a new thread
