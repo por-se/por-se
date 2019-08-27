@@ -17,7 +17,7 @@ class Function;
 namespace klee {
 class Array;
 class ExecutionState;
-class KFunction;
+struct KFunction;
 class KInstruction;
 class KModule;
 class StackFrame;
