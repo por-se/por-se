@@ -265,7 +265,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
     auto base = reinterpret_cast<std::uint64_t>(seg.base);
 
     if (address < base || address > base + seg.len) {
-      klee_error("Allocator returned an invalid address: address=0x%llx, start address of segment=0x%llx, length of segment=%lu", address, base, seg.len);
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg.len);
     }
   }
 #endif // NDEBUG
