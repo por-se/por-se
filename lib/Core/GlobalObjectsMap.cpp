@@ -64,7 +64,8 @@ void GlobalObjectsMap::registerAlias(const llvm::GlobalAlias* alias, ref<Constan
   globalObjects.insert(std::make_pair(alias, GlobalObjectReference(alias, addr)));
 }
 
-const MemoryObject* GlobalObjectsMap::registerGlobalData(const llvm::GlobalValue* gv, std::size_t size) {
+const MemoryObject * GlobalObjectsMap::registerGlobalData(const llvm::GlobalValue *gv, std::size_t size,
+                                                          std::size_t alignment) {
   assert(findObject(gv) == nullptr);
 
   GlobalObjectReference reference(gv, size);
@@ -72,7 +73,7 @@ const MemoryObject* GlobalObjectsMap::registerGlobalData(const llvm::GlobalValue
   // For the main thread we create the memory object directly
   ThreadId mainThreadId(1);
 
-  auto mo = memoryManager->allocateGlobal(size, gv, mainThreadId, gv->getAlignment());
+  auto mo = memoryManager->allocateGlobal(size, gv, mainThreadId, alignment);
   reference.threadLocalMemory.insert(std::make_pair(mainThreadId, mo));
 
   if (!gv->isThreadLocal() && mo != nullptr) {

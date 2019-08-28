@@ -865,6 +865,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
          e = m->global_end();
        i != e; ++i) {
     const GlobalVariable *v = &*i;
+    auto globalObjectAlignment = getAllocationAlignment(v);
 
     if (i->isDeclaration()) {
       // FIXME: We have no general way of handling unknown external
@@ -897,7 +898,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 			(int)i->getName().size(), i->getName().data());
       }
 
-      auto *mo = globalObjectsMap->registerGlobalData(v, size);
+      auto *mo = globalObjectsMap->registerGlobalData(v, size, globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
 
       // Program already running = object already initialized.  Read
@@ -924,7 +925,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       Type *ty = i->getType()->getElementType();
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
 
-      auto mo = globalObjectsMap->registerGlobalData(v, size);
+      auto mo = globalObjectsMap->registerGlobalData(v, size, globalObjectAlignment);
 
       if (!mo)
         llvm::report_fatal_error("out of memory");

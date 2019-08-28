@@ -54,7 +54,7 @@ namespace klee {
 
       void registerFunction(const llvm::Function* func, ref<ConstantExpr> addr);
       void registerAlias(const llvm::GlobalAlias* alias, ref<ConstantExpr> addr);
-      const MemoryObject* registerGlobalData(const llvm::GlobalValue* gv, std::size_t size);
+      const MemoryObject *registerGlobalData(const llvm::GlobalValue *gv, std::size_t size, std::size_t alignment);
 
       const MemoryObject* lookupGlobalMemoryObject(const llvm::GlobalValue* gv, const ThreadId& byTid);
       ref<ConstantExpr> lookupGlobal(const llvm::GlobalValue* gv, const ThreadId& byTid);
