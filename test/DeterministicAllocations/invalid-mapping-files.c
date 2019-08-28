@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
   // CHECK-MISSING: KLEE: ERROR: Could not open the segments file specified by -allocate-thread-segments-file
   // CHECK-TID: KLEE: ERROR: ThreadId in -allocate-thread-segments-file in line 3 malformed. Exiting.
   // CHECK-ADDRESS: KLEE: ERROR: Address specified in -allocate-thread-segments-file in line 3 may not be zero. Exiting.
-  // CHECK-OVERLAPPING: KLEE: ERROR: Overlapping thread memory segments for tid1=1 and tid2=1,1 - Exiting.
+  // CHECK-OVERLAPPING: KLEE: ERROR: Overlapping mapping requested
   // CHECK-SYNTAX: KLEE: ERROR: Line 3 in -allocate-thread-segments-file malformed. Expected '='. Exiting.
 
   assert(0);

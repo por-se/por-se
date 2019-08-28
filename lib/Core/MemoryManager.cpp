@@ -177,19 +177,18 @@ pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, std::uintptr
     auto end = requestedAddress + threadHeapSize + threadStackSize;
 
     for (const auto &seg : threadMemoryMappings) {
-      // If new one is after the already created one
-      if (seg.second.startAddress + seg.second.allocatedSize < requestedAddress) {
-        continue;
+      auto heapStart = reinterpret_cast<std::uintptr_t>(seg.second.heap.base);
+      auto stackStart = reinterpret_cast<std::uintptr_t>(seg.second.stack.base);
+
+      if (!(end < heapStart || requestedAddress > heapStart + seg.second.heap.len)) {
+        klee_error("Overlapping mapping requested=%p and other=%p (heap) - Exiting.",
+                reqAddressAsPointer, seg.second.heap.base);
       }
 
-      // if the new one is before the already created one
-      if (end < seg.second.startAddress) {
-        continue;
+      if (!(end < stackStart || requestedAddress > stackStart + seg.second.stack.len)) {
+        klee_error("Overlapping mapping requested=%p and other=%p (stack) - Exiting.",
+                   reqAddressAsPointer, seg.second.stack.base);
       }
-
-      // We overlap in some area - fail for now since otherwise threads can override the other threads data
-      klee_error("Overlapping mapping requested=%p and other=%p - Exiting.", reqAddressAsPointer,
-                 reinterpret_cast<void *>(seg.second.startAddress));
     }
   }
 
@@ -223,13 +222,15 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t 
 
   pseudoalloc::Mapping threadHeapMapping = createMapping(threadHeapSize, requestedAddress);
 
-  auto stackAddress = reinterpret_cast<std::uintptr_t>(threadHeapMapping.base) + threadHeapSize;
+  std::uintptr_t stackAddress = 0;
+  if (requestedAddress != 0) {
+    // If we did not specify an address, then we can place the stack at any place
+    stackAddress = requestedAddress + threadHeapSize;
+  }
+
   pseudoalloc::Mapping threadStackMapping = createMapping(threadStackSize, stackAddress);
 
   ThreadMemorySegments segment{};
-  segment.startAddress = reinterpret_cast<std::uint64_t>(threadHeapMapping.base);
-  segment.allocatedSize = threadHeapSize + threadStackSize;
-
   segment.heap = threadHeapMapping;
   segment.stack = threadStackMapping;
 

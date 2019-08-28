@@ -37,9 +37,6 @@ private:
   typedef std::set<MemoryObject *> objects_ty;
 
   struct ThreadMemorySegments {
-    std::uint64_t startAddress;
-    std::size_t allocatedSize;
-
     pseudoalloc::Mapping heap;
     pseudoalloc::Mapping stack;
   };
