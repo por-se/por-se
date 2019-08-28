@@ -4544,8 +4544,8 @@ void Executor::runFunctionAsMain(Function *f,
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
-  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_HEAP);
-  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_STACK);
+  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::HEAP);
+  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::STACK);
   
   MemoryObject *argvMO = nullptr;
 
@@ -4906,8 +4906,8 @@ ThreadId Executor::createThread(ExecutionState &state,
   threadStartFrame->locals[startRoutine->getArgRegister(0)].value = runtimeStructPtr;
 
   // If we create a thread, then we also have to create the memory region and the TLS objects
-  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_HEAP);
-  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::REGION_STACK);
+  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::HEAP);
+  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::STACK );
 
   // Errno is one of the tls objects
   std::uint64_t alignment = alignof(errno);

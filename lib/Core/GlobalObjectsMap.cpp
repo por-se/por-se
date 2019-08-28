@@ -10,10 +10,10 @@ using namespace klee;
 //
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::Function* f, ref<ConstantExpr> addr)
-        : type(ReferencedType::Function), value(f), address(addr) {}
+        : type(ReferencedType::Function), value(f), address(addr), size(0) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr)
-        : type(ReferencedType::Alias), value(a), address(addr) {}
+        : type(ReferencedType::Alias), value(a), address(addr), size(0) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalValue* v, std::size_t size)
         : type(ReferencedType::Data), value(v), address(0), size(size) {}

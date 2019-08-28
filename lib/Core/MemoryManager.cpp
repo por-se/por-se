@@ -325,7 +325,7 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
     auto base = reinterpret_cast<std::uint64_t>(seg.base);
 
     if (address < base || address > base + seg.len) {
-      klee_error("Allocator returned an invalid address: address=0x%llx, start address of segment=0x%llx, length of segment=%lu", address, base, seg.len);
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg.len);
     }
   }
 #endif // NDEBUG
@@ -385,7 +385,7 @@ pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, Al
     assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");
   }
 
-  auto allocator = pseudoalloc::pseudoalloc_new(region == REGION_STACK ? it->second.stack : it->second.heap);
+  auto allocator = pseudoalloc::pseudoalloc_new(region == AllocatorRegion::STACK ? it->second.stack : it->second.heap);
 
   if (allocator == nullptr) {
     klee_error("Failed to create an allocator for tid=%s\n", tid.to_string().c_str());

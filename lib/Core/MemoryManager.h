@@ -29,8 +29,9 @@ class ArrayCache;
 
 class MemoryManager {
 public:
-  enum AllocatorRegion {
-    REGION_STACK, REGION_HEAP
+  enum class AllocatorRegion {
+    STACK,
+    HEAP
   };
 
 private:
