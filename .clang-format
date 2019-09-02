@@ -1,0 +1,25 @@
+---
+BasedOnStyle: LLVM
+Standard: Cpp11
+SpaceBeforeParens: Never
+# SpaceInEmptyBlock: true  # ENABLE ASAP!
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: false
+# AllowShortLambdasOnASingleLine: true
+IndentCaseLabels: true
+IndentPPDirectives: AfterHash  # CHANGE THIS TO BeforeHash ASAP!
+NamespaceIndentation: All
+UseTab: ForIndentation
+AccessModifierOffset: -2
+IndentWidth: 2
+TabWidth: 2
+ContinuationIndentWidth: 2
+ColumnLimit: 120
+PointerAlignment: Left
+BreakConstructorInitializers: BeforeComma
+ConstructorInitializerIndentWidth: 2
+BreakBeforeBraces: Custom
+BraceWrapping:
+  SplitEmptyFunction: false
