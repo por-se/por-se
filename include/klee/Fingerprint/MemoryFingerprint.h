@@ -116,6 +116,8 @@ public:
   void addDelta(const MemoryFingerprintDelta &delta);
   void removeDelta(const MemoryFingerprintDelta &delta);
 
+  MemoryFingerprintDelta getFingerprintAsDelta();
+
   valueT getFingerprint(std::vector<ref<Expr>> &expressions);
 
   valueT getFingerprintWithDelta(std::vector<ref<Expr>> &expressions,

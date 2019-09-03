@@ -150,6 +150,14 @@ void MemoryFingerprintT<D, S, V>::removeDelta(const MemoryFingerprintDelta &delt
   }
 }
 
+template <typename D, std::size_t S, typename V>
+MemoryFingerprintDelta MemoryFingerprintT<D, S, V>::getFingerprintAsDelta() {
+  MemoryFingerprintDelta delta;
+  delta.fingerprintValue = fingerprintValue;
+  delta.symbolicReferences = symbolicReferences;
+  return delta;
+}
+
 template <typename D, std::size_t S, typename valueT>
 valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   std::set<const Array *> arraysReferenced;
