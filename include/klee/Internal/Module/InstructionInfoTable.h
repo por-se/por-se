@@ -22,7 +22,7 @@ namespace llvm {
 }
 
 namespace klee {
-class KInstruction;
+struct KInstruction;
 
   /* Stores debug information for a KInstruction */
   struct InstructionInfo {

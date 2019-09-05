@@ -18,9 +18,9 @@ namespace klee {
 class Array;
 class ExecutionState;
 struct KFunction;
-class KInstruction;
+struct KInstruction;
 class KModule;
-class StackFrame;
+struct StackFrame;
 
 class MemoryState {
   MemoryState(const MemoryState &) = default;
