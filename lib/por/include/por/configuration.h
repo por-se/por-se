@@ -1917,14 +1917,14 @@ namespace por {
 					switch(e->kind()) {
 						case por::event::event_kind::lock_acquire:
 						case por::event::event_kind::wait2:
-							candidates = std::move(cex_acquire(e));
+							candidates = cex_acquire(e);
 							break;
 						case por::event::event_kind::wait1:
-							candidates = std::move(cex_wait1(e));
+							candidates = cex_wait1(e);
 							break;
 						case por::event::event_kind::signal:
 						case por::event::event_kind::broadcast:
-							candidates = std::move(cex_notification(e));
+							candidates = cex_notification(e);
 							break;
 					}
 					_unfolding->stats_inc_cex_candidates(candidates.size());
