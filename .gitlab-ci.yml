@@ -27,7 +27,8 @@ test:
     - /workspace/ws build >build.log 2>&1
     - |
         /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
-          cd "$(dirname "$(which klee)")/.."
+          cd "$(build-dir porse)"
           klee -version
-          cmake --build . --target check -j ${WS_JOBS}
+          cmake -DLIT_ARGS="-s;-v;-j${WS_JOBS}" .
+          cmake --build . -j "${WS_JOBS}" --target check
         '
