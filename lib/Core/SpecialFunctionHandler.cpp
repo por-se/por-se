@@ -24,7 +24,7 @@
 #include "klee/Internal/Support/Debug.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/OptionCategories.h"
-#include "klee/SolverCmdLine.h"
+#include "klee/Solver/SolverCmdLine.h"
 #include "klee/StatePruningCmdLine.h"
 
 #include "llvm/ADT/Twine.h"
