@@ -15,7 +15,7 @@ stages:
 
 test:
   stage: test
-  image: kleenet.comsys.rwth-aachen.de/symbiosys-projects-concurrent-symbolic-execution-workspace:latest-prebuilt
+  image: registry.comsys.rwth-aachen.de/symbiosys-projects-concurrent-symbolic-execution-workspace:latest-prebuilt
   artifacts:
     when: always
     paths:
