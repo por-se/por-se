@@ -111,14 +111,8 @@ namespace pseudoalloc {
 		}
 	} // namespace util
 
-	/// Wraps a mapping that is shared with other allocators that are required to return
-	/// identical addresses. The bins are maintained in the following layout in the mapping:
-	///
-	/// +------------------------------------------------+
-	/// | 8 | 16 | ... | 4096 | large object bin | stack |
-	/// +------------------------------------------------+
-	class allocator_t {
-		class sized_bin_t {
+	namespace suballocators {
+		class sized_heap_t {
 			/// Stores the slots which are currently allocated as a sorted sequence of right-open intervals, e.g., ((1, 3),
 			/// (4, 5)) means that the slots 1, 2 and 4 are currently in use. Between two of these intervals, there is always
 			/// at least one empty slot (i.e., ((1,2), (2,3)) is not valid and will not occur).
@@ -190,13 +184,64 @@ namespace pseudoalloc {
 						_allocated.insert(next, std::move(node));
 						_pa_check(node.empty());
 					}
-				} else if (index + 1 == it->second) {
+				} else if(index + 1 == it->second) {
 					_pa_check(index != it->first);
 					--it->second;
 				} else {
 					_allocated.emplace_hint(next, index + 1, it->second);
 					it->second = index;
 				}
+			}
+		};
+
+		class sized_stack_t {
+			char* _base = nullptr;
+			std::size_t _size = 0;
+			std::size_t _slot_size = 0;
+			std::size_t _allocated = 0;
+
+			[[nodiscard]] inline std::size_t index2pos(std::size_t index) const {
+				index += 1;
+				int layer = std::numeric_limits<std::size_t>::digits - util::clz(index);
+				auto high_bit = static_cast<std::size_t>(1) << (layer - 1);
+				_pa_check((high_bit & index) != 0 && "Failed to compute high bit");
+
+				auto current_slot_size = (_size >> layer);
+				assert(current_slot_size > _slot_size && "Zero (or below) red zone size!");
+				auto pos = (index ^ high_bit) * 2 + 1;
+				return current_slot_size * pos;
+			}
+
+			[[nodiscard]] inline std::size_t pos2index(std::size_t pos) const noexcept {
+				int trailing_zeroes = util::ctz(pos);
+				auto layer_index = pos >> (trailing_zeroes + 1);
+				auto layer = util::ctz(_size) - (trailing_zeroes + 1);
+				auto result = (static_cast<std::size_t>(1) << layer) + layer_index - 1;
+				return result;
+			}
+
+		public:
+			void initialize(void* base, std::size_t size, std::size_t slot_size) noexcept {
+				_pa_check(size > 0 && (size & (size - 1)) == 0 && "Sizes of sized bins must be powers of two");
+
+				_base = static_cast<char*>(base);
+				_size = size;
+				_slot_size = slot_size;
+			}
+
+			[[nodiscard]] void* allocate() { return _base + index2pos(_allocated++); }
+
+			void deallocate(void* const ptr) {
+				--_allocated;
+
+#ifndef NDEBUG
+				auto pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
+				_pa_check(pos < _size);
+				auto index = pos2index(pos);
+				assert(index == _allocated);
+#else
+				static_cast<void>(ptr);
+#endif
 			}
 		};
 
@@ -267,26 +312,34 @@ namespace pseudoalloc {
 				auto node = map1.extract(std::pair<std::size_t, char*>(left_it->second, left_it->first));
 				_pa_check(!node.empty());
 				std::size_t const combined_size = left_it->second + size + right_it->second;
-				node.value() = std::pair<std::size_t, char*>(combined_size, left_it->first);
+				node.value().first = combined_size;
 				map1.insert(std::move(node));
 
 				left_it->second = combined_size;
 				map2.erase(right_it);
 			}
 		};
+	} // namespace suballocators
 
+	/// Wraps a mapping that is shared with other allocators that are required to return
+	/// identical addresses. The bins are maintained in the following layout in the mapping:
+	///
+	/// +---------------------------------------------------+
+	/// | 4 | 8 | 16 | ... | 2048 | 4096 | large object bin |
+	/// +---------------------------------------------------+
+	class allocator_t {
 		mapping_t* _mapping;
-		std::array<sized_bin_t, 10> _sized_bins;
-		large_object_heap_t _loh;
+		std::array<suballocators::sized_heap_t, 11> _sized_bins;
+		suballocators::large_object_heap_t _loh;
 
 		[[nodiscard]] static inline int size2bin(std::size_t size) noexcept {
-			if(size <= 8) {
+			if(size <= 4) {
 				return 0;
 			} else if(size > 4096) {
-				return 10;
+				return 11;
 			} else {
-				int result = (std::numeric_limits<std::size_t>::digits - 3) - util::clz(size - 1);
-				_pa_check(result > 0 && result < 10);
+				int result = (std::numeric_limits<std::size_t>::digits - 2) - util::clz(size - 1);
+				_pa_check(result > 0 && result < 11);
 				return result;
 			}
 		}
@@ -294,10 +347,10 @@ namespace pseudoalloc {
 	public:
 		allocator_t(mapping_t& mapping)
 		  : _mapping(&mapping) {
-			assert(mapping.size() > 11 && "Mapping is *far* to small");
+			assert(mapping.size() > (_sized_bins.size() + 1) && "Mapping is *far* to small");
 
-			auto bin_size = static_cast<std::size_t>(1)
-			                << (std::numeric_limits<std::size_t>::digits - 1 - util::clz(_mapping->size() / 11));
+			auto bin_size = static_cast<std::size_t>(1) << (std::numeric_limits<std::size_t>::digits - 1 -
+			                                                util::clz(_mapping->size() / (_sized_bins.size() + 1)));
 			char* const base = static_cast<char*>(_mapping->begin());
 			std::size_t slot_size = 8;
 			std::size_t total_size = 0;
@@ -320,7 +373,7 @@ namespace pseudoalloc {
 		allocator_t& operator=(allocator_t&&) = default;
 
 		[[nodiscard]] void* allocate(std::size_t size) {
-			if(auto bin = size2bin(size); bin < 10) {
+			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
 				return _sized_bins[bin].allocate();
 			} else {
 				return _loh.allocate(size);
@@ -330,7 +383,77 @@ namespace pseudoalloc {
 		void free(void* ptr, std::size_t size) {
 			assert(ptr && "Freeing nullptrs is not supported"); // we are not ::free!
 
-			if(auto bin = size2bin(size); bin < 10) {
+			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
+				return _sized_bins[bin].deallocate(ptr);
+			} else {
+				return _loh.deallocate(ptr, size);
+			}
+		}
+	};
+
+	/// Wraps a mapping that is shared with other stack allocators that are required to return
+	/// identical addresses. The bins are maintained in the following layout in the mapping:
+	///
+	/// +-----------------------------------------------+
+	/// | 8 | 16 | ... | 2048 | 4096 | large object bin |
+	/// +-----------------------------------------------+
+	class stack_allocator_t {
+		mapping_t* _mapping;
+		std::array<suballocators::sized_stack_t, 11> _sized_bins;
+		suballocators::large_object_heap_t _loh;
+
+		[[nodiscard]] static inline int size2bin(std::size_t size) noexcept {
+			if(size <= 4) {
+				return 0;
+			} else if(size > 4096) {
+				return 11;
+			} else {
+				int result = (std::numeric_limits<std::size_t>::digits - 2) - util::clz(size - 1);
+				_pa_check(result > 0 && result < 11);
+				return result;
+			}
+		}
+
+	public:
+		stack_allocator_t(mapping_t& mapping)
+		  : _mapping(&mapping) {
+			assert(mapping.size() > (_sized_bins.size() + 1) && "Mapping is *far* to small");
+
+			auto bin_size = static_cast<std::size_t>(1) << (std::numeric_limits<std::size_t>::digits - 1 -
+			                                                util::clz(_mapping->size() / (_sized_bins.size() + 1)));
+			char* const base = static_cast<char*>(_mapping->begin());
+			std::size_t slot_size = 8;
+			std::size_t total_size = 0;
+			for(auto& bin : _sized_bins) {
+				bin.initialize(base + total_size, bin_size, slot_size);
+
+				total_size += bin_size;
+				assert(total_size <= _mapping->size() && "Mapping too small");
+				slot_size *= 2;
+			}
+
+			auto loh_size = mapping.size() - total_size;
+			assert(loh_size > 0);
+			_loh.initialize(base + total_size, loh_size);
+		}
+
+		stack_allocator_t(stack_allocator_t const&) = default;
+		stack_allocator_t& operator=(stack_allocator_t const&) = default;
+		stack_allocator_t(stack_allocator_t&&) = default;
+		stack_allocator_t& operator=(stack_allocator_t&&) = default;
+
+		[[nodiscard]] void* allocate(std::size_t size) {
+			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
+				return _sized_bins[bin].allocate();
+			} else {
+				return _loh.allocate(size);
+			}
+		}
+
+		void free(void* ptr, std::size_t size) {
+			assert(ptr && "Freeing nullptrs is not supported"); // we are not ::free!
+
+			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
 				return _sized_bins[bin].deallocate(ptr);
 			} else {
 				return _loh.deallocate(ptr, size);

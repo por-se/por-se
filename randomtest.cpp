@@ -1,18 +1,19 @@
 #include "pseudoalloc.h"
+#include "xoshiro.h"
 
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <vector>
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <utility>
+#include <vector>
 
 namespace {
 	class RandomTest {
-		std::mt19937_64 rng;
+		xoshiro512 rng;
 
 #if defined(USE_PSEUDOALLOC)
 		pseudoalloc::mapping_t mapping;
@@ -37,7 +38,6 @@ namespace {
 #endif
 		  , allocation_bin_distribution(0.3)
 		  , large_allocation_distribution(0.00003) {
-			rng.discard(100'000);
 		}
 
 		void run(std::uint64_t const iterations) {
@@ -61,11 +61,11 @@ namespace {
 		void cleanup() {
 			while(!allocations.empty()) {
 				auto choice = std::uniform_int_distribution<std::size_t>(0, allocations.size() - 1)(rng);
-	#if defined(USE_PSEUDOALLOC)
+#if defined(USE_PSEUDOALLOC)
 				allocator.free(allocations[choice].first, allocations[choice].second);
-	#else
+#else
 				free(allocations[choice].first);
-	#endif
+#endif
 				allocations[choice] = allocations.back();
 				allocations.pop_back();
 			}
@@ -73,11 +73,11 @@ namespace {
 
 		void allocate_sized() {
 			auto bin = allocation_bin_distribution(rng);
-			while(bin >= 10) {
+			while(bin >= 11) {
 				bin = allocation_bin_distribution(rng);
 			}
-			auto min = (bin == 0 ? 1 : (static_cast<std::size_t>(1) << (bin + 2)) + 1);
-			auto max = static_cast<std::size_t>(1) << (bin + 3);
+			auto min = (bin == 0 ? 1 : (static_cast<std::size_t>(1) << (bin + 1)) + 1);
+			auto max = static_cast<std::size_t>(1) << (bin + 2);
 			auto size = std::uniform_int_distribution<std::size_t>(min, max)(rng);
 
 #if defined(USE_PSEUDOALLOC)
@@ -131,7 +131,7 @@ int main() {
 	auto start = std::chrono::steady_clock::now();
 
 	RandomTest tester;
-	tester.run(3'000'000);
+	tester.run(10'000'000);
 
 	auto stop = std::chrono::steady_clock::now();
 	std::cout << std::dec << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms\n";
