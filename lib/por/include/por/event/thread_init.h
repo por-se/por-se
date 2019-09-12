@@ -55,6 +55,10 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
+		virtual event const* thread_predecessor() const override {
+			return nullptr;
+		}
+
 		std::shared_ptr<event>      & thread_creation_predecessor()       noexcept { return _predecessors[0]; }
 		std::shared_ptr<event> const& thread_creation_predecessor() const noexcept { return _predecessors[0]; }
 	};

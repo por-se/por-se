@@ -115,8 +115,9 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
-		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
+		virtual event const* thread_predecessor() const override {
+			return _predecessors[0].get();
+		}
 
 		// may return empty range if no condition variable predecessor other than condition_variable_create exists
 		util::iterator_range<std::shared_ptr<event>*> condition_variable_predecessors() noexcept {

@@ -30,6 +30,9 @@ namespace {
 		util::iterator_range<std::shared_ptr<por::event::event>*> predecessors() override {
 			return util::make_iterator_range<std::shared_ptr<por::event::event>*>(nullptr, nullptr);
 		}
+		virtual event const* thread_predecessor() const override {
+			return nullptr;
+		}
 		dummy(por::event::thread_id_t tid, std::shared_ptr<por::event::event> const& immediate_predecessor, std::vector<std::shared_ptr<por::event::event>>& other_predecessors)
 		: event(por::event::event_kind::wait1, // does not matter, value is not exposed through cone
 						tid,
@@ -1031,68 +1034,6 @@ namespace por {
 			return thread_event;
 		}
 
-		static std::shared_ptr<por::event::event> const* get_thread_predecessor(por::event::event const* event) {
-			assert(event);
-			std::shared_ptr<por::event::event> const* pred = nullptr;
-			switch(event->kind()) {
-				case por::event::event_kind::broadcast:
-					pred = &static_cast<por::event::broadcast const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::condition_variable_create:
-					pred = &static_cast<por::event::condition_variable_create const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::condition_variable_destroy:
-					pred = &static_cast<por::event::condition_variable_destroy const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::local:
-					pred = &static_cast<por::event::local const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::lock_acquire:
-					pred = &static_cast<por::event::lock_acquire const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::lock_create:
-					pred = &static_cast<por::event::lock_create const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::lock_destroy:
-					pred = &static_cast<por::event::lock_destroy const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::lock_release:
-					pred = &static_cast<por::event::lock_release const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::signal:
-					pred = &static_cast<por::event::signal const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::thread_create:
-					pred = &static_cast<por::event::thread_create const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::thread_exit:
-					pred = &static_cast<por::event::thread_exit const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::thread_init:
-					break;
-				case por::event::event_kind::thread_join:
-					pred = &static_cast<por::event::thread_join const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::wait1:
-					pred = &static_cast<por::event::wait1 const*>(event)->thread_predecessor();
-					break;
-				case por::event::event_kind::wait2:
-					pred = &static_cast<por::event::wait2 const*>(event)->thread_predecessor();
-					break;
-
-				default:
-					assert(0 && "event has no thread_predecessor");
-			}
-			if(pred != nullptr && *pred != nullptr && (*pred)->kind() != por::event::event_kind::program_init) {
-				return pred;
-			}
-			return nullptr;
-		}
-
-		static std::shared_ptr<por::event::event> const* get_thread_predecessor(std::shared_ptr<por::event::event const> const& event) {
-			return get_thread_predecessor(event.get());
-		}
-
 		static std::shared_ptr<por::event::event> const* get_lock_predecessor(std::shared_ptr<por::event::event const> const& event) {
 			assert(event);
 			std::shared_ptr<por::event::event> const* pred = nullptr;
@@ -1281,7 +1222,8 @@ namespace por {
 			std::vector<conflicting_extension> result;
 
 			// immediate causal predecessor on same thread
-			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
+			auto tmp = const_cast<por::event::event*>(e->thread_predecessor())->shared_from_this();
+			std::shared_ptr<por::event::event> const* et = &tmp;
 			// maximal event concerning same lock in history of e
 			std::shared_ptr<por::event::event> const* er = get_lock_predecessor(e);
 			// maximal event concerning same lock in [et] (acq) or [et] \cup [es] (wait2)
@@ -1352,7 +1294,8 @@ namespace por {
 			auto const* w1 = static_cast<por::event::wait1 const*>(e.get());
 
 			// immediate causal predecessor on same thread
-			std::shared_ptr<por::event::event> const* et = &w1->thread_predecessor();
+			auto tmp = const_cast<por::event::event*>(e->thread_predecessor())->shared_from_this();
+			std::shared_ptr<por::event::event> const* et = &tmp;
 
 			// exclude condition variable create event from comb (if present)
 			std::shared_ptr<por::event::event> const* cond_create = nullptr;
@@ -1454,7 +1397,7 @@ namespace por {
 
 			// remove those that have already been notified (so just their w2 event is missing in cone)
 			for(auto& [tid, c] : event->cone()) {
-				for(auto const* e = c; e != nullptr; e = (get_thread_predecessor(e) ? get_thread_predecessor(e)->get() : nullptr)) {
+				for(auto const* e = c; e != nullptr; e = e->thread_predecessor()) {
 					if(wait1s.empty())
 						break; // no wait1s left
 
@@ -1524,10 +1467,11 @@ namespace por {
 			std::vector<conflicting_extension> result;
 
 			// immediate causal predecessor on same thread
-			std::shared_ptr<por::event::event> const* et = get_thread_predecessor(e);
+			auto tmp = const_cast<por::event::event*>(e->thread_predecessor())->shared_from_this();
+			std::shared_ptr<por::event::event> const* et = &tmp;
 
 			// exclude condition variable create event from comb (if present)
-			std::shared_ptr<por::event::event> const* cond_create = nullptr;
+			por::event::event const* cond_create = nullptr;
 
 			// condition variable id
 			por::event::cond_id_t cid = get_cid(e);
@@ -1567,28 +1511,29 @@ namespace por {
 			// we cannot use cond predecessors here as these are not complete
 			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> comb;
 			for(auto& thread_head : _thread_heads) {
-				std::shared_ptr<por::event::event> const* pred = &thread_head.second;
+				por::event::event const* pred = thread_head.second.get();
 				do {
-					if((*pred)->tid() == e->tid())
+					if(pred->tid() == e->tid())
 						break; // all events on this thread are either in [et] or succ(e)
 
-					if(e->is_less_than(**pred))
+					if(e->is_less_than(*pred))
 						break; // pred and all its predecessors are in succ(e)
 
-					if((*pred)->is_less_than(**et))
+					if(pred->is_less_than(**et))
 						break; // pred and all its predecessors are in [et]
 
-					if(get_cid(*pred) == cid) {
+					if(get_cid(pred) == cid) {
 						// only include events on same cond
-						if((*pred)->kind() == por::event::event_kind::condition_variable_create) {
+						if(pred->kind() == por::event::event_kind::condition_variable_create) {
 							cond_create = pred; // exclude from comb
-						} else if((*pred)->kind() != por::event::event_kind::wait2) {
+						} else if(pred->kind() != por::event::event_kind::wait2) {
 							// also exclude wait2 events
-							comb[(*pred)->tid()].push_back(pred);
+							auto tmp = const_cast<por::event::event*>(pred)->shared_from_this();
+							comb[pred->tid()].push_back(&tmp);
 						}
 					}
 
-					pred = get_thread_predecessor(*pred);
+					pred = pred->thread_predecessor();
 				} while(pred != nullptr);
 			}
 
@@ -1668,7 +1613,7 @@ namespace por {
 					N.push_back(*m);
 				}
 				if(cond_create) {
-					N.push_back(*cond_create);
+					N.push_back(const_cast<por::event::event*>(cond_create)->shared_from_this());
 				}
 
 				// compute conflicts (minimal event from {e} or wait1s in (comb \setminus [M]))

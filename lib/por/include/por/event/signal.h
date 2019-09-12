@@ -192,8 +192,9 @@ namespace por::event {
 			}
 		}
 
-		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
-		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
+		virtual event const* thread_predecessor() const override {
+			return _predecessors[0].get();
+		}
 
 		// may return nullptr if signal is lost
 		std::shared_ptr<event>       wait_predecessor()       noexcept {

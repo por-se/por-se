@@ -33,5 +33,9 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
 		}
 
+		virtual event const* thread_predecessor() const override {
+			return nullptr;
+		}
+
 	};
 }

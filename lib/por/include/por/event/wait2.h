@@ -43,7 +43,7 @@ namespace por::event {
 				auto sig = static_cast<signal const*>(this->notifying_event().get());
 				assert(sig->notified_thread() == this->tid());
 				assert(sig->cid() == this->cid());
-				assert(sig->wait_predecessor() == this->thread_predecessor());
+				assert(sig->wait_predecessor().get() == this->thread_predecessor());
 			} else {
 				assert(this->notifying_event()->kind() == event_kind::broadcast);
 				auto bro = static_cast<broadcast const*>(this->notifying_event().get());
@@ -51,7 +51,7 @@ namespace por::event {
 				assert(bro->cid() == this->cid());
 				[[maybe_unused]] bool wait1_found = false;
 				for(auto& e : bro->wait_predecessors()) {
-					if(e == this->thread_predecessor()) {
+					if(e.get() == this->thread_predecessor()) {
 						wait1_found = true;
 						break;
 					}
@@ -106,8 +106,9 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
-		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
+		virtual event const* thread_predecessor() const override {
+			return _predecessors[0].get();
+		}
 
 		std::shared_ptr<event>      & lock_predecessor()       noexcept { return _predecessors[2]; }
 		std::shared_ptr<event> const& lock_predecessor() const noexcept { return _predecessors[2]; }

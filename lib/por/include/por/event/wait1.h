@@ -123,8 +123,9 @@ namespace por::event {
 			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		std::shared_ptr<event>      & thread_predecessor()       noexcept { return _predecessors[0]; }
-		std::shared_ptr<event> const& thread_predecessor() const noexcept { return _predecessors[0]; }
+		virtual event const* thread_predecessor() const override {
+			return _predecessors[0].get();
+		}
 
 		std::shared_ptr<event>      & lock_predecessor()       noexcept { return _predecessors[1]; }
 		std::shared_ptr<event> const& lock_predecessor() const noexcept { return _predecessors[1]; }
