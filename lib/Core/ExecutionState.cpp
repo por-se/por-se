@@ -33,13 +33,12 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdarg>
 #include <iomanip>
 #include <map>
 #include <set>
 #include <sstream>
-#include <stdarg.h>
 
-using namespace llvm;
 using namespace klee;
 
 size_t ExecutionState::next_id = 0;
@@ -354,7 +353,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
   const KInstruction *target = thread->prevPc;
   for (auto it = thread->stack.rbegin(), ie = thread->stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
-    Function *f = sf.kf->function;
+    llvm::Function *f = sf.kf->function;
     const InstructionInfo &ii = *target->info;
     out << "\t#" << idx++;
     std::stringstream AssStream;
@@ -363,8 +362,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
     out << " in " << f->getName().str() << " (";
     // Yawn, we could go up and print varargs if we wanted to.
     unsigned index = 0;
-    for (Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
-         ai != ae; ++ai) {
+    for (auto ai = f->arg_begin(), ae = f->arg_end(); ai != ae; ++ai) {
       if (ai!=f->arg_begin()) out << ", ";
 
       out << ai->getName().str();
