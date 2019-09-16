@@ -10,7 +10,7 @@ using namespace por;
 //
 static void testBasicFunctions(void) {
 	thread_id empty{};
-	thread_id singleLayer(1);
+	thread_id singleLayer(thread_id(), 1);
 	thread_id doubleLayer(singleLayer, 2);
 
 	assert(empty.empty() && empty.size() == 0);
@@ -25,15 +25,15 @@ static void testBasicFunctions(void) {
 // Operator overloads
 //
 static void testOperatorOverloads(void) {
-	assert(thread_id(1));
+	assert(thread_id(thread_id(), 1));
 	assert(!thread_id());
 
-	assert(thread_id(1)[0] == 1);
+	assert(thread_id(thread_id(), 1)[0] == 1);
 
-	assert(thread_id(thread_id(1), 2)[1] == 2);
+	assert(thread_id(thread_id(thread_id(), 1), 2)[1] == 2);
 
 	// Special test that goes deeper into the hierarchy
-	thread_id tid(1);
+	thread_id tid(thread_id(), 1);
 	for (int i = 0; i < 12; i++) {
 		tid = thread_id(tid, i + 2);
 
@@ -47,9 +47,9 @@ static void testOperatorOverloads(void) {
 // Formatting of thread ids
 //
 static void testFormattingOfThreadIds(void) {
-	assert(thread_id(1).to_string() == "1");
-	assert(thread_id(thread_id(1), 1).to_string() == "1,1");
-	assert(thread_id(thread_id(1), 10000).to_string() == "1,10000");
+	assert(thread_id(thread_id(), 1).to_string() == "1");
+	assert(thread_id(thread_id(thread_id(), 1), 1).to_string() == "1,1");
+	assert(thread_id(thread_id(thread_id(), 1), 10000).to_string() == "1,10000");
 
 	// special case
 	assert(thread_id().to_string() == "");

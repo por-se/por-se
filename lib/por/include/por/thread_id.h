@@ -65,6 +65,7 @@ namespace por {
 			data()[_size - 1] = localId;
 		}
 
+		[[deprecated("use thread_id(thread_id(), localId) instead")]]
 		explicit thread_id(std::uint16_t localId) : thread_id(thread_id(), localId) { }
 
 		thread_id(thread_id const& other) : thread_id() {
