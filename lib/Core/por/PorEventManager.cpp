@@ -81,7 +81,7 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
 
   bool registerStandbyState = true;
   if (StandbyStates != StandbyStatePolicy::All) {
-    registerStandbyState = (kind == por_thread_init && state.currentThreadId() == ThreadId(1)) || (kind == por_condition_variable_create);
+    registerStandbyState = (kind == por_thread_init && state.isOnMainThread()) || (kind == por_condition_variable_create);
 
     if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
       auto dist = state.porConfiguration->distance_to_last_standby_state(&state);
@@ -140,7 +140,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
 
-  if (tid == ThreadId(1)) {
+  if (tid == ExecutionState::mainThreadId) {
     // main thread only: event already present in configuration
     checkIfCatchUpIsNeeded(state);
     registerStandbyState(state, por_thread_init);

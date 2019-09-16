@@ -60,6 +60,8 @@ public:
 
   typedef std::map<ThreadId, Thread> threads_ty;
 
+  static const ThreadId mainThreadId;
+
 private:
   ExecutionState() = delete;
   ExecutionState &operator=(const ExecutionState &) = delete;
@@ -209,6 +211,10 @@ public:
       return {};
 
     return it->second;
+  }
+
+  bool isOnMainThread() const {
+    return currentThreadId() == mainThreadId;
   }
 
   /// @brief will create a new thread

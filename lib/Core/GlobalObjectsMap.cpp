@@ -1,6 +1,7 @@
 #include "GlobalObjectsMap.h"
-#include "MemoryManager.h"
 
+#include "klee/ExecutionState.h"
+#include "MemoryManager.h"
 
 
 using namespace klee;
@@ -71,10 +72,8 @@ const MemoryObject * GlobalObjectsMap::registerGlobalData(const llvm::GlobalValu
   GlobalObjectReference reference(gv, size);
 
   // For the main thread we create the memory object directly
-  ThreadId mainThreadId(1);
-
-  auto mo = memoryManager->allocateGlobal(size, gv, mainThreadId, alignment);
-  reference.threadLocalMemory.insert(std::make_pair(mainThreadId, mo));
+  auto mo = memoryManager->allocateGlobal(size, gv, ExecutionState::mainThreadId, alignment);
+  reference.threadLocalMemory.insert(std::make_pair(ExecutionState::mainThreadId, mo));
 
   if (!gv->isThreadLocal() && mo != nullptr) {
     reference.address = mo->getBaseExpr();
@@ -97,7 +96,7 @@ const MemoryObject* GlobalObjectsMap::lookupGlobalMemoryObject(const llvm::Globa
   // Now we have to check whether the value is actually depending on the thread
   // that is calling
   if (!gv->isThreadLocal()) {
-    return globalObject->threadLocalMemory[ThreadId(1)];
+    return globalObject->threadLocalMemory[ExecutionState::mainThreadId];
   }
 
   // Now we have to check if we actually have already created the object for this specific thread

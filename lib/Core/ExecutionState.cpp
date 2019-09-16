@@ -42,6 +42,7 @@
 using namespace klee;
 
 size_t ExecutionState::next_id = 0;
+const ThreadId ExecutionState::mainThreadId{ThreadId(), 1};
 
 /***/
 
@@ -60,9 +61,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     memoryState(this),
     steppedInstructions(0)
 {
-    ThreadId mainThreadId(1);
-
-    // Thread 1 is reserved for program's main thread (executing kf)
     auto result = threads.emplace(std::piecewise_construct,
                                   std::forward_as_tuple(mainThreadId),
                                   std::forward_as_tuple(mainThreadId, kf));

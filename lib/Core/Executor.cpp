@@ -3301,7 +3301,7 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
       Value *operand = ii.getOperand();
       if (Constant *c = dyn_cast<Constant>(operand)) {
         ref<ConstantExpr> index =
-                evalConstant(c, ThreadId(1))->SExt(Context::get().getPointerWidth());
+                evalConstant(c, ExecutionState::mainThreadId)->SExt(Context::get().getPointerWidth());
         ref<ConstantExpr> addend = 
           index->Mul(ConstantExpr::alloc(elementSize,
                                          Context::get().getPointerWidth()));
@@ -3315,7 +3315,7 @@ void Executor::computeOffsets(KGEPInstruction *kgepi, TypeIt ib, TypeIt ie) {
         kmodule->targetData->getTypeStoreSize(ptr->getElementType());
       auto operand = ii.getOperand();
       if (auto c = dyn_cast<Constant>(operand)) {
-        auto index = evalConstant(c, ThreadId(1))->SExt(Context::get().getPointerWidth());
+        auto index = evalConstant(c, ExecutionState::mainThreadId)->SExt(Context::get().getPointerWidth());
         auto addend = index->Mul(ConstantExpr::alloc(elementSize,
                                          Context::get().getPointerWidth()));
         constantOffset = constantOffset->Add(addend);
@@ -3355,7 +3355,7 @@ void Executor::bindModuleConstants() {
       std::unique_ptr<Cell[]>(new Cell[kmodule->constants.size()]);
   for (unsigned i=0; i<kmodule->constants.size(); ++i) {
     Cell &c = kmodule->constantTable[i];
-    c.value = evalConstant(kmodule->constants[i], ThreadId(1), nullptr);
+    c.value = evalConstant(kmodule->constants[i], ExecutionState::mainThreadId, nullptr);
   }
 }
 
@@ -5050,20 +5050,18 @@ void Executor::preemptThread(ExecutionState &state) {
 }
 
 void Executor::exitThread(ExecutionState &state) {
-  const ThreadId& tid = state.currentThreadId();
-  auto mainThreadId = ThreadId(1);
-
   // needs to come before thread_exit event
-  if (tid == mainThreadId && !state.currentThread().pathSincePorLocal.empty()) {
+  if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
     // pathSincePorLocal has to be empty in standby state attached to event
     std::vector<bool> path = std::move(state.currentThread().pathSincePorLocal);
     state.currentThread().pathSincePorLocal = {};
     porEventManager.registerLocal(state, path);
   }
 
+  const ThreadId& tid = state.currentThreadId();
   state.exitThread(tid);
   state.needsThreadScheduling = true;
-  if (tid == mainThreadId) {
+  if (state.isOnMainThread()) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
     porEventManager.registerThreadExit(state, tid);
