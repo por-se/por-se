@@ -12,6 +12,10 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#if defined(__linux)
+#include <linux/version.h>
+#endif
+
 #if defined(PSEUDOALLOC_CHECKED)
 #	define _pa_check(expr) (assert(expr))
 #else
@@ -40,7 +44,11 @@ namespace pseudoalloc {
 #if defined(__APPLE__)
 				flags |= MAP_FIXED;
 #else
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 				flags |= MAP_FIXED_NOREPLACE;
+	#else
+				flags |= MAP_FIXED;
+	#endif
 #endif
 			}
 
