@@ -17,16 +17,9 @@ variables:
 stages:
   - test
 
-sample:
+check:
   stage: test
   image: kleenet.comsys.rwth-aachen.de/symbiosys-projects-workspace-docker-base-image:latest
   script:
-    - 'g++ -std=c++17 -Og -ggdb -fsanitize=address,undefined sample.cpp -DPSEUDOALLOC_CHECKED -o sample'
-    - './sample'
-
-randomtest:
-  stage: test
-  image: kleenet.comsys.rwth-aachen.de/symbiosys-projects-workspace-docker-base-image:latest
-  script:
-    - 'g++ -std=c++17 -Og -ggdb -fsanitize=address,undefined randomtest.cpp -DPSEUDOALLOC_CHECKED -DUSE_PSEUDOALLOC -o randomtest'
-    - './randomtest'
+    - 'mkdir build && cd build && cmake -G Ninja ..'
+    - 'ninja check'
