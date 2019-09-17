@@ -356,16 +356,17 @@ if (VERIFIED_FINGERPRINTS)
 endif()
 
 ################################################################################
-# Support for pseudo allocations (via pseudoalloc library)
+# Support for deterministic allocations (via pseudoalloc library)
 ################################################################################
-find_package(PseudoAlloc)
-if (PSEUDOALLOC_FOUND)
-  message(STATUS "pseudoalloc found")
-  set(TARGET_LIBS ${TARGET_LIBS} pseudoalloc)
-  list(APPEND KLEE_COMPONENT_EXTRA_LIBRARIES ${PSEUDOALLOC_LIBRARIES})
-  list(APPEND KLEE_COMPONENT_EXTRA_INCLUDE_DIRS ${PSEUDOALLOC_INCLUDE_DIRS})
+
+if (PSEUDOALLOC_DIR)
+  include("${PSEUDOALLOC_DIR}/libpseudoalloc-targets.cmake")
+  set(TARGET_LIBS ${TARGET_LIBS} libpseudoalloc)
+  message(STATUS "Pseudoalloc Library included: ${PSEUDOALLOC_DIR}")
 else()
-  message(FATAL_ERROR "pseudoalloc is required but could not be found")
+  message(FATAL_ERROR
+    "pseudoalloc is required but could not be found."
+    "Please set PSEUDOALLOC_DIR!")
 endif()
 
 ################################################################################
