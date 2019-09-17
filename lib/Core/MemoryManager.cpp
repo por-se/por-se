@@ -87,7 +87,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
-  globalAllocator = new pseudoalloc::allocator_t(*globalMemorySegment);
+  globalAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalMemorySegment);
 }
 
 MemoryManager::~MemoryManager() {
@@ -98,9 +98,6 @@ MemoryManager::~MemoryManager() {
   }
 
   markMemoryRegionsAsUnneeded();
-
-  delete(globalAllocator);
-  globalAllocator = nullptr;
 }
 
 void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {

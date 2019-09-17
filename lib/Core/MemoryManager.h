@@ -46,7 +46,7 @@ private:
   std::size_t globalSegmentSize;
 
   std::shared_ptr<pseudoalloc::mapping_t> globalMemorySegment;
-  pseudoalloc::allocator_t* globalAllocator;
+  std::unique_ptr<pseudoalloc::allocator_t> globalAllocator;
 
   /**
    * Requested a memory mapping for `tid`.
