@@ -108,7 +108,7 @@ namespace por {
 		configuration construct();
 
 		configuration_root& add_thread() {
-			event::thread_id_t tid = thread_id(_thread_heads.size() + 1);
+			event::thread_id_t tid = thread_id(thread_id(), _thread_heads.size() + 1);
 
 			_thread_heads.emplace(tid, event::thread_init::alloc(_unfolding, tid, _program_init));
 			_unfolding->mark_as_explored(_thread_heads[tid]);
