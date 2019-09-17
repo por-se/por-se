@@ -6,7 +6,7 @@
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/Internal/Module/KModule.h"
-#include "pseudoalloc.h"
+#include "pseudoalloc/pseudoalloc.h"
 #include "ThreadId.h"
 
 #include <vector>
@@ -109,15 +109,13 @@ namespace klee {
       /// @brief counts how many threads this thread already created
       std::uint16_t spawnedThreads = 0;
 
-      pseudoalloc::Alloc* threadHeapAlloc = nullptr;
-
-      pseudoalloc::Alloc* threadStackAlloc = nullptr;
+      std::unique_ptr<pseudoalloc::allocator_t> threadHeapAlloc;
+      std::unique_ptr<pseudoalloc::stack_allocator_t> threadStackAlloc;
 
     public:
       Thread() = delete;
       Thread(const Thread &thread);
       Thread(ThreadId tid, KFunction* threadStartRoutine);
-      ~Thread();
 
       ThreadId getThreadId() const;
       ref<Expr> getRuntimeStructPtr() const;

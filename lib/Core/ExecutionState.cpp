@@ -154,12 +154,11 @@ ExecutionState *ExecutionState::branch() {
 void ExecutionState::popFrameOfThread(Thread* thread) {
   StackFrame &sf = thread->stack.back();
 
-  for (auto &it : sf.allocas) {
-    addressSpace.unbindObject(it);
+  for (auto it = sf.allocas.rbegin(), end = sf.allocas.rend(); it != end; it++) {
+    const MemoryObject* mo = *it;
 
-    // TODO: once we have a proper way to free stack memory objects
-    //       use that functionality here
-    it->parent->deallocate(it, *thread);
+    addressSpace.unbindObject(mo);
+    mo->parent->deallocate(mo, *thread);
   }
 
   if (PruneStates) {

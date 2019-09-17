@@ -2,7 +2,6 @@
 #include "Memory.h"
 
 #include "CallPathManager.h"
-#include "pseudoalloc.h"
 
 using namespace llvm;
 using namespace klee;
@@ -80,20 +79,9 @@ Thread::Thread(const Thread &t)
           pathSincePorLocal(t.pathSincePorLocal),
           spawnedThreads(t.spawnedThreads) {
 
-  threadHeapAlloc = pseudoalloc::pseudoalloc_clone(t.threadHeapAlloc);
-  threadStackAlloc = pseudoalloc::pseudoalloc_clone(t.threadStackAlloc);
+  threadHeapAlloc = std::make_unique<pseudoalloc::allocator_t>(*t.threadHeapAlloc);
+  threadStackAlloc = std::make_unique<pseudoalloc::stack_allocator_t>(*t.threadStackAlloc);
 }
-
-Thread::~Thread() {
-  if (threadHeapAlloc) {
-    pseudoalloc::pseudoalloc_drop(threadHeapAlloc);
-  }
-
-  if (threadStackAlloc) {
-    pseudoalloc::pseudoalloc_drop(threadStackAlloc);
-  }
-}
-
 
 ThreadId Thread::getThreadId() const {
   return tid;

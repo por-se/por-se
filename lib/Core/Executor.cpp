@@ -4245,7 +4245,11 @@ void Executor::executeFree(ExecutionState &state,
         processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
 
         it->second->addressSpace.unbindObject(mo);
-        mo->parent->deallocate(mo, state.currentThread());
+
+        auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
+        assert(thread.has_value() && "MemoryObject created by thread that is not known");
+
+        mo->parent->deallocate(mo, thread.value().get());
 
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));
@@ -4544,8 +4548,8 @@ void Executor::runFunctionAsMain(Function *f,
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
-  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::HEAP);
-  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::STACK);
+  thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
+  thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
   
   MemoryObject *argvMO = nullptr;
 
@@ -4906,8 +4910,8 @@ ThreadId Executor::createThread(ExecutionState &state,
   threadStartFrame->locals[startRoutine->getArgRegister(0)].value = runtimeStructPtr;
 
   // If we create a thread, then we also have to create the memory region and the TLS objects
-  thread.threadHeapAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::HEAP);
-  thread.threadStackAlloc = memory->createThreadAllocator(thread.getThreadId(), MemoryManager::AllocatorRegion::STACK );
+  thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
+  thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
 
   // Errno is one of the tls objects
   std::uint64_t alignment = alignof(errno);

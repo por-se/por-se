@@ -70,9 +70,6 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
   threadStackSize = static_cast<std::size_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
   globalSegmentSize = static_cast<std::size_t>(GlobalSegmentSize.getValue()) * 1024 * 1024 * 1024;
 
-  globalMemorySegment.base = nullptr;
-  globalMemorySegment.len = 0;
-
   // this assumes that the pagesize is a power of 2
   if ((threadHeapSize & (pageSize - 1)) != 0) {
     klee_error("-allocate-thread-heap-size must be a multiple of the page size");
@@ -86,11 +83,11 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     loadRequestedThreadMemoryMappingsFromFile();
   }
 
-  if (globalMemorySegment.base == nullptr) {
+  if (!globalMemorySegment || globalMemorySegment->begin() == nullptr) {
     globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
-  globalAllocator = pseudoalloc::pseudoalloc_new(globalMemorySegment);
+  globalAllocator = new pseudoalloc::allocator_t(*globalMemorySegment);
 }
 
 MemoryManager::~MemoryManager() {
@@ -102,8 +99,7 @@ MemoryManager::~MemoryManager() {
 
   markMemoryRegionsAsUnneeded();
 
-  pseudoalloc::pseudoalloc_dontneed(&globalMemorySegment);
-  pseudoalloc::pseudoalloc_drop(globalAllocator);
+  delete(globalAllocator);
   globalAllocator = nullptr;
 }
 
@@ -154,7 +150,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
     if (tidAsString == "global") {
       globalMemorySegment = createMapping(globalSegmentSize, address);
-      klee_message("Created thread memory mapping for globals at %p", globalMemorySegment.base);
+      klee_message("Created thread memory mapping for globals at %p", globalMemorySegment->begin());
     } else {
       auto forTid = ThreadId::from_string(tidAsString);
       if (!forTid) {
@@ -168,7 +164,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
   }
 }
 
-pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, std::uintptr_t requestedAddress) {
+std::shared_ptr<pseudoalloc::mapping_t> MemoryManager::createMapping(std::size_t size, std::uintptr_t requestedAddress) {
   auto reqAddressAsPointer = reinterpret_cast<void*>(requestedAddress);
 
   // Test that we do not place overlapping mappings by checking the requestedAddress
@@ -177,41 +173,41 @@ pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, std::uintptr
     auto end = requestedAddress + threadHeapSize + threadStackSize;
 
     for (const auto &seg : threadMemoryMappings) {
-      auto heapStart = reinterpret_cast<std::uintptr_t>(seg.second.heap.base);
-      auto stackStart = reinterpret_cast<std::uintptr_t>(seg.second.stack.base);
+      auto heapStart = reinterpret_cast<std::uintptr_t>(seg.second.heap->begin());
+      auto stackStart = reinterpret_cast<std::uintptr_t>(seg.second.stack->begin());
 
-      if (!(end < heapStart || requestedAddress > heapStart + seg.second.heap.len)) {
+      if (!(end < heapStart || requestedAddress > heapStart + seg.second.heap->size())) {
         klee_error("Overlapping mapping requested=%p and other=%p (heap) - Exiting.",
-                reqAddressAsPointer, seg.second.heap.base);
+                reqAddressAsPointer, seg.second.heap->begin());
       }
 
-      if (!(end < stackStart || requestedAddress > stackStart + seg.second.stack.len)) {
+      if (!(end < stackStart || requestedAddress > stackStart + seg.second.stack->size())) {
         klee_error("Overlapping mapping requested=%p and other=%p (stack) - Exiting.",
-                   reqAddressAsPointer, seg.second.stack.base);
+                   reqAddressAsPointer, seg.second.stack->begin());
       }
     }
   }
 
-  pseudoalloc::Mapping mapping{};
+  std::shared_ptr<pseudoalloc::mapping_t> mapping;
   if (requestedAddress != 0) {
-    mapping = pseudoalloc::pseudoalloc_new_mapping(requestedAddress, size);
+    mapping = std::make_shared<pseudoalloc::mapping_t>(requestedAddress, size);
   } else {
-    mapping = pseudoalloc::pseudoalloc_default_mapping(size);
+    mapping = std::make_shared<pseudoalloc::mapping_t>(size);
   }
 
-  if (mapping.base == nullptr) {
+  if (mapping->begin() == nullptr) {
     klee_error("Could not allocate a mapping at %p - error: %s", reqAddressAsPointer, strerror(errno));
   }
 
   // Now check that the address is correct and that our mappings are of the correct size
-  if (requestedAddress && mapping.base != reqAddressAsPointer) {
-    klee_error("Could not allocate a mapping at %p - received %p", reqAddressAsPointer, mapping.base);
+  if (requestedAddress && mapping->begin() != reqAddressAsPointer) {
+    klee_error("Could not allocate a mapping at %p - received %p", reqAddressAsPointer, mapping->begin());
   }
 
-  if (mapping.len != size) {
+  if (mapping->size() != size) {
     klee_error(
             "Allocator failed to create a mapping with the requested size: requested size=%lu, returned size=%lu",
-            size, mapping.len);
+            size, mapping->size());
   }
 
   return mapping;
@@ -220,7 +216,8 @@ pseudoalloc::Mapping MemoryManager::createMapping(std::size_t size, std::uintptr
 void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
-  pseudoalloc::Mapping threadHeapMapping = createMapping(threadHeapSize, requestedAddress);
+  ThreadMemorySegments segment{};
+  segment.heap = createMapping(threadHeapSize, requestedAddress);
 
   std::uintptr_t stackAddress = 0;
   if (requestedAddress != 0) {
@@ -228,16 +225,12 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t 
     stackAddress = requestedAddress + threadHeapSize;
   }
 
-  pseudoalloc::Mapping threadStackMapping = createMapping(threadStackSize, stackAddress);
-
-  ThreadMemorySegments segment{};
-  segment.heap = threadHeapMapping;
-  segment.stack = threadStackMapping;
+  segment.stack = createMapping(threadStackSize, stackAddress);
 
   auto insertOpRes = threadMemoryMappings.insert(std::make_pair(tid, segment));
   assert(insertOpRes.second && "Mapping should always be able to be registered");
 
-  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), threadHeapMapping.base);
+  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), segment.heap->begin());
 }
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,
@@ -265,9 +258,9 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
 
   void* allocAddress;
   if (isLocal) {
-    allocAddress = pseudoalloc::pseudoalloc_alloc_aligned(thread.threadStackAlloc, size, alignment);
+    allocAddress = thread.threadStackAlloc->allocate(std::max(size, alignment));
   } else {
-    allocAddress = pseudoalloc::pseudoalloc_alloc_aligned(thread.threadHeapAlloc, size, alignment);
+    allocAddress = thread.threadHeapAlloc->allocate(std::max(size, alignment));
   }
 
   auto address = reinterpret_cast<std::uint64_t>(allocAddress);
@@ -282,17 +275,17 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
     assert(segmentIt != threadMemoryMappings.end() && "Thread has no known memory mapping");
 
     const auto& seg = isLocal ? segmentIt->second.stack : segmentIt->second.heap;
-    auto base = reinterpret_cast<std::uint64_t>(seg.base);
+    auto base = reinterpret_cast<std::uint64_t>(seg->begin());
 
-    if (address < base || address > base + seg.len) {
-      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg.len);
+    if (address < base || address > base + seg->size()) {
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg->size());
     }
   }
 #endif // NDEBUG
 
   ++stats::allocations;
   MemoryObject *res =
-          new MemoryObject(address, size, isLocal, isGlobal, false, false, allocSite,
+          new MemoryObject(address, size, alignment, isLocal, isGlobal, false, false, allocSite,
                            std::make_pair(thread.getThreadId(), stackframeIndex), this);
   objects.insert(res);
   return res;
@@ -312,7 +305,7 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
     return nullptr;
   }
 
-  void* allocAddress = pseudoalloc::pseudoalloc_alloc_aligned(globalAllocator, size, alignment);
+  void* allocAddress = globalAllocator->allocate(std::max(size, alignment));
   auto address = reinterpret_cast<std::uint64_t>(allocAddress);
 
   if (!address)
@@ -322,16 +315,16 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
   {
     // Test that the address that we got is actually inside the mapping
     const auto& seg = globalMemorySegment;
-    auto base = reinterpret_cast<std::uint64_t>(seg.base);
+    auto base = reinterpret_cast<std::uint64_t>(seg->begin());
 
-    if (address < base || address > base + seg.len) {
-      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg.len);
+    if (address < base || address > base + seg->size()) {
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg->size());
     }
   }
 #endif // NDEBUG
 
   ++stats::allocations;
-  auto res = new MemoryObject(address, size, false, true, false, false, allocSite,
+  auto res = new MemoryObject(address, size, alignment, false, true, false, false, allocSite,
                            std::make_pair(byTid, 0), this);
   objects.insert(res);
   return res;
@@ -352,19 +345,21 @@ MemoryObject *MemoryManager::allocateFixed(std::uint64_t address, std::uint64_t 
 
   ++stats::allocations;
   MemoryObject *res =
-          new MemoryObject(address, size, false, true, true, false, allocSite,
+          new MemoryObject(address, size, 0, false, true, true, false, allocSite,
                            std::make_pair(thread.getThreadId(), stackframeIndex), this);
   objects.insert(res);
   return res;
 }
 
 void MemoryManager::deallocate(const MemoryObject *mo, const Thread &thread) {
+  assert(mo->getAllocationStackFrame().first == thread.tid);
+
   // so we have to pass this info to the allocator
   auto address = reinterpret_cast<void*>(mo->address);
   if (mo->isLocal) {
-    pseudoalloc::pseudoalloc_dealloc(thread.threadStackAlloc, address);
+    thread.threadStackAlloc->free(address, std::max(mo->size, mo->alignment));
   } else {
-    pseudoalloc::pseudoalloc_dealloc(thread.threadHeapAlloc, address);
+    thread.threadHeapAlloc->free(address, std::max(mo->size, mo->alignment));
   }
 }
 
@@ -374,7 +369,7 @@ void MemoryManager::markFreed(MemoryObject *mo) {
   }
 }
 
-pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, AllocatorRegion region) {
+MemoryManager::ThreadMemorySegments& MemoryManager::getThreadSegments(const ThreadId& tid) {
   // So first of all, check if we already have a mapping for that thread
   auto it = threadMemoryMappings.find(tid);
 
@@ -385,18 +380,24 @@ pseudoalloc::Alloc* MemoryManager::createThreadAllocator(const ThreadId &tid, Al
     assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");
   }
 
-  auto allocator = pseudoalloc::pseudoalloc_new(region == AllocatorRegion::STACK ? it->second.stack : it->second.heap);
+  return it->second;
+}
 
-  if (allocator == nullptr) {
-    klee_error("Failed to create an allocator for tid=%s\n", tid.to_string().c_str());
-  }
+std::unique_ptr<pseudoalloc::allocator_t> MemoryManager::createThreadHeapAllocator(const ThreadId &tid) {
+  auto& seg = getThreadSegments(tid);
+  return std::make_unique<pseudoalloc::allocator_t>(*seg.heap);
+}
 
-  return allocator;
+std::unique_ptr<pseudoalloc::stack_allocator_t> MemoryManager::createThreadStackAllocator(const ThreadId &tid) {
+  auto& seg = getThreadSegments(tid);
+  return std::make_unique<pseudoalloc::stack_allocator_t>(*seg.stack);
 }
 
 void MemoryManager::markMemoryRegionsAsUnneeded() {
   for (auto& it : threadMemoryMappings) {
-    pseudoalloc::pseudoalloc_dontneed(&it.second.heap);
-    pseudoalloc::pseudoalloc_dontneed(&it.second.stack);
+    it.second.heap->clear();
+    it.second.stack->clear();
   }
+
+  globalMemorySegment->clear();
 }

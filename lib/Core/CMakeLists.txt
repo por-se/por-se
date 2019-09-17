@@ -46,7 +46,7 @@ set(LLVM_COMPONENTS
 )
 
 klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
-target_link_libraries(kleeCore PUBLIC ${LLVM_LIBS} ${SQLITE3_LIBRARIES} libpor)
+target_link_libraries(kleeCore PUBLIC ${LLVM_LIBS} ${SQLITE3_LIBRARIES} libpor libpseudoalloc)
 target_link_libraries(kleeCore PRIVATE
   kleeBasic
   kleeFingerprint

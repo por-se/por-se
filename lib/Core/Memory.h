@@ -53,6 +53,7 @@ public:
 
   /// size in bytes
   unsigned size;
+  unsigned alignment;
   mutable std::string name;
 
   bool isLocal;
@@ -94,7 +95,7 @@ public:
       allocSite(0) {
   }
 
-  MemoryObject(uint64_t _address, unsigned _size, bool _isLocal, bool _isGlobal, bool _isFixed, bool _isThreadLocal,
+  MemoryObject(uint64_t _address, unsigned _size, unsigned _alignment, bool _isLocal, bool _isGlobal, bool _isFixed, bool _isThreadLocal,
                const llvm::Value *_allocSite, std::pair<ThreadId, std::size_t> _allocationStackFrame,
                MemoryManager *_parent)
     : refCount(0),
@@ -102,6 +103,7 @@ public:
       id(counter++),
       address(_address),
       size(_size),
+      alignment(_alignment),
       name("unnamed"),
       isLocal(_isLocal),
       isGlobal(_isGlobal),

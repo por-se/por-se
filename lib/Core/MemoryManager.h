@@ -13,7 +13,7 @@
 #include "klee/ThreadId.h"
 #include "klee/Thread.h"
 
-#include "pseudoalloc.h"
+#include "pseudoalloc/pseudoalloc.h"
 
 #include <cstddef>
 #include <set>
@@ -28,18 +28,12 @@ class MemoryObject;
 class ArrayCache;
 
 class MemoryManager {
-public:
-  enum class AllocatorRegion {
-    STACK,
-    HEAP
-  };
-
 private:
   typedef std::set<MemoryObject *> objects_ty;
 
   struct ThreadMemorySegments {
-    pseudoalloc::Mapping heap;
-    pseudoalloc::Mapping stack;
+    std::shared_ptr<pseudoalloc::mapping_t> heap;
+    std::shared_ptr<pseudoalloc::mapping_t> stack;
   };
 
   objects_ty objects;
@@ -51,8 +45,8 @@ private:
   std::size_t threadStackSize;
   std::size_t globalSegmentSize;
 
-  pseudoalloc::Mapping globalMemorySegment;
-  pseudoalloc::Alloc* globalAllocator;
+  std::shared_ptr<pseudoalloc::mapping_t> globalMemorySegment;
+  pseudoalloc::allocator_t* globalAllocator;
 
   /**
    * Requested a memory mapping for `tid`.
@@ -61,9 +55,11 @@ private:
    */
   void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
 
-  pseudoalloc::Mapping createMapping(std::size_t size, std::uintptr_t requestedAddress);
+  std::shared_ptr<pseudoalloc::mapping_t> createMapping(std::size_t size, std::uintptr_t requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
+
+  ThreadMemorySegments& getThreadSegments(const ThreadId& tid);
 
 public:
   MemoryManager(ArrayCache *arrayCache);
@@ -95,11 +91,10 @@ public:
   void markFreed(MemoryObject *mo);
   ArrayCache *getArrayCache() const { return arrayCache; }
 
-  /**
-   * Constructs a new thread allocator in the threads reserved
-   * memory region.
-   */
-  pseudoalloc::Alloc* createThreadAllocator(const ThreadId &tid, AllocatorRegion region);
+  // Constructs a new thread allocator in the threads reserved
+  // memory region.
+  std::unique_ptr<pseudoalloc::allocator_t> createThreadHeapAllocator(const ThreadId &tid);
+  std::unique_ptr<pseudoalloc::stack_allocator_t> createThreadStackAllocator(const ThreadId &tid);
 
   void markMemoryRegionsAsUnneeded();
 };
