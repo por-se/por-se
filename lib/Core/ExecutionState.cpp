@@ -157,8 +157,8 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
   for (auto it = sf.allocas.rbegin(), end = sf.allocas.rend(); it != end; it++) {
     const MemoryObject* mo = *it;
 
-    addressSpace.unbindObject(mo);
     mo->parent->deallocate(mo, *thread);
+    addressSpace.unbindObject(mo);
   }
 
   if (PruneStates) {

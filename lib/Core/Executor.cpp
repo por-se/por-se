@@ -4123,8 +4123,8 @@ void Executor::executeAlloc(ExecutionState &state,
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
         processMemoryAccess(state, reallocatedObject, nullptr, MemoryAccessTracker::FREE_ACCESS);
-        state.addressSpace.unbindObject(reallocatedObject);
         reallocatedObject->parent->deallocate(reallocatedObject, thread);
+        state.addressSpace.unbindObject(reallocatedObject);
       }
 
       if (PruneStates) {
@@ -4244,12 +4244,11 @@ void Executor::executeFree(ExecutionState &state,
         // A free operation should be tracked as well
         processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
 
-        it->second->addressSpace.unbindObject(mo);
-
         auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
         assert(thread.has_value() && "MemoryObject created by thread that is not known");
 
         mo->parent->deallocate(mo, thread.value().get());
+        it->second->addressSpace.unbindObject(mo);
 
         if (target)
           bindLocal(target, *it->second, Expr::createPointer(0));

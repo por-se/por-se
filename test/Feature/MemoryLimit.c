@@ -1,4 +1,3 @@
-// XFAIL: *
 // REQUIRES: not-msan
 // Memsan adds additional memory that overflows the counter
 // Check that we properly kill states when we exceed our memory bounds, for both
