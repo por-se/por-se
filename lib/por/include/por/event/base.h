@@ -1,16 +1,16 @@
 #pragma once
 
+#include "por/cone.h"
+#include "por/thread_id.h"
+
 #include <util/iterator_range.h>
 
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <por/thread_id.h>
 
 #ifdef LIBPOR_IN_KLEE
 #include "klee/Fingerprint/MemoryFingerprint.h"
@@ -83,7 +83,7 @@ namespace por::event {
 
 	class event : public std::enable_shared_from_this<event> {
 		std::size_t _depth;
-		std::map<thread_id_t, event*> _cone;
+		por::cone _cone;
 		thread_id_t _tid;
 		const event_kind _kind;
 
@@ -110,7 +110,7 @@ namespace por::event {
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
-		std::map<thread_id_t, event*> const& cone() const noexcept { return _cone; }
+		auto const& cone() const noexcept { return _cone; }
 
 		virtual void mark_as_open(path_t const& path) const {
 			assert(!is_explorable() && "method must be overriden in explorable events!");
@@ -139,50 +139,20 @@ namespace por::event {
 
 		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor)
 		: _depth(immediate_predecessor->_depth + 1)
-		, _cone(immediate_predecessor->_cone)
+		, _cone(*immediate_predecessor.get())
 		, _tid(tid)
 		, _kind(kind)
 		{
-			// immediate_predecessor may be on different thread than this new event, e.g. in thread_init
-			_cone[immediate_predecessor->tid()] = immediate_predecessor.get();
-
 			assert(immediate_predecessor->_depth < _depth);
 			assert(_cone.size() >= immediate_predecessor->_cone.size());
 		}
 
 	private:
-		void insert_predecessor_into_cone(std::shared_ptr<event> const& p) {
-			if(!p)
-				return;
-			for(auto& pred : p->_cone) {
-				auto t = pred.first;
-				auto& event = pred.second;
-				if(_cone.count(t) == 0 || _cone[t]->_depth < event->_depth) {
-					_cone[t] = event;
-				}
-			}
-
-			// p is not part of p->_cone
-			if(_cone.count(p->_tid) == 0 || _cone[p->_tid]->_depth < p->_depth) {
-				_cone[p->_tid] = p.get();
-			}
-		}
-
 		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const* single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
-		: _cone(immediate_predecessor->_cone)
+		: _cone(*immediate_predecessor.get(), (single_other_predecessor ? single_other_predecessor->get() : nullptr), other_predecessors)
 		, _tid(tid)
 		, _kind(kind)
 		{
-			_cone[immediate_predecessor->tid()] = immediate_predecessor.get();
-
-			if(single_other_predecessor) {
-				insert_predecessor_into_cone(*single_other_predecessor);
-			}
-
-			for(auto& op : other_predecessors) {
-				insert_predecessor_into_cone(op);
-			}
-
 			std::size_t max_depth = 0;
 			for(auto& c : _cone) {
 				auto& event = c.second;

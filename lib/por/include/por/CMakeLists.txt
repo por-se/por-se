@@ -13,7 +13,7 @@ endif()
 set(AUTO_GEN_MSG "AUTOMATICALLY GENERATED. DO NOT EDIT!")
 configure_file(${CMAKE_CURRENT_LIST_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h)
 
-target_sources(libpor INTERFACE
+target_sources(libpor PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/base.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/broadcast.h"
@@ -34,8 +34,9 @@ target_sources(libpor INTERFACE
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait1.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait2.h"
 	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
+	"${CMAKE_CURRENT_LIST_DIR}/cone.h"
 
 	"${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h"
 )
 
-target_include_directories(libpor INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/include")
+target_include_directories(libpor PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/include")
