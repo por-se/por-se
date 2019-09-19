@@ -96,7 +96,7 @@ namespace por::event {
 					// insert wait1 events first
 					for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
 						if((*iter)->kind() == event_kind::wait1) {
-							new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
+							new(_predecessors.data() + index) std::shared_ptr<event>(*iter);
 							*iter = nullptr;
 							++index;
 						}

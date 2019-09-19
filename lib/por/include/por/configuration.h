@@ -1383,7 +1383,7 @@ namespace por {
 			for(auto& [tid, c] : event->cone()) {
 				if(c->kind() == por::event::event_kind::wait1) {
 					if(get_cid(c) == cid)
-						wait1s.emplace_back(c->shared_from_this());
+						wait1s.emplace_back(const_cast<por::event::event*>(c)->shared_from_this());
 				}
 			}
 
@@ -1510,6 +1510,7 @@ namespace por {
 			// calculate comb, containing all w1, sig, bro events on same cond outside of [et] \cup succ(e) (which contains e)
 			// we cannot use cond predecessors here as these are not complete
 			std::map<por::event::thread_id_t, std::vector<std::shared_ptr<por::event::event> const*>> comb;
+			std::vector<std::shared_ptr<por::event::event>> tmp_ptrs; // keep at least one shared pointer in scope
 			for(auto& thread_head : _thread_heads) {
 				por::event::event const* pred = thread_head.second.get();
 				do {
@@ -1529,7 +1530,8 @@ namespace por {
 						} else if(pred->kind() != por::event::event_kind::wait2) {
 							// also exclude wait2 events
 							auto tmp = const_cast<por::event::event*>(pred)->shared_from_this();
-							comb[pred->tid()].push_back(&tmp);
+							tmp_ptrs.push_back(tmp);
+							comb[pred->tid()].push_back(&tmp_ptrs.back());
 						}
 					}
 
