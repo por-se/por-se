@@ -202,15 +202,20 @@ namespace por::event {
 
 		virtual event const* thread_predecessor() const = 0;
 
+		bool is_less_than(por::cone const& rhs) const {
+			auto it = rhs.find(_tid);
+			if(it != rhs.end()) {
+				event const& e = *it->second;
+				return _depth < e._depth || _depth == e._depth;
+			}
+			return false;
+		}
+
 		bool is_less_than(event const& rhs) const {
 			if(rhs._tid == _tid) {
 				return _depth < rhs._depth;
 			} else {
-				auto it = rhs._cone.find(_tid);
-				if(it != rhs._cone.end()) {
-					event const& g = *it->second;
-					return _depth < g._depth || _depth == g._depth;
-				}
+				return is_less_than(rhs.cone());
 			}
 			return false;
 		}
