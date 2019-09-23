@@ -504,10 +504,11 @@ private:
 
   void terminateStateOnDeadlock(ExecutionState &state);
 
-  void terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction);
+  void terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, const ThreadId &racingThread,
+                                       KInstruction *racingInstruction);
 
-  bool processMemoryAccess(ExecutionState &state, const MemoryObject* mo,
-                           ref<Expr> offset, uint8_t type);
+  bool processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref <Expr> &offset, std::size_t numBytes,
+                           MemoryOperation::Type type);
 
   void registerForkInProcessTree(ExecutionState &existing, ExecutionState &fork);
   void registerFork(ExecutionState &state, ExecutionState* fork);

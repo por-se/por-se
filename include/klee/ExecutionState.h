@@ -18,7 +18,7 @@
 
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
-#include "../../lib/Core/MemoryAccessTracker.h"
+#include "../../lib/Core/RaceDetection/DataRaceDetection.h"
 #include "../../lib/Core/MemoryState.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
@@ -86,8 +86,8 @@ private:
 
   bool onlyOneThreadRunnableSinceEpochStart;
 
-  /// @brief the tracker that will keep all memory access
-  MemoryAccessTracker memAccessTracker;
+  /// @brief tracks and checks all memory accesses
+  DataRaceDetection raceDetection;
 
 public:
   // Execution - Control Flow specific
@@ -217,6 +217,13 @@ public:
     return currentThreadId() == mainThreadId;
   }
 
+  void trackPorEvent(const std::shared_ptr<por::event::event>& evt) {
+  }
+
+  const auto& getDataRaceStats() const {
+    return raceDetection.getStats();
+  }
+
   /// @brief will create a new thread
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
@@ -234,8 +241,6 @@ public:
 
   /// @brief update the current scheduled thread
   void scheduleNextThread(const ThreadId &tid);
-
-  void trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type);
 
   void popFrameOfCurrentThread();
 

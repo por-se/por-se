@@ -22,7 +22,6 @@ set(CORE_COMPONENTS
   MemoryManager.cpp
   MemoryState.cpp
   PTree.cpp
-  MemoryAccessTracker.cpp
   Searcher.cpp
   SeedInfo.cpp
   SpecialFunctionHandler.cpp
@@ -31,6 +30,9 @@ set(CORE_COMPONENTS
   TimingSolver.cpp
   UserSearcher.cpp
   por/PorEventManager.cpp
+  RaceDetection/DataRaceDetection.cpp
+  RaceDetection/ObjectAccesses.cpp
+  RaceDetection/EpochMemoryAccesses.cpp
 )
 
 klee_add_component(kleeCore ${CORE_COMPONENTS})

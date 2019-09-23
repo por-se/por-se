@@ -538,6 +538,9 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
       *fSchedules << tid << "\n";
     }
 
+    auto fDataRaceStats = openTestFile("race-stats.json", id);
+    *fDataRaceStats << state.getDataRaceStats();
+
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
       m_pathWriter->readStream(m_interpreter->getPathStreamID(state),
@@ -1577,6 +1580,11 @@ int main(int argc, char **argv, char **envp) {
     << "KLEE: done: valid queries = " << queriesValid << "\n"
     << "KLEE: done: invalid queries = " << queriesInvalid << "\n"
     << "KLEE: done: query cex = " << queryCounterexamples << "\n";
+
+  if (true) {
+    handler->getInfoStream()
+      << "KLEE: done: data race detection stats = " << DataRaceDetection::getGlobalStats();
+  }
 
   std::stringstream stats;
   stats << "\n";

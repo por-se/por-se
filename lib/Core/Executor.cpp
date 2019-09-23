@@ -16,7 +16,6 @@
 #include "ExternalDispatcher.h"
 #include "ImpliedValue.h"
 #include "Memory.h"
-#include "MemoryAccessTracker.h"
 #include "MemoryManager.h"
 #include "MemoryState.h"
 #include "PTree.h"
@@ -74,6 +73,9 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "por/configuration.h"
+
+#include "RaceDetection/DataRaceDetection.h"
+#include "RaceDetection/TimingSolverWrapper.h"
 
 #include <algorithm>
 #include <cassert>
@@ -1805,7 +1807,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       if (mo) {
-        processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::ALLOC_ACCESS);
+        processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::ALLOC);
 
         if ((WordSize == Expr::Int64) && (mo->address & 15) &&
             requires16ByteAlignment) {
@@ -1984,7 +1986,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // this means that we need to check these memory accesses
       std::vector<const MemoryObject*> freedAllocas = thread.stack.back().allocas;
       for (auto mo : freedAllocas) {
-        processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+        processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
       }
 
       state.popFrameOfCurrentThread();
@@ -4100,7 +4102,7 @@ void Executor::executeAlloc(ExecutionState &state,
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
-      processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::ALLOC_ACCESS);
+      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::ALLOC);
 
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
@@ -4122,7 +4124,9 @@ void Executor::executeAlloc(ExecutionState &state,
         if (PruneStates) {
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
-        processMemoryAccess(state, reallocatedObject, nullptr, MemoryAccessTracker::FREE_ACCESS);
+
+        processMemoryAccess(state, reallocatedObject, nullptr, 0, MemoryOperation::Type::FREE);
+
         reallocatedObject->parent->deallocate(reallocatedObject, thread);
         state.addressSpace.unbindObject(reallocatedObject);
       }
@@ -4242,7 +4246,7 @@ void Executor::executeFree(ExecutionState &state,
           it->second->memoryState.unregisterWrite(*mo, *os);
 
         // A free operation should be tracked as well
-        processMemoryAccess(*it->second, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+        processMemoryAccess(*it->second, mo, nullptr, 0, MemoryOperation::Type::FREE);
 
         auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
         assert(thread.has_value() && "MemoryObject created by thread that is not known");
@@ -4354,12 +4358,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           if (PruneStates) {
             state.memoryState.registerWrite(address, *mo, *wos, bytes);
           }
-          processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
+          processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
         }          
       } else {
         ref<Expr> result = os->read(offset, type);
 
-        processMemoryAccess(state, mo, offset, MemoryAccessTracker::READ_ACCESS);
+        processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
         
         if (interpreterOpts.MakeConcreteSymbolic)
           result = replaceReadWithSymbolic(state, result);
@@ -4409,14 +4413,14 @@ void Executor::executeMemoryOperation(ExecutionState &state,
           if (PruneStates) {
             bound->memoryState.registerWrite(address, *mo, *wos, bytes);
           }
-          processMemoryAccess(state, mo, offset, MemoryAccessTracker::WRITE_ACCESS);
+          processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
         }
       } else {
         ref<Expr> offset = mo->getOffsetExpr(address);
         ref<Expr> result = os->read(offset, type);
         bindLocal(target, *bound, result);
 
-        processMemoryAccess(state, mo, offset, MemoryAccessTracker::READ_ACCESS);
+        processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
       }
     }
 
@@ -4544,6 +4548,11 @@ void Executor::runFunctionAsMain(Function *f,
 
   // This creates a new configuration with one thread (aka our main thread)
   state->porConfiguration = std::make_unique<por::configuration>();
+
+  // With the initial creation of the por configuration, some events are automatically created
+  for (auto& event : state->porConfiguration->schedule()) {
+    state->trackPorEvent(event);
+  }
 
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
@@ -5082,7 +5091,7 @@ void Executor::exitThread(ExecutionState &state) {
         state.memoryState.unregisterWrite(*mo, *os);
       }
 
-      processMemoryAccess(state, mo, nullptr, MemoryAccessTracker::FREE_ACCESS);
+      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
 
       state.addressSpace.unbindObject(mo);
     }
@@ -5093,121 +5102,79 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
   state.threadSchedulingEnabled = enabled;
 }
 
-bool Executor::processMemoryAccess(ExecutionState &state, const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  MemoryAccess access;
-  access.offset = offset;
-  access.type = type;
-  access.safeMemoryAccess = false;
-  access.atomicMemoryAccess = state.atomicPhase;
+bool
+Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref<Expr> &offset,
+                              std::size_t numBytes, MemoryOperation::Type type) {
+  if (!state.threadSchedulingEnabled) {
+    // These accesses are always safe and do not need to be tracked
+    return true;
+  }
 
-  KInstruction* racingInstruction = nullptr;
-  MemAccessSafetyResult result = state.memAccessTracker.testIfUnsafeMemoryAccess(mo->getId(), access);
-  if (result.possibleCandidates.empty()) {
-    access.safeMemoryAccess = result.wasSafe;
-    if (!result.wasSafe) {
-      racingInstruction = result.racingAccess.instruction;
-    }
-  } else {
-    // First build one big expression to test if one of them matches
-    ref<Expr> query = ConstantExpr::create(1, Expr::Bool);
+  MemoryOperation operation{};
+  operation.object = mo;
+  operation.offset = offset;
+  operation.numBytes = numBytes;
+  operation.tid = state.currentThreadId();
+  operation.instruction = state.currentThread().prevPc;
+  operation.type = type;
 
-    for (auto& candidateIt : result.possibleCandidates) {
-      ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
-      query = AndExpr::create(query, condition);
-    }
-
-    solver->setTimeout(coreSolverTimeout);
-    bool noViolation = true;
-    bool solverSuccessful = solver->mustBeTrue(state, query, noViolation);
-    solver->setTimeout(time::Span());
-
-    if (!solverSuccessful) {
-      klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
-      return true;
-    }
-
-    if (!noViolation) {
-      // So we now know that at least one of the possible candidates match
-      // Now test every one of them with the solver to know the exact one
-      for (auto &candidateIt : result.possibleCandidates) {
-        ref<Expr> condition = NeExpr::create(offset, candidateIt.offset);
-
-        solver->setTimeout(coreSolverTimeout);
-        bool alwaysDifferent = true;
-        solverSuccessful = solver->mustBeTrue(state, condition, alwaysDifferent);
-        solver->setTimeout(time::Span());
-
-        if (!solverSuccessful) {
-          klee_warning("Solver could not complete query for offset; Skipping possible unsafe mem access test");
-          continue;
-        }
-
-        if (!alwaysDifferent) {
-          // Now we know that both can be equal!
-
-          // the error is that both offsets point to the same memory region so go
-          // ahead and add the constraint that they are equal
-          addConstraint(state, EqExpr::create(offset, candidateIt.offset));
-
-          // Extract all important info in order to generate a proper report we should
-          // probably be showing info about which thread was causing the race
-          access.safeMemoryAccess = false;
-          racingInstruction = candidateIt.instruction;
-
-          break;
-        }
-      }
-
-      // Final step test if it is possible that this will not trigger an unsafe memory
-      // access. If there is a possibility that this is safe, then we want to follow these
-      // states as well
-
-      ref<Expr> unsafeQuery = ConstantExpr::create(1, Expr::Bool);
-
-      for (auto& candidateIt : result.possibleCandidates) {
-        ref<Expr> condition = EqExpr::create(offset, candidateIt.offset);
-        unsafeQuery = AndExpr::create(unsafeQuery, condition);
-      }
-
-      solver->setTimeout(coreSolverTimeout);
-      bool canBeSafe = true;
-      solverSuccessful = solver->mayBeFalse(state, unsafeQuery, canBeSafe);
-      solver->setTimeout(time::Span());
-
-      if (!solverSuccessful) {
-        klee_warning("Solver could not complete query for offset; Skipping possible safe mem access path");
-        return true;
-      } else if (canBeSafe) {
-        fork(state, query, true);
-      }
+  if (!operation.isAlloc() && !operation.isFree() && state.atomicPhase) {
+    if (operation.isRead()) {
+      operation.type = MemoryOperation::Type::ATOMIC_READ;
     } else {
-      // We were not successful, so go ahead and add the constraint
-      // that they are always unequal
-      addConstraint(state, query);
+      operation.type = MemoryOperation::Type::ATOMIC_WRITE;
     }
   }
 
-  if (!access.safeMemoryAccess) {
-    terminateStateOnUnsafeMemAccess(state, mo, racingInstruction);
-  } else {
-    if (!access.atomicMemoryAccess) {
-      const ThreadId& tid = state.currentThreadId();
+  WrappedTimingSolver solv(state, *solver, coreSolverTimeout);
 
-      for (auto dep : result.dataDependencies) {
-        uint64_t scheduleIndex = dep.second;
-        const ThreadId& dTid = dep.first;
+  auto result = state.raceDetection.isDataRace(state.porConfiguration, solv, operation);
+  if (!result.has_value()) {
+    klee_warning("Failure at determining whether an accesses races - assuming safe access");
 
-        state.memAccessTracker.registerThreadDependency(tid, dTid, scheduleIndex);
+    if (!state.onlyOneThreadRunnableSinceEpochStart) {
+      state.raceDetection.trackAccess(state.porConfiguration, operation);
+    }
+    return true;
+  }
+
+  if (result->isRace) {
+    // So two important cases: always racing or only racing with specific symbolic values
+    if (result->canBeSafe) {
+      auto statePair = fork(state, result->conditionToBeSafe, true);
+
+      auto safeState = statePair.first;
+      auto unsafeState = statePair.second;
+
+      assert(safeState != nullptr && unsafeState != nullptr && "Solver returned different results the second time");
+
+      terminateStateOnUnsafeMemAccess(*unsafeState, mo, result->racingThread, result->racingInstruction);
+
+      if (!state.onlyOneThreadRunnableSinceEpochStart) {
+        safeState->raceDetection.trackAccess(state.porConfiguration, operation);
       }
+
+      return safeState == &state;
+    } else {
+      // Now the racing part
+      terminateStateOnUnsafeMemAccess(state, mo, result->racingThread, result->racingInstruction);
+      return false;
+    }
+  } else {
+    if (result->hasNewConstraints) {
+      addConstraint(state, result->newConstraints);
     }
 
-    state.trackMemoryAccess(mo, offset, type);
+    if (!state.onlyOneThreadRunnableSinceEpochStart) {
+      state.raceDetection.trackAccess(state.porConfiguration, operation);
+    }
+    return true;
   }
-
-  return access.safeMemoryAccess;
 }
 
-void Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, KInstruction *racingInstruction) {
+void
+Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObject *mo, const ThreadId &racingThread,
+                                          KInstruction *racingInstruction) {
   std::string TmpStr;
   llvm::raw_string_ostream os(TmpStr);
   os << "Unsafe access to memory from multiple threads\nAffected memory: ";
@@ -5217,8 +5184,11 @@ void Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const Memo
   os << memInfo << "\n";
 
   const InstructionInfo &ii = *racingInstruction->info;
-  if (ii.file != "")
-    os << "Racing instruction: " << ii.file << ":" << ii.line << "\n";
+  if (!ii.file.empty()) {
+    os << state.currentThreadId() << " races with " << racingThread << " instruction: " << ii.file << ":" << ii.line << "\n";
+  } else {
+    os << state.currentThreadId() << " races with " << racingThread << " instruction unknown\n";
+  }
 
   terminateStateOnError(state, "thread unsafe memory access",
                         UnsafeMemoryAccess, nullptr, os.str());

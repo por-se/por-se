@@ -20,7 +20,6 @@
 #include "klee/Thread.h"
 
 #include "Memory.h"
-#include "MemoryAccessTracker.h"
 #include "MemoryState.h"
 #include "MemoryManager.h"
 #include "PTree.h"
@@ -100,7 +99,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     lostNotifications(state.lostNotifications),
     currentSchedulingIndex(state.currentSchedulingIndex),
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
-    memAccessTracker(state.memAccessTracker),
+    raceDetection(state.raceDetection),
     threads(state.threads),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
@@ -189,12 +188,6 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
   // New threads are by default directly runnable
   runnableThreads.insert(tid);
 
-  // We cannot sync the current thread with the others since we cannot
-  // infer any knowledge from them
-  memAccessTracker.registerThreadDependency(tid,
-                                            currentThreadId(),
-                                            currentSchedulingIndex);
-
   return newThread;
 }
 
@@ -209,8 +202,6 @@ void ExecutionState::scheduleNextThread(const ThreadId &tid) {
     ptreeNode->schedulingDecision.scheduledThread = tid;
     ptreeNode->schedulingDecision.epochNumber = schedulingHistory.size();
   }
-
-  memAccessTracker.scheduledNewThread(tid);
 
   // So it can happen that this is the first execution of the thread since it was waiting
   // so we might have to disable thread scheduling again
@@ -259,12 +250,6 @@ void ExecutionState::wakeUpThread(const ThreadId &tid) {
     thread->get().state = ThreadState::Runnable;
 
     thread->get().waitingHandle = 0;
-
-    // One thread has woken up another one so make sure we remember that they
-    // are at sync in this moment
-    memAccessTracker.registerThreadDependency(tid,
-                                              currentThreadId(),
-                                              currentSchedulingIndex);
   }
 }
 
@@ -275,31 +260,9 @@ void ExecutionState::exitThread(const ThreadId &tid) {
   thread->get().state = ThreadState::Exited;
   runnableThreads.erase(tid);
 
-  if (currentThreadId() != tid) {
-    memAccessTracker.registerThreadDependency(tid,
-                                              currentThreadId(),
-                                              currentSchedulingIndex);
-  }
-
    // Now remove all stack frames
    while (!thread->get().stack.empty()) {
     popFrameOfThread(&thread->get());
-  }
-}
-
-void ExecutionState::trackMemoryAccess(const MemoryObject* mo, ref<Expr> offset, uint8_t type) {
-  // We do not need to track the memory access for now
-  if (!onlyOneThreadRunnableSinceEpochStart) {
-    MemoryAccess access;
-    access.type = type;
-    access.offset = offset;
-    access.atomicMemoryAccess = atomicPhase;
-    access.safeMemoryAccess = !threadSchedulingEnabled || atomicPhase;
-
-    // Using the prevPc here since the instruction will already be iterated
-    access.instruction = currentThread().prevPc;
-
-    memAccessTracker.trackMemoryAccess(mo->getId(), access);
   }
 }
 

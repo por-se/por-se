@@ -110,7 +110,8 @@ bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> pat
     llvm::errs() << "\n";
   }
 
-  state.porConfiguration->local(state.currentThreadId(), std::move(path));
+  auto evt = state.porConfiguration->local(state.currentThreadId(), std::move(path));
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_local);
@@ -126,7 +127,9 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
+  auto evts = state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
+  state.trackPorEvent(evts.first);
+  state.trackPorEvent(evts.second);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_thread_create);
@@ -158,7 +161,8 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and exited thread " << tid << "\n";
   }
   
-  state.porConfiguration->exit_thread(tid);
+  auto evt = state.porConfiguration->exit_thread(tid);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_thread_exit);
@@ -172,7 +176,8 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
   
-  state.porConfiguration->join_thread(state.currentThreadId(), joinedThread);
+  auto evt = state.porConfiguration->join_thread(state.currentThreadId(), joinedThread);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_thread_join);
@@ -187,7 +192,8 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
     llvm::errs() << " on mutex " << mId << "\n";
   }
   
-  state.porConfiguration->create_lock(state.currentThreadId(), mId);
+  auto evt = state.porConfiguration->create_lock(state.currentThreadId(), mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_lock_create);
@@ -201,7 +207,8 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->destroy_lock(state.currentThreadId(), mId);
+  auto evt = state.porConfiguration->destroy_lock(state.currentThreadId(), mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_lock_destroy);
@@ -215,7 +222,8 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->acquire_lock(state.currentThreadId(), mId);
+  auto evt = state.porConfiguration->acquire_lock(state.currentThreadId(), mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_lock_acquire);
@@ -229,7 +237,8 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->release_lock(state.currentThreadId(), mId);
+  auto evt = state.porConfiguration->release_lock(state.currentThreadId(), mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_lock_release);
@@ -244,7 +253,8 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  state.porConfiguration->create_cond(state.currentThreadId(), cId);
+  auto evt = state.porConfiguration->create_cond(state.currentThreadId(), cId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_condition_variable_create);
@@ -258,7 +268,8 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
+  auto evt = state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_condition_variable_destroy);
@@ -272,7 +283,8 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
 
-  state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
+  auto evt = state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_signal);
@@ -291,7 +303,8 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
     llvm::errs() << "\n";
   }
 
-  state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, threads);
+  auto evt = state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, threads);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_broadcast);
@@ -305,7 +318,8 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  state.porConfiguration->wait1(state.currentThreadId(), cId, mId);
+  auto evt = state.porConfiguration->wait1(state.currentThreadId(), cId, mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_wait1);
@@ -319,7 +333,8 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  state.porConfiguration->wait2(state.currentThreadId(), cId, mId);
+  auto evt = state.porConfiguration->wait2(state.currentThreadId(), cId, mId);
+  state.trackPorEvent(evt);
 
   checkIfCatchUpIsNeeded(state);
   registerStandbyState(state, por_wait2);
