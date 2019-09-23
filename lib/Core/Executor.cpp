@@ -4549,11 +4549,6 @@ void Executor::runFunctionAsMain(Function *f,
   // This creates a new configuration with one thread (aka our main thread)
   state->porConfiguration = std::make_unique<por::configuration>();
 
-  // With the initial creation of the por configuration, some events are automatically created
-  for (auto& event : state->porConfiguration->schedule()) {
-    state->trackPorEvent(event);
-  }
-
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
   thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());

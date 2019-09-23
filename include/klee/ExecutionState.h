@@ -217,9 +217,6 @@ public:
     return currentThreadId() == mainThreadId;
   }
 
-  void trackPorEvent(const std::shared_ptr<por::event::event>& evt) {
-  }
-
   const auto& getDataRaceStats() const {
     return raceDetection.getStats();
   }

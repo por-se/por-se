@@ -1581,10 +1581,8 @@ int main(int argc, char **argv, char **envp) {
     << "KLEE: done: invalid queries = " << queriesInvalid << "\n"
     << "KLEE: done: query cex = " << queryCounterexamples << "\n";
 
-  if (true) {
-    handler->getInfoStream()
-      << "KLEE: done: data race detection stats = " << DataRaceDetection::getGlobalStats();
-  }
+  handler->getInfoStream()
+    << "KLEE: done: data race detection stats = " << DataRaceDetection::getGlobalStats();
 
   std::stringstream stats;
   stats << "\n";
