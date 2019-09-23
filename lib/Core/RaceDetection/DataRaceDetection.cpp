@@ -1,10 +1,10 @@
-#include <iostream>
-#include <iomanip>
-#include <chrono>
+#include "DataRaceDetection.h"
 
 #include "llvm/Support/CommandLine.h"
 
-#include "DataRaceDetection.h"
+#include <iostream>
+#include <iomanip>
+#include <chrono>
 
 using namespace klee;
 
@@ -217,7 +217,7 @@ DataRaceDetection::isDataRaceSolver(const std::unique_ptr<por::configuration>& c
         // So if we could actually make a bounds check and the result
         // was that the accesses are not overlapping, then we do not
         // have to check this combination with the solver
-        auto inBounds = operation.areOverlappingBytesAccessed(access);
+        auto inBounds = operation.isOverlappingWith(access);
         if (inBounds.has_value() && !inBounds.value()) {
           continue;
         }
@@ -375,7 +375,7 @@ DataRaceDetection::isDataRaceFastPath(const std::unique_ptr<por::configuration>&
 
         // So now we know that every other combination will actually race.
         // Therefore, we do not have to check any other access type, but only have to check the offsets
-        auto inBounds = operation.areOverlappingBytesAccessed(op);
+        auto inBounds = operation.isOverlappingWith(op);
         if (!inBounds.has_value()) {
           canGiveDefiniteResult = false;
           continue;

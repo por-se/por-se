@@ -70,7 +70,7 @@ namespace klee {
       return boundStart1 >= boundStart2 && boundEnd1 <= boundEnd2;
     };
 
-    [[nodiscard]] std::optional<bool> areOverlappingBytesAccessed(const AccessMetaData& data) const {
+    [[nodiscard]] std::optional<bool> isOverlappingWith(const AccessMetaData& data) const {
       assert(!isAlloc() && !isFree() && !data.isAlloc() && !data.isFree());
 
       if (offset == data.offset) {

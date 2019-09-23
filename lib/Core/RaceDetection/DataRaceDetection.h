@@ -1,12 +1,12 @@
 #pragma once
 
+#include "CommonTypes.h"
+#include "EpochMemoryAccesses.h"
+
+#include "por/configuration.h"
+
 #include <deque>
 #include <unordered_map>
-#include <por/configuration.h>
-
-#include "CommonTypes.h"
-
-#include "EpochMemoryAccesses.h"
 
 namespace klee {
   class DataRaceDetection {

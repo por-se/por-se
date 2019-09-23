@@ -4,7 +4,7 @@ using namespace klee;
 
 std::shared_ptr<ObjectAccesses::OperationList> ObjectAccesses::OperationList::replace(
         const MemoryOperation& op, const void* from, std::size_t at) {
-  assert(at >= 0 && at < list.size());
+  assert(at < list.size());
 
   if (from == owner) {
     auto& data = list[at];
