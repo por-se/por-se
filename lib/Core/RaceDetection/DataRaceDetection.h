@@ -45,14 +45,14 @@ namespace klee {
 
     private:
       std::optional<RaceDetectionResult>
-      isDataRaceSolver(const std::unique_ptr<por::configuration>& cfg,
-                       const SolverInterface &interface,
-                       const MemoryOperation& operation);
+      SolverPath(const std::unique_ptr<por::configuration>& cfg,
+                 const SolverInterface &interface,
+                 const MemoryOperation& operation);
 
       /// The fast-path tries to check if the access is safe without using the solver
       std::optional<RaceDetectionResult>
-      isDataRaceFastPath(const std::unique_ptr<por::configuration>& cfg,
-                         const MemoryOperation& operation);
+      FastPath(const std::unique_ptr<por::configuration>& cfg,
+               const MemoryOperation& operation);
 
       EpochMemoryAccesses& getAccessesAfter(const por::event::event& evt) {
         auto it = accessesV2.find(&evt);

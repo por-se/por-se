@@ -94,7 +94,7 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
   auto clockStart = std::chrono::steady_clock::now();
 
   // Test if we can try a fast path -> races with a concrete offset or alloc/free
-  const auto& easyResult = isDataRaceFastPath(cfg, operation);
+  const auto& easyResult = FastPath(cfg, operation);
 
   if (easyResult.has_value()) {
     // So if the fast path could produce any definite claims, then either
@@ -125,7 +125,7 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
     return easyResult;
   }
 
-  const auto& solverResult = isDataRaceSolver(cfg, interface, operation);
+  const auto& solverResult = SolverPath(cfg, interface, operation);
 
   stats.numSolverRaceChecks++;
   globalStats.numSolverRaceChecks++;
@@ -168,9 +168,9 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
 }
 
 std::optional<RaceDetectionResult>
-DataRaceDetection::isDataRaceSolver(const std::unique_ptr<por::configuration>& cfg,
-                                    const SolverInterface &interface,
-                                    const MemoryOperation &operation) {
+DataRaceDetection::SolverPath(const std::unique_ptr<por::configuration>& cfg,
+                              const SolverInterface &interface,
+                              const MemoryOperation &operation) {
   // So we have to check if we have potentially raced with any thread
   const auto& threadsToCheck = cfg->thread_heads();
   auto it = threadsToCheck.find(operation.tid);
@@ -316,8 +316,8 @@ DataRaceDetection::isDataRaceSolver(const std::unique_ptr<por::configuration>& c
 }
 
 std::optional<RaceDetectionResult>
-DataRaceDetection::isDataRaceFastPath(const std::unique_ptr<por::configuration>& cfg,
-                                      const MemoryOperation& operation) {
+DataRaceDetection::FastPath(const std::unique_ptr<por::configuration>& cfg,
+                            const MemoryOperation& operation) {
   // So we have to check if we have potentially raced with any thread
   const auto& threadsToCheck = cfg->thread_heads();
   auto it = threadsToCheck.find(operation.tid);

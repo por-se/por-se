@@ -75,7 +75,7 @@
 #include "por/configuration.h"
 
 #include "RaceDetection/DataRaceDetection.h"
-#include "RaceDetection/TimingSolverWrapper.h"
+#include "RaceDetection/StateBoundTimingSolver.h"
 
 #include <algorithm>
 #include <cassert>
@@ -5121,7 +5121,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
     }
   }
 
-  WrappedTimingSolver solv(state, *solver, coreSolverTimeout);
+  StateBoundTimingSolver solv(state, *solver, coreSolverTimeout);
 
   auto result = state.raceDetection.isDataRace(state.porConfiguration, solv, operation);
   if (!result.has_value()) {

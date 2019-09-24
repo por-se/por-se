@@ -7,14 +7,14 @@
 #include "CommonTypes.h"
 
 namespace klee {
-  class WrappedTimingSolver : public SolverInterface {
+  class StateBoundTimingSolver : public SolverInterface {
     private:
       ExecutionState& state;
       TimingSolver& solver;
       time::Span timeout;
 
     public:
-      WrappedTimingSolver(ExecutionState& st, TimingSolver& s, time::Span t) : state(st), solver(s), timeout(t) {};
+      StateBoundTimingSolver(ExecutionState& st, TimingSolver& s, time::Span t) : state(st), solver(s), timeout(t) {};
 
       [[nodiscard]] std::optional<bool> mustBeTrue(ref<Expr> expr) const override {
         solver.setTimeout(timeout);
