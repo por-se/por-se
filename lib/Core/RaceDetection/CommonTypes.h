@@ -87,8 +87,8 @@ namespace klee {
       // Both overlap if one is not completely placed before the other
       // Note that we cannot overflow since these bytes have to be accessed and we currently
       // do not support pointer addresses with more than 64 bits
-      auto boundEnd1 = boundStart1 + numBytes;
-      auto boundEnd2 = boundStart2 + data.numBytes;
+      auto boundEnd1 = boundStart1 + numBytes - 1;
+      auto boundEnd2 = boundStart2 + data.numBytes - 1;
 
       return !(boundStart1 > boundEnd2 || boundStart2 > boundEnd1);
     };

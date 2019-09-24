@@ -186,6 +186,8 @@ DataRaceDetection::isDataRaceSolver(const std::unique_ptr<por::configuration>& c
 
     const auto* evt = pair.second.get();
     for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
+      assert(evt->tid() != operation.tid);
+
       auto memAccesses = getAccessesAfter(*evt);
       auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object);
 
@@ -339,6 +341,8 @@ DataRaceDetection::isDataRaceFastPath(const std::unique_ptr<por::configuration>&
 
     const auto* evt = pair.second.get();
     for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
+      assert(evt->tid() != operation.tid);
+
       auto memAccesses = getAccessesAfter(*evt);
       auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object);
 
