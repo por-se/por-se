@@ -9,7 +9,9 @@
 using namespace klee;
 
 namespace {
-  llvm::cl::opt<bool> DebugDrd("debug-drd", llvm::cl::init(false));
+  llvm::cl::opt<bool> DebugDrd("debug-drd",
+                               llvm::cl::desc("Outputs debug info on stderr about the data race detection"),
+                               llvm::cl::init(false));
 
   DataRaceDetection::Stats globalStats;
 }

@@ -24,7 +24,7 @@ namespace klee {
       };
 
     private:
-      std::unordered_map<const por::event::event*, EpochMemoryAccesses> accessesV2;
+      std::unordered_map<const por::event::event*, EpochMemoryAccesses> accesses;
 
       Stats stats;
 
@@ -55,12 +55,12 @@ namespace klee {
                const MemoryOperation& operation);
 
       EpochMemoryAccesses& getAccessesAfter(const por::event::event& evt) {
-        auto it = accessesV2.find(&evt);
-        if (it != accessesV2.end()) {
+        auto it = accesses.find(&evt);
+        if (it != accesses.end()) {
           return it->second;
         }
 
-        auto insertIt = accessesV2.emplace(&evt, EpochMemoryAccesses{});
+        auto insertIt = accesses.emplace(&evt, EpochMemoryAccesses{});
         assert(insertIt.second);
         return insertIt.first->second;
       };
