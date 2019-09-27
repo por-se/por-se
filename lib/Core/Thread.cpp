@@ -87,10 +87,6 @@ ThreadId Thread::getThreadId() const {
   return tid;
 }
 
-ref<Expr> Thread::getRuntimeStructPtr() const {
-  return runtimeStructPtr;
-}
-
 void Thread::popStackFrame() {
   stack.pop_back();
 }

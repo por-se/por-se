@@ -11,8 +11,10 @@
 #include "kpr/internal.h"
 
 static kpr_thread mainThread;
+static _Thread_local kpr_thread* ownThread = NULL;
+
 pthread_t pthread_self(void) {
-  void* d = klee_get_thread_runtime_struct_ptr();
+  void* d = ownThread;
 
   if (d == NULL) {
     // Main thread will not have any start argument so make sure that we pass the correct one
@@ -27,9 +29,9 @@ int pthread_equal(pthread_t th1, pthread_t th2) {
 }
 
 static void kpr_wrapper(void* arg) {
-  kpr_thread* thread = (kpr_thread*) arg;
+  ownThread = (kpr_thread*) arg;
 
-  void* ret = thread->startRoutine(thread->startArg);
+  void* ret = ownThread->startRoutine(ownThread->startArg);
   pthread_exit(ret);
 }
 

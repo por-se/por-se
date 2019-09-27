@@ -158,8 +158,6 @@ extern "C" {
 
   void klee_create_thread(void (*start_routine)(void*), void *runtime_struct);
 
-  void* klee_get_thread_runtime_struct_ptr(void);
-
   void klee_preempt_thread(void);
 
   void klee_exit_thread(void) __attribute__ ((__noreturn__));
