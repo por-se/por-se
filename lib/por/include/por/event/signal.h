@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <memory>
 
 namespace {
 	// defined in wait1.h
@@ -23,25 +22,25 @@ namespace por::event {
 		// 1. same-thread predecessor
 		// 2+ previous non-lost sig/bro operations (or cond_create) on same condition variable that did not notify this thread (tid of this signal event)
 		//    (may be a single nullptr if no such sig/bro events exist and only predecessor is condition_variable_create event, which is optional)
-		util::sso_array<std::shared_ptr<event>, 2> _predecessors; // size = 2: optimizing for the case with a single wait1 (hence the nullptr in the latter case)
+		util::sso_array<event const*, 2> _predecessors; // size = 2: optimizing for the case with a single wait1 (hence the nullptr in the latter case)
 
 		cond_id_t _cid;
 
 		exploration_info _info;
 
-	public: // FIXME: should be protected
+	protected:
 		signal(thread_id_t tid,
 			cond_id_t cid,
-			std::shared_ptr<event>&& thread_predecessor,
-			std::shared_ptr<event>&& notified_wait
+			event const& thread_predecessor,
+			event const& notified_wait
 		)
-			: event(event_kind::signal, tid, thread_predecessor, notified_wait)
+			: event(event_kind::signal, tid, thread_predecessor, &notified_wait)
 			, _predecessors{util::create_uninitialized, 2ul}
 			, _cid(cid)
 		{
 			// we perform a very small optimization by allocating the predecessors in uninitialized storage
-			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
-			new(_predecessors.data() + 1) std::shared_ptr<event>(std::move(notified_wait));
+			_predecessors[0] = &thread_predecessor;
+			_predecessors[1] = &notified_wait;
 
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -53,7 +52,7 @@ namespace por::event {
 			assert(this->wait_predecessor()->tid());
 			assert(this->wait_predecessor()->tid() != this->tid());
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
-			assert(wait1_cid(this->wait_predecessor().get()) == this->cid());
+			assert(wait1_cid(this->wait_predecessor()) == this->cid());
 
 			assert(std::distance(this->condition_variable_predecessors().begin(), this->condition_variable_predecessors().end()) == 1);
 			assert(*this->condition_variable_predecessors().begin() == this->wait_predecessor());
@@ -63,29 +62,24 @@ namespace por::event {
 			assert(this->notified_thread() == this->wait_predecessor()->tid());
 		}
 
-		template<typename T>
 		signal(thread_id_t tid,
 			cond_id_t cid,
-			std::shared_ptr<event>&& thread_predecessor,
-			T&& begin_condition_variable_predecessors,
-			T&& end_condition_variable_predecessors
+			event const& thread_predecessor,
+			event const* const* begin_condition_variable_predecessors,
+			event const* const* end_condition_variable_predecessors
 		)
-			: event(event_kind::signal, tid, thread_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
+			: event(event_kind::signal, tid, thread_predecessor, util::make_iterator_range<event const* const*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
 			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
 			, _cid(cid)
 		{
-			// we perform a very small optimization by allocating the predecessors in uninitialized storage
-			new(_predecessors.data() + 0) std::shared_ptr<event>(std::move(thread_predecessor));
+			_predecessors[0] = &thread_predecessor;
 			std::size_t index = 1;
-			if constexpr(!std::is_same_v<std::decay_t<T>, decltype(nullptr)>) {
-				for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
-					assert(iter != nullptr);
-					assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
-					new(_predecessors.data() + index) std::shared_ptr<event>(std::move(*iter));
-				}
+			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
+				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
+				_predecessors[index] = *iter;
 			}
 			if(index == 1) {
-				new(_predecessors.data() + index) std::shared_ptr<event>(nullptr);
+				_predecessors[index] = nullptr;
 			}
 
 			assert(this->thread_predecessor());
@@ -99,18 +93,18 @@ namespace por::event {
 			for(auto& e : this->condition_variable_predecessors()) {
 				assert(!!e && "range should be empty instead of containing nullptr");
 				if(e->kind() == event_kind::signal) {
-					auto sig = static_cast<signal const*>(e.get());
+					auto sig = static_cast<signal const*>(e);
 					assert(!sig->is_lost());
 					assert(sig->notified_thread() != this->tid());
 					assert(sig->cid() == this->cid());
 				} else if(e->kind() == event_kind::broadcast) {
-					auto bro = static_cast<broadcast const*>(e.get());
+					auto bro = static_cast<broadcast const*>(e);
 					assert(!bro->is_lost());
 					assert(!bro->is_notifying_thread(this->tid()));
 					assert(bro->cid() == this->cid());
 				} else {
 					assert(e->kind() == event_kind::condition_variable_create);
-					assert(static_cast<condition_variable_create const*>(e.get())->cid() == this->cid());
+					assert(static_cast<condition_variable_create const*>(e)->cid() == this->cid());
 				}
 			}
 
@@ -121,40 +115,37 @@ namespace por::event {
 
 	public:
 		// notifying signal
-		static std::shared_ptr<event> alloc(
-			std::shared_ptr<unfolding>& unfolding,
+		static event const& alloc(
+			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
-			std::shared_ptr<event> thread_predecessor,
-			std::shared_ptr<event> notified_thread_predecessor
+			event const& thread_predecessor,
+			event const& notified_thread_predecessor
 		) {
-			return deduplicate(unfolding, std::make_shared<signal>(
+			return deduplicate(unfolding, signal(
 				tid,
 				cid,
-				std::move(thread_predecessor),
-				std::move(notified_thread_predecessor)
+				thread_predecessor,
+				notified_thread_predecessor
 			));
 		}
 
 		// lost signal
-		template<typename T>
-		static std::shared_ptr<event> alloc(
-			std::shared_ptr<unfolding>& unfolding,
+		static event const& alloc(
+			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
-			std::shared_ptr<event> thread_predecessor,
-			T begin_condition_variable_predecessors,
-			T end_condition_variable_predecessors
+			event const& thread_predecessor,
+			std::vector<event const*> cond_predecessors
 		) {
-			if constexpr(!std::is_same_v<std::decay_t<T>, decltype(nullptr)>) {
-				std::sort(begin_condition_variable_predecessors, end_condition_variable_predecessors);
-			}
-			return deduplicate(unfolding, std::make_shared<signal>(
+			std::sort(cond_predecessors.begin(), cond_predecessors.end());
+
+			return deduplicate(unfolding, signal(
 				tid,
 				cid,
-				std::move(thread_predecessor),
-				std::move(begin_condition_variable_predecessors),
-				std::move(end_condition_variable_predecessors)
+				thread_predecessor,
+				cond_predecessors.data(),
+				cond_predecessors.data() + cond_predecessors.size()
 			));
 		}
 
@@ -177,52 +168,31 @@ namespace por::event {
 			return "signal";
 		}
 
-		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
+		virtual util::iterator_range<event const* const*> predecessors() const override {
 			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
-				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 			} else {
-				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + 1);
-			}
-		}
-		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
-			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
-				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
-			} else {
-				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + 1);
+				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 1);
 			}
 		}
 
 		virtual event const* thread_predecessor() const override {
-			return _predecessors[0].get();
+			return _predecessors[0];
 		}
 
 		// may return nullptr if signal is lost
-		std::shared_ptr<event>       wait_predecessor()       noexcept {
-			if(!is_lost())
-				return _predecessors[1];
-			return nullptr;
-		}
-		// may return nullptr if signal is lost
-		std::shared_ptr<event> const wait_predecessor() const noexcept {
+		event const* wait_predecessor() const noexcept {
 			if(!is_lost())
 				return _predecessors[1];
 			return nullptr;
 		}
 
 		// may return empty range if no condition variable predecessor other than condition_variable_create exists
-		util::iterator_range<std::shared_ptr<event>*> condition_variable_predecessors() noexcept {
+		util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
 			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
-				return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
+				return util::make_iterator_range<event const* const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
 			} else {
-				return util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr);
-			}
-		}
-		// may return empty range if no condition variable predecessor other than condition_variable_create exists
-		util::iterator_range<std::shared_ptr<event> const*> condition_variable_predecessors() const noexcept {
-			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
-				return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
-			} else {
-				return util::make_iterator_range<std::shared_ptr<event> const*>(nullptr, nullptr);
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 			}
 		}
 

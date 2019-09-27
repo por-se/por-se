@@ -5,7 +5,6 @@
 #include <util/iterator_range.h>
 
 #include <map>
-#include <memory>
 
 namespace por::event {
 	class event;
@@ -30,14 +29,8 @@ namespace por {
 
 		cone(por::event::event const& immediate_predecessor);
 
-		cone(por::event::event const* immediate_predecessor,
-			por::event::event const* single_other_predecessor,
-			util::iterator_range<por::event::event const**> other_predecessors);
-
-		[[deprecated]]
 		cone(por::event::event const& immediate_predecessor,
 			por::event::event const* single_other_predecessor,
-			util::iterator_range<std::shared_ptr<por::event::event>*> other_predecessors);
-
+			util::iterator_range<por::event::event const* const*> other_predecessors);
 	};
 }

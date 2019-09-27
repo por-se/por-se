@@ -4,19 +4,18 @@
 
 #include <cassert>
 #include <array>
-#include <memory>
 
 namespace por::event {
 	class thread_join final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
-		// 2. joined thread
-		std::array<std::shared_ptr<event>, 2> _predecessors;
+		// 2. joined predecessor
+		std::array<event const*, 2> _predecessors;
 
 	protected:
-		thread_join(thread_id_t tid, std::shared_ptr<event>&& thread_predecessor, std::shared_ptr<event>&& joined_thread)
-			: event(event_kind::thread_join, tid, thread_predecessor, joined_thread)
-			, _predecessors{std::move(thread_predecessor), std::move(joined_thread)}
+		thread_join(thread_id_t tid, event const& thread_predecessor, event const& joined_predecessor)
+			: event(event_kind::thread_join, tid, thread_predecessor, &joined_predecessor)
+			, _predecessors{&thread_predecessor, &joined_predecessor}
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -30,18 +29,16 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<event> alloc(
-			std::shared_ptr<unfolding>& unfolding,
+		static event const& alloc(
+			unfolding& unfolding,
 			thread_id_t tid,
-			std::shared_ptr<event> thread_predecessor,
-			std::shared_ptr<event> joined_thread
+			event const& thread_predecessor,
+			event const& joined_predecessor
 		) {
-			return deduplicate(unfolding, std::make_shared<thread_join>(
-				thread_join{
-					tid,
-					std::move(thread_predecessor),
-					std::move(joined_thread)
-				}
+			return deduplicate(unfolding, thread_join(
+				tid,
+				thread_predecessor,
+				joined_predecessor
 			));
 		}
 
@@ -51,19 +48,14 @@ namespace por::event {
 			return "thread_join";
 		}
 
-		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
-			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
-		}
-
-		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
-			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+		virtual util::iterator_range<event const* const*> predecessors() const override {
+			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
 		virtual event const* thread_predecessor() const override {
-			return _predecessors[0].get();
+			return _predecessors[0];
 		}
 
-		std::shared_ptr<event>      & joined_thread()       noexcept { return _predecessors[1]; }
-		std::shared_ptr<event> const& joined_thread() const noexcept { return _predecessors[1]; }
+		event const* joined_thread() const noexcept { return _predecessors[1]; }
 	};
 }

@@ -4,18 +4,17 @@
 
 #include <cassert>
 #include <array>
-#include <memory>
 
 namespace por::event {
 	class thread_init final : public event {
 		// predecessors:
 		// 1. thread creation predecessor (must be a different thread or program init)
-		std::array<std::shared_ptr<event>, 1> _predecessors;
+		std::array<event const*, 1> _predecessors;
 
 	protected:
-		thread_init(thread_id_t tid, std::shared_ptr<event>&& creator)
-			: event(event_kind::thread_init, tid, creator)
-			, _predecessors{std::move(creator)}
+		thread_init(thread_id_t tid, event const& creation_predecessor)
+			: event(event_kind::thread_init, tid, creation_predecessor)
+			, _predecessors{&creation_predecessor}
 		{
 			assert(this->thread_creation_predecessor());
 			assert(this->thread_creation_predecessor()->tid() != this->tid());
@@ -28,16 +27,14 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<event> alloc(
-			std::shared_ptr<unfolding>& unfolding,
+		static event const& alloc(
+			unfolding& unfolding,
 			thread_id_t tid,
-			std::shared_ptr<event> creator
+			event const& creation_predecessor
 		) {
-			return deduplicate(unfolding, std::make_shared<thread_init>(
-				thread_init{
-					tid,
-					std::move(creator)
-				}
+			return deduplicate(unfolding, thread_init(
+				tid,
+				creation_predecessor
 			));
 		}
 
@@ -47,19 +44,14 @@ namespace por::event {
 			return "thread_init";
 		}
 
-		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
-			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
-		}
-
-		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
-			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+		virtual util::iterator_range<event const* const*> predecessors() const override {
+			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
 		virtual event const* thread_predecessor() const override {
 			return nullptr;
 		}
 
-		std::shared_ptr<event>      & thread_creation_predecessor()       noexcept { return _predecessors[0]; }
-		std::shared_ptr<event> const& thread_creation_predecessor() const noexcept { return _predecessors[0]; }
+		event const* thread_creation_predecessor() const noexcept { return _predecessors[0]; }
 	};
 }

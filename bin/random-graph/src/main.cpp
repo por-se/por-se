@@ -205,11 +205,11 @@ int main(int argc, char** argv){
 				for(auto& e : configuration.thread_heads()) {
 					if(e.second->kind() == por::event::event_kind::wait1) {
 						auto& w = e.second;
-						auto* l = &configuration.lock_heads().at(lid);
-						while(l != nullptr && (*w).is_less_than(**l)) {
-							l = por::configuration::get_lock_predecessor(*l);
+						auto* l = configuration.lock_heads().at(lid);
+						while(l != nullptr && w->is_less_than(*l)) {
+							l = por::configuration::get_lock_predecessor(l);
 						}
-						if(l != nullptr && *l == w) {
+						if(l == w) {
 							no_block_on_lock = false;
 						}
 					}
@@ -303,13 +303,13 @@ int main(int argc, char** argv){
 						if(e->tid() == tid || (e->kind() != por::event::event_kind::signal && e->kind() != por::event::event_kind::broadcast))
 							continue;
 						if(e->kind() == por::event::event_kind::signal) {
-							auto sig = static_cast<por::event::signal const*>(e.get());
+							auto sig = static_cast<por::event::signal const*>(e);
 							if(sig->wait_predecessor() == wait1) {
 								cid = cond.first;
 							}
 						} else {
 							assert(e->kind() == por::event::event_kind::broadcast);
-							auto bro = static_cast<por::event::broadcast const*>(e.get());
+							auto bro = static_cast<por::event::broadcast const*>(e);
 							for(auto& w : bro->wait_predecessors()) {
 								if(w == wait1) {
 									cid = cond.first;
@@ -326,11 +326,11 @@ int main(int argc, char** argv){
 				if(cid) {
 					auto lid = 0;
 					for(auto& e : configuration.lock_heads()) {
-						auto l = &e.second;
-						while(l != nullptr && (*wait1).is_less_than(**l)) {
-							l = por::configuration::get_lock_predecessor(*l);
+						auto *l = e.second;
+						while(l != nullptr && wait1->is_less_than(*l)) {
+							l = por::configuration::get_lock_predecessor(l);
 						}
-						if(l != nullptr && *l == wait1) {
+						if(l == wait1) {
 							lid = e.first;
 							auto currently = e.second->kind();
 							if(currently != por::event::event_kind::wait1 && currently != por::event::event_kind::lock_release)
@@ -371,9 +371,9 @@ int main(int argc, char** argv){
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& entry : cex) {
 		auto& c = entry.new_event();
-		std::cerr << c->to_string(true);
-		for(auto it = c->predecessors().begin(), ie = c->predecessors().end(); it != ie; ++it) {
-			if(it == c->predecessors().begin())
+		std::cerr << c.to_string(true);
+		for(auto it = c.predecessors().begin(), ie = c.predecessors().end(); it != ie; ++it) {
+			if(it == c.predecessors().begin())
 				std::cerr << " with predecessor(s): ";
 			std::cerr << (*it)->tid() << "@" << (*it)->depth();
 			if(std::next(it) != ie) {
@@ -398,7 +398,7 @@ int main(int argc, char** argv){
 	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> non_immediate_intra_thread_dependencies;
 	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> intra_thread_dependencies;
 	for(auto& t : configuration.thread_heads()) {
-		open.push_back(t.second.get());
+		open.push_back(t.second);
 	}
 	while(!open.empty()) {
 		por::event::event const* event = open.back();
@@ -411,7 +411,7 @@ int main(int argc, char** argv){
 		threads[tid].push_back(event);
 		bool first = true;
 		for(auto& p : event->predecessors()) {
-			por::event::event const* predecessor = p.get();
+			por::event::event const* predecessor = p;
 			if(visited.count(predecessor) == 0) {
 				open.push_back(predecessor);
 			}

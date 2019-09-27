@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -81,7 +80,7 @@ namespace por::event {
 		}
 	};
 
-	class event : public std::enable_shared_from_this<event> {
+	class event {
 		std::size_t _depth;
 		por::cone _cone;
 		thread_id_t _tid;
@@ -127,6 +126,8 @@ namespace por::event {
 			return true;
 		}
 
+		virtual ~event() = default;
+
 	protected:
 		event(event_kind kind, thread_id_t tid)
 		: _depth(0)
@@ -137,19 +138,18 @@ namespace por::event {
 			assert(kind == event_kind::program_init);
 		}
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event>& immediate_predecessor)
-		: _depth(immediate_predecessor->_depth + 1)
-		, _cone(*immediate_predecessor.get())
+		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor)
+		: _depth(immediate_predecessor._depth + 1)
+		, _cone(immediate_predecessor)
 		, _tid(tid)
 		, _kind(kind)
 		{
-			assert(immediate_predecessor->_depth < _depth);
-			assert(_cone.size() >= immediate_predecessor->_cone.size());
+			assert(immediate_predecessor._depth < _depth);
+			assert(_cone.size() >= immediate_predecessor._cone.size());
 		}
 
-	private:
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const* single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
-		: _cone(*immediate_predecessor.get(), (single_other_predecessor ? single_other_predecessor->get() : nullptr), other_predecessors)
+		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const* single_other_predecessor, util::iterator_range<event const* const*> other_predecessors)
+		: _cone(immediate_predecessor, single_other_predecessor, other_predecessors)
 		, _tid(tid)
 		, _kind(kind)
 		{
@@ -160,11 +160,11 @@ namespace por::event {
 			}
 			_depth = max_depth + 1;
 
-			assert(immediate_predecessor->_depth < _depth);
-			assert(_cone.size() >= immediate_predecessor->_cone.size());
-			if(single_other_predecessor != nullptr && *single_other_predecessor != nullptr) {
-				assert((*single_other_predecessor)->_depth < _depth);
-				assert(_cone.size() >= (*single_other_predecessor)->_cone.size());
+			assert(immediate_predecessor._depth < _depth);
+			assert(_cone.size() >= immediate_predecessor._cone.size());
+			if(single_other_predecessor != nullptr) {
+				assert(single_other_predecessor->_depth < _depth);
+				assert(_cone.size() >= single_other_predecessor->_cone.size());
 			}
 			for(auto& op : other_predecessors) {
 				if(!op)
@@ -174,31 +174,27 @@ namespace por::event {
 			}
 		}
 
-	protected:
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
-		: event(kind, tid, immediate_predecessor, (single_other_predecessor ? &single_other_predecessor : nullptr), other_predecessors)
-		{ }
-
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, util::iterator_range<std::shared_ptr<event>*> other_predecessors)
+		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, util::iterator_range<event const* const*> other_predecessors)
 		: event(kind, tid, immediate_predecessor, nullptr, other_predecessors)
 		{ }
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor, std::shared_ptr<event>& yet_another_predecessor)
-		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(&yet_another_predecessor, &yet_another_predecessor + 1))
-		{ }
+		// FIXME: this is ugly
+		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const& single_other_predecessor, event const* yet_another_predecessor)
+		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<event const* const*>(&yet_another_predecessor, &yet_another_predecessor + 1))
+		{ assert(yet_another_predecessor != nullptr); }
 
-		event(event_kind kind, thread_id_t tid, std::shared_ptr<event> const& immediate_predecessor, std::shared_ptr<event> const& single_other_predecessor)
-		: event(kind, tid, immediate_predecessor, &single_other_predecessor, util::make_iterator_range<std::shared_ptr<event>*>(nullptr, nullptr))
+		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const* single_other_predecessor)
+		: event(kind, tid, immediate_predecessor, single_other_predecessor, util::make_iterator_range<event const* const*>(nullptr, nullptr))
 		{ }
 
 		// defined in unfolding.h
-		static std::shared_ptr<por::event::event> deduplicate(std::shared_ptr<por::unfolding>& unfolding, std::shared_ptr<por::event::event>&& event);
+		static por::event::event const& deduplicate(por::unfolding& unfolding, por::event::event&& event);
+
 
 	public:
 		virtual std::string to_string(bool details = false) const = 0;
 
-		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() = 0;
-		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const = 0;
+		virtual util::iterator_range<event const* const*> predecessors() const = 0;
 
 		virtual event const* thread_predecessor() const = 0;
 

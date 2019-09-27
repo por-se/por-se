@@ -4,20 +4,19 @@
 
 #include <cassert>
 #include <array>
-#include <memory>
 
 namespace por::event {
 	class condition_variable_create final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
-		std::array<std::shared_ptr<event>, 1> _predecessors;
+		std::array<event const*, 1> _predecessors;
 
 		cond_id_t _cid;
 
 	protected:
-		condition_variable_create(thread_id_t tid, cond_id_t cid, std::shared_ptr<event>&& thread_predecessor)
+		condition_variable_create(thread_id_t tid, cond_id_t cid, event const& thread_predecessor)
 			: event(event_kind::condition_variable_create, tid, thread_predecessor)
-			, _predecessors{std::move(thread_predecessor)}
+			, _predecessors{&thread_predecessor}
 			, _cid(cid)
 		{
 			assert(this->thread_predecessor());
@@ -28,18 +27,16 @@ namespace por::event {
 		}
 
 	public:
-		static std::shared_ptr<event> alloc(
-			std::shared_ptr<unfolding>& unfolding,
+		static event const& alloc(
+			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
-			std::shared_ptr<event> thread_predecessor
+			event const& thread_predecessor
 		) {
-			return deduplicate(unfolding, std::make_shared<condition_variable_create>(
-				condition_variable_create{
-					tid,
-					cid,
-					std::move(thread_predecessor)
-				}
+			return deduplicate(unfolding, condition_variable_create(
+				tid,
+				cid,
+				thread_predecessor
 			));
 		}
 
@@ -49,15 +46,12 @@ namespace por::event {
 			return "condition_variable_create";
 		}
 
-		virtual util::iterator_range<std::shared_ptr<event>*> predecessors() override {
-			return util::make_iterator_range<std::shared_ptr<event>*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
-		}
-		virtual util::iterator_range<std::shared_ptr<event> const*> predecessors() const override {
-			return util::make_iterator_range<std::shared_ptr<event> const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
+		virtual util::iterator_range<event const* const*> predecessors() const override {
+			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
 		virtual event const* thread_predecessor() const override {
-			return _predecessors[0].get();
+			return _predecessors[0];
 		}
 
 		cond_id_t cid() const noexcept { return _cid; }

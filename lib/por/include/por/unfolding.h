@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -13,32 +15,33 @@ namespace por {
 	class configuration;
 
 	class unfolding {
-		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::shared_ptr<por::event::event>>> events;
+		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::unique_ptr<por::event::event>>> events;
+		por::event::event const* _root;
 
 		// NOTE: do not use for other purposes, only compares pointers of predecessors
-		bool compare_events(por::event::event const* a, por::event::event const* b) {
-			if(a == b)
+		bool compare_events(por::event::event const& a, por::event::event const& b) {
+			if(&a == &b)
 				return true;
 
-			if(a->tid() != b->tid())
+			if(a.tid() != b.tid())
 				return false;
 
-			if(a->depth() != b->depth())
+			if(a.depth() != b.depth())
 				return false;
 
-			if(a->kind() != b->kind())
+			if(a.kind() != b.kind())
 				return false;
 
-			if(a->kind() == por::event::event_kind::local) {
-				auto alocal = static_cast<por::event::local const*>(a);
-				auto blocal = static_cast<por::event::local const*>(b);
+			if(a.kind() == por::event::event_kind::local) {
+				auto& alocal = static_cast<por::event::local const&>(a);
+				auto& blocal = static_cast<por::event::local const&>(b);
 
-				if(alocal->path() != blocal->path())
+				if(alocal.path() != blocal.path())
 					return false;
 			}
 
-			auto a_preds = a->predecessors();
-			auto b_preds = b->predecessors();
+			auto a_preds = a.predecessors();
+			auto b_preds = b.predecessors();
 			std::size_t a_num_preds = std::distance(a_preds.begin(), a_preds.end());
 			std::size_t b_num_preds = std::distance(b_preds.begin(), b_preds.end());
 
@@ -61,58 +64,63 @@ namespace por {
 			return true;
 		}
 
+		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
+		por::event::event const* store_event(T&& event) {
+			auto&& tuple = std::make_tuple(event.tid(), event.depth(), event.kind());
+			auto&& ptr = std::make_unique<T>(std::forward<T>(event));
+			return events[std::move(tuple)].emplace_back(std::move(ptr)).get();
+		}
+
 	public:
-		unfolding() = delete;
+		unfolding() {
+			_root = store_event(por::event::program_init());
+			mark_as_explored(*_root);
+		}
 		unfolding(unfolding&) = default;
 		unfolding& operator=(unfolding&) = default;
 		unfolding(unfolding&&) = default;
 		unfolding& operator=(unfolding&&) = default;
-		unfolding(std::shared_ptr<por::event::event> root) {
-			events[std::make_tuple(root->tid(), root->depth(), root->kind())].emplace_back(root);
-			mark_as_explored(root);
-		}
 		~unfolding() = default;
 
-		void mark_as_open(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
-			assert(e != nullptr);
-			e->mark_as_open(path);
+		void mark_as_open(por::event::event const& e, por::event::path_t const& path) {
+			e.mark_as_open(path);
 		}
 
-		void mark_as_explored(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
-			assert(e != nullptr);
-			e->mark_as_explored(path);
+		void mark_as_explored(por::event::event const& e, por::event::path_t const& path) {
+			e.mark_as_explored(path);
 		}
 
-		void mark_as_explored(std::shared_ptr<por::event::event> const& e) {
-			assert(e != nullptr);
+		void mark_as_explored(por::event::event const& e) {
 			static por::event::path_t empty;
-			e->mark_as_explored(empty);
+			e.mark_as_explored(empty);
 		}
 
-		bool is_present(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
-			assert(e != nullptr);
-			return e->is_present(path);
+		bool is_present(por::event::event const& e, por::event::path_t const& path) {
+			return e.is_present(path);
 		}
 
-		bool is_explored(std::shared_ptr<por::event::event> const& e, por::event::path_t const& path) {
-			assert(e != nullptr);
-			return e->is_explored(path);
+		bool is_explored(por::event::event const& e, por::event::path_t const& path) {
+			return e.is_explored(path);
 		}
 
-		std::shared_ptr<por::event::event> deduplicate(std::shared_ptr<por::event::event>&& e) {
-			auto it = events.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
+		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
+		por::event::event const& deduplicate(T&& e) {
+			auto it = events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
 			if(it != events.end()) {
 				for(auto& v : it->second) {
-					if(compare_events(e.get(), v.get())) {
+					if(compare_events(e, *v.get())) {
 						stats_inc_event_deduplicated();
-						return v;
+						return *v.get();
 					}
 				}
 			}
 			// new event
-			events[std::make_tuple(e->tid(), e->depth(), e->kind())].emplace_back(e);
-			stats_inc_unique_event(e->kind());
-			return std::move(e);
+			stats_inc_unique_event(e.kind());
+			return *store_event(std::forward<T>(e));
+		}
+
+		por::event::event const& root() {
+			return *_root;
 		}
 
 
@@ -248,7 +256,41 @@ namespace por {
 		}
 	};
 
-	inline std::shared_ptr<por::event::event> por::event::event::deduplicate(std::shared_ptr<por::unfolding>& unfolding, std::shared_ptr<por::event::event>&& event) {
-		return unfolding->deduplicate(std::move(event));
+	inline por::event::event const& por::event::event::deduplicate(por::unfolding& unfolding, por::event::event&& event) {
+		switch(event.kind()) {
+			case por::event::event_kind::local:
+				return unfolding.deduplicate<por::event::local>(std::move(static_cast<por::event::local&&>(event)));
+			case por::event::event_kind::program_init:
+				return unfolding.deduplicate<por::event::program_init>(std::move(static_cast<por::event::program_init&&>(event)));
+			case por::event::event_kind::thread_create:
+				return unfolding.deduplicate<por::event::thread_create>(std::move(static_cast<por::event::thread_create&&>(event)));
+			case por::event::event_kind::thread_join:
+				return unfolding.deduplicate<por::event::thread_join>(std::move(static_cast<por::event::thread_join&&>(event)));
+			case por::event::event_kind::thread_init:
+				return unfolding.deduplicate<por::event::thread_init>(std::move(static_cast<por::event::thread_init&&>(event)));
+			case por::event::event_kind::thread_exit:
+				return unfolding.deduplicate<por::event::thread_exit>(std::move(static_cast<por::event::thread_exit&&>(event)));
+			case por::event::event_kind::lock_create:
+				return unfolding.deduplicate<por::event::lock_create>(std::move(static_cast<por::event::lock_create&&>(event)));
+			case por::event::event_kind::lock_destroy:
+				return unfolding.deduplicate<por::event::lock_destroy>(std::move(static_cast<por::event::lock_destroy&&>(event)));
+			case por::event::event_kind::lock_acquire:
+				return unfolding.deduplicate<por::event::lock_acquire>(std::move(static_cast<por::event::lock_acquire&&>(event)));
+			case por::event::event_kind::lock_release:
+				return unfolding.deduplicate<por::event::lock_release>(std::move(static_cast<por::event::lock_release&&>(event)));
+			case por::event::event_kind::condition_variable_create:
+				return unfolding.deduplicate<por::event::condition_variable_create>(std::move(static_cast<por::event::condition_variable_create&&>(event)));
+			case por::event::event_kind::condition_variable_destroy:
+				return unfolding.deduplicate<por::event::condition_variable_destroy>(std::move(static_cast<por::event::condition_variable_destroy&&>(event)));
+			case por::event::event_kind::wait1:
+				return unfolding.deduplicate<por::event::wait1>(std::move(static_cast<por::event::wait1&&>(event)));
+			case por::event::event_kind::wait2:
+				return unfolding.deduplicate<por::event::wait2>(std::move(static_cast<por::event::wait2&&>(event)));
+			case por::event::event_kind::signal:
+				return unfolding.deduplicate<por::event::signal>(std::move(static_cast<por::event::signal&&>(event)));
+			case por::event::event_kind::broadcast:
+				return unfolding.deduplicate<por::event::broadcast>(std::move(static_cast<por::event::broadcast&&>(event)));
+		}
+
 	}
 }
