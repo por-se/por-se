@@ -3766,7 +3766,7 @@ void Executor::terminateState(ExecutionState &state) {
     scheduleThreads(*toExecute);
 
     if (LogConflictingExtensions) {
-      llvm::errs() << "New Event: " << c.new_event()->to_string(true) << "; Conflicting Event(s): ";
+      llvm::errs() << "New Event: " << c.new_event().to_string(true) << "; Conflicting Event(s): ";
       for(auto& conflict : c.conflicts()) {
         llvm::errs() << conflict->to_string(true);
       }
