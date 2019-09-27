@@ -18,7 +18,11 @@ int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept);
 
 void kpr_check_init_pattern(pthread_internal_t* data, size_t size);
 
+void kpr_check_already_init(pthread_internal_t* data);
+
 #define kpr_check_if_valid(typename, argument) kpr_check_init_pattern((pthread_internal_t*) argument, sizeof(typename));
+
+#define kpr_check_for_double_init(argument) kpr_check_already_init(&argument->magic)
 #define kpr_ensure_valid(argument) argument->magic.magic = PTHREAD_INTERNAL_MAGIC_VALUE
 
 typedef struct {

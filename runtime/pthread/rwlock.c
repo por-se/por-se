@@ -44,6 +44,7 @@ static int rwlock_trywrlock(pthread_rwlock_t* lock) {
 // Now the actual implementation
 
 int pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr) {
+  kpr_check_for_double_init(lock);
   kpr_ensure_valid(lock);
 
   lock->acquiredWriter = NULL;
@@ -71,7 +72,6 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
   pthread_mutex_lock(&lock->mutex);
@@ -94,7 +94,6 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
   pthread_mutex_lock(&lock->mutex);
@@ -105,7 +104,6 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
   pthread_mutex_lock(&lock->mutex);
@@ -128,9 +126,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
-
 
   pthread_mutex_lock(&lock->mutex);
   int result = rwlock_trywrlock(lock);
@@ -140,7 +136,6 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock) {
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock) {
-  klee_toggle_thread_scheduling(0);
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
   pthread_mutex_lock(&lock->mutex);

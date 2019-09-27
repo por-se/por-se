@@ -54,3 +54,9 @@ void kpr_check_init_pattern(pthread_internal_t* obj, size_t size) {
     obj->magic = PTHREAD_INTERNAL_MAGIC_VALUE;
   }
 }
+
+void kpr_check_already_init(pthread_internal_t* obj) {
+  if (obj->magic == PTHREAD_INTERNAL_MAGIC_VALUE) {
+    klee_report_error(__FILE__, __LINE__, "Double init of pthread primitive", "user");
+  }
+}

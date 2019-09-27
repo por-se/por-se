@@ -6,6 +6,7 @@
 #include "kpr/internal.h"
 
 int pthread_barrier_init(pthread_barrier_t *barrier, const pthread_barrierattr_t *attr, unsigned count) {
+  kpr_check_for_double_init(barrier);
   kpr_ensure_valid(barrier);
 
   if (count == 0) {
