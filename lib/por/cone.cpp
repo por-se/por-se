@@ -23,6 +23,15 @@ cone::cone(por::event::event const& immediate_predecessor)
 	_map[immediate_predecessor.tid()] = &immediate_predecessor;
 }
 
+cone::cone(util::iterator_range<por::event::event const* const*> events)
+{
+	for(auto& e : events) {
+		if(e != nullptr) {
+			insert(*e);
+		}
+	}
+}
+
 cone::cone(por::event::event const& immediate_predecessor,
            por::event::event const* single_other_predecessor,
            util::iterator_range<por::event::event const* const*> other_predecessors)
@@ -35,6 +44,8 @@ cone::cone(por::event::event const& immediate_predecessor,
 	}
 
 	for(auto& op : other_predecessors) {
-		insert(*op);
+		if(op != nullptr) {
+			insert(*op);
+		}
 	}
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cone.h"
 #include "event/event.h"
 #include "unfolding.h"
 
@@ -18,31 +19,6 @@ namespace por {
 namespace klee {
 	class ExecutionState;
 	por::configuration* configuration_from_execution_state(klee::ExecutionState const* s);
-}
-
-namespace {
-	// dummy event class to be used to compute a cone for a set of events
-	class dummy : public por::event::event {
-	public:
-		std::string to_string(bool details = false) const override { return ""; }
-		util::iterator_range<por::event::event const* const*> predecessors() const override {
-			return util::make_iterator_range<por::event::event const* const*>(nullptr, nullptr);
-		}
-		virtual event const* thread_predecessor() const override {
-			return nullptr;
-		}
-		dummy(por::event::thread_id_t tid, por::event::event const& immediate_predecessor, std::vector<por::event::event const*>& other_predecessors)
-		: event(por::event::event_kind::wait1, // does not matter, value is not exposed through cone
-		        tid,
-		        immediate_predecessor,
-		        util::make_iterator_range<por::event::event const* const*>(other_predecessors.data(), other_predecessors.data() + other_predecessors.size()))
-		{}
-		dummy(std::vector<por::event::event const*>& predecessors)
-		: dummy(predecessors.front()->tid(), // tid is guaranteed to be part of the cone anyways
-		        **predecessors.front()->predecessors().begin(), // will not be exposed through the cone
-		        predecessors)
-		{}
-	};
 }
 
 namespace por {
@@ -1286,25 +1262,16 @@ namespace por {
 			concurrent_combinations(comb, [&](auto const& M) {
 				bool generate_conflict = false;
 
-				// generate dummy event for its cone
-				std::vector<por::event::event const*> N;
-				N.reserve(M.size());
-				for(auto& m : M) {
-					N.push_back(m);
-				}
-				if(cond_create) {
-					N.push_back(cond_create);
-				}
-				dummy dummy(e.tid(), *et, N);
+				por::cone cone(*et, cond_create, util::make_iterator_range<por::event::event const* const*>(M.data(), M.data() + M.size()));
 
 				// check if [M] \cup [et] != [e] \setminus {e}
 				// NOTE: lock predecessor is an event on the same thread
-				assert(dummy.cone().size() <= e.cone().size());
-				if(dummy.cone().size() != e.cone().size()) {
+				assert(cone.size() <= e.cone().size());
+				if(cone.size() != e.cone().size()) {
 					generate_conflict = true;
 				} else {
 					for(auto& [tid, c] : e.cone()) {
-						if(dummy.cone().at(tid)->is_less_than(*c)) {
+						if(cone.at(tid)->is_less_than(*c)) {
 							generate_conflict = true;
 							break;
 						}
@@ -1334,6 +1301,10 @@ namespace por {
 				}
 
 				// lock predecessor is guaranteed to be in [et] (has to be an aquire/wait2 on the same thread)
+				std::vector<por::event::event const*> N(M);
+				if(cond_create) {
+					N.push_back(cond_create);
+				}
 				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), w1->cid(), *et, *w1->lock_predecessor(), std::move(N)), std::move(conflicts));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
@@ -1342,10 +1313,10 @@ namespace por {
 			return result;
 		}
 
-		static std::vector<por::event::event const*> outstanding_wait1(por::event::cond_id_t cid, por::event::event const& event) {
+		static std::vector<por::event::event const*> outstanding_wait1(por::event::cond_id_t cid, por::cone const& cone) {
 			// collect threads blocked on wait1 on cond cid
 			std::vector<por::event::event const*> wait1s;
-			for(auto& [tid, c] : event.cone()) {
+			for(auto& [tid, c] : cone) {
 				if(c->kind() == por::event::event_kind::wait1) {
 					if(get_cid(c) == cid)
 						wait1s.emplace_back(c);
@@ -1361,7 +1332,7 @@ namespace por {
 			});
 
 			// remove those that have already been notified (so just their w2 event is missing in cone)
-			for(auto& [tid, c] : event.cone()) {
+			for(auto& [tid, c] : cone) {
 				for(auto const* e = c; e != nullptr; e = e->thread_predecessor()) {
 					if(wait1s.empty())
 						break; // no wait1s left
@@ -1408,18 +1379,11 @@ namespace por {
 			assert(!events.empty());
 			if(events.size() == 1) {
 				assert(events.front() != nullptr);
-				return outstanding_wait1(cid, *events.front());
+				return outstanding_wait1(cid, events.front()->cone());
 			}
 
-			// generate dummy event for its cone
-			std::vector<por::event::event const*> N;
-			N.reserve(events.size());
-			for(auto& event : events) {
-				assert(event != nullptr);
-				N.push_back(event);
-			}
-			dummy dummy{N};
-			return outstanding_wait1(cid, dummy);
+			por::cone cone(util::make_iterator_range<por::event::event const* const*>(events.data(), events.data() + events.size()));
+			return outstanding_wait1(cid, cone);
 		}
 
 		std::vector<conflicting_extension> cex_notification(por::event::event const& e) {
@@ -1623,7 +1587,7 @@ namespace por {
 				auto sig = static_cast<por::event::signal const*>(&e);
 
 				// generate set W with all wait1 events in comb and those that are outstanding in [et]
-				std::vector<por::event::event const*> W = outstanding_wait1(cid, *et);
+				std::vector<por::event::event const*> W = outstanding_wait1(cid, et->cone());
 				for(auto& [tid, tooth] : wait1_comb) {
 					W.reserve(W.size() + tooth.size());
 					for(auto& e : tooth) {

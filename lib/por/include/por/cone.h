@@ -29,6 +29,8 @@ namespace por {
 
 		cone(por::event::event const& immediate_predecessor);
 
+		cone(util::iterator_range<por::event::event const* const*> events);
+
 		cone(por::event::event const& immediate_predecessor,
 			por::event::event const* single_other_predecessor,
 			util::iterator_range<por::event::event const* const*> other_predecessors);
