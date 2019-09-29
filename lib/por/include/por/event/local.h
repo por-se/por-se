@@ -2,6 +2,8 @@
 
 #include "base.h"
 
+#include "por/unfolding.h"
+
 #include <cassert>
 #include <array>
 
@@ -36,7 +38,7 @@ namespace por::event {
 			event const& thread_predecessor,
 			path_t path
 		) {
-			return deduplicate(unfolding, local(
+			return unfolding.deduplicate(local(
 				tid,
 				thread_predecessor,
 				std::move(path)

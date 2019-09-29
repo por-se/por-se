@@ -2,6 +2,8 @@
 
 #include "base.h"
 
+#include "por/unfolding.h"
+
 #include <cassert>
 #include <array>
 
@@ -33,7 +35,7 @@ namespace por::event {
 			cond_id_t cid,
 			event const& thread_predecessor
 		) {
-			return deduplicate(unfolding, condition_variable_create(
+			return unfolding.deduplicate(condition_variable_create(
 				tid,
 				cid,
 				thread_predecessor

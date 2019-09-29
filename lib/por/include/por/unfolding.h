@@ -1,6 +1,6 @@
 #pragma once
 
-#include "event/event.h"
+#include "event/base.h"
 #include "thread_id.h"
 
 #include <map>
@@ -209,42 +209,4 @@ namespace por {
 			std::cout << "==========================\n";
 		}
 	};
-
-	inline por::event::event const& por::event::event::deduplicate(por::unfolding& unfolding, por::event::event&& event) {
-		switch(event.kind()) {
-			case por::event::event_kind::local:
-				return unfolding.deduplicate<por::event::local>(std::move(static_cast<por::event::local&&>(event)));
-			case por::event::event_kind::program_init:
-				return unfolding.deduplicate<por::event::program_init>(std::move(static_cast<por::event::program_init&&>(event)));
-			case por::event::event_kind::thread_create:
-				return unfolding.deduplicate<por::event::thread_create>(std::move(static_cast<por::event::thread_create&&>(event)));
-			case por::event::event_kind::thread_join:
-				return unfolding.deduplicate<por::event::thread_join>(std::move(static_cast<por::event::thread_join&&>(event)));
-			case por::event::event_kind::thread_init:
-				return unfolding.deduplicate<por::event::thread_init>(std::move(static_cast<por::event::thread_init&&>(event)));
-			case por::event::event_kind::thread_exit:
-				return unfolding.deduplicate<por::event::thread_exit>(std::move(static_cast<por::event::thread_exit&&>(event)));
-			case por::event::event_kind::lock_create:
-				return unfolding.deduplicate<por::event::lock_create>(std::move(static_cast<por::event::lock_create&&>(event)));
-			case por::event::event_kind::lock_destroy:
-				return unfolding.deduplicate<por::event::lock_destroy>(std::move(static_cast<por::event::lock_destroy&&>(event)));
-			case por::event::event_kind::lock_acquire:
-				return unfolding.deduplicate<por::event::lock_acquire>(std::move(static_cast<por::event::lock_acquire&&>(event)));
-			case por::event::event_kind::lock_release:
-				return unfolding.deduplicate<por::event::lock_release>(std::move(static_cast<por::event::lock_release&&>(event)));
-			case por::event::event_kind::condition_variable_create:
-				return unfolding.deduplicate<por::event::condition_variable_create>(std::move(static_cast<por::event::condition_variable_create&&>(event)));
-			case por::event::event_kind::condition_variable_destroy:
-				return unfolding.deduplicate<por::event::condition_variable_destroy>(std::move(static_cast<por::event::condition_variable_destroy&&>(event)));
-			case por::event::event_kind::wait1:
-				return unfolding.deduplicate<por::event::wait1>(std::move(static_cast<por::event::wait1&&>(event)));
-			case por::event::event_kind::wait2:
-				return unfolding.deduplicate<por::event::wait2>(std::move(static_cast<por::event::wait2&&>(event)));
-			case por::event::event_kind::signal:
-				return unfolding.deduplicate<por::event::signal>(std::move(static_cast<por::event::signal&&>(event)));
-			case por::event::event_kind::broadcast:
-				return unfolding.deduplicate<por::event::broadcast>(std::move(static_cast<por::event::broadcast&&>(event)));
-		}
-
-	}
 }

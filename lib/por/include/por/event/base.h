@@ -187,10 +187,6 @@ namespace por::event {
 		: event(kind, tid, immediate_predecessor, single_other_predecessor, util::make_iterator_range<event const* const*>(nullptr, nullptr))
 		{ }
 
-		// defined in unfolding.h
-		static por::event::event const& deduplicate(por::unfolding& unfolding, por::event::event&& event);
-
-
 	public:
 		virtual std::string to_string(bool details = false) const = 0;
 

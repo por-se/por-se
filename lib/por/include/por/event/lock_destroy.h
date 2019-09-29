@@ -2,6 +2,8 @@
 
 #include "base.h"
 
+#include "por/unfolding.h"
+
 #include <cassert>
 #include <array>
 
@@ -36,7 +38,7 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const* lock_predecessor
 		) {
-			return deduplicate(unfolding, lock_destroy(
+			return unfolding.deduplicate(lock_destroy(
 				tid,
 				thread_predecessor,
 				lock_predecessor

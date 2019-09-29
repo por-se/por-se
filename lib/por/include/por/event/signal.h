@@ -2,6 +2,8 @@
 
 #include "base.h"
 
+#include "por/unfolding.h"
+
 #include <util/distance.h>
 #include <util/sso_array.h>
 
@@ -122,7 +124,7 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const& notified_thread_predecessor
 		) {
-			return deduplicate(unfolding, signal(
+			return unfolding.deduplicate(signal(
 				tid,
 				cid,
 				thread_predecessor,
@@ -140,7 +142,7 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return deduplicate(unfolding, signal(
+			return unfolding.deduplicate(signal(
 				tid,
 				cid,
 				thread_predecessor,
