@@ -5,4 +5,5 @@ include("${CMAKE_CURRENT_LIST_DIR}/include/CMakeLists.txt")
 
 target_sources(libpor PRIVATE
 	"${CMAKE_CURRENT_LIST_DIR}/cone.cpp"
+	"${CMAKE_CURRENT_LIST_DIR}/unfolding.cpp"
 )
