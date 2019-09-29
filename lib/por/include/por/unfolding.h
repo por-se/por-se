@@ -29,10 +29,7 @@ namespace por {
 		}
 
 	public:
-		unfolding() {
-			_root = store_event(por::event::program_init());
-			mark_as_explored(*_root);
-		}
+		unfolding();
 		unfolding(unfolding&) = default;
 		unfolding& operator=(unfolding&) = default;
 		unfolding(unfolding&&) = default;
