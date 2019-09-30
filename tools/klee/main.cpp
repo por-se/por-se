@@ -813,7 +813,6 @@ static const char *modelledExternals[] = {
   "klee_preempt_thread",
   "klee_exit_thread",
   "klee_toggle_thread_scheduling",
-  "klee_get_thread_runtime_struct_ptr",
   "klee_por_register_event",
   "klee_por_thread_join",
   "klee_por_thread_exit",
