@@ -186,7 +186,7 @@ DataRaceDetection::SolverPath(const std::unique_ptr<por::configuration>& cfg,
       continue;
     }
 
-    const auto* evt = pair.second.get();
+    const auto* evt = pair.second;
     for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
       assert(evt->tid() != operation.tid);
 
@@ -341,7 +341,7 @@ DataRaceDetection::FastPath(const std::unique_ptr<por::configuration>& cfg,
       continue;
     }
 
-    const auto* evt = pair.second.get();
+    const auto* evt = pair.second;
     for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
       assert(evt->tid() != operation.tid);
 
