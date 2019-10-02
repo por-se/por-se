@@ -1077,7 +1077,7 @@ namespace por {
 			// compute all combinations: S \subseteq comb (where S is concurrent,
 			// i.e. there are no causal dependencies between any of its elements)
 			assert(comb.size() < 64); // FIXME: can "only" be used with 64 threads
-			for(std::uint64_t mask = 0; mask < (1 << comb.size()); ++mask) {
+			for(std::uint64_t mask = 0; mask < (static_cast<std::uint64_t>(1) << comb.size()); ++mask) {
 				std::size_t popcount = 0;
 				for(std::size_t i = 0; i < comb.size(); ++i) {
 					if((mask >> i) & 1)
