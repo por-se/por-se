@@ -55,15 +55,6 @@ namespace {
 		return {};
 	}
 
-	por::event::lock_id_t choose_lock(por::configuration const& configuration, std::mt19937_64& gen) {
-		if(configuration.lock_heads().empty())
-			return 0;
-
-		std::uniform_int_distribution<std::size_t> dis(0, configuration.lock_heads().size() - 1);
-		std::size_t chosen = dis(gen);
-		return std::next(configuration.lock_heads().begin(), chosen)->first;
-	}
-
 	por::event::lock_id_t choose_suitable_lock(por::configuration const& configuration,
 		std::mt19937_64& gen,
 		std::bernoulli_distribution& rare_choice,
