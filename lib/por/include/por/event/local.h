@@ -38,11 +38,11 @@ namespace por::event {
 			event const& thread_predecessor,
 			path_t path
 		) {
-			return unfolding.deduplicate(local(
+			return unfolding.deduplicate(local{
 				tid,
 				thread_predecessor,
 				std::move(path)
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

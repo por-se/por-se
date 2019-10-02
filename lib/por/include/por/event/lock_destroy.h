@@ -38,11 +38,11 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const* lock_predecessor
 		) {
-			return unfolding.deduplicate(lock_destroy(
+			return unfolding.deduplicate(lock_destroy{
 				tid,
 				thread_predecessor,
 				lock_predecessor
-			));
+			});
 		}
 
 		virtual std::string to_string(bool details) const override {

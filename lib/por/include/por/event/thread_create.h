@@ -31,10 +31,10 @@ namespace por::event {
 			thread_id_t tid,
 			event const& thread_predecessor
 		) {
-			return unfolding.deduplicate(thread_create(
+			return unfolding.deduplicate(thread_create{
 				tid,
 				thread_predecessor
-			));
+			});
 		}
 
 		virtual std::string to_string(bool details) const override {

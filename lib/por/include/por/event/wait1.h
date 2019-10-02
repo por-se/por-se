@@ -80,14 +80,14 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(wait1(
+			return unfolding.deduplicate(wait1{
 				tid,
 				cid,
 				thread_predecessor,
 				lock_predecessor,
 				cond_predecessors.data(),
 				cond_predecessors.data() + cond_predecessors.size()
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

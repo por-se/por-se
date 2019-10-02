@@ -803,7 +803,7 @@ namespace por {
 				if(cond_head_it == _cond_heads.end() && !notified_thread) {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
-					thread_event = &por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, {});
+					thread_event = &por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, std::vector<por::event::event const*>());
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 					_unfolding->mark_as_open(*thread_event, _path);
 					_cond_heads.emplace(cond, std::vector{thread_event});

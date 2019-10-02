@@ -37,11 +37,11 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const& joined_predecessor
 		) {
-			return unfolding.deduplicate(thread_join(
+			return unfolding.deduplicate(thread_join{
 				tid,
 				thread_predecessor,
 				joined_predecessor
-			));
+			});
 		}
 
 		virtual std::string to_string(bool details) const override {

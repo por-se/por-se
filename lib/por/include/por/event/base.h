@@ -84,7 +84,7 @@ namespace por::event {
 		std::size_t _depth;
 		por::cone _cone;
 		thread_id_t _tid;
-		const event_kind _kind;
+		event_kind _kind;
 
 		bool is_explorable() const {
 			switch(_kind) {
@@ -126,6 +126,11 @@ namespace por::event {
 			return true;
 		}
 
+		explicit event() = delete;
+		event(const event&) = default;
+		event(event&&) = default;
+		event& operator=(const event&) = default;
+		event& operator=(event&&) = default;
 		virtual ~event() = default;
 
 	protected:

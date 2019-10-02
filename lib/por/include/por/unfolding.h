@@ -15,7 +15,10 @@ namespace por {
 	class configuration;
 
 	class unfolding {
-		std::map<std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>, std::vector<std::unique_ptr<por::event::event>>> events;
+		using key_t = std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>;
+		using value_t = std::vector<std::unique_ptr<por::event::event>>;
+
+		std::map<key_t, value_t> _events;
 		por::event::event const* _root;
 
 		// NOTE: do not use for other purposes, only compares pointers of predecessors
@@ -23,9 +26,9 @@ namespace por {
 
 		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
 		por::event::event const* store_event(T&& event) {
-			auto&& tuple = std::make_tuple(event.tid(), event.depth(), event.kind());
-			auto&& ptr = std::make_unique<T>(std::forward<T>(event));
-			return events[std::move(tuple)].emplace_back(std::move(ptr)).get();
+			key_t key = std::make_tuple(event.tid(), event.depth(), event.kind());
+			auto ptr = std::make_unique<T>(std::forward<T>(event));
+			return _events[std::move(key)].emplace_back(std::move(ptr)).get();
 		}
 
 	public:
@@ -59,8 +62,8 @@ namespace por {
 
 		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
 		por::event::event const& deduplicate(T&& e) {
-			auto it = events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
-			if(it != events.end()) {
+			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
+			if(it != _events.end()) {
 				for(auto& v : it->second) {
 					if(compare_events(e, *v.get())) {
 						stats_inc_event_deduplicated();

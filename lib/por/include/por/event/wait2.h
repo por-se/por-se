@@ -70,13 +70,13 @@ namespace por::event {
 			event const& lock_predecessor,
 			event const& condition_variable_predecessor
 		) {
-			return unfolding.deduplicate(wait2(
+			return unfolding.deduplicate(wait2{
 				tid,
 				cid,
 				thread_predecessor,
 				lock_predecessor,
 				condition_variable_predecessor
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

@@ -161,13 +161,13 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(broadcast(
+			return unfolding.deduplicate(broadcast{
 				tid,
 				cid,
 				thread_predecessor,
 				cond_predecessors.data(),
 				cond_predecessors.data() + cond_predecessors.size()
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

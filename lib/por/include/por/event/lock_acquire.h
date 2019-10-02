@@ -43,11 +43,11 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const* lock_predecessor
 		) {
-			return unfolding.deduplicate(lock_acquire(
+			return unfolding.deduplicate(lock_acquire{
 				tid,
 				thread_predecessor,
 				lock_predecessor
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

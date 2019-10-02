@@ -35,11 +35,11 @@ namespace por::event {
 			cond_id_t cid,
 			event const& thread_predecessor
 		) {
-			return unfolding.deduplicate(condition_variable_create(
+			return unfolding.deduplicate(condition_variable_create{
 				tid,
 				cid,
 				thread_predecessor
-			));
+			});
 		}
 
 		virtual std::string to_string(bool details) const override {

@@ -124,12 +124,12 @@ namespace por::event {
 			event const& thread_predecessor,
 			event const& notified_thread_predecessor
 		) {
-			return unfolding.deduplicate(signal(
+			return unfolding.deduplicate(signal{
 				tid,
 				cid,
 				thread_predecessor,
 				notified_thread_predecessor
-			));
+			});
 		}
 
 		// lost signal
@@ -142,13 +142,13 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(signal(
+			return unfolding.deduplicate(signal{
 				tid,
 				cid,
 				thread_predecessor,
 				cond_predecessors.data(),
 				cond_predecessors.data() + cond_predecessors.size()
-			));
+			});
 		}
 
 		virtual void mark_as_open(path_t const& path) const override {

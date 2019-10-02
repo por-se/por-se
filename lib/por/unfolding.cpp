@@ -7,7 +7,7 @@
 using namespace por;
 
 unfolding::unfolding() {
-	_root = store_event(por::event::program_init());
+	_root = store_event(por::event::program_init{});
 	mark_as_explored(*_root);
 }
 
