@@ -690,6 +690,7 @@ namespace por {
 				}
 			}
 			assert(0 && "There has to be a notifying event before a wait2");
+			std::abort();
 		}
 
 	public:

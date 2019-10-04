@@ -130,7 +130,8 @@ namespace por {
 				case por::event::event_kind::broadcast:
 					return 15;
 				default:
-					assert(0);
+					assert(0 && "unknown event_kind");
+					return 255;
 			}
 		}
 
