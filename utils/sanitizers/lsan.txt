@@ -10,3 +10,6 @@
 leak:src/malloc_extension.cc
 # Memory leak from klee_replay
 leak:klee-replay.c
+
+# uninstrumented LLVM
+leak:RegisterHandlers
