@@ -198,7 +198,7 @@ int main(int argc, char** argv){
 						auto& w = e.second;
 						auto* l = configuration.lock_heads().at(lid);
 						while(l != nullptr && w->is_less_than(*l)) {
-							l = por::configuration::get_lock_predecessor(l);
+							l = l->lock_predecessor();
 						}
 						if(l == w) {
 							no_block_on_lock = false;
@@ -319,7 +319,7 @@ int main(int argc, char** argv){
 					for(auto& e : configuration.lock_heads()) {
 						auto *l = e.second;
 						while(l != nullptr && wait1->is_less_than(*l)) {
-							l = por::configuration::get_lock_predecessor(l);
+							l = l->lock_predecessor();
 						}
 						if(l == wait1) {
 							lid = e.first;

@@ -64,6 +64,6 @@ namespace por::event {
 		}
 
 		// may return nullptr if only preceded by lock_create event
-		event const* lock_predecessor() const noexcept { return _predecessors[1]; }
+		event const* lock_predecessor() const noexcept override { return _predecessors[1]; }
 	};
 }

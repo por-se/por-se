@@ -106,7 +106,7 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
-		event const* lock_predecessor() const noexcept { return _predecessors[2]; }
+		event const* lock_predecessor() const noexcept override { return _predecessors[2]; }
 
 		util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);

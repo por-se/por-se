@@ -60,6 +60,6 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
-		event const* lock_predecessor() const noexcept { return _predecessors[1]; }
+		event const* lock_predecessor() const noexcept override { return _predecessors[1]; }
 	};
 }

@@ -986,34 +986,6 @@ namespace por {
 			return thread_event;
 		}
 
-		static por::event::event const* get_lock_predecessor(por::event::event const* event) {
-			assert(event);
-			por::event::event const* pred = nullptr;
-			switch(event->kind()) {
-				case por::event::event_kind::lock_acquire:
-					pred = static_cast<por::event::lock_acquire const*>(event)->lock_predecessor();
-					break;
-				case por::event::event_kind::lock_create:
-					break;
-				case por::event::event_kind::lock_destroy:
-					pred = static_cast<por::event::lock_destroy const*>(event)->lock_predecessor();
-					break;
-				case por::event::event_kind::lock_release:
-					pred = static_cast<por::event::lock_release const*>(event)->lock_predecessor();
-					break;
-				case por::event::event_kind::wait1:
-					pred = static_cast<por::event::wait1 const*>(event)->lock_predecessor();
-					break;
-				case por::event::event_kind::wait2:
-					pred = static_cast<por::event::wait2 const*>(event)->lock_predecessor();
-					break;
-
-				default:
-					assert(0 && "event has no lock_predecessor");
-			}
-			return pred;
-		}
-
 		static util::iterator_range<por::event::event const* const*> get_condition_variable_predecessors(por::event::event const* event) {
 			assert(event);
 			auto preds = util::make_iterator_range<por::event::event const* const*>(nullptr, nullptr);
@@ -1169,7 +1141,7 @@ namespace por {
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
 			// maximal event concerning same lock in history of e
-			por::event::event const* er = get_lock_predecessor(&e);
+			por::event::event const* er = e.lock_predecessor();
 			// maximal event concerning same lock in [et] (acq) or [et] \cup [es] (wait2)
 			por::event::event const* em = er;
 			// immediate successor of em / ep operating on same lock
@@ -1183,7 +1155,7 @@ namespace por {
 				while(em != nullptr && !em->is_less_than_eq(*et)) {
 					// descend chain of lock events until em is in [et]
 					conflict = em;
-					em = get_lock_predecessor(em);
+					em = em->lock_predecessor();
 				}
 			} else {
 				assert(e.kind() == por::event::event_kind::wait2);
@@ -1192,7 +1164,7 @@ namespace por {
 				while(em != nullptr && !em->is_less_than_eq(*et) && !em->is_less_than(*es)) {
 					// descend chain of lock events until em is in [et] \cup [es]
 					conflict = em;
-					em = get_lock_predecessor(em);
+					em = em->lock_predecessor();
 				}
 			}
 
@@ -1208,7 +1180,7 @@ namespace por {
 			}
 
 			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
-			por::event::event const* ep = get_lock_predecessor(er); // lock events in K \ {r}
+			por::event::event const* ep = er->lock_predecessor(); // lock events in K \ {r}
 			conflict = er;
 			while(ep != nullptr && (em == nullptr || !ep->is_less_than_eq(*em)) && (es == nullptr || !ep->is_less_than_eq(*es))) {
 				if(ep->kind() == por::event::event_kind::lock_release || ep->kind() == por::event::event_kind::wait1 || ep->kind() == por::event::event_kind::lock_create) {
@@ -1224,7 +1196,7 @@ namespace por {
 					}
 				}
 				conflict = ep;
-				ep = get_lock_predecessor(ep);
+				ep = ep->lock_predecessor();
 			}
 
 			return result;
@@ -1306,7 +1278,7 @@ namespace por {
 				if(cond_create) {
 					N.push_back(cond_create);
 				}
-				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), w1->cid(), *et, *w1->lock_predecessor(), std::move(N)), std::move(conflicts));
+				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), w1->cid(), *et, *e.lock_predecessor(), std::move(N)), std::move(conflicts));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
 			});
