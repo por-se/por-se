@@ -1,3 +1,4 @@
+// XFAIL: asan || ubsan
 // RUN: %clang %s -emit-llvm -g %O0opt -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out  %t.bc 2> %t.log

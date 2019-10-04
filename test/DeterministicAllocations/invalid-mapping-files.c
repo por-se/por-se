@@ -1,3 +1,4 @@
+// XFAIL: asan
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t-missing.klee-out
 // RUN: rm -rf %t-address.klee-out

@@ -1,3 +1,4 @@
+// XFAIL: asan
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --pthread-runtime --allocate-thread-heap-size=50 --allocate-thread-segments-file=%p/thread-mappings.conf %t.bc 2>&1 | FileCheck %s
