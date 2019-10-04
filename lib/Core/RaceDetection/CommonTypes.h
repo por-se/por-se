@@ -13,6 +13,7 @@ namespace klee {
       [[nodiscard]] virtual std::optional<bool> mustBeFalse(ref<Expr> expr) const = 0;
       [[nodiscard]] virtual std::optional<bool> mayBeTrue(ref<Expr> expr) const = 0;
       [[nodiscard]] virtual std::optional<bool> mayBeFalse(ref<Expr> expr) const = 0;
+      virtual ~SolverInterface() = default;
   };
 
   struct AccessMetaData {
