@@ -33,7 +33,7 @@ namespace klee {
 
       bool registerLockCreate(ExecutionState &state, std::uint64_t mId);
       bool registerLockDestroy(ExecutionState &state, std::uint64_t mId);
-      bool registerLockAcquire(ExecutionState &state, std::uint64_t mId);
+      bool registerLockAcquire(ExecutionState &state, std::uint64_t mId, bool snapshotsAllowed = true);
       bool registerLockRelease(ExecutionState &state, std::uint64_t mId);
 
       bool registerCondVarCreate(ExecutionState &state, std::uint64_t cId);

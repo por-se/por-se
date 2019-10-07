@@ -208,7 +208,7 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
   return true;
 }
 
-bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId, bool snapshotsAllowed) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_lock_acquire);
 
@@ -218,7 +218,9 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
   state.porConfiguration->acquire_lock(state.currentThreadId(), mId);
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_lock_acquire);
+  if (snapshotsAllowed) {
+    registerStandbyState(state, por_lock_acquire);
+  }
   return true;
 }
 

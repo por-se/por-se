@@ -3086,6 +3086,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       return;
     }
 
+    porEventManager.registerLockAcquire(state, memLoc->first->getId(), false);
+
     auto oldValue = executeMemoryRead(state, memLoc.value(), memValWidth);
     ref<Expr> result;
 
@@ -3147,6 +3149,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     state.atomicPhase = wasAtomicPhase;
 
+    porEventManager.registerLockRelease(state, memLoc->first->getId());
     break;
   }
 
@@ -3171,6 +3174,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       return;
     }
 
+    porEventManager.registerLockAcquire(state, src->first->getId(), false);
+
     auto oldValue = executeMemoryRead(state, src.value(), readWidth);
 
     auto equal = EqExpr::create(oldValue, compare);
@@ -3181,6 +3186,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bindLocal(ki, state, ConcatExpr::create(oldValue, equal));
 
     state.atomicPhase = wasAtomicPhase;
+
+    porEventManager.registerLockRelease(state, src->first->getId());
     break;
   }
 
