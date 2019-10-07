@@ -108,6 +108,7 @@ public:
   };
 
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
+  typedef std::pair<const MemoryObject*, ref<Expr>> MemoryLocation;
 
   enum TerminateReason {
     Abort,
@@ -345,6 +346,19 @@ private:
                    KInstruction *ki,
                    llvm::Function *f,
                    std::vector< ref<Expr> > &arguments);
+
+  std::optional<MemoryLocation>
+  extractMemoryObject(ExecutionState &state, bool isWrite, ref<Expr> address,
+                      ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */);
+
+  void executeMemoryWrite(ExecutionState& state,
+                          const MemoryLocation& memLoc,
+                          ref<Expr> address,
+                          ref<Expr> value);
+
+  void executeMemoryRead(ExecutionState& state,
+                         const MemoryLocation& memLoc,
+                         KInstruction* target);
                    
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
