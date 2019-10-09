@@ -1,19 +1,22 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include <sys/mman.h>
 #include <unistd.h>
 
 #if defined(__linux)
-#include <linux/version.h>
+#	include <linux/version.h>
 #endif
 
 #if defined(PSEUDOALLOC_CHECKED)
@@ -44,11 +47,11 @@ namespace pseudoalloc {
 #if defined(__APPLE__)
 				flags |= MAP_FIXED;
 #else
-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
+#	if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 				flags |= MAP_FIXED_NOREPLACE;
-	#else
+#	else
 				flags |= MAP_FIXED;
-	#endif
+#	endif
 #endif
 			}
 
@@ -142,7 +145,7 @@ namespace pseudoalloc {
 				return current_slot_size * pos;
 			}
 
-			[[nodiscard]] inline std::size_t pos2index(std::size_t pos) const noexcept {
+			[[nodiscard]] inline std::size_t pos2index(std::size_t const pos) const noexcept {
 				int trailing_zeroes = util::ctz(pos);
 				auto layer_index = pos >> (trailing_zeroes + 1);
 				auto layer = util::ctz(_size) - (trailing_zeroes + 1);
@@ -246,7 +249,7 @@ namespace pseudoalloc {
 				auto pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
 				_pa_check(pos < _size);
 				auto index = pos2index(pos);
-				assert(index == _allocated);
+				assert(index == _allocated && "Invalid free");
 #else
 				static_cast<void>(ptr);
 #endif
