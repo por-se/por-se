@@ -25,6 +25,10 @@
 #	define _pa_check(expr) ((void)0)
 #endif
 
+#if defined(PSEUDOALLOC_TRACE)
+#	include <iostream>
+#endif
+
 namespace pseudoalloc {
 #if defined(PSEUDOALLOC_CHECKED)
 	static constexpr const bool checked_build = true;
@@ -253,10 +257,9 @@ namespace pseudoalloc {
 			/// The first direction of the mapping, `map1`, maps the size of each free region to its location. It is inversely
 			/// sorted by size, so that `map1.begin()` always returns the largest free region.
 			/// As it is possible that two free ranges have the same size, there is a need to provide a deterministic
-			/// tie-breaker between those. To this end, the mapping is implemented as a set of pairs of size and beginning of
-			/// the free ranges. This way, sorting is done first by size, and - for ranges of the same size - second on their
-			/// position.
-			std::set<std::pair<std::size_t, char*>, std::greater<std::pair<std::size_t, char*>>> map1;
+			/// tie-breaker between those. To this end, we use a vector that effectively uses insertion order as a
+			/// tie-breaker.
+			std::map<std::size_t, std::vector<char*>, std::greater<std::size_t>> map1;
 
 			/// The second direction of the mapping, `map2`, maps the position of each free region to its size. Its ordering
 			/// is ascending, so that a lookup for the position of an allocated object is able to return the previous and the
@@ -265,60 +268,169 @@ namespace pseudoalloc {
 
 		public:
 			void initialize(void* base, std::size_t size) {
-				map1.emplace(size, static_cast<char*>(base));
+				map1.emplace(size, std::initializer_list<char*>{static_cast<char*>(base)});
 				map2.emplace(static_cast<char*>(base), size);
+
+#if defined(PSEUDOALLOC_TRACE)
+				::std::cout << "[LOH] Initialization complete.\n";
+				trace();
+#endif
 			}
 
 			[[nodiscard]] void* allocate(std::size_t size) {
+#if defined(PSEUDOALLOC_TRACE)
+				::std::cout << "[LOH] Allocating " << size << " (" << util::round_up_to_multiple_of_4096(size) << ") bytes\n";
+				trace();
+#endif
+
 				_pa_check(size > 4096);
 				size = util::round_up_to_multiple_of_4096(size);
 
 				_pa_check(!map1.empty());
-				auto largest_free_range = map1.extract(map1.begin());
-				_pa_check(!largest_free_range.empty());
-				std::size_t const range_size = largest_free_range.value().first;
-				char* const range_pos = largest_free_range.value().second;
+				auto largest_free_range_it = map1.begin();
+				std::size_t const range_size = largest_free_range_it->first;
 				assert(range_size + 2 * 4096 >= size && "Zero (or below) red zone size!");
+				char* const range_pos = largest_free_range_it->second.back();
+				largest_free_range_it->second.pop_back();
+				decltype(map1)::node_type node;
+				if(largest_free_range_it->second.empty()) {
+					node = map1.extract(largest_free_range_it);
+				}
 
 				auto offset = (range_size - size) / 2;
 				offset = util::round_up_to_multiple_of_4096(offset);
+				auto const left_size = offset;
+				auto const left_pos = range_pos;
+				auto const right_size = range_size - offset - size;
+				auto const right_pos = range_pos + offset + size;
 
 				// left subrange
-				map1.emplace(offset, range_pos);
+				{
+					decltype(map1)::iterator it1;
+					if(!node.empty()) {
+						node.key() = left_size;
+						_pa_check(node.mapped().empty());
+						it1 = map1.insert(std::move(node)).position;
+					} else {
+						it1 = std::get<0>(map1.try_emplace(left_size));
+					}
+					auto& v1 = it1->second;
+					v1.emplace_back(left_pos);
+					if(left_size == right_size) {
+						v1.emplace_back(right_pos);
+					}
+				}
 				auto finger = map2.find(range_pos);
 				_pa_check(finger != map2.end());
 				_pa_check(finger->second == range_size);
-				finger->second = offset;
+				_pa_check(finger->first == left_pos);
+				finger->second = left_size;
 
 				// right subrange
-				largest_free_range.value() =
-				  std::pair<std::size_t, char*>(range_size - offset - size, range_pos + offset + size);
-				map1.insert(std::move(largest_free_range));
-				map2.emplace_hint(std::next(finger), range_pos + offset + size, range_size - offset - size);
+				if(left_size != right_size) {
+					auto it1 = std::get<0>(map1.try_emplace(right_size));
+					it1->second.emplace_back(right_pos);
+				}
+				map2.emplace_hint(std::next(finger), right_pos, right_size);
 
 				return range_pos + offset;
 			}
 
 			void deallocate(void* ptr, std::size_t size) {
+#if defined(PSEUDOALLOC_TRACE)
+				::std::cout << "[LOH] Freeing " << ptr << " with size " << size << " ("
+				            << util::round_up_to_multiple_of_4096(size) << ")\n";
+				trace();
+#endif
+
 				_pa_check(size > 4096);
 				size = util::round_up_to_multiple_of_4096(size);
 
 				auto right_it = map2.upper_bound(static_cast<char*>(ptr));
 				auto left_it = std::prev(right_it);
-				_pa_check(left_it->first + left_it->second == static_cast<char*>(ptr));
-				_pa_check(left_it->first + left_it->second + size == right_it->first);
+				auto const left_pos = left_it->first;
+				auto const left_size = left_it->second;
+				auto const right_pos = right_it->first;
+				auto const right_size = right_it->second;
+				_pa_check(left_pos + left_size == static_cast<char*>(ptr));
+				_pa_check(left_pos + left_size + size == right_pos);
 
-				[[maybe_unused]] auto erased = map1.erase(std::pair<std::size_t, char*>(right_it->second, right_it->first));
-				_pa_check(erased == 1);
-				auto node = map1.extract(std::pair<std::size_t, char*>(left_it->second, left_it->first));
-				_pa_check(!node.empty());
-				std::size_t const combined_size = left_it->second + size + right_it->second;
-				node.value().first = combined_size;
-				map1.insert(std::move(node));
+				decltype(map1)::node_type node;
+
+				{
+					auto it1 = map1.find(left_size);
+					_pa_check(it1 != map1.end());
+					if(left_size == right_size) {
+						_pa_check(it1->second.size() >= 2);
+						auto it1v = std::find_if(it1->second.begin(), it1->second.end(),
+						                         [left_pos, right_pos](char* ptr) { return ptr == left_pos || ptr == right_pos; });
+						_pa_check(it1v != it1->second.end());
+						if(*it1v == left_pos) {
+							*it1v = it1->second.back();
+							it1v = std::find(it1v, std::prev(it1->second.end()), right_pos);
+						} else {
+							_pa_check(*it1v == right_pos);
+							*it1v = it1->second.back();
+							it1v = std::find(it1v, std::prev(it1->second.end()), left_pos);
+						}
+						_pa_check(it1v < std::prev(it1->second.end()));
+						*it1v = it1->second[it1->second.size() - 2];
+						it1->second.pop_back();
+						it1->second.pop_back();
+						if(it1->second.empty()) {
+							node = map1.extract(it1);
+						}
+					} else {
+						auto it1v = std::find(it1->second.begin(), it1->second.end(), left_pos);
+						_pa_check(it1v != it1->second.end());
+						*it1v = it1->second.back();
+						it1->second.pop_back();
+						if(it1->second.empty()) {
+							node = map1.extract(it1);
+						}
+
+						it1 = map1.find(right_size);
+						_pa_check(it1 != map1.end());
+						it1v = std::find(it1->second.begin(), it1->second.end(), right_pos);
+						_pa_check(it1v != it1->second.end());
+						*it1v = it1->second.back();
+						it1->second.pop_back();
+						if(it1->second.empty()) {
+							node = map1.extract(it1);
+						}
+					}
+				}
+
+				std::size_t const combined_size = left_size + size + right_size;
+				if(!node.empty()) {
+					node.key() = combined_size;
+					_pa_check(node.mapped().empty());
+					auto it1 = map1.insert(::std::move(node)).position;
+					it1->second.emplace_back(left_pos);
+				} else {
+					auto it1 = std::get<0>(map1.try_emplace(combined_size));
+					it1->second.emplace_back(left_it->first);
+				}
 
 				left_it->second = combined_size;
 				map2.erase(right_it);
 			}
+
+#if defined(PSEUDOALLOC_TRACE)
+			void trace() {
+				::std::cout << "[LOH] map1:\n";
+				for(auto const& x : map1) {
+					::std::cout << "      " << x.first << "\n";
+					for(auto const& y : x.second) {
+						::std::cout << "        " << static_cast<void*>(y) << "\n";
+					}
+				}
+				::std::cout << "[LOH] map2:\n";
+				for(auto const& x : map2) {
+					::std::cout << "      " << static_cast<void*>(x.first) << " " << x.second << "\n";
+				}
+			}
+#endif
 		};
 	} // namespace suballocators
 
