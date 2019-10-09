@@ -3071,199 +3071,81 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     terminateStateOnExecError(state, "Unexpected ShuffleVector instruction");
     break;
   case Instruction::AtomicRMW: {
-    // An atomic instruction gets a pointer and a value. It reads the value at the pointer, perfoms its operation, stores the result and returns the value that was originally at the pointer.
-    AtomicRMWInst *ai = cast<AtomicRMWInst>(i);
+    // An atomic instruction gets a pointer and a value. It reads the value at the pointer,
+    // performs its operation, stores the result and returns the value that was originally at the pointer.
+    auto ai = cast<AtomicRMWInst>(i);
 
     bool wasAtomicPhase = state.atomicPhase;
     state.atomicPhase = true;
 
+    auto memValWidth = getWidthForLLVMType(ai->getValOperand()->getType());
+
+    ref<Expr> pointer = eval(ki, 0, state).value;
+    ref<Expr> value = eval(ki, 1, state).value;
+
+    auto memLoc = extractMemoryObject(state, pointer, memValWidth);
+    if (!memLoc.has_value()) {
+      return;
+    }
+
+    auto oldValue = executeMemoryRead(state, memLoc.value(), memValWidth);
+    ref<Expr> result;
+
     switch (ai->getOperation()) {
     case AtomicRMWInst::Xchg: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto memLoc = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!memLoc.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, memLoc.value(), ki);
-      executeMemoryWrite(state, memLoc.value(), pointer, value);
-
+      result = value;
       break;
     }
     case AtomicRMWInst::Add: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = AddExpr::create(oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = AddExpr::create(oldValue, value);
       break;
     }
     case AtomicRMWInst::Sub: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = SubExpr::create(oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = SubExpr::create(oldValue, value);
       break;
     }
     case AtomicRMWInst::And: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = AndExpr::create(oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = AndExpr::create(oldValue, value);;
       break;
     }
     case AtomicRMWInst::Nand: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = XorExpr::create(AndExpr::create(oldValue, value), ConstantExpr::create(-1, value->getWidth()));
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = XorExpr::create(AndExpr::create(oldValue, value), ConstantExpr::create(-1, value->getWidth()));
       break;
     }
     case AtomicRMWInst::Or: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = OrExpr::create(oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = OrExpr::create(oldValue, value);
       break;
     }
     case AtomicRMWInst::Xor: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = XorExpr::create(oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = XorExpr::create(oldValue, value);
       break;
     }
     case AtomicRMWInst::Max: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = SelectExpr::create(SgtExpr::create(oldValue, value), oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = SelectExpr::create(SgtExpr::create(oldValue, value), oldValue, value);
       break;
     }
     case AtomicRMWInst::Min: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = SelectExpr::create(SltExpr::create(oldValue, value), oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = SelectExpr::create(SltExpr::create(oldValue, value), oldValue, value);
       break;
     }
     case AtomicRMWInst::UMax: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = SelectExpr::create(UgtExpr::create(oldValue, value), oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = SelectExpr::create(UgtExpr::create(oldValue, value), oldValue, value);
       break;
     }
     case AtomicRMWInst::UMin: {
-      ref<Expr> pointer = eval(ki, 0, state).value;
-      ref<Expr> value = eval(ki, 1, state).value;
-
-      auto src = extractMemoryObject(state, false, pointer, 0, ki);
-      if (!src.has_value()) {
-        return;
-      }
-
-      executeMemoryRead(state, src.value(), ki);
-
-      ref<Expr> oldValue = getDestCell(state, ki).value;
-      ref<Expr> result = SelectExpr::create(UltExpr::create(oldValue, value), oldValue, value);
-
-      executeMemoryWrite(state, src.value(), pointer, result);
+      result = SelectExpr::create(UltExpr::create(oldValue, value), oldValue, value);
       break;
     }
-    case AtomicRMWInst::BAD_BINOP: terminateStateOnExecError(state, "Bad atomicrmw operation"); break;
+    case AtomicRMWInst::BAD_BINOP:
+      terminateStateOnExecError(state, "Bad atomicrmw operation");
+      break;
     }
+
+    // Write the new result back to the pointer
+    executeMemoryWrite(state, memLoc.value(), pointer, result);
+
+    // Every AtomicRMW returns the old value
+    bindLocal(ki, state, oldValue);
 
     state.atomicPhase = wasAtomicPhase;
 
@@ -3278,17 +3160,27 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> compare = eval(ki, 1, state).value;
     ref<Expr> newValue = eval(ki, 2, state).value;
 
-    auto src = extractMemoryObject(state, false, pointer, 0, ki);
+    auto atCmpXchg = cast<AtomicCmpXchgInst>(i);
+    assert(atCmpXchg != nullptr);
+
+    auto readWidth = getWidthForLLVMType(atCmpXchg->getCompareOperand()->getType());
+    auto writeWidth = newValue->getWidth();
+
+    assert(writeWidth == getWidthForLLVMType(atCmpXchg->getNewValOperand()->getType()));
+
+    auto src = extractMemoryObject(state, pointer, std::max(readWidth, writeWidth));
     if (!src.has_value()) {
       return;
     }
 
-    executeMemoryRead(state, src.value(), ki);
+    auto oldValue = executeMemoryRead(state, src.value(), readWidth);
 
-    ref<Expr> oldValue = getDestCell(state, ki).value;
-    ref<Expr> write = SelectExpr::create(EqExpr::create(oldValue, compare), newValue, oldValue);
+    auto equal = EqExpr::create(oldValue, compare);
+    auto write = SelectExpr::create(equal, newValue, oldValue);
 
     executeMemoryWrite(state, src.value(), pointer, write);
+
+    bindLocal(ki, state, ConcatExpr::create(oldValue, equal));
 
     state.atomicPhase = wasAtomicPhase;
     break;
@@ -4352,14 +4244,8 @@ void Executor::resolveExact(ExecutionState &state,
 }
 
 std::optional<Executor::MemoryLocation>
-Executor::extractMemoryObject(ExecutionState &state,
-                              bool isWrite,
-                              ref<Expr> address,
-                              ref<Expr> value /* undef if read */,
-                              KInstruction *target /* undef if write */) {
-  Expr::Width type = (isWrite ? value->getWidth() :
-                      getWidthForLLVMType(target->inst->getType()));
-  auto bytes = Expr::getMinBytesForWidth(type);
+Executor::extractMemoryObject(ExecutionState &state, ref<Expr> address, Expr::Width bitWidth) {
+  auto bytes = Expr::getMinBytesForWidth(bitWidth);
 
   if (SimplifySymIndices && !isa<ConstantExpr>(address)) {
     address = state.constraints.simplifyExpr(address);
@@ -4488,12 +4374,10 @@ void Executor::executeMemoryWrite(ExecutionState& state,
   processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
 }
 
-void Executor::executeMemoryRead(ExecutionState& state,
+ref<Expr> Executor::executeMemoryRead(ExecutionState& state,
                                  const MemoryLocation& memLoc,
-                                 KInstruction* target) {
-
-  auto type = getWidthForLLVMType(target->inst->getType());
-  auto bytes = Expr::getMinBytesForWidth(type);
+                                 Expr::Width bitWidth) {
+  auto bytes = Expr::getMinBytesForWidth(bitWidth);
 
   auto mo = memLoc.first;
   auto& offset = memLoc.second;
@@ -4501,14 +4385,14 @@ void Executor::executeMemoryRead(ExecutionState& state,
   auto os = state.addressSpace.findObject(mo);
   assert(os != nullptr);
 
-  ref<Expr> result = os->read(offset, type);
+  ref<Expr> result = os->read(offset, bitWidth);
   processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
 
   if (interpreterOpts.MakeConcreteSymbolic) {
     result = replaceReadWithSymbolic(state, result);
   }
 
-  bindLocal(target, state, result);
+  return result;
 }
 
 void Executor::executeMemoryOperation(ExecutionState &state,
@@ -4517,7 +4401,14 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
 
-  auto memRegion = extractMemoryObject(state, isWrite, address, value, target);
+  Expr::Width width = 0;
+  if (isWrite) {
+    width = value->getWidth();
+  } else {
+    width = getWidthForLLVMType(target->inst->getType());
+  }
+
+  auto memRegion = extractMemoryObject(state, address, width);
   if (!memRegion.has_value()) {
     return;
   }
@@ -4525,7 +4416,8 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   if (isWrite) {
     executeMemoryWrite(state, memRegion.value(), address, value);
   } else {
-    executeMemoryRead(state, memRegion.value(), target);
+    auto res = executeMemoryRead(state, memRegion.value(), width);
+    bindLocal(target, state, res);
   }
 }
 

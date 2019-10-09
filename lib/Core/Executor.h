@@ -348,17 +348,16 @@ private:
                    std::vector< ref<Expr> > &arguments);
 
   std::optional<MemoryLocation>
-  extractMemoryObject(ExecutionState &state, bool isWrite, ref<Expr> address,
-                      ref<Expr> value /* undef if read */, KInstruction *target /* undef if write */);
+  extractMemoryObject(ExecutionState &state, ref<Expr> address, Expr::Width bitWidth);
 
   void executeMemoryWrite(ExecutionState& state,
                           const MemoryLocation& memLoc,
                           ref<Expr> address,
                           ref<Expr> value);
 
-  void executeMemoryRead(ExecutionState& state,
-                         const MemoryLocation& memLoc,
-                         KInstruction* target);
+  ref<Expr> executeMemoryRead(ExecutionState& state,
+                              const MemoryLocation& memLoc,
+                              Expr::Width bitWidth);
                    
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
