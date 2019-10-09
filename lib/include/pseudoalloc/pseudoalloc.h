@@ -124,10 +124,8 @@ namespace pseudoalloc {
 
 	namespace suballocators {
 		class sized_heap_t {
-			/// Stores the slots which are currently allocated as a sorted sequence of right-open intervals, e.g., ((1, 3),
-			/// (4, 5)) means that the slots 1, 2 and 4 are currently in use. Between two of these intervals, there is always
-			/// at least one empty slot (i.e., ((1,2), (2,3)) is not valid and will not occur).
-			std::map<std::size_t, std::size_t> _allocated;
+			std::vector<std::uint64_t> _bitmap; /// stores the *free* locations as one bits
+			std::size_t _finger = 0;
 
 			char* _base = nullptr;
 			std::size_t _size = 0;
@@ -163,44 +161,36 @@ namespace pseudoalloc {
 			}
 
 			[[nodiscard]] void* allocate() {
-				if(_allocated.empty()) {
-					_allocated.emplace(0, 1);
-					return _base + index2pos(0);
+				while(_finger < _bitmap.size() && _bitmap[_finger] == 0) {
+					++_finger;
 				}
-
-				auto it = _allocated.begin();
-				auto const index = it->second++;
-				if(auto next = std::next(it); next != _allocated.end() && next->first == index + 1) {
-					it->second = next->second;
-					_allocated.erase(next);
+				if(_finger < _bitmap.size()) {
+					auto shift = util::ctz(_bitmap[_finger]);
+					_bitmap[_finger] ^= static_cast<::std::uint64_t>(1) << shift;
+					return _base + index2pos(_finger * 64 + shift);
+				} else {
+					_bitmap.emplace_back(~static_cast<::std::uint64_t>(1));
+					return _base + index2pos(_finger * 64 + 0);
 				}
-				return _base + index2pos(index);
 			}
 
 			void deallocate(void* const ptr) {
 				auto pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
 				_pa_check(pos < _size);
 				auto index = pos2index(pos);
+				if(index < _finger) {
+					_finger = index;
+				}
 
-				auto const next = _allocated.upper_bound(index);
-				auto it = std::prev(next);
-				assert(it != _allocated.end() && it->second > index && "Invalid free");
-				if(index == it->first) {
-					if(index + 1 == it->second) {
-						_allocated.erase(it);
-					} else {
-						auto node = _allocated.extract(it);
-						_pa_check(!node.empty());
-						++node.key();
-						_allocated.insert(next, std::move(node));
-						_pa_check(node.empty());
+				auto loc = index / 64;
+				auto shift = index % 64;
+				assert(loc < _bitmap.size() && (_bitmap[loc] & (static_cast<std::uint64_t>(1) << shift)) == 0 &&
+				       "Invalid free");
+				_bitmap[loc] |= static_cast<std::uint64_t>(1) << shift;
+				if(loc + 1 == _bitmap.size()) {
+					while(!_bitmap.empty() && _bitmap.back() == ~static_cast<::std::uint64_t>(0)) {
+						_bitmap.pop_back();
 					}
-				} else if(index + 1 == it->second) {
-					_pa_check(index != it->first);
-					--it->second;
-				} else {
-					_allocated.emplace_hint(next, index + 1, it->second);
-					it->second = index;
 				}
 			}
 		};
