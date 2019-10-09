@@ -4432,7 +4432,7 @@ Executor::extractMemoryObject(ExecutionState &state,
 
     unbound = branches.second;
     if (unbound) {
-      // Reset current pc since the operation has to be
+      // Reset current pc since the operation has to be redone in the forked state
       unbound->currentThread().pc = unbound->currentThread().prevPc;
     } else {
       break;
@@ -4517,146 +4517,15 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       ref<Expr> value /* undef if read */,
                                       KInstruction *target /* undef if write */) {
 
-  Thread &thread = state.currentThread();
-  Expr::Width type = (isWrite ? value->getWidth() : 
-                     getWidthForLLVMType(target->inst->getType()));
-  unsigned bytes = Expr::getMinBytesForWidth(type);
-
-  if (SimplifySymIndices) {
-    if (!isa<ConstantExpr>(address))
-      address = state.constraints.simplifyExpr(address);
-    if (isWrite && !isa<ConstantExpr>(value))
-      value = state.constraints.simplifyExpr(value);
+  auto memRegion = extractMemoryObject(state, isWrite, address, value, target);
+  if (!memRegion.has_value()) {
+    return;
   }
 
-  address = optimizer.optimizeExpr(address, true);
-
-  // fast path: single in-bounds resolution
-  ObjectPair op;
-  bool success;
-  solver->setTimeout(coreSolverTimeout);
-  if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
-    address = toConstant(state, address, "resolveOne failure");
-    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
-  }
-  solver->setTimeout(time::Span());
-
-  if (success) {
-    const MemoryObject *mo = op.first;
-
-    if (MaxSymArraySize && mo->size >= MaxSymArraySize) {
-      address = toConstant(state, address, "max-sym-array-size");
-    }
-    
-    ref<Expr> offset = mo->getOffsetExpr(address);
-    ref<Expr> check = mo->getBoundsCheckOffset(offset, bytes);
-    check = optimizer.optimizeExpr(check, true);
-
-    bool inBounds;
-    solver->setTimeout(coreSolverTimeout);
-    bool success = solver->mustBeTrue(state, check, inBounds);
-    solver->setTimeout(time::Span());
-    if (!success) {
-      thread.pc = thread.prevPc;
-      terminateStateEarly(state, "Query timed out (bounds check).");
-      return;
-    }
-
-    if (inBounds) {
-      const ObjectState *os = op.second;
-      if (isWrite) {
-        if (os->readOnly) {
-          terminateStateOnError(state, "memory error: object read only",
-                                ReadOnly);
-        } else {
-          ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-          if (PruneStates) {
-            // unregister previous value to avoid cancellation
-            state.memoryState.unregisterWrite(address, *mo, *wos, bytes);
-          }
-          wos->write(offset, value);
-          if (PruneStates) {
-            state.memoryState.registerWrite(address, *mo, *wos, bytes);
-          }
-          processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
-        }          
-      } else {
-        ref<Expr> result = os->read(offset, type);
-
-        processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
-        
-        if (interpreterOpts.MakeConcreteSymbolic)
-          result = replaceReadWithSymbolic(state, result);
-
-        bindLocal(target, state, result);
-      }
-
-      return;
-    }
-  } 
-
-  // we are on an error path (no resolution, multiple resolution, one
-  // resolution with out of bounds)
-
-  address = optimizer.optimizeExpr(address, true);
-  ResolutionList rl;  
-  solver->setTimeout(coreSolverTimeout);
-  bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
-                                               0, coreSolverTimeout);
-  solver->setTimeout(time::Span());
-  
-  // XXX there is some query wasteage here. who cares?
-  ExecutionState *unbound = &state;
-  
-  for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
-    const MemoryObject *mo = i->first;
-    const ObjectState *os = i->second;
-    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
-    
-    StatePair branches = fork(*unbound, inBounds, true);
-    ExecutionState *bound = branches.first;
-
-    // bound can be 0 on failure or overlapped 
-    if (bound) {
-      if (isWrite) {
-        if (os->readOnly) {
-          terminateStateOnError(*bound, "memory error: object read only",
-                                ReadOnly);
-        } else {
-          ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
-          if (PruneStates) {
-            // unregister previous value to avoid cancellation
-            bound->memoryState.unregisterWrite(address, *mo, *wos, bytes);
-          }
-          ref<Expr> offset = mo->getOffsetExpr(address);
-          wos->write(offset, value);
-          if (PruneStates) {
-            bound->memoryState.registerWrite(address, *mo, *wos, bytes);
-          }
-          processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
-        }
-      } else {
-        ref<Expr> offset = mo->getOffsetExpr(address);
-        ref<Expr> result = os->read(offset, type);
-        bindLocal(target, *bound, result);
-
-        processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
-      }
-    }
-
-    unbound = branches.second;
-    if (!unbound)
-      break;
-  }
-  
-  // XXX should we distinguish out of bounds and overlapped cases?
-  if (unbound) {
-    if (incomplete) {
-      terminateStateEarly(*unbound, "Query timed out (resolve).");
-    } else {
-      terminateStateOnError(*unbound, "memory error: out of bound pointer", Ptr,
-                            NULL, getAddressInfo(*unbound, address));
-    }
+  if (isWrite) {
+    executeMemoryWrite(state, memRegion.value(), address, value);
+  } else {
+    executeMemoryRead(state, memRegion.value(), target);
   }
 }
 
