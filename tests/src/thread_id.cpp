@@ -8,7 +8,7 @@ using namespace por;
 //
 // Basic functions
 //
-static void testBasicFunctions(void) {
+static void testBasicFunctions() {
 	thread_id empty{};
 	thread_id singleLayer(thread_id(), 1);
 	thread_id doubleLayer(singleLayer, 2);
@@ -24,7 +24,7 @@ static void testBasicFunctions(void) {
 //
 // Operator overloads
 //
-static void testOperatorOverloads(void) {
+static void testOperatorOverloads() {
 	assert(thread_id(thread_id(), 1));
 	assert(!thread_id());
 
@@ -46,7 +46,7 @@ static void testOperatorOverloads(void) {
 //
 // Formatting of thread ids
 //
-static void testFormattingOfThreadIds(void) {
+static void testFormattingOfThreadIds() {
 	assert(thread_id(thread_id(), 1).to_string() == "1");
 	assert(thread_id(thread_id(thread_id(), 1), 1).to_string() == "1,1");
 	assert(thread_id(thread_id(thread_id(), 1), 10000).to_string() == "1,10000");
@@ -76,7 +76,7 @@ static void testParsing(std::string input, bool shouldWork) {
 	}
 }
 
-static void testParsingOfThreadIds(void) {
+static void testParsingOfThreadIds() {
 	testParsing("1", true);
 	testParsing("1,2,3", true);
 	testParsing("1231,12312,4334", true);
@@ -101,7 +101,7 @@ static void testParsingOfThreadIds(void) {
 	testParsing("1,123123121", false); // simple overflow
 }
 
-int main(void) {
+int main() {
 	testBasicFunctions();
 
 	testOperatorOverloads();
