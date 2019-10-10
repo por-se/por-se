@@ -13,17 +13,17 @@ namespace por::event {
 		{ }
 
 	public:
-		virtual std::string to_string(bool details) const override {
+		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: program_init]";
 			return "program_init";
 		}
 
-		virtual util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const override {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
 
-		virtual event const* thread_predecessor() const override {
+		event const* thread_predecessor() const override {
 			return nullptr;
 		}
 

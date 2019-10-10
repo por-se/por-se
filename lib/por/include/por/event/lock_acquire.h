@@ -50,26 +50,26 @@ namespace por::event {
 			});
 		}
 
-		virtual void mark_as_open(path_t const& path) const override {
+		void mark_as_open(path_t const& path) const override {
 			_info.mark_as_open(path);
 		}
-		virtual void mark_as_explored(path_t const& path) const override {
+		void mark_as_explored(path_t const& path) const override {
 			_info.mark_as_explored(path);
 		}
-		virtual bool is_present(path_t const& path) const override {
+		bool is_present(path_t const& path) const override {
 			return _info.is_present(path);
 		}
-		virtual bool is_explored(path_t const& path) const override {
+		bool is_explored(path_t const& path) const override {
 			return _info.is_explored(path);
 		}
 
-		virtual std::string to_string(bool details) const override {
+		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_acquire]";
 			return "lock_acquire";
 		}
 
-		virtual util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const override {
 			if(_predecessors[1] != nullptr) {
 				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);
 			} else {
@@ -77,7 +77,7 @@ namespace por::event {
 			}
 		}
 
-		virtual event const* thread_predecessor() const override {
+		event const* thread_predecessor() const override {
 			return _predecessors[0];
 		}
 

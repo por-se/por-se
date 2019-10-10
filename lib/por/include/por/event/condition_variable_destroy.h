@@ -96,17 +96,17 @@ namespace por::event {
 			});
 		}
 
-		virtual std::string to_string(bool details) const override {
+		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: condition_variable_destroy cid: " + std::to_string(cid()) + "]";
 			return "condition_variable_destroy";
 		}
 
-		virtual util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const override {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		virtual event const* thread_predecessor() const override {
+		event const* thread_predecessor() const override {
 			return _predecessors[0];
 		}
 

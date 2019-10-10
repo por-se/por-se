@@ -45,20 +45,20 @@ namespace por::event {
 			});
 		}
 
-		virtual void mark_as_open(path_t const& path) const override {
+		void mark_as_open(path_t const& path) const override {
 			_info.mark_as_open(path);
 		}
-		virtual void mark_as_explored(path_t const& path) const override {
+		void mark_as_explored(path_t const& path) const override {
 			_info.mark_as_explored(path);
 		}
-		virtual bool is_present(path_t const& path) const override {
+		bool is_present(path_t const& path) const override {
 			return _info.is_present(path);
 		}
-		virtual bool is_explored(path_t const& path) const override {
+		bool is_explored(path_t const& path) const override {
 			return _info.is_explored(path);
 		}
 
-		virtual std::string to_string(bool details) const override {
+		std::string to_string(bool details) const override {
 			if(details) {
 				std::string res = "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: local";
 				if(!path().empty())
@@ -72,11 +72,11 @@ namespace por::event {
 			}
 		}
 
-		virtual util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const override {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		virtual event const* thread_predecessor() const override {
+		event const* thread_predecessor() const override {
 			return _predecessors[0];
 		}
 
