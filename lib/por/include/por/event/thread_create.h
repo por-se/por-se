@@ -44,6 +44,27 @@ namespace por::event {
 			});
 		}
 
+		thread_create(thread_create&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _created_tid(std::move(that._created_tid)) {
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			replace_successor_of(*thread_predecessor(), that);
+		}
+
+		~thread_create() {
+			assert(!has_successors());
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			remove_from_successors_of(*thread_predecessor());
+		}
+
+		thread_create() = delete;
+		thread_create(const thread_create&) = delete;
+		thread_create& operator=(const thread_create&) = delete;
+		thread_create& operator=(thread_create&&) = delete;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_create created: " + created_tid().to_string() + "]";

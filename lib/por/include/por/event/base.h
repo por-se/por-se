@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -95,6 +96,8 @@ namespace por::event {
 		thread_id_t _tid;
 		event_kind _kind;
 
+		mutable std::set<event const*> _successors;
+
 		bool is_explorable() const {
 			switch(_kind) {
 				case por::event::event_kind::local:
@@ -133,12 +136,25 @@ namespace por::event {
 			return true;
 		}
 
-		explicit event() = delete;
-		event(const event&) = default;
-		event(event&&) = default;
-		event& operator=(const event&) = default;
-		event& operator=(event&&) = default;
-		virtual ~event() = default;
+		event(event&& that)
+		: _depth(that._depth)
+		, _cone(std::move(that._cone))
+		, _tid(std::move(that._tid))
+		, _kind(that._kind)
+		, _successors(std::move(that._successors))
+		, _fingerprint(std::move(that._fingerprint))
+		, _thread_delta(std::move(that._thread_delta)) {
+			assert(!that.has_successors());
+		}
+
+		virtual ~event() {
+			assert(!has_successors());
+		}
+
+		event() = delete;
+		event(const event&) = delete;
+		event& operator=(const event&) = delete;
+		event& operator=(event&&) = delete;
 
 	protected:
 		event(event_kind kind, thread_id_t tid)
@@ -158,6 +174,7 @@ namespace por::event {
 		{
 			assert(immediate_predecessor._depth < _depth);
 			assert(_cone.size() >= immediate_predecessor._cone.size());
+			immediate_predecessor._successors.insert(this);
 		}
 
 		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const* single_other_predecessor, util::iterator_range<event const* const*> other_predecessors)
@@ -174,15 +191,25 @@ namespace por::event {
 
 			assert(immediate_predecessor._depth < _depth);
 			assert(_cone.size() >= immediate_predecessor._cone.size());
+			if(&immediate_predecessor == _cone.at(immediate_predecessor.tid())) {
+				immediate_predecessor._successors.insert(this);
+			}
 			if(single_other_predecessor != nullptr) {
 				assert(single_other_predecessor->_depth < _depth);
 				assert(_cone.size() >= single_other_predecessor->_cone.size());
+				if(single_other_predecessor == _cone.at(single_other_predecessor->tid())) {
+					single_other_predecessor->_successors.insert(this);
+				}
 			}
 			for(auto& op : other_predecessors) {
-				if(!op)
+				if(!op) {
 					continue;
+				}
 				assert(op->_depth < _depth);
 				assert(_cone.size() >= op->_cone.size());
+				if(op == _cone.at(op->tid())) {
+					op->_successors.insert(this);
+				}
 			}
 		}
 
@@ -199,12 +226,30 @@ namespace por::event {
 		: event(kind, tid, immediate_predecessor, single_other_predecessor, util::make_iterator_range<event const* const*>(nullptr, nullptr))
 		{ }
 
+		void remove_from_successors_of(event const& event) const noexcept {
+			event._successors.erase(this);
+		}
+
+		void replace_successor_of(event const& event, por::event::event const& old) const noexcept {
+			std::set<por::event::event const*>& succ = event._successors;
+			succ.erase(&old);
+			succ.insert(this);
+		}
+
 	public:
+		bool has_successors() const noexcept {
+			return !_successors.empty();
+		}
+
 		virtual std::string to_string(bool details = false) const = 0;
 
 		virtual util::iterator_range<event const* const*> predecessors() const noexcept {
 			assert(_kind == event_kind::program_init);
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
+		}
+
+		auto const& successors() const noexcept {
+			return _successors;
 		}
 
 		virtual event const* thread_predecessor() const = 0;

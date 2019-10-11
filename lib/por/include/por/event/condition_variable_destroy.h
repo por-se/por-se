@@ -82,6 +82,30 @@ namespace por::event {
 			});
 		}
 
+		condition_variable_destroy(condition_variable_destroy&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _cid(that._cid) {
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				replace_successor_of(*pred, that);
+			}
+		}
+
+		~condition_variable_destroy() {
+			assert(!has_successors());
+			assert(!has_successors());
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				remove_from_successors_of(*pred);
+			}
+		}
+
+		condition_variable_destroy() = delete;
+		condition_variable_destroy(const condition_variable_destroy&) = delete;
+		condition_variable_destroy& operator=(const condition_variable_destroy&) = delete;
+		condition_variable_destroy& operator=(condition_variable_destroy&&) = delete;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: condition_variable_destroy cid: " + std::to_string(cid()) + "]";

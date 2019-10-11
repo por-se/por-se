@@ -81,6 +81,30 @@ namespace por::event {
 			});
 		}
 
+		wait2(wait2&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _cid(that._cid)
+		, _info(std::move(that._info)) {
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				replace_successor_of(*pred, that);
+			}
+		}
+
+		~wait2() {
+			assert(!has_successors());
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				remove_from_successors_of(*pred);
+			}
+		}
+
+		wait2() = delete;
+		wait2(const wait2&) = delete;
+		wait2& operator=(const wait2&) = delete;
+		wait2& operator=(wait2&&) = delete;
+
 		void mark_as_open(path_t const& path) const override {
 			_info.mark_as_open(path);
 		}

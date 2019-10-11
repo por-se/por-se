@@ -45,6 +45,28 @@ namespace por::event {
 			});
 		}
 
+		lock_destroy(lock_destroy&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors)) {
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				replace_successor_of(*pred, that);
+			}
+		}
+
+		~lock_destroy() {
+			assert(!has_successors());
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				remove_from_successors_of(*pred);
+			}
+		}
+
+		lock_destroy() = delete;
+		lock_destroy(const lock_destroy&) = delete;
+		lock_destroy& operator=(const lock_destroy&) = delete;
+		lock_destroy& operator=(lock_destroy&&) = delete;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_destroy]";

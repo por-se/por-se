@@ -50,6 +50,29 @@ namespace por::event {
 			});
 		}
 
+		lock_acquire(lock_acquire&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _info(std::move(that._info)) {
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				replace_successor_of(*pred, that);
+			}
+		}
+
+		~lock_acquire() {
+			assert(!has_successors());
+			for(auto& pred : predecessors()) {
+				assert(pred != nullptr);
+				remove_from_successors_of(*pred);
+			}
+		}
+
+		lock_acquire() = delete;
+		lock_acquire(const lock_acquire&) = delete;
+		lock_acquire& operator=(const lock_acquire&) = delete;
+		lock_acquire& operator=(lock_acquire&&) = delete;
+
 		void mark_as_open(path_t const& path) const override {
 			_info.mark_as_open(path);
 		}

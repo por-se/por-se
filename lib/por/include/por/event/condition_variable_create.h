@@ -43,6 +43,27 @@ namespace por::event {
 			});
 		}
 
+		condition_variable_create(condition_variable_create&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _cid(that._cid) {
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			replace_successor_of(*thread_predecessor(), that);
+		}
+
+		~condition_variable_create() {
+			assert(!has_successors());
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			remove_from_successors_of(*thread_predecessor());
+		}
+
+		condition_variable_create() = delete;
+		condition_variable_create(const condition_variable_create&) = delete;
+		condition_variable_create& operator=(const condition_variable_create&) = delete;
+		condition_variable_create& operator=(condition_variable_create&&) = delete;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: condition_variable_create cid: " + std::to_string(cid()) + "]";

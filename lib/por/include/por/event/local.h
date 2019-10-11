@@ -45,6 +45,28 @@ namespace por::event {
 			});
 		}
 
+		local(local&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors))
+		, _path(std::move(that._path))
+		, _info(std::move(that._info)) {
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			replace_successor_of(*thread_predecessor(), that);
+		}
+
+		~local() {
+			assert(!has_successors());
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			remove_from_successors_of(*thread_predecessor());
+		}
+
+		explicit local() = delete;
+		local(const local&) = delete;
+		local& operator=(const local&) = delete;
+		local& operator=(local&&) = delete;
+
 		void mark_as_open(path_t const& path) const override {
 			_info.mark_as_open(path);
 		}

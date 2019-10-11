@@ -37,6 +37,26 @@ namespace por::event {
 			});
 		}
 
+		thread_exit(thread_exit&& that)
+		: event(std::move(that))
+		, _predecessors(std::move(that._predecessors)) {
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			replace_successor_of(*thread_predecessor(), that);
+		}
+
+		~thread_exit() {
+			assert(!has_successors());
+			assert(_predecessors.size() == 1);
+			assert(thread_predecessor() != nullptr);
+			remove_from_successors_of(*thread_predecessor());
+		}
+
+		thread_exit() = delete;
+		thread_exit(const thread_exit&) = delete;
+		thread_exit& operator=(const thread_exit&) = delete;
+		thread_exit& operator=(thread_exit&&) = delete;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit]";

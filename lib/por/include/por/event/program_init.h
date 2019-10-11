@@ -13,6 +13,12 @@ namespace por::event {
 		{ }
 
 	public:
+		program_init(const program_init&) = delete;
+		program_init(program_init&&) = default;
+		program_init& operator=(const program_init&) = delete;
+		program_init& operator=(program_init&&) = delete;
+		~program_init() = default;
+
 		std::string to_string(bool details) const override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: program_init]";

@@ -26,6 +26,9 @@ namespace por {
 
 		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
 		por::event::event const* store_event(T&& event) {
+			static_assert(std::is_rvalue_reference<decltype(event)>::value);
+			static_assert(std::is_move_constructible_v<std::remove_reference_t<decltype(event)>>);
+
 			key_t key = std::make_tuple(event.tid(), event.depth(), event.kind());
 			auto ptr = std::make_unique<T>(std::forward<T>(event));
 			return _events[std::move(key)].emplace_back(std::move(ptr)).get();
@@ -33,11 +36,38 @@ namespace por {
 
 	public:
 		unfolding();
-		unfolding(unfolding&) = default;
-		unfolding& operator=(unfolding&) = default;
+		unfolding(unfolding const&) = default;
+		unfolding& operator=(unfolding const&) = default;
 		unfolding(unfolding&&) = default;
 		unfolding& operator=(unfolding&&) = default;
-		~unfolding() = default;
+
+		~unfolding() {
+			assert(_root->has_successors());
+			while(!_events.empty()) {
+				[[maybe_unused]] std::size_t removed = 0;
+				for(auto it = _events.begin(); it != _events.end();) {
+					auto& v = it->second;
+					for(auto it2 = v.begin(); it2 != v.end();) {
+						auto& e = *it2;
+						if(e->kind() == por::event::event_kind::program_init) {
+							assert(e.get() == _root);
+						}
+						if(!e->has_successors()) {
+							it2 = v.erase(it2);
+							++removed;
+						} else {
+							++it2;
+						}
+					}
+					if(v.empty()) {
+						it = _events.erase(it);
+					} else {
+						++it;
+					}
+				}
+				assert(removed > 0 && "infinite loop");
+			}
+		}
 
 		void mark_as_open(por::event::event const& e, por::event::path_t const& path) {
 			e.mark_as_open(path);
