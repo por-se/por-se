@@ -5378,7 +5378,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
       if (state.porConfiguration->peek()->kind() == por::event::event_kind::thread_join) {
         auto *join = static_cast<por::event::thread_join const*>(state.porConfiguration->peek());
-        auto jid = join->joined_thread()->tid();
+        auto jid = join->joined_thread();
         auto it = state.threads.find(jid);
         if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {
           // thread that is to be joined has to catch-up first
