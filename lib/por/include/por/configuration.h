@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cone.h"
+#include "comb.h"
 #include "event/event.h"
 #include "unfolding.h"
 
@@ -987,99 +988,6 @@ namespace por {
 		}
 
 	private:
-		// IMPORTANT: comb must be conflict-free
-		template<typename UnaryPredicate>
-		std::vector<std::vector<por::event::event const*>> concurrent_combinations(
-			std::map<por::event::thread_id_t, std::vector<por::event::event const*>> &comb,
-			UnaryPredicate filter
-		) {
-			std::vector<std::vector<por::event::event const*>> result;
-			// compute all combinations: S \subseteq comb (where S is concurrent,
-			// i.e. there are no causal dependencies between any of its elements)
-			assert(comb.size() < 64); // FIXME: can "only" be used with 64 threads
-			for(std::uint64_t mask = 0; mask < (static_cast<std::uint64_t>(1) << comb.size()); ++mask) {
-				std::size_t popcount = 0;
-				for(std::size_t i = 0; i < comb.size(); ++i) {
-					if((mask >> i) & 1)
-						++popcount;
-				}
-				if (popcount > 0) {
-					// indexes of the threads enabled in current mask
-					// (of which there are popcount-many)
-					std::vector<por::event::thread_id_t> selected_threads;
-					selected_threads.reserve(popcount);
-
-					// maps a selected thread to the highest index present in its event vector
-					// i.e. highest_index[i] == comb[selected_threads[i]].size() - 1
-					std::vector<std::size_t> highest_index;
-					highest_index.reserve(popcount);
-
-					auto it = comb.begin();
-					for(std::size_t i = 0; i < comb.size(); ++i, ++it) {
-						assert(std::next(comb.begin(), i) == it);
-						assert(std::next(comb.begin(), i) != comb.end());
-						if((mask >> i) & 1) {
-							selected_threads.push_back(it->first);
-							highest_index.push_back(it->second.size() - 1);
-						}
-					}
-
-					// index in the event vector of corresponding thread for
-					// each selected thread, starting with all zeros
-					std::vector<std::size_t> event_indices(popcount, 0);
-
-					std::size_t pos = 0;
-					while(pos < popcount) {
-						// complete subset
-						std::vector<por::event::event const*> subset;
-						subset.reserve(popcount);
-						bool is_concurrent = true;
-						for(std::size_t k = 0; k < popcount; ++k) {
-							auto& new_event = comb[selected_threads[k]][event_indices[k]];
-							if(k > 0) {
-								// check if new event is concurrent to previous ones
-								for(auto& e : subset) {
-									if(e->is_less_than(*new_event) || new_event->is_less_than(*e)) {
-										is_concurrent = false;
-										break;
-									}
-								}
-							}
-							if(!is_concurrent)
-								break;
-							subset.push_back(new_event);
-						}
-						if(is_concurrent && filter(subset)) {
-							result.push_back(std::move(subset));
-						}
-
-						// search for lowest position that can be incremented
-						while(pos < popcount && event_indices[pos] == highest_index[pos]) {
-							++pos;
-						}
-
-						if(pos == popcount && event_indices[pos - 1] == highest_index[pos - 1])
-							break;
-
-						++event_indices[pos];
-
-						// reset lower positions and go back to pos = 0
-						while(pos > 0) {
-							--pos;
-							event_indices[pos] = 0;
-						}
-					}
-				} else {
-					// empty set
-					std::vector<por::event::event const*> empty;
-					if(filter(empty)) {
-						result.push_back(std::move(empty));
-					}
-				}
-			}
-			return result;
-		}
-
 		std::vector<conflicting_extension> cex_acquire(por::event::event const& e) {
 			assert(e.kind() == por::event::event_kind::lock_acquire || e.kind() == por::event::event_kind::wait2);
 
@@ -1159,25 +1067,18 @@ namespace por {
 			// exclude condition variable create event from comb (if present)
 			por::event::event const* cond_create = nullptr;
 
-			std::map<por::event::thread_id_t, std::vector<por::event::event const*>> comb;
+			por::comb comb;
 			for(auto& p : e.condition_variable_predecessors()) {
 				// cond predecessors contains exactly the bro and lost sig causes outside of [et] plus cond_create (if exists)
 				if(p->kind() == por::event::event_kind::condition_variable_create) {
 					cond_create = p;
 				} else {
 					assert(p->tid() != e.tid() && !p->is_less_than(*et));
-					comb[p->tid()].push_back(p);
+					comb.insert(*p);
 				}
 			}
 
-			// sort each tooth of comb
-			for(auto& [tid, tooth] : comb) {
-				std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
-					return a->is_less_than(*b);
-				});
-			}
-
-			concurrent_combinations(comb, [&](auto const& M) {
+			comb.concurrent_combinations([&](auto const& M) {
 				bool generate_conflict = false;
 
 				por::cone cone(*et, cond_create, util::make_iterator_range<por::event::event const* const*>(M.data(), M.data() + M.size()));
@@ -1200,23 +1101,15 @@ namespace por {
 					return false;
 
 				// compute conflicts (minimal events from comb \setminus [M])
-				// TODO: compute real minimum, not a superset
-				std::vector<por::event::event const*> conflicts;
-				auto conflict_comb = comb;
-				for(auto& m : M) {
-					auto& tooth = conflict_comb[m->tid()];
-					if(tooth.size() == 1 || tooth.back()->depth() == m->depth()) {
-						conflict_comb.erase(m->tid());
-					} else {
-						auto it = std::find(tooth.begin(), tooth.end(), m);
-						assert(it != tooth.end());
-						tooth.erase(tooth.begin(), std::next(it));
+				por::comb conflict_comb(comb, [&](auto& c) {
+					for(auto &m : M) {
+						if(m->is_less_than_eq(c)) {
+							return false;
+						}
 					}
-				}
-				for(auto& [tid, tooth] : conflict_comb) {
-					// minimal event from this thread
-					conflicts.emplace_back(tooth.front());
-				}
+					return true;
+				});
+				std::vector<por::event::event const*> conflicts = conflict_comb.min();
 
 				// lock predecessor is guaranteed to be in [et] (has to be an aquire/wait2 on the same thread)
 				std::vector<por::event::event const*> N(M);
@@ -1322,36 +1215,21 @@ namespace por {
 			std::vector<por::event::event const*> max;
 			{
 				// compute comb
-				std::map<por::event::thread_id_t, std::vector<por::event::event const*>> comb;
+				por::comb comb;
 				for(auto& p : e.condition_variable_predecessors()) {
 					// cond predecessors contain all causes outside of [et]
 						if(p->tid() == e.tid() || p->is_less_than(*et))
 							continue; // cond_create and wait1s (because of their lock relation) can be in in [et]
-					comb[p->tid()].push_back(p);
+					comb.insert(*p);
 				}
-				// derive maximum from comb
-				for(auto& [tid, tooth] : comb) {
-					auto x = std::max_element(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
-						return a->is_less_than(*b);
-					});
-					bool is_maximal_element = true;
-					for(auto it = max.begin(); it != max.end();) {
-						if((*it)->is_less_than(**x)) {
-							it = max.erase(it);
-						} else {
-							if((*x)->is_less_than(**it))
-								is_maximal_element = false;
-							++it;
-						}
-					}
-					if(is_maximal_element)
-						max.push_back(*x);
-				}
+				max = comb.max();
 			}
 
 			// calculate comb, containing all w1, sig, bro events on same cond outside of [et] \cup succ(e) (which contains e)
 			// we cannot use cond predecessors here as these are not complete
-			std::map<por::event::thread_id_t, std::vector<por::event::event const*>> comb;
+			por::comb comb;
+			// also prepare wait1_comb (version of comb with only wait1 events on same cond)
+			por::comb wait1_comb;
 			for(auto& thread_head : _thread_heads) {
 				por::event::event const* pred = thread_head.second;
 				do {
@@ -1370,7 +1248,10 @@ namespace por {
 							cond_create = pred; // exclude from comb
 						} else if(pred->kind() != por::event::event_kind::wait2) {
 							// also exclude wait2 events
-							comb[pred->tid()].push_back(pred);
+							comb.insert(*pred);
+							if(pred->kind() == por::event::event_kind::wait1) {
+								wait1_comb.insert(*pred);
+							}
 						}
 					}
 
@@ -1378,19 +1259,8 @@ namespace por {
 				} while(pred != nullptr);
 			}
 
-			// prepare wait1_comb (sorted version of comb with only wait1 events on same cond)
-			auto wait1_comb = comb;
-			for(auto& [tid, tooth] : wait1_comb) {
-				tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [](auto& e) {
-					return e->kind() != por::event::event_kind::wait1;
-				}), tooth.end());
-				std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
-					return a->is_less_than(*b);
-				});
-			}
-
 			// conflicting extensions: lost notification events
-			concurrent_combinations(comb, [&](auto const& M) {
+			comb.concurrent_combinations([&](auto const& M) {
 				// ensure that M differs from max
 				if(max.size() == M.size()) {
 					bool ismax = true;
@@ -1458,36 +1328,16 @@ namespace por {
 				}
 
 				// compute conflicts (minimal event from {e} or wait1s in (comb \setminus [M]))
-				// TODO: compute real minimum, not a superset
-				std::vector<por::event::event const*> conflicts;
-				auto conflict_comb = wait1_comb;
-				{ // add e to conflict_comb and sort the corresponding tooth
-					auto& e_tooth = conflict_comb[e.tid()];
-					e_tooth.push_back(&e);
-					std::sort(e_tooth.begin(), e_tooth.end(), [](auto& a, auto& b) {
-						return a->is_less_than(*b);
-					});
-				}
-				for(auto& m : M) {
-					auto it = conflict_comb.begin();
-					while(it != conflict_comb.end()) {
-						auto& tooth = it->second;
-						tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
-							return m->is_less_than_eq(*e);
-						}), tooth.end());
-						if(tooth.empty())
-							it = conflict_comb.erase(it);
-						else
-							++it;
+				auto conflict_comb = por::comb(wait1_comb, [&](auto& c) {
+					for(auto &m : M) {
+						if(m->is_less_than_eq(c)) {
+							return false;
+						}
 					}
-				}
-				for(auto& [tid, tooth] : conflict_comb) {
-					if(tooth.empty())
-						continue;
-
-					// minimal event from this thread
-					conflicts.emplace_back(tooth.front());
-				}
+					return true;
+				});
+				conflict_comb.insert(e);
+				std::vector<por::event::event const*> conflicts = conflict_comb.min();
 
 				if(e.kind() == por::event::event_kind::signal) {
 					result.emplace_back(por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)), std::move(conflicts));
@@ -1560,28 +1410,22 @@ namespace por {
 			// conflicting extensions: broadcast events
 			if(e.kind() == por::event::event_kind::broadcast) {
 				// compute pre-filtered conflict comb (only containing wait1, non-lost sig and lost bro events)
-				auto broadcast_conflict_comb = comb;
-				for(auto& [tid, tooth] : broadcast_conflict_comb) {
-					tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [](auto& e) {
-						if(e->kind() == por::event::event_kind::wait1) {
-							return false;
-						} else if(e->kind() == por::event::event_kind::signal) {
-							auto* sig = static_cast<por::event::signal const*>(e);
-							if(!sig->is_lost())
-								return false;
-						} else if(e->kind() == por::event::event_kind::broadcast) {
-							auto* bro = static_cast<por::event::broadcast const*>(e);
-							if(bro->is_lost())
-								return false;
-						}
+				auto broadcast_conflict_comb = por::comb(comb, [](auto &e) {
+					if(e.kind() == por::event::event_kind::wait1) {
 						return true;
-					}), tooth.end());
-					std::sort(tooth.begin(), tooth.end(), [](auto& a, auto& b) {
-						return a->is_less_than(*b);
-					});
-				}
+					} else if(e.kind() == por::event::event_kind::signal) {
+						auto& sig = static_cast<por::event::signal const&>(e);
+						if(!sig.is_lost())
+							return true;
+					} else if(e.kind() == por::event::event_kind::broadcast) {
+						auto& bro = static_cast<por::event::broadcast const&>(e);
+						if(bro.is_lost())
+							return true;
+					}
+					return false;
+				});
 
-				concurrent_combinations(comb, [&](auto const& M) {
+				comb.concurrent_combinations([&](auto const& M) {
 					// ensure that M differs from max
 					if(max.size() == M.size()) {
 						bool ismax = true;
@@ -1630,29 +1474,17 @@ namespace por {
 					}
 
 					// compute conflicts
-					// TODO: compute real minimum, not a superset
-					std::vector<por::event::event const*> conflicts;
-					auto conflict_comb = broadcast_conflict_comb;
-					for(auto& m : M) {
-						auto it = conflict_comb.begin();
-						while(it != conflict_comb.end()) {
-							auto& tooth = it->second;
-							tooth.erase(std::remove_if(tooth.begin(), tooth.end(), [&](auto& e) {
-								return m->is_less_than_eq(*e);
-							}), tooth.end());
-							if(tooth.empty())
-								it = conflict_comb.erase(it);
-							else
-								++it;
+					auto conflict_comb = por::comb(broadcast_conflict_comb, [&](auto& c) {
+						for(auto &m : M) {
+							if(m->is_less_than_eq(c)) {
+								return false;
+							}
 						}
-					}
-					for(auto& [tid, tooth] : conflict_comb) {
-						if(tooth.empty())
-							continue;
+						return true;
+					});
 
-						// minimal event from this thread
-						conflicts.emplace_back(tooth.front());
-					}
+					std::vector<por::event::event const*> conflicts = conflict_comb.min();
+
 					// as long as this is true, e does not have to be included itself
 					//assert(!conflicts.empty()); // FIXME: does fail for random-graph 144
 
