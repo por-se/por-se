@@ -33,8 +33,9 @@ target_sources(libpor PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_exit.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait1.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait2.h"
-	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
 	"${CMAKE_CURRENT_LIST_DIR}/cone.h"
+	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
+	"${CMAKE_CURRENT_LIST_DIR}/comb.h"
 
 	"${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h"
 )
