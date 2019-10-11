@@ -203,6 +203,10 @@ namespace por::event {
 			return nullptr;
 		}
 
+		virtual util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
+			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
+		}
+
 		virtual cond_id_t cid() const noexcept { return 0; }
 
 		bool is_less_than(por::cone const& rhs) const {

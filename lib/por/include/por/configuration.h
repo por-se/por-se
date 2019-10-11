@@ -986,33 +986,6 @@ namespace por {
 			return thread_event;
 		}
 
-		static util::iterator_range<por::event::event const* const*> get_condition_variable_predecessors(por::event::event const* event) {
-			assert(event);
-			auto preds = util::make_iterator_range<por::event::event const* const*>(nullptr, nullptr);
-			switch(event->kind()) {
-				case por::event::event_kind::broadcast:
-					preds = static_cast<por::event::broadcast const*>(event)->condition_variable_predecessors();
-					break;
-				case por::event::event_kind::condition_variable_create:
-					break;
-				case por::event::event_kind::condition_variable_destroy:
-					preds = static_cast<por::event::condition_variable_destroy const*>(event)->condition_variable_predecessors();
-					break;
-				case por::event::event_kind::signal:
-					preds = static_cast<por::event::signal const*>(event)->condition_variable_predecessors();
-					break;
-				case por::event::event_kind::wait1:
-					preds = static_cast<por::event::wait1 const*>(event)->condition_variable_predecessors();
-					break;
-				case por::event::event_kind::wait2:
-					preds = static_cast<por::event::wait2 const*>(event)->condition_variable_predecessors();
-					break;
-				default:
-					assert(0 && "event has no condition_variable_predecessors");
-			}
-			return preds;
-		}
-
 	private:
 		// IMPORTANT: comb must be conflict-free
 		template<typename UnaryPredicate>
@@ -1187,7 +1160,7 @@ namespace por {
 			por::event::event const* cond_create = nullptr;
 
 			std::map<por::event::thread_id_t, std::vector<por::event::event const*>> comb;
-			for(auto& p : get_condition_variable_predecessors(&e)) {
+			for(auto& p : e.condition_variable_predecessors()) {
 				// cond predecessors contains exactly the bro and lost sig causes outside of [et] plus cond_create (if exists)
 				if(p->kind() == por::event::event_kind::condition_variable_create) {
 					cond_create = p;
@@ -1350,7 +1323,7 @@ namespace por {
 			{
 				// compute comb
 				std::map<por::event::thread_id_t, std::vector<por::event::event const*>> comb;
-				for(auto& p : get_condition_variable_predecessors(&e)) {
+				for(auto& p : e.condition_variable_predecessors()) {
 					// cond predecessors contain all causes outside of [et]
 						if(p->tid() == e.tid() || p->is_less_than(*et))
 							continue; // cond_create and wait1s (because of their lock relation) can be in in [et]

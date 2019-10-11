@@ -199,7 +199,7 @@ namespace por::event {
 		}
 
 		// may return empty range if no condition variable predecessor other than condition_variable_create exists
-		util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
+		util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept override {
 			return util::make_iterator_range<event const* const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
 		}
 
