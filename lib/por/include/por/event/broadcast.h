@@ -137,7 +137,7 @@ namespace por::event {
 						assert(!signal_is_lost(e));
 						assert(signal_notified_thread(e) != this->tid());
 					} else if(e->kind() == event_kind::broadcast) {
-						auto bro = static_cast<broadcast const*>(e);
+						[[maybe_unused]] auto bro = static_cast<broadcast const*>(e);
 						assert(!bro->is_lost());
 						assert(!bro->is_notifying_thread(this->tid()));
 					} else {

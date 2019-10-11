@@ -95,12 +95,12 @@ namespace por::event {
 			for(auto& e : this->condition_variable_predecessors()) {
 				assert(!!e && "range should be empty instead of containing nullptr");
 				if(e->kind() == event_kind::signal) {
-					auto sig = static_cast<signal const*>(e);
+					[[maybe_unused]] auto sig = static_cast<signal const*>(e);
 					assert(!sig->is_lost());
 					assert(sig->notified_thread() != this->tid());
 					assert(sig->cid() == this->cid());
 				} else if(e->kind() == event_kind::broadcast) {
-					auto bro = static_cast<broadcast const*>(e);
+					[[maybe_unused]] auto bro = static_cast<broadcast const*>(e);
 					assert(!bro->is_lost());
 					assert(!bro->is_notifying_thread(this->tid()));
 					assert(bro->cid() == this->cid());

@@ -41,13 +41,13 @@ namespace por::event {
 			assert(this->notifying_event());
 			assert(this->notifying_event()->tid() != this->tid());
 			if(this->notifying_event()->kind() == event_kind::signal) {
-				auto sig = static_cast<signal const*>(this->notifying_event());
+				[[maybe_unused]] auto sig = static_cast<signal const*>(this->notifying_event());
 				assert(sig->notified_thread() == this->tid());
 				assert(sig->cid() == this->cid());
 				assert(sig->wait_predecessor() == this->thread_predecessor());
 			} else {
 				assert(this->notifying_event()->kind() == event_kind::broadcast);
-				auto bro = static_cast<broadcast const*>(this->notifying_event());
+				[[maybe_unused]] auto bro = static_cast<broadcast const*>(this->notifying_event());
 				assert(bro->is_notifying_thread(this->tid()));
 				assert(bro->cid() == this->cid());
 				[[maybe_unused]] bool wait1_found = false;

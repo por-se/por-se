@@ -42,9 +42,9 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 		return false;
 
 	auto a_it = a_preds.begin();
-	auto a_ie = a_preds.end();
 	auto b_it = b_preds.begin();
-	auto b_ie = b_preds.end();
+	[[maybe_unused]] auto a_ie = a_preds.end();
+	[[maybe_unused]] auto b_ie = b_preds.end();
 	for(std::size_t i = 0; i < a_num_preds; ++i) {
 		assert(a_it != a_ie);
 		assert(b_it != b_ie);
