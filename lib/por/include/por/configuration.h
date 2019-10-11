@@ -1739,6 +1739,9 @@ namespace por {
 						case por::event::event_kind::broadcast:
 							candidates = cex_notification(*e);
 							break;
+						default:
+							_unfolding->mark_as_explored(*e, path);
+							continue;
 					}
 					_unfolding->stats_inc_cex_candidates(candidates.size());
 					for(auto& cex : candidates) {
