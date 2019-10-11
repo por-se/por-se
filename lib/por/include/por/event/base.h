@@ -107,7 +107,7 @@ namespace por::event {
 #endif // LIBPOR_IN_KLEE
 
 		event_kind kind() const noexcept { return _kind; }
-		thread_id_t tid() const noexcept { return _tid; }
+		thread_id_t const& tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
 		auto const& cone() const noexcept { return _cone; }
 
