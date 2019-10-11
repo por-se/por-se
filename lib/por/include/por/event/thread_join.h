@@ -24,10 +24,10 @@ namespace por::event {
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
-			assert(this->joined_thread());
-			assert(this->joined_thread()->tid());
-			assert(this->joined_thread()->tid() != this->tid());
-			assert(this->joined_thread()->kind() == event_kind::thread_exit);
+			assert(this->joined_thread_predecessor());
+			assert(this->joined_thread_predecessor()->tid());
+			assert(this->joined_thread_predecessor()->tid() != this->tid());
+			assert(this->joined_thread_predecessor()->kind() == event_kind::thread_exit);
 		}
 
 	public:
@@ -46,7 +46,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_join with: " + joined_thread()->tid().to_string() + "]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_join with: " + joined_thread().to_string() + "]";
 			return "thread_join";
 		}
 
@@ -58,6 +58,8 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
-		event const* joined_thread() const noexcept { return _predecessors[1]; }
+		thread_id_t joined_thread() const noexcept { return _predecessors[1]->tid(); }
+
+		event const* joined_thread_predecessor() const noexcept { return _predecessors[1]; }
 	};
 }
