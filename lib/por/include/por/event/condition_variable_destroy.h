@@ -90,7 +90,7 @@ namespace por::event {
 			return "condition_variable_destroy";
 		}
 
-		util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const noexcept override {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

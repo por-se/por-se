@@ -19,10 +19,6 @@ namespace por::event {
 			return "program_init";
 		}
 
-		util::iterator_range<event const* const*> predecessors() const override {
-			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
-		}
-
 		event const* thread_predecessor() const override {
 			return nullptr;
 		}

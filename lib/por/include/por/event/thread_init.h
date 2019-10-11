@@ -46,7 +46,7 @@ namespace por::event {
 			return "thread_init";
 		}
 
-		util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const noexcept override {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

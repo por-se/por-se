@@ -169,7 +169,7 @@ namespace por::event {
 			return "signal";
 		}
 
-		util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const noexcept override {
 			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
 				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 			} else {

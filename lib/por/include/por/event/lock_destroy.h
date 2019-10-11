@@ -51,7 +51,7 @@ namespace por::event {
 			return "lock_destroy";
 		}
 
-		util::iterator_range<event const* const*> predecessors() const override {
+		util::iterator_range<event const* const*> predecessors() const noexcept override {
 			if(_predecessors[1] != nullptr) {
 				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);
 			} else {

@@ -195,7 +195,10 @@ namespace por::event {
 	public:
 		virtual std::string to_string(bool details = false) const = 0;
 
-		virtual util::iterator_range<event const* const*> predecessors() const = 0;
+		virtual util::iterator_range<event const* const*> predecessors() const noexcept {
+			assert(_kind == event_kind::program_init);
+			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
+		}
 
 		virtual event const* thread_predecessor() const = 0;
 
