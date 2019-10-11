@@ -506,7 +506,7 @@ namespace por {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::condition_variable_create);
 				assert(_schedule[_schedule_pos]->tid() == thread);
-				assert(static_cast<por::event::condition_variable_create const*>(_schedule[_schedule_pos])->cid() == cond);
+				assert(_schedule[_schedule_pos]->cid() == cond);
 				_thread_heads[thread] = _schedule[_schedule_pos];
 				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 				_cond_heads.emplace(cond, std::vector{_schedule[_schedule_pos]});
@@ -1014,32 +1014,6 @@ namespace por {
 		}
 
 	private:
-		static por::event::cond_id_t get_cid(por::event::event const* event) {
-			assert(event != nullptr);
-			por::event::cond_id_t result = 0;
-			switch(event->kind()) {
-				case por::event::event_kind::broadcast:
-					result = static_cast<por::event::broadcast const*>(event)->cid();
-					break;
-				case por::event::event_kind::condition_variable_create:
-					result = static_cast<por::event::condition_variable_create const*>(event)->cid();
-					break;
-				case por::event::event_kind::condition_variable_destroy:
-					result = static_cast<por::event::condition_variable_destroy const*>(event)->cid();
-					break;
-				case por::event::event_kind::signal:
-					result = static_cast<por::event::signal const*>(event)->cid();
-					break;
-				case por::event::event_kind::wait1:
-					result = static_cast<por::event::wait1 const*>(event)->cid();
-					break;
-				case por::event::event_kind::wait2:
-					result = static_cast<por::event::wait2 const*>(event)->cid();
-					break;
-			}
-			return result;
-		}
-
 		// IMPORTANT: comb must be conflict-free
 		template<typename UnaryPredicate>
 		std::vector<std::vector<por::event::event const*>> concurrent_combinations(
@@ -1190,8 +1164,7 @@ namespace por {
 					} else {
 						assert(e.kind() == por::event::event_kind::wait2);
 						assert(ep->kind() != por::event::event_kind::lock_create);
-						auto* w2 = static_cast<por::event::wait2 const*>(&e);
-						result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), w2->cid(), *et, *ep, *es), *conflict);
+						result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), *et, *ep, *es), *conflict);
 						_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 					}
 				}
@@ -1206,7 +1179,6 @@ namespace por {
 			assert(e.kind() == por::event::event_kind::wait1);
 
 			std::vector<conflicting_extension> result;
-			auto const* w1 = static_cast<por::event::wait1 const*>(&e);
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -1278,7 +1250,7 @@ namespace por {
 				if(cond_create) {
 					N.push_back(cond_create);
 				}
-				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), w1->cid(), *et, *e.lock_predecessor(), std::move(N)), std::move(conflicts));
+				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), *et, *e.lock_predecessor(), std::move(N)), std::move(conflicts));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
 			});
@@ -1291,7 +1263,7 @@ namespace por {
 			std::vector<por::event::event const*> wait1s;
 			for(auto& [tid, c] : cone) {
 				if(c->kind() == por::event::event_kind::wait1) {
-					if(get_cid(c) == cid)
+					if(c->cid() == cid)
 						wait1s.emplace_back(c);
 				}
 			}
@@ -1371,7 +1343,7 @@ namespace por {
 			por::event::event const* cond_create = nullptr;
 
 			// condition variable id
-			por::event::cond_id_t cid = get_cid(&e);
+			por::event::cond_id_t cid = e.cid();
 
 			// calculate maximal event(s) in causes outside of [et]
 			std::vector<por::event::event const*> max;
@@ -1419,7 +1391,7 @@ namespace por {
 					if(pred->is_less_than(*et))
 						break; // pred and all its predecessors are in [et]
 
-					if(get_cid(pred) == cid) {
+					if(pred->cid() == cid) {
 						// only include events on same cond
 						if(pred->kind() == por::event::event_kind::condition_variable_create) {
 							cond_create = pred; // exclude from comb

@@ -38,6 +38,8 @@ namespace por::event {
 			assert(this->lock_predecessor());
 			assert(this->lock_predecessor()->kind() == event_kind::lock_release || this->lock_predecessor()->kind() == event_kind::wait1);
 
+			assert(this->cid());
+
 			assert(this->notifying_event());
 			assert(this->notifying_event()->tid() != this->tid());
 			if(this->notifying_event()->kind() == event_kind::signal) {
@@ -112,16 +114,8 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 
 		event const* notifying_event() const noexcept { return _predecessors[1]; }
 	};
-}
-
-namespace {
-	// wrapper function for broadcast.h, condition_variable_destroy.h
-	por::event::cond_id_t wait2_cid(por::event::event const* e) {
-		assert(e->kind() == por::event::event_kind::wait2);
-		return static_cast<por::event::wait2 const*>(e)->cid();
-	}
 }

@@ -203,6 +203,8 @@ namespace por::event {
 			return nullptr;
 		}
 
+		virtual cond_id_t cid() const noexcept { return 0; }
+
 		bool is_less_than(por::cone const& rhs) const {
 			auto it = rhs.find(_tid);
 			if(it != rhs.end()) {

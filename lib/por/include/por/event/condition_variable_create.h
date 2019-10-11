@@ -26,6 +26,7 @@ namespace por::event {
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
+			assert(this->cid());
 		}
 
 	public:
@@ -56,14 +57,6 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 	};
-}
-
-namespace {
-	// wrapper function for broadcast.h
-	por::event::cond_id_t cond_create_cid(por::event::event const* e) {
-		assert(e->kind() == por::event::event_kind::condition_variable_create);
-		return static_cast<por::event::condition_variable_create const*>(e)->cid();
-	}
 }

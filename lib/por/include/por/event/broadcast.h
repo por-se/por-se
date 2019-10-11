@@ -11,19 +11,9 @@
 #include <cassert>
 
 namespace {
-	// defined in condition_variable_create.h
-	por::event::cond_id_t cond_create_cid(por::event::event const*);
-
 	// defined in signal.h
 	bool signal_is_lost(por::event::event const*);
 	por::event::thread_id_t signal_notified_thread(por::event::event const*);
-	por::event::cond_id_t signal_cid(por::event::event const*);
-
-	// defined in wait1.h
-	por::event::cond_id_t wait1_cid(por::event::event const*);
-
-	// defined in wait2.h
-	por::event::cond_id_t wait2_cid(por::event::event const*);
 }
 
 namespace por::event {
@@ -63,19 +53,19 @@ namespace por::event {
 				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
 				switch((*iter)->kind()) {
 					case event_kind::condition_variable_create:
-						assert(cond_create_cid(*iter) == this->cid());
+						assert((*iter)->cid() == this->cid());
 						create.push_back(*iter);
 						break;
 					case event_kind::wait1:
-						assert(wait1_cid(*iter) == this->cid());
+						assert((*iter)->cid() == this->cid());
 						wait1.push_back(*iter);
 						break;
 					case event_kind::signal:
-						assert(signal_cid(*iter) == this->cid());
+						assert((*iter)->cid() == this->cid());
 						sigbro.push_back(*iter);
 						break;
 					case event_kind::broadcast:
-						assert(static_cast<broadcast const*>(*iter)->cid() == this->cid());
+						assert((*iter)->cid() == this->cid());
 						sigbro.push_back(*iter);
 						break;
 					default:
@@ -104,6 +94,8 @@ namespace por::event {
 				_predecessors[index++] = e;
 			}
 			assert(index == _predecessors.size());
+
+			assert(this->cid());
 
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -211,7 +203,7 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 
 		bool is_lost() const noexcept {
 			return _num_notified_threads == 0;

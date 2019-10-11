@@ -64,9 +64,11 @@ namespace por::event {
 					assert(bro->cid() == this->cid());
 				} else {
 					assert(e->kind() == event_kind::condition_variable_create);
-					assert(static_cast<condition_variable_create const*>(e)->cid() == this->cid());
+					assert(e->cid() == this->cid());
 				}
 			}
+
+			assert(this->cid());
 		}
 
 	public:
@@ -124,14 +126,6 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data() + 2, _predecessors.data() + _predecessors.size());
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 	};
-}
-
-namespace {
-	// wrapper function for broadcast.h, signal.h
-	por::event::cond_id_t wait1_cid(por::event::event const* e) {
-		assert(e->kind() == por::event::event_kind::wait1);
-		return static_cast<por::event::wait1 const*>(e)->cid();
-	}
 }

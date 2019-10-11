@@ -10,14 +10,6 @@
 #include <algorithm>
 #include <cassert>
 
-namespace {
-	// defined in signal.h
-	por::event::cond_id_t signal_cid(por::event::event const*);
-
-	// defined in wait2.h
-	por::event::cond_id_t wait2_cid(por::event::event const*);
-}
-
 namespace por::event {
 	class condition_variable_destroy final : public event {
 		// predecessors:
@@ -57,24 +49,20 @@ namespace por::event {
 			for(auto& e : this->condition_variable_predecessors()) {
 				switch(e->kind()) {
 					case event_kind::condition_variable_create:
-						assert(static_cast<condition_variable_create const*>(e)->cid() == this->cid());
-						break;
 					case event_kind::broadcast:
-						assert(static_cast<broadcast const*>(e)->cid() == this->cid());
-						break;
 					case event_kind::signal:
-						assert(signal_cid(e) == this->cid());
+					case event_kind::wait2:
+						assert(e->cid() == this->cid());
 						break;
 					case event_kind::wait1:
 						assert(0 && "destroying a cond that a thread is blocked on is UB");
-						break;
-					case event_kind::wait2:
-						assert(wait2_cid(e) == this->cid());
 						break;
 					default:
 						assert(0 && "unexpected event kind in cond predecessors");
 				}
 			}
+
+			assert(this->cid());
 		}
 
 	public:
@@ -115,6 +103,6 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data() + 1, _predecessors.data() + _predecessors.size());
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 	};
 }

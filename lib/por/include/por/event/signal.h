@@ -10,11 +10,6 @@
 #include <algorithm>
 #include <cassert>
 
-namespace {
-	// defined in wait1.h
-	por::event::cond_id_t wait1_cid(por::event::event const*);
-}
-
 namespace por::event {
 	class signal final : public event {
 		// predecessors:
@@ -54,10 +49,12 @@ namespace por::event {
 			assert(this->wait_predecessor()->tid());
 			assert(this->wait_predecessor()->tid() != this->tid());
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
-			assert(wait1_cid(this->wait_predecessor()) == this->cid());
+			assert(this->wait_predecessor()->cid() == this->cid());
 
 			assert(std::distance(this->condition_variable_predecessors().begin(), this->condition_variable_predecessors().end()) == 1);
 			assert(*this->condition_variable_predecessors().begin() == this->wait_predecessor());
+
+			assert(this->cid());
 
 			assert(!this->is_lost());
 			assert(this->num_notified() == 1);
@@ -106,9 +103,11 @@ namespace por::event {
 					assert(bro->cid() == this->cid());
 				} else {
 					assert(e->kind() == event_kind::condition_variable_create);
-					assert(static_cast<condition_variable_create const*>(e)->cid() == this->cid());
+					assert(e->cid() == this->cid());
 				}
 			}
+
+			assert(this->cid());
 
 			assert(this->is_lost());
 			assert(this->num_notified() == 0);
@@ -198,7 +197,7 @@ namespace por::event {
 			}
 		}
 
-		cond_id_t cid() const noexcept { return _cid; }
+		cond_id_t cid() const noexcept override { return _cid; }
 
 		bool is_lost() const noexcept {
 			return _predecessors.size() != 2 || _predecessors[1] == nullptr || _predecessors[1]->kind() != event_kind::wait1;
@@ -230,11 +229,5 @@ namespace {
 	por::event::thread_id_t signal_notified_thread(por::event::event const* e) {
 		assert(e->kind() == por::event::event_kind::signal);
 		return static_cast<por::event::signal const*>(e)->notified_thread();
-	}
-
-	// wrapper function for broadcast.h, condition_variable_destroy.h
-	por::event::cond_id_t signal_cid(por::event::event const* e) {
-		assert(e->kind() == por::event::event_kind::signal);
-		return static_cast<por::event::signal const*>(e)->cid();
 	}
 }
