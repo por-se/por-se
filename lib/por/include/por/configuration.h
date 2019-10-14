@@ -588,29 +588,29 @@ namespace por {
 		) {
 			por::event::thread_id_t thread = thread_event.tid();
 			std::vector<por::event::event const*> non_waiting;
-			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-				if((*it)->kind() == por::event::event_kind::wait1)
+			for(auto& pred : cond_preds) {
+				if(pred->kind() == por::event::event_kind::wait1)
 					continue;
 
-				if((*it)->kind() == por::event::event_kind::signal) {
-					auto sig = static_cast<por::event::signal const*>(*it);
+				if(pred->kind() == por::event::event_kind::signal) {
+					auto sig = static_cast<por::event::signal const*>(pred);
 					if(!sig->is_lost())
 						continue;
 				}
 
-				if((*it)->kind() == por::event::event_kind::broadcast) {
-					auto bro = static_cast<por::event::broadcast const*>(*it);
+				if(pred->kind() == por::event::event_kind::broadcast) {
+					auto bro = static_cast<por::event::broadcast const*>(pred);
 					if(bro->is_notifying_thread(thread))
 						continue;
 				}
 
-				if((*it)->tid() == thread_event.tid())
+				if(pred->tid() == thread_event.tid())
 					continue; // excluded event is in [thread_event]
 
-				if((*it)->is_less_than_eq(thread_event))
+				if(pred->is_less_than_eq(thread_event))
 					continue; // excluded event is in [thread_event]
 
-				non_waiting.push_back(*it);
+				non_waiting.push_back(pred);
 			}
 			return non_waiting;
 		}
@@ -749,18 +749,18 @@ namespace por {
 			std::vector<por::event::event const*> const& cond_preds
 		) {
 			std::vector<por::event::event const*> prev_notifications;
-			for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-				if((*it)->kind() == por::event::event_kind::wait1) {
+			for(auto& pred : cond_preds) {
+				if(pred->kind() == por::event::event_kind::wait1) {
 					assert(0 && "signal or broadcast would not have been lost");
-				} else if((*it)->kind() == por::event::event_kind::broadcast) {
-					auto bro = static_cast<por::event::broadcast const*>(*it);
+				} else if(pred->kind() == por::event::event_kind::broadcast) {
+					auto bro = static_cast<por::event::broadcast const*>(pred);
 					if(bro->is_lost())
 						continue;
 
 					if(bro->is_notifying_thread(thread_event.tid()))
 						continue; // excluded event is in [thread_event]
-				} else if((*it)->kind() == por::event::event_kind::signal) {
-					auto sig = static_cast<por::event::signal const*>(*it);
+				} else if(pred->kind() == por::event::event_kind::signal) {
+					auto sig = static_cast<por::event::signal const*>(pred);
 					if(sig->is_lost())
 						continue;
 
@@ -768,13 +768,13 @@ namespace por {
 						continue; // excluded event is in [thread_event]
 				}
 
-				if((*it)->tid() == thread_event.tid())
+				if(pred->tid() == thread_event.tid())
 					continue; // excluded event is in [thread_event]
 
-				if((*it)->is_less_than_eq(thread_event))
+				if(pred->is_less_than_eq(thread_event))
 					continue; // excluded event is in [thread_event]
 
-				prev_notifications.push_back(*it);
+				prev_notifications.push_back(pred);
 			}
 			return prev_notifications;
 		}
@@ -916,18 +916,18 @@ namespace por {
 					cond_preds.erase(cond_it);
 				}
 
-				for(auto it = cond_preds.begin(); it != cond_preds.end(); ++it) {
-					if((*it)->kind() == por::event::event_kind::wait1)
+				for(auto& pred : cond_preds) {
+					if(pred->kind() == por::event::event_kind::wait1)
 						continue; // relevant wait1s already part of prev_events
 
-					if((*it)->kind() == por::event::event_kind::condition_variable_create)
+					if(pred->kind() == por::event::event_kind::condition_variable_create)
 						continue; // excluded event is included in wait1's causes (if it exists)
 
-					if((*it)->kind() == por::event::event_kind::broadcast)
+					if(pred->kind() == por::event::event_kind::broadcast)
 						continue;
 
-					if((*it)->kind() == por::event::event_kind::signal) {
-						auto sig = static_cast<por::event::signal const*>(*it);
+					if(pred->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(pred);
 						if(sig->is_lost())
 							continue;
 
@@ -938,13 +938,13 @@ namespace por {
 							continue;
 					}
 
-					if((*it)->tid() == thread)
+					if(pred->tid() == thread)
 						continue; // excluded event is in [thread_event]
 
-					if((*it)->is_less_than_eq(*thread_event))
+					if(pred->is_less_than_eq(*thread_event))
 						continue; // excluded event is in [thread_event]
 
-					prev_events.push_back(*it);
+					prev_events.push_back(pred);
 				}
 
 				thread_event = &por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_events));
