@@ -3254,7 +3254,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     executeMemoryWrite(state, src.value(), pointer, write);
 
-    bindLocal(ki, state, ConcatExpr::create(oldValue, equal));
+    // The return value is a struct containing the oldValue and a bool,
+    // that indicates whether the replace was successful
+    // -> NOTE: the original value is the first member in the struct
+    //          but in the ConcatExpr it has to be the last in order to work correctly
+    // FIXME: this is totally broken, but there is no easy fix at the moment
+    bindLocal(ki, state, ConcatExpr::create(equal, oldValue));
 
     state.atomicPhase = wasAtomicPhase;
 
