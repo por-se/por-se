@@ -13,7 +13,16 @@
 
 #ifdef LIBPOR_IN_KLEE
 #include "klee/Fingerprint/MemoryFingerprint.h"
-#endif // LIBPOR_IN_KLEE
+#else
+// FIXME: create standalone header in KLEE (this has to match *exactly* for shared lib)
+namespace klee {
+	using MemoryFingerprintValue = std::array<std::uint8_t, 32>;
+	class MemoryFingerprintDelta {
+		MemoryFingerprintValue fingerprintValue = {};
+		std::unordered_map<const void *, std::uint64_t> symbolicReferences;
+	};
+}
+#endif
 
 namespace por {
 	class unfolding;
@@ -101,10 +110,8 @@ namespace por::event {
 		}
 
 	public:
-#ifdef LIBPOR_IN_KLEE
 		klee::MemoryFingerprintValue _fingerprint;
 		klee::MemoryFingerprintDelta _thread_delta;
-#endif // LIBPOR_IN_KLEE
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
