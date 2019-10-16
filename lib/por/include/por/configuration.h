@@ -278,6 +278,7 @@ namespace por {
 				++_schedule_pos;
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_init);
 				assert(_schedule[_schedule_pos]->tid() == new_tid);
+
 				_thread_heads[new_tid] = _schedule[_schedule_pos];
 				++_schedule_pos;
 				return std::make_pair(_thread_heads[source], _thread_heads[new_tid]);
@@ -289,7 +290,7 @@ namespace por {
 			assert(source_event->kind() != por::event::event_kind::thread_exit && "Source thread must not yet be exited");
 			assert(source_event->kind() != por::event::event_kind::wait1 && "Source thread must not be blocked");
 
-			source_event = &event::thread_create::alloc(*_unfolding, source, *source_event);
+			source_event = &event::thread_create::alloc(*_unfolding, source, *source_event, new_tid);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
 			_unfolding->mark_as_open(*source_event, _path);
 			assert(new_tid);
