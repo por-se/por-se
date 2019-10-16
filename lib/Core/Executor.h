@@ -146,7 +146,7 @@ private:
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
   std::vector<TimerInfo*> timers;
-  PTree *processTree;
+  std::unique_ptr<PTree> processTree;
 
   PorEventManager porEventManager{*this};
 
@@ -253,9 +253,6 @@ private:
                                     ExecutionState &state);
   
   void executeInstruction(ExecutionState &state, KInstruction *ki);
-
-  void printFileLine(ExecutionState &state, KInstruction *ki,
-                     llvm::raw_ostream &file);
 
   void run(ExecutionState &initialState);
 
@@ -494,10 +491,6 @@ private:
   /// bindInstructionConstants - Initialize any necessary per instruction
   /// constant values.
   void bindInstructionConstants(KInstruction *KI);
-
-  void handlePointsToObj(ExecutionState &state, 
-                         KInstruction *target, 
-                         const std::vector<ref<Expr> > &arguments);
 
   void doImpliedValueConcretization(ExecutionState &state,
                                     ref<Expr> e,

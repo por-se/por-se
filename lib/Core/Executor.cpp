@@ -497,7 +497,7 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
     : Interpreter(opts), interpreterHandler(ih), searcher(0),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
       pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
-      processTree(0), replayKTest(0), replayPath(0), usingSeeds(0),
+      replayKTest(0), replayPath(0), usingSeeds(0),
       atMemoryLimit(false), inhibitForking(false), haltExecution(false),
       ivcEnabled(false), debugLogBuffer(debugBufferString),
       executorStartTime(std::chrono::steady_clock::now()) {
@@ -681,7 +681,6 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
 Executor::~Executor() {
   delete memory;
   delete externalDispatcher;
-  delete processTree;
   delete specialFunctionHandler;
   delete statsTracker;
   delete solver;
@@ -1003,8 +1002,7 @@ void Executor::branch(ExecutionState &state,
       ExecutionState *ns = es->branch();
       addedStates.push_back(ns);
       result.push_back(ns);
-      registerForkInProcessTree(*es, *ns);
-
+      processTree->attach(es->ptreeNode, ns, es);
       updateForkJSON(*es, *ns, *ns);
     }
   }
@@ -1283,7 +1281,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    registerForkInProcessTree(*trueState, *falseState);
+    processTree->attach(current.ptreeNode, falseState, trueState);
 
     if (pathWriter) {
       // Need to update the pathOS.id field of falseState, otherwise the same id
@@ -4627,8 +4625,7 @@ void Executor::runFunctionAsMain(Function *f,
   
   initializeGlobals(*state);
 
-  processTree = new PTree(state);
-  state->ptreeNode = processTree->root;
+  processTree = std::make_unique<PTree>(state);
 
   // register thread_init event for main thread at last possible moment
   // to ensure that all data structures are properly set up
@@ -4641,8 +4638,7 @@ void Executor::runFunctionAsMain(Function *f,
   std::shared_ptr<por::unfolding> unfolding = state->porConfiguration->unfolding();
 
   run(*state);
-  delete processTree;
-  processTree = 0;
+  processTree = nullptr;
 
   for (ExecutionState *state : standbyStates) {
     delete state;
@@ -5184,17 +5180,8 @@ void Executor::terminateStateOnDeadlock(ExecutionState &state) {
                         Deadlock, nullptr, os.str());
 }
 
-void Executor::registerForkInProcessTree(ExecutionState &existing, ExecutionState &fork) {
-  assert(existing.ptreeNode != nullptr);
-  existing.ptreeNode->data = nullptr;
-
-  auto res = processTree->split(existing.ptreeNode, &fork, &existing);
-  fork.ptreeNode = res.first;
-  existing.ptreeNode = res.second;
-}
-
 void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
-  registerForkInProcessTree(state, *fork);
+  processTree->attach(state.ptreeNode, fork, &state);
 
   if (pathWriter) {
     fork->pathOS = pathWriter->open(state.pathOS);

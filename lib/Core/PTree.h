@@ -17,41 +17,32 @@ namespace klee {
   class ExecutionState;
 
   typedef struct {
-    ThreadId scheduledThread;
-    uint64_t epochNumber;
+    ThreadId scheduledThread = {};
+    uint64_t epochNumber = 0;
   } SchedulingDecision;
 
-  class PTree { 
-    typedef ExecutionState* data_type;
-
-  public:
-    typedef class PTreeNode Node;
-    Node *root;
-
-    explicit PTree(const data_type &_root);
-    ~PTree() = default;
-    
-    std::pair<Node*,Node*> split(Node *n,
-                                 const data_type &leftData,
-                                 const data_type &rightData);
-    void remove(Node *n);
-
-    void dump(llvm::raw_ostream &os);
-  };
-
   class PTreeNode {
-    friend class PTree;
   public:
     PTreeNode *parent = nullptr;
-    PTreeNode *left = nullptr;
-    PTreeNode *right = nullptr;
-    ExecutionState *data = nullptr;
-
+    std::unique_ptr<PTreeNode> left;
+    std::unique_ptr<PTreeNode> right;
+    ExecutionState *state = nullptr;
     SchedulingDecision schedulingDecision;
 
-  private:
-    PTreeNode(PTreeNode * parent, ExecutionState * data);
+    PTreeNode(const PTreeNode&) = delete;
+    PTreeNode(PTreeNode *parent, ExecutionState *state);
     ~PTreeNode() = default;
+  };
+
+  class PTree {
+  public:
+    std::unique_ptr<PTreeNode> root;
+    explicit PTree(ExecutionState *initialState);
+    ~PTree() = default;
+
+    static void attach(PTreeNode *node, ExecutionState *leftState, ExecutionState *rightState);
+    static void remove(PTreeNode *node);
+    void dump(llvm::raw_ostream &os);
   };
 }
 
