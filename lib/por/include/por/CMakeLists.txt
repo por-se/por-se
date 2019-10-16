@@ -14,7 +14,6 @@ set(AUTO_GEN_MSG "AUTOMATICALLY GENERATED. DO NOT EDIT!")
 configure_file(${CMAKE_CURRENT_LIST_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h)
 
 target_sources(libpor PUBLIC
-	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/base.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/broadcast.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/condition_variable_create.h"
@@ -28,14 +27,17 @@ target_sources(libpor PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/event/program_init.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/signal.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_create.h"
+	"${CMAKE_CURRENT_LIST_DIR}/event/thread_exit.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_init.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/thread_join.h"
-	"${CMAKE_CURRENT_LIST_DIR}/event/thread_exit.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait1.h"
 	"${CMAKE_CURRENT_LIST_DIR}/event/wait2.h"
+
+	"${CMAKE_CURRENT_LIST_DIR}/comb.h"
 	"${CMAKE_CURRENT_LIST_DIR}/cone.h"
 	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
-	"${CMAKE_CURRENT_LIST_DIR}/comb.h"
+	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
+	"${CMAKE_CURRENT_LIST_DIR}/unfolding.h"
 
 	"${CMAKE_CURRENT_BINARY_DIR}/include/por/version.h"
 )
