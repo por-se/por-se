@@ -264,6 +264,8 @@ namespace por::event {
 
 		virtual cond_id_t cid() const noexcept { return 0; }
 
+		bool is_independent_of(event const* other) const noexcept;
+
 		bool is_less_than(por::cone const& rhs) const {
 			auto it = rhs.find(_tid);
 			if(it != rhs.end()) {
