@@ -96,6 +96,9 @@ namespace por::event {
 		thread_id_t _tid;
 		event_kind _kind;
 
+		mutable std::size_t _color = 0;
+		static std::size_t _next_color;
+
 		mutable std::set<event const*> _successors;
 
 		bool is_explorable() const {
@@ -261,6 +264,8 @@ namespace por::event {
 		virtual util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
+
+		std::set<event const*> local_configuration() const noexcept;
 
 		virtual cond_id_t cid() const noexcept { return 0; }
 

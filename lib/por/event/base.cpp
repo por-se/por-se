@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cassert>
+#include <set>
+#include <stack>
 
 namespace {
 	bool lock_is_independent(por::event::event const* lock_event, por::event::event const* other) noexcept {
@@ -171,6 +173,8 @@ namespace {
 }
 
 namespace por::event {
+	std::size_t event::_next_color = 1;
+
 	bool event::is_independent_of(event const* other) const noexcept {
 		if(tid() == other->tid()) {
 			// events on the same thread are always dependent
@@ -325,5 +329,36 @@ namespace por::event {
 				return false;
 			}
 		}
+	}
+
+	std::set<event const*> event::local_configuration() const noexcept {
+		std::stack<event const*> W;
+		std::set<event const*> result;
+		std::size_t red = next_color++;
+
+		W.push(this);
+		while(!W.empty()) {
+			auto event = W.top();
+			W.pop();
+
+			assert(event != nullptr);
+
+			if(event->_color == red) {
+				continue;
+			}
+
+			for(auto& pred : event->predecessors()) {
+				if(pred == nullptr) {
+					continue;
+				}
+				if(pred->_color != red) {
+					W.push(pred);
+				}
+			}
+			result.insert(event);
+			event->_color = red;
+		}
+
+		return result;
 	}
 }
