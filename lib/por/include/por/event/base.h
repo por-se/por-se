@@ -239,6 +239,8 @@ namespace por::event {
 			succ.insert(this);
 		}
 
+		std::set<event const*> local_configuration(std::size_t color) const noexcept;
+
 	public:
 		bool has_successors() const noexcept {
 			return !_successors.empty();
@@ -265,7 +267,9 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
 
-		std::set<event const*> local_configuration() const noexcept;
+		std::set<event const*> local_configuration() const noexcept {
+			return local_configuration(_next_color++);
+		}
 
 		virtual cond_id_t cid() const noexcept { return 0; }
 
@@ -294,5 +298,7 @@ namespace por::event {
 		}
 
 		std::vector<event const*> immediate_predecessors() const noexcept;
+
+		std::vector<event const*> immediate_conflicts() const noexcept;
 	};
 }

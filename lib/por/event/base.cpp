@@ -331,10 +331,9 @@ namespace por::event {
 		}
 	}
 
-	std::set<event const*> event::local_configuration() const noexcept {
+	std::set<event const*> event::local_configuration(std::size_t color) const noexcept {
 		std::stack<event const*> W;
 		std::set<event const*> result;
-		std::size_t red = next_color++;
 
 		W.push(this);
 		while(!W.empty()) {
@@ -343,7 +342,7 @@ namespace por::event {
 
 			assert(event != nullptr);
 
-			if(event->_color == red) {
+			if(event->_color == color) {
 				continue;
 			}
 
@@ -351,12 +350,12 @@ namespace por::event {
 				if(pred == nullptr) {
 					continue;
 				}
-				if(pred->_color != red) {
+				if(pred->_color != color) {
 					W.push(pred);
 				}
 			}
 			result.insert(event);
-			event->_color = red;
+			event->_color = color;
 		}
 
 		return result;
@@ -374,6 +373,59 @@ namespace por::event {
 		}
 		assert(result.size() <= _cone.size());
 		assert(result.size() <= predecessors().size());
+		return result;
+	}
+
+	std::vector<event const*> event::immediate_conflicts() const noexcept {
+		std::size_t red = _next_color++;
+		std::size_t blue = _next_color++;
+
+		auto lc = local_configuration(red);
+		std::vector<event const*> W(lc.begin(), lc.end());
+
+		std::vector<event const*> result;
+
+		while(!W.empty()) {
+			auto event = W.back();
+			W.pop_back();
+
+			assert(event != nullptr);
+
+			for(auto& succ : event->successors()) {
+				if(succ == this || succ->_color == red || succ->_color == blue) {
+					continue;
+				}
+
+				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
+					// non-red predecessor => cannot determine yet whether succ is in [e] or concurrent to e
+					// this \in pre(succ) => succ is causally dependent on this => not in conflict
+					return e->_color != red || e == this;
+				})) {
+					continue;
+				}
+
+				if(is_independent_of(succ)) {
+					assert(succ->is_independent_of(this));
+					succ->_color = red;
+					W.push_back(succ);
+				} else {
+					succ->_color = blue;
+					result.push_back(succ);
+				}
+			}
+
+		}
+
+#ifndef NDEBUG
+		std::sort(result.begin(), result.end());
+		assert(std::adjacent_find(result.begin(), result.end()) == result.end() && "absence of duplicates");
+		assert(std::find(result.begin(), result.end(), this) == result.end() && "event is in immediate conflict with itself");
+		assert(std::none_of(result.begin(), result.end(), [this](auto& e) {
+			auto lc = e->local_configuration();
+			return std::find(lc.begin(), lc.end(), this) != lc.end();
+		}) && "conflicting event is causally dependent on this");
+#endif
+
 		return result;
 	}
 }
