@@ -164,8 +164,15 @@ namespace por::event {
 		}
 
 		std::string to_string(bool details) const override {
-			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: signal cid: " + std::to_string(cid()) +" nid: " + notified_thread().to_string() + "]";
+			if(details) {
+				std::string result = "tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: signal cid: " + std::to_string(cid()) + " ";
+				if(is_lost()) {
+					result += "lost";
+				} else {
+					result += "notifying: " + wait_predecessor()->tid().to_string() + "@" + std::to_string(wait_predecessor()->depth());
+				}
+				return "[" + result + "]";
+			}
 			return "signal";
 		}
 

@@ -176,8 +176,20 @@ namespace por::event {
 		}
 
 		std::string to_string(bool details) const override {
-			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: broadcast cid: " + std::to_string(cid()) + "]";
+			if(details) {
+				std::string result = "tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: broadcast cid: " + std::to_string(cid()) + " ";
+				if(is_lost()) {
+					result += "lost";
+				} else {
+					result += "notifying: {";
+					std::size_t remaining = num_notified();
+					for(auto& w1 : wait_predecessors()) {
+						result += w1->tid().to_string() + "@" + std::to_string(w1->depth()) + (--remaining ? " " : "");
+					}
+					result += "}";
+				}
+				return "[" + result + "]";
+			}
 			return "broadcast";
 		}
 
