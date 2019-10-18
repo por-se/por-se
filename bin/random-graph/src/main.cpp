@@ -422,6 +422,41 @@ int main(int argc, char** argv){
 
 	assert(visited.size() == configuration.schedule().size());
 
+#ifndef NDEBUG
+	std::set<por::event::event const*> E;
+	for(auto& [tid, t] : configuration.thread_heads()) {
+		for(auto& l : t->local_configuration()) {
+			if(l) {
+				E.insert(l);
+			}
+		}
+		E.insert(t);
+	}
+	assert(E.size() == std::distance(configuration.begin(), configuration.end()));
+#endif
+
+#ifndef NDEBUG
+	for(auto& v : visited) {
+		for(auto& w : visited) {
+			if(v->is_independent_of(w)) {
+				if(!w->is_independent_of(v)) {
+					std::cerr << "Symmetry failure:\n";
+					std::cerr << v->to_string(true) << " IS independent of " << w->to_string(true) << "\n";
+					std::cerr << "However: " << w->to_string(true) << " IS NOT independent of " << v->to_string(true) << "\n";
+				}
+				assert(w->is_independent_of(v));
+			} else {
+				if(w->is_independent_of(v)) {
+					std::cerr << "Symmetry failure:\n";
+					std::cerr << v->to_string(true) << " IS NOT independent of " << w->to_string(true) << "\n";
+					std::cerr << "HOWEVER: " << w->to_string(true) << " IS independent of " << v->to_string(true) << "\n";
+				}
+				assert(!w->is_independent_of(v));
+			}
+		}
+	}
+#endif
+
 	std::cout << "\n\n";
 	std::cout << "digraph {\n"
 	          << "  rankdir=TB;\n";
