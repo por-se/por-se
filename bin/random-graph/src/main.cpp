@@ -431,14 +431,14 @@ int main(int argc, char** argv){
 		por::event::thread_id_t tid = t.first;
 		if(!tid) {
 			std::cout << "\n"
-			          << "  subgraph cluster_T0 {\n"
+			          << "  subgraph \"cluster_T0\" {\n"
 			          << "    graph[style=invis]\n\n"
 			          << "    node[shape=box style=dashed fixedsize=false width=1 label=\"\"]\n"
 			          << "    // single visible node\n";
 
 		} else {
 			std::cout << "\n"
-			          << "  subgraph cluster_T" << tid << " {\n"
+			          << "  subgraph \"cluster_T" << tid << "\" {\n"
 			          << "    graph[label=\"Thread " << tid << "\"]\n\n"
 			          << "    node[shape=box fixedsize=false width=1 label=\"\"]\n"
 			          << "    // visible and invisible nodes\n";
