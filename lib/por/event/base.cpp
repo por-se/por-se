@@ -361,4 +361,19 @@ namespace por::event {
 
 		return result;
 	}
+
+	std::vector<event const*> event::immediate_predecessors() const noexcept {
+		std::vector<event const*> result;
+		for(auto& p : predecessors()) {
+			if(p == _cone.at(p->tid())) {
+				if(std::find(result.begin(), result.end(), p) != result.end()) {
+					continue;
+				}
+				result.push_back(p);
+			}
+		}
+		assert(result.size() <= _cone.size());
+		assert(result.size() <= predecessors().size());
+		return result;
+	}
 }

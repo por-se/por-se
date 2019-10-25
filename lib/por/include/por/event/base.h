@@ -292,5 +292,7 @@ namespace por::event {
 		bool is_less_than_eq(event const& rhs) const {
 			return (&rhs == this) || is_less_than(rhs);
 		}
+
+		std::vector<event const*> immediate_predecessors() const noexcept;
 	};
 }
