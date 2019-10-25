@@ -21,6 +21,15 @@ namespace util {
 		std::decay_t<T> const& end() noexcept {
 			return _end;
 		}
+
+		template<decltype(nullptr)>
+		std::size_t size() const noexcept {
+			return 0;
+		}
+
+		std::size_t size() const noexcept {
+			return std::distance(_begin, _end);
+		}
 	};
 
 	template<typename T>

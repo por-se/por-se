@@ -4,7 +4,6 @@
 
 #include "por/unfolding.h"
 
-#include <util/distance.h>
 #include <util/sso_array.h>
 
 #include <algorithm>
@@ -38,35 +37,34 @@ namespace por::event {
 		broadcast(thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
-			event const* const* begin_condition_variable_predecessors,
-			event const* const* end_condition_variable_predecessors
+			util::iterator_range<event const* const*> condition_variable_predecessors
 		)
-			: event(event_kind::broadcast, tid, thread_predecessor, util::make_iterator_range<event const* const*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
-			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			: event(event_kind::broadcast, tid, thread_predecessor, condition_variable_predecessors)
+			, _predecessors{util::create_uninitialized, 1ul + condition_variable_predecessors.size()}
 			, _cid(cid)
 		{
 			// group events by type
 			std::vector<event const*> wait1;
 			std::vector<event const*> sigbro;
 			std::vector<event const*> create;
-			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter) {
-				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
-				switch((*iter)->kind()) {
+			for(auto& c : condition_variable_predecessors) {
+				assert(c != nullptr && "no nullptr in cond predecessors allowed");
+				switch(c->kind()) {
 					case event_kind::condition_variable_create:
-						assert((*iter)->cid() == this->cid());
-						create.push_back(*iter);
+						assert(c->cid() == this->cid());
+						create.push_back(c);
 						break;
 					case event_kind::wait1:
-						assert((*iter)->cid() == this->cid());
-						wait1.push_back(*iter);
+						assert(c->cid() == this->cid());
+						wait1.push_back(c);
 						break;
 					case event_kind::signal:
-						assert((*iter)->cid() == this->cid());
-						sigbro.push_back(*iter);
+						assert(c->cid() == this->cid());
+						sigbro.push_back(c);
 						break;
 					case event_kind::broadcast:
-						assert((*iter)->cid() == this->cid());
-						sigbro.push_back(*iter);
+						assert(c->cid() == this->cid());
+						sigbro.push_back(c);
 						break;
 					default:
 						assert(0 && "unexpected event kind in cond predecessors");
@@ -103,7 +101,7 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 
-			assert(std::distance(this->wait_predecessors().begin(), this->wait_predecessors().end()) == wait1.size());
+			assert(this->wait_predecessors().size() == wait1.size());
 			for(auto& e : this->wait_predecessors()) {
 				assert(e->kind() == event_kind::wait1);
 				assert(e->tid());
@@ -157,8 +155,8 @@ namespace por::event {
 				tid,
 				cid,
 				thread_predecessor,
-				cond_predecessors.data(),
-				cond_predecessors.data() + cond_predecessors.size()
+				util::make_iterator_range<event const* const*>(cond_predecessors.data(),
+				                                               cond_predecessors.data() + cond_predecessors.size())
 			});
 		}
 

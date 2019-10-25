@@ -35,17 +35,15 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 
 	auto a_preds = a.predecessors();
 	auto b_preds = b.predecessors();
-	std::size_t a_num_preds = std::distance(a_preds.begin(), a_preds.end());
-	std::size_t b_num_preds = std::distance(b_preds.begin(), b_preds.end());
 
-	if(a_num_preds != b_num_preds)
+	if(a_preds.size() != b_preds.size())
 		return false;
 
 	auto a_it = a_preds.begin();
 	auto b_it = b_preds.begin();
 	[[maybe_unused]] auto a_ie = a_preds.end();
 	[[maybe_unused]] auto b_ie = b_preds.end();
-	for(std::size_t i = 0; i < a_num_preds; ++i) {
+	for(std::size_t i = 0; i < a_preds.size(); ++i) {
 		assert(a_it != a_ie);
 		assert(b_it != b_ie);
 		if(*a_it != *b_it)

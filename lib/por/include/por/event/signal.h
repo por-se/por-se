@@ -4,7 +4,6 @@
 
 #include "por/unfolding.h"
 
-#include <util/distance.h>
 #include <util/sso_array.h>
 
 #include <algorithm>
@@ -51,7 +50,7 @@ namespace por::event {
 			assert(this->wait_predecessor()->kind() == event_kind::wait1);
 			assert(this->wait_predecessor()->cid() == this->cid());
 
-			assert(std::distance(this->condition_variable_predecessors().begin(), this->condition_variable_predecessors().end()) == 1);
+			assert(this->condition_variable_predecessors().size() == 1);
 			assert(*this->condition_variable_predecessors().begin() == this->wait_predecessor());
 
 			assert(this->cid());
@@ -64,18 +63,17 @@ namespace por::event {
 		signal(thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
-			event const* const* begin_condition_variable_predecessors,
-			event const* const* end_condition_variable_predecessors
+			util::iterator_range<event const* const*> condition_variable_predecessors
 		)
-			: event(event_kind::signal, tid, thread_predecessor, util::make_iterator_range<event const* const*>(begin_condition_variable_predecessors, end_condition_variable_predecessors))
-			, _predecessors{util::create_uninitialized, 1ul + util::distance(begin_condition_variable_predecessors, end_condition_variable_predecessors)}
+			: event(event_kind::signal, tid, thread_predecessor, condition_variable_predecessors)
+			, _predecessors{util::create_uninitialized, 1ul + condition_variable_predecessors.size()}
 			, _cid(cid)
 		{
 			_predecessors[0] = &thread_predecessor;
 			std::size_t index = 1;
-			for(auto iter = begin_condition_variable_predecessors; iter != end_condition_variable_predecessors; ++iter, ++index) {
-				assert(*iter != nullptr && "no nullptr in cond predecessors allowed");
-				_predecessors[index] = *iter;
+			for(auto& c : condition_variable_predecessors) {
+				assert(c != nullptr && "no nullptr in cond predecessors allowed");
+				_predecessors[index++] = c;
 			}
 			if(index == 1) {
 				_predecessors[index] = nullptr;
@@ -145,8 +143,8 @@ namespace por::event {
 				tid,
 				cid,
 				thread_predecessor,
-				cond_predecessors.data(),
-				cond_predecessors.data() + cond_predecessors.size()
+				util::iterator_range<event const* const*>(cond_predecessors.data(),
+				                                          cond_predecessors.data() + cond_predecessors.size())
 			});
 		}
 
