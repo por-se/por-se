@@ -74,7 +74,7 @@ namespace por::event {
 			_predecessors[0] = &thread_predecessor;
 			std::size_t index = 1;
 			if(wait1.size() > 0) {
-				assert(create.size() == 0);
+				assert(create.empty());
 				_num_notified_threads = wait1.size();
 				// insert wait1 events first
 				for(auto& e : wait1) {
@@ -138,7 +138,7 @@ namespace por::event {
 
 			// (wait1_count > 0) <=> !is_lost()
 			assert(wait1.size() > 0 || this->is_lost());
-			assert(!this->is_lost() || wait1.size() == 0);
+			assert(!this->is_lost() || wait1.empty());
 		}
 
 	public:

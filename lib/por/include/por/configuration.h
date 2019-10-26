@@ -256,7 +256,7 @@ namespace por {
 		}
 
 		std::size_t active_threads() const noexcept {
-			if(_thread_heads.size() == 0)
+			if(_thread_heads.empty())
 				return 0;
 
 			std::size_t res = 0;
