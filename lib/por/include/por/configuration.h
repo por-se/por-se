@@ -78,6 +78,9 @@ namespace por {
 			_unfolding->mark_as_explored(*_thread_heads[tid]);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
 
+			[[maybe_unused]] auto init = static_cast<por::event::thread_init const*>(_thread_heads[tid]);
+			assert(init->thread_creation_predecessor() == static_cast<por::event::event const*>(&_program_init));
+
 			return *this;
 		}
 	};
