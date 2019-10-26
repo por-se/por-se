@@ -275,6 +275,7 @@ namespace por::event {
 
 		bool is_independent_of(event const* other) const noexcept;
 
+		// IMPORTANT: assumes no conflict between this and rhs
 		bool is_less_than(por::cone const& rhs) const {
 			auto it = rhs.find(_tid);
 			if(it != rhs.end()) {
@@ -284,6 +285,7 @@ namespace por::event {
 			return false;
 		}
 
+		// IMPORTANT: assumes no conflict between this and rhs
 		bool is_less_than(event const& rhs) const {
 			if(rhs._tid == _tid) {
 				return _depth < rhs._depth;
@@ -293,6 +295,7 @@ namespace por::event {
 			return false;
 		}
 
+		// IMPORTANT: assumes no conflict between this and rhs
 		bool is_less_than_eq(event const& rhs) const {
 			return (&rhs == this) || is_less_than(rhs);
 		}
