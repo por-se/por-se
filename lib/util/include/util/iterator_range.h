@@ -30,6 +30,15 @@ namespace util {
 		std::size_t size() const noexcept {
 			return std::distance(_begin, _end);
 		}
+
+		template<decltype(nullptr)>
+		bool constexpr empty() const noexcept {
+			return true;
+		}
+
+		bool empty() const noexcept {
+			return _begin == _end;
+		}
 	};
 
 	template<typename T>
