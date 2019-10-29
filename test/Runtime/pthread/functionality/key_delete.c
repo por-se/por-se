@@ -8,9 +8,9 @@
 pthread_key_t key;
 
 static void* test(void* arg) {
-  pthread_setspecific(&key, &key);
+  pthread_setspecific(key, &key);
 
-  pthread_key_delete(&key);
+  pthread_key_delete(key);
 
   return NULL;
 }
@@ -22,7 +22,7 @@ static void destructor(void* keyValue) {
 
 int main(void) {
   pthread_key_create(&key, destructor);
-  pthread_setspecific(&key, &key);
+  pthread_setspecific(key, &key);
 
   pthread_t thread;
   pthread_create(&thread, NULL, test, NULL);

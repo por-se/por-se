@@ -12,16 +12,16 @@ int mainThreadNumber;
 int childThreadNumber;
 
 static void* test(void* arg) {
-  pthread_setspecific(&key, &childThreadNumber);
+  pthread_setspecific(key, &childThreadNumber);
 
-  void* v = pthread_getspecific(&key);
+  void* v = pthread_getspecific(key);
   assert(v == &childThreadNumber);
 
   return NULL;
 }
 
 static void destructor(void* keyValue) {
-  void* v = pthread_getspecific(&key);
+  void* v = pthread_getspecific(key);
   assert(v == NULL);
 
   if (pthread_equal(mainThread, pthread_self())) {
@@ -38,9 +38,9 @@ int main(void) {
   pthread_t thread;
   pthread_create(&thread, NULL, test, NULL);
 
-  pthread_setspecific(&key, &mainThreadNumber);
+  pthread_setspecific(key, &mainThreadNumber);
 
-  void* v = pthread_getspecific(&key);
+  void* v = pthread_getspecific(key);
   assert(v == &mainThreadNumber);
 
   pthread_join(thread, NULL);

@@ -11,12 +11,12 @@ pthread_t mainThread;
 int count = 0;
 
 static void* test(void* arg) {
-  pthread_setspecific(&key, NULL);
+  pthread_setspecific(key, NULL);
   return NULL;
 }
 
 static void destructor(void* keyValue) {
-  void* v = pthread_getspecific(&key);
+  void* v = pthread_getspecific(key);
   assert(v == NULL);
 
   assert(pthread_equal(mainThread, pthread_self()));
@@ -24,7 +24,7 @@ static void destructor(void* keyValue) {
 
   assert(count < PTHREAD_DESTRUCTOR_ITERATIONS);
 
-  pthread_setspecific(&key, &count);
+  pthread_setspecific(key, &count);
   count++;
 }
 
@@ -35,9 +35,9 @@ int main(void) {
   pthread_t thread;
   pthread_create(&thread, NULL, test, NULL);
 
-  pthread_setspecific(&key, &count);
+  pthread_setspecific(key, &count);
 
-  void* v = pthread_getspecific(&key);
+  void* v = pthread_getspecific(key);
   assert(v == &count);
 
   pthread_join(thread, NULL);
