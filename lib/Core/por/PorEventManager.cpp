@@ -93,7 +93,8 @@ void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t ki
     }
   }
 
-  if (registerStandbyState) {
+  // Exception is por_thread_init since we need a standby state for init of the program
+  if (registerStandbyState && (state.threads.size() > 1 || kind == por_thread_init)) {
     ExecutionState *newState = new ExecutionState(state);
     executor.standbyStates.push_back(newState);
     newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
