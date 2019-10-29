@@ -380,8 +380,8 @@ namespace por::event {
 		std::size_t red = _next_color++;
 		std::size_t blue = _next_color++;
 
-		auto lc = local_configuration(red);
-		std::vector<event const*> W(lc.begin(), lc.end());
+		auto red_set = causes(red);
+		std::vector<event const*> W(red_set.begin(), red_set.end());
 
 		std::vector<event const*> result;
 
@@ -397,9 +397,8 @@ namespace por::event {
 				}
 
 				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
-					// non-red predecessor => cannot determine yet whether succ is in [e] or concurrent to e
-					// this \in pre(succ) => succ is causally dependent on this => not in conflict
-					return e->_color != red || e == this;
+					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
+					return e->_color != red;
 				})) {
 					continue;
 				}

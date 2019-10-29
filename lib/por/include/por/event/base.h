@@ -241,6 +241,14 @@ namespace por::event {
 
 		std::set<event const*> local_configuration(std::size_t color) const noexcept;
 
+		std::set<event const*> causes(std::size_t color) const noexcept {
+			std::size_t orig_color = _color;
+			auto W = local_configuration(color);
+			W.erase(this);
+			_color = orig_color;
+			return W;
+		}
+
 	public:
 		bool has_successors() const noexcept {
 			return !_successors.empty();
@@ -269,6 +277,10 @@ namespace por::event {
 
 		std::set<event const*> local_configuration() const noexcept {
 			return local_configuration(_next_color++);
+		}
+
+		std::set<event const*> causes() const noexcept {
+			return causes(_next_color++);
 		}
 
 		virtual cond_id_t cid() const noexcept { return 0; }
