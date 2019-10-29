@@ -69,27 +69,6 @@ namespace por {
 			}
 		}
 
-		void mark_as_open(por::event::event const& e, por::event::path_t const& path) {
-			e.mark_as_open(path);
-		}
-
-		void mark_as_explored(por::event::event const& e, por::event::path_t const& path) {
-			e.mark_as_explored(path);
-		}
-
-		void mark_as_explored(por::event::event const& e) {
-			static por::event::path_t empty;
-			e.mark_as_explored(empty);
-		}
-
-		bool is_present(por::event::event const& e, por::event::path_t const& path) {
-			return e.is_present(path);
-		}
-
-		bool is_explored(por::event::event const& e, por::event::path_t const& path) {
-			return e.is_explored(path);
-		}
-
 		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
 		por::event::event const& deduplicate(T&& e) {
 			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));

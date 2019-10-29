@@ -17,8 +17,6 @@ namespace por::event {
 
 		cond_id_t _cid;
 
-		exploration_info _info;
-
 	protected:
 		wait2(thread_id_t tid,
 			cond_id_t cid,
@@ -84,8 +82,7 @@ namespace por::event {
 		wait2(wait2&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _cid(that._cid)
-		, _info(std::move(that._info)) {
+		, _cid(that._cid) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -104,19 +101,6 @@ namespace por::event {
 		wait2(const wait2&) = delete;
 		wait2& operator=(const wait2&) = delete;
 		wait2& operator=(wait2&&) = delete;
-
-		void mark_as_open(path_t const& path) const override {
-			_info.mark_as_open(path);
-		}
-		void mark_as_explored(path_t const& path) const override {
-			_info.mark_as_explored(path);
-		}
-		bool is_present(path_t const& path) const override {
-			return _info.is_present(path);
-		}
-		bool is_explored(path_t const& path) const override {
-			return _info.is_explored(path);
-		}
 
 		std::string to_string(bool details) const override {
 			if(details)

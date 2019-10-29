@@ -55,41 +55,6 @@ namespace por::event {
 		broadcast,
 	};
 
-
-	class exploration_info {
-		mutable std::vector<path_t> open_paths;
-		mutable std::vector<path_t> explored_paths;
-
-	public:
-		void mark_as_open(path_t const& path) const {
-			open_paths.emplace_back(path);
-		}
-
-		void mark_as_explored(path_t const& path) const {
-			auto it = std::find(open_paths.begin(), open_paths.end(), path);
-			if(it != open_paths.end()) {
-				explored_paths.emplace_back(std::move(*it));
-				open_paths.erase(it);
-				return;
-			}
-			if(!is_explored(path))
-				explored_paths.emplace_back(path);
-		}
-
-		bool is_explored(path_t const& path) const {
-			auto it = std::find(explored_paths.begin(), explored_paths.end(), path);
-			return it != explored_paths.end();
-		}
-
-		bool is_present(path_t const& path) const {
-			auto it = std::find(explored_paths.begin(), explored_paths.end(), path);
-			if(it != explored_paths.end())
-				return true;
-			it = std::find(open_paths.begin(), open_paths.end(), path);
-			return it != open_paths.end();
-		}
-	};
-
 	class event {
 		std::size_t _depth;
 		por::cone _cone;
@@ -123,21 +88,6 @@ namespace por::event {
 		thread_id_t const& tid() const noexcept { return _tid; }
 		std::size_t depth() const noexcept { return _depth; }
 		auto const& cone() const noexcept { return _cone; }
-
-		virtual void mark_as_open(path_t const& path) const {
-			assert(!is_explorable() && "method must be overriden in explorable events!");
-		}
-		virtual void mark_as_explored(path_t const& path) const {
-			assert(!is_explorable() && "method must be overriden in explorable events!");
-		}
-		virtual bool is_present(path_t const& path) const {
-			assert(!is_explorable() && "method must be overriden in explorable events!");
-			return true;
-		}
-		virtual bool is_explored(path_t const& path) const {
-			assert(!is_explorable() && "method must be overriden in explorable events!");
-			return true;
-		}
 
 		event(event&& that)
 		: _depth(that._depth)

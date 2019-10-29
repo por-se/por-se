@@ -8,7 +8,6 @@ using namespace por;
 
 unfolding::unfolding() {
 	_root = store_event(por::event::program_init{});
-	mark_as_explored(*_root);
 }
 
 // NOTE: do not use for other purposes, only compares pointers of predecessors

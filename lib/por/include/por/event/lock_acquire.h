@@ -14,8 +14,6 @@ namespace por::event {
 		// 2. previous operation on same lock (may be nullptr if only preceded by lock_create event)
 		std::array<event const*, 2> _predecessors;
 
-		exploration_info _info;
-
 	protected:
 		lock_acquire(thread_id_t tid, event const& thread_predecessor, event const* lock_predecessor)
 			: event(event_kind::lock_acquire, tid, thread_predecessor, lock_predecessor)
@@ -52,8 +50,7 @@ namespace por::event {
 
 		lock_acquire(lock_acquire&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors))
-		, _info(std::move(that._info)) {
+		, _predecessors(std::move(that._predecessors)) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -72,19 +69,6 @@ namespace por::event {
 		lock_acquire(const lock_acquire&) = delete;
 		lock_acquire& operator=(const lock_acquire&) = delete;
 		lock_acquire& operator=(lock_acquire&&) = delete;
-
-		void mark_as_open(path_t const& path) const override {
-			_info.mark_as_open(path);
-		}
-		void mark_as_explored(path_t const& path) const override {
-			_info.mark_as_explored(path);
-		}
-		bool is_present(path_t const& path) const override {
-			return _info.is_present(path);
-		}
-		bool is_explored(path_t const& path) const override {
-			return _info.is_explored(path);
-		}
 
 		std::string to_string(bool details) const override {
 			if(details)

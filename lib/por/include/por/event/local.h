@@ -16,8 +16,6 @@ namespace por::event {
 		// decisions taken along path since last local event
 		path_t _path;
 
-		exploration_info _info;
-
 	protected:
 		local(thread_id_t tid, event const& thread_predecessor, path_t&& path)
 			: event(event_kind::local, tid, thread_predecessor)
@@ -48,8 +46,7 @@ namespace por::event {
 		local(local&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _path(std::move(that._path))
-		, _info(std::move(that._info)) {
+		, _path(std::move(that._path)) {
 			assert(_predecessors.size() == 1);
 			assert(thread_predecessor() != nullptr);
 			replace_successor_of(*thread_predecessor(), that);
@@ -66,19 +63,6 @@ namespace por::event {
 		local(const local&) = delete;
 		local& operator=(const local&) = delete;
 		local& operator=(local&&) = delete;
-
-		void mark_as_open(path_t const& path) const override {
-			_info.mark_as_open(path);
-		}
-		void mark_as_explored(path_t const& path) const override {
-			_info.mark_as_explored(path);
-		}
-		bool is_present(path_t const& path) const override {
-			return _info.is_present(path);
-		}
-		bool is_explored(path_t const& path) const override {
-			return _info.is_explored(path);
-		}
 
 		std::string to_string(bool details) const override {
 			if(details) {
