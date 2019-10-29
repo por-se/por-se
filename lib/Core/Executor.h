@@ -516,8 +516,6 @@ private:
 
   void scheduleThreads(ExecutionState &state);
 
-  void forkForThreadScheduling(ExecutionState &state, std::size_t newForkCount);
-  
   /// Only for debug purposes; enable via debugger or klee-control
   void dumpStates();
   void dumpPTree();

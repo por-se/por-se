@@ -435,9 +435,6 @@ cl::opt<bool> DebugCheckForImpliedValues(
     cl::desc("Debug the implied value optimization"),
     cl::cat(DebugCat));
 
-cl::opt<bool> NoScheduleForks("no-schedule-forks",
-    cl::init(true));
-
 enum class ThreadSchedulingPolicy {
   First, // first runnable thread (by id)
   Last, // last runnable thread (by id)
@@ -5075,35 +5072,10 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
     return;
   }
 
-
-  size_t allowedChoices = choices.size();
-
-  // Before we actually fork the states, make sure we honor MaxForks
-  if (MaxForks != ~0u && stats::forks + allowedChoices > MaxForks) {
-    allowedChoices = (MaxForks - stats::forks) + 1;
-  }
-
-  // So we are not able to fork for new states when we should not
-  if (atMemoryLimit || inhibitForking || NoScheduleForks) {
-    allowedChoices = 1;
-  }
-
-  for (size_t i = 0; i < allowedChoices; ++i) {
-    // we want to reuse the current state when that is possible
-    ExecutionState* st;
-    if (i == allowedChoices - 1) {
-      st = &state;
-    } else {
-      st = state.branch();
-      registerFork(state, st);
-      addedStates.push_back(st);
-    }
-
-    st->wakeUpThread(choices[i]);
-
-    if (registerAsNotificationEvent) {
-      porEventManager.registerCondVarSignal(*st, lid, choices[i]);
-    }
+  // always take first possible choice
+  state.wakeUpThread(choices[0]);
+  if (registerAsNotificationEvent) {
+    porEventManager.registerCondVarSignal(state, lid, choices[0]);
   }
 }
 
@@ -5270,39 +5242,6 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
   }
 }
 
-void Executor::forkForThreadScheduling(ExecutionState &state, std::size_t newForkCount) {
-  assert(newForkCount < state.runnableThreads.size());
-
-  // Before we actually fork the states, make sure we honor MaxForks
-  if (MaxForks != ~0u && stats::forks + newForkCount > MaxForks) {
-    newForkCount = MaxForks - stats::forks;
-  }
-
-  // So we are not able to fork for new states when we should not
-  if (atMemoryLimit || inhibitForking || NoScheduleForks) {
-    newForkCount = 0;
-  }
-
-  stats::forks += newForkCount;
-
-  auto rIt = state.runnableThreads.begin();
-
-  for (size_t i = 0; i < newForkCount + 1; ++i, ++rIt) {
-    // we want to reuse the current state when that is possible
-    ExecutionState* st;
-    if (i == newForkCount) {
-      st = &state;
-    } else {
-      st = state.branch();
-      registerFork(state, st);
-      addedStates.push_back(st);
-    }
-
-    const ThreadId& tidToSchedule = *rIt;
-    st->scheduleNextThread(tidToSchedule);
-  }
-}
-
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
@@ -5348,50 +5287,45 @@ void Executor::scheduleThreads(ExecutionState &state) {
     return;
   }
 
-  if (NoScheduleForks) {
-    // pick thread according to policy by default
-    ThreadId tid;
-    switch (ThreadScheduling) {
-        case ThreadSchedulingPolicy::First:
-            tid = *runnable.begin();
-            break;
-        case ThreadSchedulingPolicy::Last:
-            tid = *std::prev(runnable.end());
-            break;
-        case ThreadSchedulingPolicy::Random:
-            tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
-            break;
-        case ThreadSchedulingPolicy::RoundRobin: {
-          tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
+  // pick thread according to policy by default
+  ThreadId tid;
+  switch (ThreadScheduling) {
+      case ThreadSchedulingPolicy::First:
+          tid = *runnable.begin();
           break;
-        }
-    }
-
-    // or (if possible) pick thread that needs to catch up
-    if (state.porConfiguration->needs_catch_up()) {
-      tid = state.porConfiguration->peek()->tid();
-
-      if (!state.threadSchedulingEnabled) {
-        state.threadSchedulingEnabled = true;
-        state.currentThread().threadSchedulingWasDisabled = true;
+      case ThreadSchedulingPolicy::Last:
+          tid = *std::prev(runnable.end());
+          break;
+      case ThreadSchedulingPolicy::Random:
+          tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
+          break;
+      case ThreadSchedulingPolicy::RoundRobin: {
+        tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
+        break;
       }
-
-      if (state.porConfiguration->peek()->kind() == por::event::event_kind::thread_join) {
-        auto *join = static_cast<por::event::thread_join const*>(state.porConfiguration->peek());
-        auto jid = join->joined_thread();
-        auto it = state.threads.find(jid);
-        if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {
-          // thread that is to be joined has to catch-up first
-          tid = jid;
-        }
-      }
-    }
-
-    state.scheduleNextThread(tid);
-  } else {
-    uint64_t newForkCount = runnable.size() - 1;
-    forkForThreadScheduling(state, newForkCount);
   }
+
+  // or (if possible) pick thread that needs to catch up
+  if (state.porConfiguration->needs_catch_up()) {
+    tid = state.porConfiguration->peek()->tid();
+
+    if (!state.threadSchedulingEnabled) {
+      state.threadSchedulingEnabled = true;
+      state.currentThread().threadSchedulingWasDisabled = true;
+    }
+
+    if (state.porConfiguration->peek()->kind() == por::event::event_kind::thread_join) {
+      auto *join = static_cast<por::event::thread_join const*>(state.porConfiguration->peek());
+      auto jid = join->joined_thread();
+      auto it = state.threads.find(jid);
+      if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {
+        // thread that is to be joined has to catch-up first
+        tid = jid;
+      }
+    }
+  }
+
+  state.scheduleNextThread(tid);
 }
 
 /// Returns the errno location in memory
