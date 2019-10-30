@@ -265,5 +265,18 @@ namespace por::event {
 		std::vector<event const*> immediate_predecessors() const noexcept;
 
 		std::vector<event const*> immediate_conflicts() const noexcept;
+
+		std::size_t color() const noexcept {
+			return _color;
+		}
+
+		template<typename T>
+		static std::size_t colorize(T begin, T end) {
+			std::size_t color = ++_next_color;
+			for (; begin != end; ++begin) {
+				(*begin)->_color = color;
+			}
+			return color;
+		}
 	};
 }

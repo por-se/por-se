@@ -49,3 +49,35 @@ cone::cone(por::event::event const& immediate_predecessor,
 		}
 	}
 }
+
+bool cone::is_lte_for_all_of(cone const& rhs) const noexcept {
+	for(auto& [tid, event] : rhs) {
+		if(at(tid)->depth() > event->depth()) {
+			// By construction, rhs also includes all elements of event's cone.
+			// Thus, we only need to check against the depth on the same tid.
+			return false;
+		}
+		assert(!count(tid) || at(tid) == event || at(tid)->is_less_than_eq(*event));
+	}
+	return true;
+}
+
+bool cone::is_gte_for_all_of(cone const& rhs) const noexcept {
+	for(auto& [tid, event] : rhs) {
+		if(!count(tid) || at(tid)->depth() < event->depth()) {
+			// By construction, rhs also includes all elements of event's cone.
+			// Thus, we only need to check against the depth on the same tid.
+			return false;
+		}
+		assert(at(tid) == event || event->is_less_than_eq(*at(tid)));
+	}
+	return true;
+}
+
+void cone::extend_unchecked_single(por::event::event const& event) noexcept {
+#ifndef NDEBUG // FIXME: expensive
+	assert(is_lte_for_all_of(event.cone()));
+#endif
+	assert(!_map.count(event.tid()) || _map[event.tid()]->depth() <= event.depth());
+	_map[event.tid()] = &event;
+}

@@ -89,6 +89,8 @@ namespace por {
 			return *_root;
 		}
 
+		por::event::event const* compute_alternative(por::configuration const& C,
+		                                             std::vector<por::event::event const*> D) const noexcept;
 
 		// statistics
 	private:

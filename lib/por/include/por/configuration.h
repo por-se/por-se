@@ -1002,7 +1002,7 @@ namespace por {
 		}
 
 	private:
-		std::vector<conflicting_extension> cex_acquire(por::event::event const& e) {
+		std::vector<conflicting_extension> cex_acquire(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::lock_acquire || e.kind() == por::event::event_kind::wait2);
 
 			std::vector<conflicting_extension> result;
@@ -1070,7 +1070,7 @@ namespace por {
 			return result;
 		}
 
-		std::vector<conflicting_extension> cex_wait1(por::event::event const& e) {
+		std::vector<conflicting_extension> cex_wait1(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::wait1);
 
 			std::vector<conflicting_extension> result;
@@ -1211,7 +1211,7 @@ namespace por {
 			return outstanding_wait1(cid, cone);
 		}
 
-		std::vector<conflicting_extension> cex_notification(por::event::event const& e) {
+		std::vector<conflicting_extension> cex_notification(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::signal || e.kind() == por::event::event_kind::broadcast);
 
 			std::vector<conflicting_extension> result;
@@ -1532,7 +1532,7 @@ namespace por {
 		}
 
 	public:
-		std::vector<conflicting_extension> conflicting_extensions() {
+		std::vector<conflicting_extension> conflicting_extensions() const noexcept {
 			_unfolding->stats_inc_configuration();
 			std::vector<conflicting_extension> S;
 			for(auto* e : *this) {
@@ -1559,6 +1559,10 @@ namespace por {
 			}
 			_unfolding->stats_inc_cex_created(S.size());
 			return S;
+		}
+
+		por::event::event const* compute_alternative(std::vector<por::event::event const*> D) const noexcept {
+			return unfolding()->compute_alternative(*this, D);
 		}
 	};
 
