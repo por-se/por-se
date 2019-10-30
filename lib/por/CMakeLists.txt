@@ -8,5 +8,6 @@ target_sources(libpor PRIVATE
 	"${CMAKE_CURRENT_LIST_DIR}/cone.cpp"
 	"${CMAKE_CURRENT_LIST_DIR}/configuration.cpp"
 	"${CMAKE_CURRENT_LIST_DIR}/comb.cpp"
+	"${CMAKE_CURRENT_LIST_DIR}/node.cpp"
 	"${CMAKE_CURRENT_LIST_DIR}/unfolding.cpp"
 )

@@ -93,6 +93,8 @@ namespace por {
 	};
 
 	class configuration {
+		friend class node;
+
 		// creation events for locks and condition variables are optional
 		static const bool optional_creation_events = true;
 
