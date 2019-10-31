@@ -14,8 +14,6 @@ namespace por {
 	class cone {
 		std::map<thread_id, por::event::event const*> _map;
 
-		void insert(por::event::event const& event);
-
 	public:
 		auto begin() const { return _map.begin(); }
 		auto end() const { return _map.end(); }
@@ -24,6 +22,8 @@ namespace por {
 		auto find(thread_id const& tid) const { return _map.find(tid); }
 		auto at(thread_id const& tid) const { return _map.at(tid); }
 		auto count(thread_id const& tid) const { return _map.count(tid); }
+
+		void insert(por::event::event const& event);
 
 		cone() = default;
 
