@@ -17,7 +17,7 @@ namespace por {
 		friend class comb;
 
 		// invariant: first element is minimum, last element is maximum
-		// thus: _events[0] < _events[1] <= ... <= _events[n-1] < _events[n]
+		// thus: _events[0] < {_events[1], ..., _events[n-1]} < _events[n]
 		std::deque<por::event::event const*> _events;
 
 		// true iff all events are sorted (by causality)
@@ -31,7 +31,9 @@ namespace por {
 
 		bool insert(por::event::event const& event) noexcept;
 
-		bool is_sorted() const noexcept { return _sorted; }
+		void remove(por::event::event const& event) noexcept;
+
+		bool is_sorted() const noexcept;
 		por::event::event const* min() const noexcept { return empty() ? nullptr : _events.front(); }
 		por::event::event const* max() const noexcept { return empty() ? nullptr : _events.back(); }
 		void sort() noexcept;
@@ -39,9 +41,6 @@ namespace por {
 
 	class comb {
 		std::map<thread_id, tooth> _teeth;
-
-		// true iff all teeth are sorted
-		bool _sorted = true;
 
 	public:
 		comb() = default;
@@ -54,8 +53,20 @@ namespace por {
 
 		auto begin() const { return _teeth.begin(); }
 		auto end() const { return _teeth.end(); }
-		auto size() const { return _teeth.size(); }
-		auto empty() const { return _teeth.empty(); }
+
+		std::size_t num_threads() const noexcept { return _teeth.size(); }
+		std::size_t size() const noexcept {
+			std::size_t n = 0;
+			for(auto& [_, tooth] : _teeth) {
+				assert(!tooth.empty());
+				n += tooth.size();
+			}
+			return n;
+		}
+		bool empty() const noexcept {
+			assert(_teeth.empty() == (size() == 0));
+			return _teeth.empty();
+		}
 
 		auto find(thread_id const& tid) const { return _teeth.find(tid); }
 		auto& at(thread_id const& tid) const { return _teeth.at(tid); }
@@ -63,10 +74,27 @@ namespace por {
 
 		void insert(por::event::event const& event) noexcept;
 
-		bool is_sorted() const noexcept { return _sorted; }
+		bool is_sorted() const noexcept {
+			// FIXME: value can be cached if we prevent teeth from being modified (or monitor changes)
+			return std::all_of(begin(), end(), [](auto& t) { return t.second.is_sorted(); });
+		}
 		std::vector<por::event::event const*> min() const noexcept;
 		std::vector<por::event::event const*> max() const noexcept;
 		void sort() noexcept;
+
+		void remove(por::event::event const& event) noexcept;
+
+		template<typename T>
+		void remove(T begin, T end) {
+			for (; begin != end; ++begin) {
+				if(_teeth.count((*begin)->tid())) {
+					_teeth[(*begin)->tid()].remove(**begin);
+					if(_teeth[(*begin)->tid()].empty()) {
+						_teeth.erase((*begin)->tid());
+					}
+				}
+			}
+		}
 
 		// compute all combinations: S \subseteq comb (where S is concurrent,
 		// i.e. there are no causal dependencies between any of its elements)

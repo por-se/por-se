@@ -17,27 +17,72 @@ bool tooth::insert(por::event::event const& e) noexcept {
 	} else if((_events.size() == 1 && _events.front() != &e) || _events.back()->is_less_than(e)) {
 		// order is preserved
 		_events.push_back(&e);
-	} else if(_events.front() != &e && _events.back() != &e) {
+	} else if(std::find(_events.begin(), _events.end(), &e) != _events.end()) {
+		// event is already present
+		return _sorted;
+	} else {
 		_events.insert(std::prev(_events.end()), &e);
-		if(_events.size() == 2) {
+		if(_events.size() == 3) {
 			// order is preserved
 			assert(_sorted);
 		} else {
-			assert(_events.size() > 2);
+			assert(_events.size() > 3);
 			_sorted = false;
 		}
 	}
+	assert(_sorted == is_sorted()); // for invariant checks
 	return _sorted;
+}
+
+void tooth::remove(por::event::event const& e) noexcept {
+	using it_t = decltype(_events)::const_iterator;
+	auto cmp = [](it_t a, it_t b) { return (*a)->is_less_than(**b); };
+
+	auto it = std::find(_events.begin(), _events.end(), &e);
+	if(it == _events.end()) {
+		return;
+	} else if(_sorted || _events.size() <= 3) {
+		_events.erase(it);
+		_sorted = true;
+	} else if(it != _events.begin() && it != std::prev(_events.end())) {
+		if(_events.size() == 4) {
+			_sorted = true;
+		}
+		_events.erase(it);
+	} else if(it == _events.begin()) {
+		_events.pop_front();
+		auto min = std::min(_events.begin(), _events.end(), cmp);
+		std::iter_swap(min, _events.begin());
+	} else if(it == std::prev(_events.end())) {
+		_events.pop_back();
+		auto max = std::max(_events.begin(), _events.end(), cmp);
+		std::iter_swap(max, std::prev(_events.end()));
+	}
+	assert(_sorted == is_sorted()); // for invariant checks
 }
 
 void tooth::sort() noexcept {
 	if(_sorted) {
+		assert(_sorted == is_sorted()); // for invariant checks
 		return;
 	}
 	std::sort(_events.begin(), _events.end(), [](auto& a, auto& b) {
 		return a->is_less_than(*b);
 	});
 	_sorted = true;
+}
+
+bool tooth::is_sorted() const noexcept {
+#ifndef NDEBUG // FIXME: EXPENSIVE
+	assert(std::all_of(std::next(begin()), end(), [this](auto* e) { return _events.front()->is_less_than(*e); }));
+	assert(std::all_of(begin(), std::prev(end()), [this](auto* e) { return e->is_less_than(*_events.back()); }));
+	if(_sorted) {
+		std::vector<por::event::event const*> tmp(begin(), end());
+		std::sort(tmp.begin(), tmp.end(), [](auto a, auto b) { return a->is_less_than(*b); });
+		assert(std::equal(tmp.begin(), tmp.end(), begin()));
+	}
+#endif
+	return _sorted;
 }
 
 comb::comb(comb const& comb, std::function<bool(por::event::event const&)> filter) {
@@ -51,17 +96,13 @@ comb::comb(comb const& comb, std::function<bool(por::event::event const&)> filte
 }
 
 void comb::insert(por::event::event const& e) noexcept {
-	bool tooth_sorted = _teeth[e.tid()].insert(e);
-	if(!tooth_sorted) {
-		_sorted = false;
-	}
+	_teeth[e.tid()].insert(e);
 }
 
 void comb::sort() noexcept {
 	for(auto& [tid, tooth] : _teeth) {
 		tooth.sort();
 	}
-	_sorted = true;
 }
 
 std::vector<por::event::event const*> comb::max() const noexcept {
@@ -102,6 +143,7 @@ std::vector<por::event::event const*> comb::max() const noexcept {
 std::vector<por::event::event const*> comb::min() const noexcept {
 	std::vector<por::event::event const*> result;
 	for(auto& [tid, tooth] : _teeth) {
+		assert(!tooth.empty());
 		por::event::event const* tmin = tooth.min();
 		bool is_minimal_element = true;
 		for(auto it = result.begin(); it != result.end();) {
@@ -134,6 +176,13 @@ std::vector<por::event::event const*> comb::min() const noexcept {
 	return result;
 }
 
+void comb::remove(por::event::event const& event) noexcept {
+	_teeth[event.tid()].remove(event);
+	if(_teeth[event.tid()].empty()) {
+		_teeth.erase(event.tid());
+	}
+}
+
 std::vector<std::vector<por::event::event const*>>
 comb::concurrent_combinations(std::function<bool(std::vector<por::event::event const*>&)> filter) {
 	std::vector<std::vector<por::event::event const*>> result;
@@ -142,10 +191,10 @@ comb::concurrent_combinations(std::function<bool(std::vector<por::event::event c
 	// FIXME: WHY?!
 	sort();
 
-	assert(size() < 64); // FIXME: can "only" be used with 64 threads
-	for(std::uint64_t mask = 0; mask < (static_cast<std::uint64_t>(1) << size()); ++mask) {
+	assert(num_threads() < 64); // FIXME: can "only" be used with 64 threads
+	for(std::uint64_t mask = 0; mask < (static_cast<std::uint64_t>(1) << num_threads()); ++mask) {
 		std::size_t popcount = 0;
-		for(std::size_t i = 0; i < size(); ++i) {
+		for(std::size_t i = 0; i < num_threads(); ++i) {
 			if((mask >> i) & 1)
 				++popcount;
 		}
@@ -161,7 +210,7 @@ comb::concurrent_combinations(std::function<bool(std::vector<por::event::event c
 			highest_index.reserve(popcount);
 
 			auto it = begin();
-			for(std::size_t i = 0; i < size(); ++i, ++it) {
+			for(std::size_t i = 0; i < num_threads(); ++i, ++it) {
 				assert(std::next(begin(), i) == it);
 				assert(std::next(begin(), i) != end());
 				if((mask >> i) & 1) {
