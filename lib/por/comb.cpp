@@ -84,6 +84,18 @@ std::vector<por::event::event const*> comb::max() const noexcept {
 			result.push_back(tmax);
 		}
 	}
+
+#ifndef NDEBUG // FIXME: expensive?
+	for(auto& a : result) {
+		for(auto& b : result) {
+			if(a == b) {
+				continue;
+			}
+			assert(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
+		}
+	}
+#endif
+
 	return result;
 }
 
@@ -108,7 +120,7 @@ std::vector<por::event::event const*> comb::min() const noexcept {
 		}
 	}
 
-#ifndef NDEBUG
+#ifndef NDEBUG // FIXME: expensive?
 	for(auto& a : result) {
 		for(auto& b : result) {
 			if(a == b) {
