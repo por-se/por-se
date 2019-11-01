@@ -8,6 +8,7 @@
 #include <util/sso_array.h>
 
 #include <cassert>
+#include <iterator>
 #include <map>
 #include <set>
 #include <vector>
@@ -56,6 +57,44 @@ namespace por {
 
 		std::size_t num_of_conflicts() const {
 			return _conflicting_events.size();
+		}
+	};
+
+	class configuration_iterator {
+		por::configuration const* _configuration = nullptr;
+		std::map<por::event::thread_id_t, por::event::event const*>::const_reverse_iterator _thread;
+		por::event::event const* _event = nullptr;
+
+	public:
+		using value_type = por::event::event const*;
+		using difference_type = std::ptrdiff_t;
+		using pointer = por::event::event const* const*;
+		using reference = por::event::event const* const&;
+
+		using iterator_category = std::forward_iterator_tag;
+
+		configuration_iterator() = default;
+		explicit configuration_iterator(por::configuration const& configuration, bool end=false);
+
+		reference operator*() const noexcept {
+			return _event;
+		}
+		pointer operator->() const noexcept {
+			return &_event;
+		}
+
+		configuration_iterator& operator++() noexcept;
+		configuration_iterator operator++(int) noexcept {
+			configuration_iterator tmp = *this;
+			++(*this);
+			return tmp;
+		}
+
+		bool operator==(const configuration_iterator& rhs) const noexcept {
+			return _configuration == rhs._configuration && _thread == rhs._thread && _event == rhs._event;
+		}
+		bool operator!=(const configuration_iterator& rhs) const noexcept {
+			return !(*this == rhs);
 		}
 	};
 
@@ -136,6 +175,10 @@ namespace por {
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 		}
 		~configuration() = default;
+
+		// iterate over events in configuration (excl. catch-up events)
+		configuration_iterator begin() const noexcept { return configuration_iterator(*this); }
+		configuration_iterator end() const noexcept { return configuration_iterator(*this, true); }
 
 		auto const& thread_heads() const noexcept { return _thread_heads; }
 		auto const& lock_heads() const noexcept { return _lock_heads; }
