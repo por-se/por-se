@@ -421,6 +421,7 @@ int main(int argc, char** argv){
 	}
 
 	assert(visited.size() == std::distance(configuration.begin(), configuration.end()));
+	assert(visited.size() == configuration.size());
 
 #ifndef NDEBUG
 	std::set<por::event::event const*> E;
@@ -433,6 +434,7 @@ int main(int argc, char** argv){
 		E.insert(t);
 	}
 	assert(E.size() == std::distance(configuration.begin(), configuration.end()));
+	assert(E.size() == configuration.size());
 #endif
 
 #ifndef NDEBUG

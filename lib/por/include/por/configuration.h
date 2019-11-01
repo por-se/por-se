@@ -141,6 +141,9 @@ namespace por {
 		// sequence of events that need to be caught up
 		std::deque<por::event::event const*> _catch_up;
 
+		// number of events in this configuration (excl. catch-up events)
+		std::size_t _size;
+
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
 		configuration(configuration const&) = default;
@@ -150,6 +153,7 @@ namespace por {
 		configuration(configuration_root&& root)
 			: _unfolding(std::move(root._unfolding))
 			, _thread_heads(std::move(root._thread_heads))
+			, _size(_thread_heads.size() + 1)
 		{
 			_unfolding->stats_inc_event_created(por::event::event_kind::program_init);
 			_unfolding->stats_inc_unique_event(por::event::event_kind::program_init);
@@ -167,6 +171,8 @@ namespace por {
 
 		auto const& unfolding() const noexcept { return _unfolding; }
 
+		std::size_t size() const noexcept { return _size; }
+		bool empty() const noexcept { return _size == 0; }
 
 		bool needs_catch_up() const noexcept { return !_catch_up.empty(); }
 
@@ -196,6 +202,8 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -212,6 +220,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
 			_thread_create.emplace(new_tid, thread_event);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -221,6 +230,8 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -236,6 +247,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
 			_thread_create.erase(create_it);
 
+			++_size;
 			return _thread_heads[thread];
 		}
 
@@ -245,6 +257,8 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -261,6 +275,7 @@ namespace por {
 			thread_event = &event::thread_join::alloc(*_unfolding, thread, *thread_event, *joined_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_join);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -270,6 +285,8 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -283,6 +300,7 @@ namespace por {
 			thread_event = &event::thread_exit::alloc(*_unfolding, thread, *thread_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_exit);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -293,6 +311,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads.emplace(lock, _catch_up.front());
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -309,6 +329,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_create);
 			_lock_heads.emplace(lock, thread_event);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -319,6 +340,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads.erase(lock);
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -333,6 +356,7 @@ namespace por {
 					thread_event = &event::lock_destroy::alloc(*_unfolding, thread, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -342,6 +366,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 			_lock_heads.erase(lock_it);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -352,6 +377,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads[lock] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -367,6 +394,7 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					_lock_heads.emplace(lock, thread_event);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -376,6 +404,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			lock_event = thread_event;
 
+			++_size;
 			return thread_event;
 		}
 
@@ -386,6 +415,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads[lock] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -401,6 +432,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_release);
 			lock_event = thread_event;
 
+			++_size;
 			return thread_event;
 		}
 
@@ -413,6 +445,8 @@ namespace por {
 				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 				_cond_heads.emplace(cond, std::vector{_catch_up.front()});
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -430,6 +464,7 @@ namespace por {
 			_cond_heads.emplace(cond, std::vector{thread_event});
 			_used_cond_ids.insert(cond);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -440,6 +475,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_cond_heads.erase(cond);
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -456,6 +493,7 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 					_used_cond_ids.insert(cond);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -467,6 +505,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 			_cond_heads.erase(cond_head_it);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -514,6 +553,8 @@ namespace por {
 				_lock_heads[lock] = _catch_up.front();
 				_cond_heads[cond].push_back(_catch_up.front());
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -535,6 +576,7 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -550,6 +592,7 @@ namespace por {
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
 
+			++_size;
 			return thread_event;
 		}
 
@@ -584,6 +627,8 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads[lock] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -604,6 +649,7 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
 
+			++_size;
 			return thread_event;
 		}
 
@@ -669,6 +715,8 @@ namespace por {
 					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _catch_up.front();
 				}
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -687,6 +735,7 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -714,6 +763,7 @@ namespace por {
 				cond_event = thread_event;
 			}
 
+			++_size;
 			return thread_event;
 		}
 
@@ -731,6 +781,8 @@ namespace por {
 				}
 				_cond_heads[cond].push_back(_catch_up.front());
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 
@@ -749,6 +801,7 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
+					++_size;
 					return thread_event;
 				}
 			}
@@ -815,6 +868,7 @@ namespace por {
 				cond_preds.push_back(thread_event);
 			}
 
+			++_size;
 			return thread_event;
 		}
 
@@ -825,6 +879,8 @@ namespace por {
 				assert(static_cast<por::event::local const*>(peek())->path() == local_path);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+
+				++_size;
 				return _thread_heads[thread];
 			}
 			auto thread_it = _thread_heads.find(thread);
@@ -835,6 +891,7 @@ namespace por {
 			thread_event = &event::local::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
 			_unfolding->stats_inc_event_created(por::event::event_kind::local);
 
+			++_size;
 			return thread_event;
 		}
 
