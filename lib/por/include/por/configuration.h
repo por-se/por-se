@@ -16,14 +16,7 @@
 
 namespace por {
 	class configuration;
-}
 
-namespace klee {
-	class ExecutionState;
-	por::configuration* configuration_from_execution_state(klee::ExecutionState const* s);
-}
-
-namespace por {
 	class conflicting_extension {
 		por::event::event const& _new_event;
 		util::sso_array<por::event::event const*, 1> _conflicting_events;
@@ -145,14 +138,8 @@ namespace por {
 		// contains all previously used condition variable ids
 		std::set<por::event::cond_id_t> _used_cond_ids;
 
-		// sequence of events in order of their execution
-		std::vector<por::event::event const*> _schedule;
-
-		// index of upcoming event, if _schedule_pos < _schedule.size(), catch-up is needed
-		std::size_t _schedule_pos = 0;
-
-		// sequence of standby execution states along the schedule
-		std::vector<klee::ExecutionState const*> _standby_states;
+		// sequence of events that need to be caught up
+		std::deque<por::event::event const*> _catch_up;
 
 	public:
 		configuration() : configuration(configuration_root{}.add_thread().construct()) { }
@@ -166,11 +153,6 @@ namespace por {
 		{
 			_unfolding->stats_inc_event_created(por::event::event_kind::program_init);
 			_unfolding->stats_inc_unique_event(por::event::event_kind::program_init);
-			_schedule.emplace_back(&root._program_init);
-			for(auto& thread : _thread_heads) {
-				_schedule.emplace_back(thread.second);
-			}
-			_schedule_pos = _schedule.size();
 			assert(!_thread_heads.empty() && "Cannot create a configuration without any startup threads");
 		}
 		~configuration() = default;
@@ -185,95 +167,14 @@ namespace por {
 
 		auto const& unfolding() const noexcept { return _unfolding; }
 
-		// `previous` is the maximal configuration that was used to generate the conflict
-		configuration(configuration const& previous, conflicting_extension const& cex)
-			: _unfolding(previous._unfolding)
-			, _schedule(previous._schedule)
-			, _standby_states(previous._standby_states)
-		{
-			std::size_t conflict_gap = _schedule.size();
 
-			// create new schedule and compute common prefix,
-			// set _schedule_pos to latest theoretically possible standby
-			_schedule_pos = compute_new_schedule_from_old(cex, _schedule) - 1;
-			assert(_schedule_pos < _schedule.size());
-			assert(_schedule.size() >= 2 && "there have to be at least program_init and thread_init");
-
-			conflict_gap -= _schedule_pos;
-			assert(conflict_gap >= 1);
-			_unfolding->stats_inc_sum_of_conflict_gaps(conflict_gap);
-
-			std::size_t catchup_gap = _schedule_pos;
-
-			// there may not be a standby state for every schedule position
-			if(_schedule_pos >= _standby_states.size())
-				_schedule_pos = _standby_states.size() - 1;
-
-			// find latest available standby state
-			while(_schedule_pos > 0 && _standby_states[_schedule_pos] == nullptr) {
-				--_schedule_pos;
-			}
-			assert(_schedule_pos >= 1 && "thread_init of main thread must always have a standby state");
-			assert(_standby_states[_schedule_pos] != nullptr);
-
-			// remove standby states that are invalid in the new schedule
-			_standby_states.erase(std::next(_standby_states.begin(), _schedule_pos + 1), _standby_states.end());
-			assert(_standby_states.size() - 1 == _schedule_pos);
-			assert(_standby_states.back() != nullptr);
-
-			catchup_gap -= _schedule_pos;
-			_unfolding->stats_inc_sum_of_catchup_gaps(catchup_gap);
-
-			// no need to catch up to standby state
-			++_schedule_pos;
-
-			// reset heads to values at standby
-			configuration* partial = configuration_from_execution_state(_standby_states.back());
-			assert(partial != nullptr);
-			_thread_heads = partial->_thread_heads;
-			_lock_heads = partial->_lock_heads;
-			_cond_heads = partial->_cond_heads;
-			_used_cond_ids = partial->_used_cond_ids;
-
-			_unfolding->stats_inc_cex_inserted();
-		}
-
-		auto const& schedule() const noexcept { return _schedule; }
-		bool needs_catch_up() const noexcept { return _schedule_pos < _schedule.size(); }
+		bool needs_catch_up() const noexcept { return !_catch_up.empty(); }
 
 		por::event::event const* peek() const noexcept {
 			if(!needs_catch_up()) {
 				return nullptr;
 			}
-			return _schedule[_schedule_pos];
-		}
-
-		klee::ExecutionState const* standby_execution_state() const noexcept { return _standby_states.back(); }
-
-		void standby_execution_state(klee::ExecutionState const* s) {
-			assert(s != nullptr);
-			assert(_schedule.size() > 0);
-			assert(_schedule_pos > 0);
-			_standby_states.resize(_schedule_pos, nullptr);
-			assert(_standby_states.back() == nullptr);
-			_standby_states.back() = s;
-			assert(_standby_states.back() != nullptr);
-		}
-
-		std::size_t distance_to_last_standby_state(klee::ExecutionState const* s) {
-			assert(s != nullptr);
-			assert(_schedule.size() > 0);
-			assert(_schedule_pos > 0);
-			std::size_t res = 0;
-			for(auto it = _standby_states.rbegin(); it != _standby_states.rend(); ++it) {
-				if(*it != nullptr) {
-					res = _schedule_pos - std::distance(it, _standby_states.rend());
-					break;
-				} else {
-					++res;
-				}
-			}
-			return res;
+			return _catch_up.front();
 		}
 
 		std::size_t active_threads() const noexcept {
@@ -291,10 +192,10 @@ namespace por {
 
 		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_create);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::thread_create);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -311,18 +212,15 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
 			_thread_create.emplace(new_tid, thread_event);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* init_thread(event::thread_id_t thread) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_init);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::thread_init);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -338,18 +236,15 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
 			_thread_create.erase(create_it);
 
-			_schedule.emplace_back(_thread_heads[thread]);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return _thread_heads[thread];
 		}
 
 		por::event::event const* join_thread(event::thread_id_t thread, event::thread_id_t joined) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_join);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::thread_join);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -366,18 +261,15 @@ namespace por {
 			thread_event = &event::thread_join::alloc(*_unfolding, thread, *thread_event, *joined_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_join);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* exit_thread(event::thread_id_t thread) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_exit);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::thread_exit);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -391,19 +283,16 @@ namespace por {
 			thread_event = &event::thread_exit::alloc(*_unfolding, thread, *thread_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_exit);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* create_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::lock_create);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				_lock_heads.emplace(lock, _schedule[_schedule_pos]);
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::lock_create);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_lock_heads.emplace(lock, _catch_up.front());
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -420,19 +309,16 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_create);
 			_lock_heads.emplace(lock, thread_event);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::lock_destroy);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(peek()->kind() == por::event::event_kind::lock_destroy);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
 				_lock_heads.erase(lock);
-				++_schedule_pos;
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -447,9 +333,6 @@ namespace por {
 					thread_event = &event::lock_destroy::alloc(*_unfolding, thread, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -459,19 +342,16 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 			_lock_heads.erase(lock_it);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::lock_acquire);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				_lock_heads[lock] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::lock_acquire);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_lock_heads[lock] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -487,9 +367,6 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					_lock_heads.emplace(lock, thread_event);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -499,19 +376,16 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			lock_event = thread_event;
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* release_lock(event::thread_id_t thread, event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::lock_release);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				_lock_heads[lock] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::lock_release);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_lock_heads[lock] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -527,21 +401,18 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_release);
 			lock_event = thread_event;
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* create_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::condition_variable_create);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				assert(_schedule[_schedule_pos]->cid() == cond);
-				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(peek()->kind() == por::event::event_kind::condition_variable_create);
+				assert(peek()->tid() == thread);
+				assert(peek()->cid() == cond);
+				_thread_heads[thread] = _catch_up.front();
 				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
-				_cond_heads.emplace(cond, std::vector{_schedule[_schedule_pos]});
-				++_schedule_pos;
+				_cond_heads.emplace(cond, std::vector{_catch_up.front()});
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -559,19 +430,16 @@ namespace por {
 			_cond_heads.emplace(cond, std::vector{thread_event});
 			_used_cond_ids.insert(cond);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* destroy_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::condition_variable_destroy);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(peek()->kind() == por::event::event_kind::condition_variable_destroy);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
 				_cond_heads.erase(cond);
-				++_schedule_pos;
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -588,9 +456,6 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 					_used_cond_ids.insert(cond);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -602,9 +467,6 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 			_cond_heads.erase(cond_head_it);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
@@ -646,12 +508,12 @@ namespace por {
 		por::event::event const*
 		wait1(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::wait1);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				_lock_heads[lock] = _schedule[_schedule_pos];
-				_cond_heads[cond].push_back(_schedule[_schedule_pos]);
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::wait1);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_lock_heads[lock] = _catch_up.front();
+				_cond_heads[cond].push_back(_catch_up.front());
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -673,9 +535,6 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -691,9 +550,6 @@ namespace por {
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
@@ -723,11 +579,11 @@ namespace por {
 		por::event::event const*
 		wait2(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::wait2);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				_lock_heads[lock] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::wait2);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
+				_lock_heads[lock] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -748,9 +604,6 @@ namespace por {
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
@@ -807,15 +660,15 @@ namespace por {
 		por::event::event const*
 		signal_thread(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::thread_id_t notified_thread) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::signal);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(peek()->kind() == por::event::event_kind::signal);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
 				if(!notified_thread) { // lost signal
-					_cond_heads[cond].push_back(_schedule[_schedule_pos]);
+					_cond_heads[cond].push_back(_catch_up.front());
 				} else {
-					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _schedule[_schedule_pos];
+					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _catch_up.front();
 				}
-				++_schedule_pos;
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -834,9 +687,6 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -864,9 +714,6 @@ namespace por {
 				cond_event = thread_event;
 			}
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
@@ -874,16 +721,16 @@ namespace por {
 		por::event::event const*
 		broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::vector<por::event::thread_id_t> notified_threads) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::broadcast);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				_thread_heads[thread] = _schedule[_schedule_pos];
+				assert(peek()->kind() == por::event::event_kind::broadcast);
+				assert(peek()->tid() == thread);
+				_thread_heads[thread] = _catch_up.front();
 				if(!notified_threads.empty()) {
 					for(auto& nid : notified_threads) {
 						_cond_heads[cond].erase(notified_wait1_predecessor(nid, _cond_heads[cond]));
 					}
 				}
-				_cond_heads[cond].push_back(_schedule[_schedule_pos]);
-				++_schedule_pos;
+				_cond_heads[cond].push_back(_catch_up.front());
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 
@@ -902,9 +749,6 @@ namespace por {
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
 
-					_schedule.emplace_back(thread_event);
-					++_schedule_pos;
-					assert(_schedule_pos == _schedule.size());
 					return thread_event;
 				}
 			}
@@ -971,20 +815,16 @@ namespace por {
 				cond_preds.push_back(thread_event);
 			}
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
 		por::event::event const* local(event::thread_id_t thread, event::path_t local_path) {
 			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::local);
-				assert(_schedule[_schedule_pos]->tid() == thread);
-				[[maybe_unused]] auto& cs = static_cast<por::event::local const*>(_schedule[_schedule_pos])->path();
-				assert(cs == local_path);
-				_thread_heads[thread] = _schedule[_schedule_pos];
-				++_schedule_pos;
+				assert(peek()->kind() == por::event::event_kind::local);
+				assert(peek()->tid() == thread);
+				assert(static_cast<por::event::local const*>(peek())->path() == local_path);
+				_thread_heads[thread] = _catch_up.front();
+				_catch_up.pop_front();
 				return _thread_heads[thread];
 			}
 			auto thread_it = _thread_heads.find(thread);
@@ -995,9 +835,6 @@ namespace por {
 			thread_event = &event::local::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
 			_unfolding->stats_inc_event_created(por::event::event_kind::local);
 
-			_schedule.emplace_back(thread_event);
-			++_schedule_pos;
-			assert(_schedule_pos == _schedule.size());
 			return thread_event;
 		}
 
@@ -1510,25 +1347,6 @@ namespace por {
 			}
 
 			return result;
-		}
-
-		// returns index of first conflict, i.e. first index that deviates from given schedule
-		std::size_t compute_new_schedule_from_old(conflicting_extension const& cex, std::vector<por::event::event const*>& schedule) {
-			[[maybe_unused]] std::size_t original_size = schedule.size();
-			auto is_in_conflict = [&](auto& e) {
-				for(auto& conflict : cex.conflicts()) {
-					assert(conflict);
-					assert(e);
-					if((*conflict).is_less_than_eq(*e))
-						return true;
-				}
-				return false;
-			};
-			auto first_conflict = std::find_if(schedule.begin(), schedule.end(), is_in_conflict);
-			schedule.erase(std::remove_if(first_conflict, schedule.end(), is_in_conflict), schedule.end());
-			assert(schedule.size() <= (original_size - cex.num_of_conflicts()));
-			schedule.emplace_back(&cex.new_event());
-			return std::distance(schedule.begin(), first_conflict);
 		}
 
 	public:

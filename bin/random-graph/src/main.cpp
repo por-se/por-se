@@ -420,7 +420,7 @@ int main(int argc, char** argv){
 		}
 	}
 
-	assert(visited.size() == configuration.schedule().size());
+	assert(visited.size() == std::distance(configuration.begin(), configuration.end()));
 
 #ifndef NDEBUG
 	std::set<por::event::event const*> E;
