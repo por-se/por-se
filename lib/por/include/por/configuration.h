@@ -317,46 +317,6 @@ namespace por {
 			return res;
 		}
 
-		// Spawn a new thread from tid `source`.
-		[[deprecated]]
-		std::pair<por::event::event const*, por::event::event const*>
-		spawn_thread(event::thread_id_t source, por::event::thread_id_t new_tid) {
-			if(needs_catch_up()) {
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_create);
-				assert(_schedule[_schedule_pos]->tid() == source);
-				_thread_heads[source] = _schedule[_schedule_pos];
-				++_schedule_pos;
-				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_init);
-				assert(_schedule[_schedule_pos]->tid() == new_tid);
-
-				_thread_heads[new_tid] = _schedule[_schedule_pos];
-				++_schedule_pos;
-				return std::make_pair(_thread_heads[source], _thread_heads[new_tid]);
-			}
-
-			auto source_it = _thread_heads.find(source);
-			assert(source_it != _thread_heads.end() && "Source thread must exist");
-			auto& source_event = source_it->second;
-			assert(source_event->kind() != por::event::event_kind::thread_exit && "Source thread must not yet be exited");
-			assert(source_event->kind() != por::event::event_kind::wait1 && "Source thread must not be blocked");
-
-			source_event = &event::thread_create::alloc(*_unfolding, source, *source_event, new_tid);
-			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
-			_unfolding->mark_as_open(*source_event, _path);
-			assert(new_tid);
-			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
-			_thread_heads.emplace(new_tid, &event::thread_init::alloc(*_unfolding, new_tid, *source_event));
-			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
-			_unfolding->mark_as_open(*_thread_heads[new_tid], _path);
-
-			_schedule.emplace_back(source_event);
-			_schedule.emplace_back(_thread_heads[new_tid]);
-			_schedule_pos += 2;
-			assert(_schedule_pos == _schedule.size());
-
-			return std::make_pair(_thread_heads[source], _thread_heads[new_tid]);
-		}
-
 		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
 			if(needs_catch_up()) {
 				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_create);
