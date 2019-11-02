@@ -134,6 +134,9 @@ namespace por {
 		// contains most recent event of ALL threads that ever existed within this configuration
 		std::map<por::event::thread_id_t, por::event::event const*> _thread_heads;
 
+		// contains most recent event
+		std::map<por::event::thread_id_t, por::event::event const*> _thread_create;
+
 		// contains most recent event of ACTIVE locks
 		std::map<event::lock_id_t, por::event::event const*> _lock_heads;
 
@@ -315,6 +318,7 @@ namespace por {
 		}
 
 		// Spawn a new thread from tid `source`.
+		[[deprecated]]
 		std::pair<por::event::event const*, por::event::event const*>
 		spawn_thread(event::thread_id_t source, por::event::thread_id_t new_tid) {
 			if(needs_catch_up()) {
@@ -351,6 +355,63 @@ namespace por {
 			assert(_schedule_pos == _schedule.size());
 
 			return std::make_pair(_thread_heads[source], _thread_heads[new_tid]);
+		}
+
+		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
+			if(needs_catch_up()) {
+				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_create);
+				assert(_schedule[_schedule_pos]->tid() == thread);
+				_thread_heads[thread] = _schedule[_schedule_pos];
+				++_schedule_pos;
+				return _thread_heads[thread];
+			}
+
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it != _thread_heads.end() && "Thread must exist");
+			auto& thread_event = thread_it->second;
+			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
+			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
+
+			assert(new_tid);
+			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
+			assert(_thread_create.find(new_tid) == _thread_create.end() && "Thread with same id was already created");
+			thread_event = &event::thread_create::alloc(*_unfolding, thread, *thread_event, new_tid);
+			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
+			_unfolding->mark_as_open(*thread_event, _path);
+			_thread_create.emplace(new_tid, thread_event);
+
+			_schedule.emplace_back(thread_event);
+			++_schedule_pos;
+			assert(_schedule_pos == _schedule.size());
+			return thread_event;
+		}
+
+		por::event::event const* init_thread(event::thread_id_t thread) {
+			if(needs_catch_up()) {
+				assert(_schedule[_schedule_pos]->kind() == por::event::event_kind::thread_init);
+				assert(_schedule[_schedule_pos]->tid() == thread);
+				_thread_heads[thread] = _schedule[_schedule_pos];
+				++_schedule_pos;
+				return _thread_heads[thread];
+			}
+
+			auto create_it = _thread_create.find(thread);
+			assert(create_it != _thread_create.end() && "Thread must have been created");
+			auto& thread_create = create_it->second;
+			assert(thread_create->tid() != thread);
+
+			auto thread_it = _thread_heads.find(thread);
+			assert(thread_it == _thread_heads.end() && "Thread must not be initialized");
+
+			_thread_heads.emplace(thread, &event::thread_init::alloc(*_unfolding, thread, *thread_create));
+			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
+			_unfolding->mark_as_open(*_thread_heads[thread], _path);
+			_thread_create.erase(create_it);
+
+			_schedule.emplace_back(_thread_heads[thread]);
+			++_schedule_pos;
+			assert(_schedule_pos == _schedule.size());
+			return _thread_heads[thread];
 		}
 
 		por::event::event const* join_thread(event::thread_id_t thread, event::thread_id_t joined) {
