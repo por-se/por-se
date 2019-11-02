@@ -120,7 +120,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 			// 2. check if [e] \cup C is conflict free
 			std::vector<por::event::event const*> cex;
 			for(auto& x : c.conflicting_extensions()) {
-				cex.push_back(&x.new_event());
+				cex.push_back(&x.extension());
 			}
 			std::size_t blue = por::event::event::colorize(cex.begin(), cex.end());
 			bool is_conflict_free = true;

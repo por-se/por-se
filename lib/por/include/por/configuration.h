@@ -18,39 +18,15 @@ namespace por {
 	class configuration;
 
 	class conflicting_extension {
-		por::event::event const& _new_event;
-		util::sso_array<por::event::event const*, 1> _conflicting_events;
+		por::event::event const& _event;
+		por::event::event const& _extension;
 
 	public:
-		conflicting_extension(por::event::event const& new_event, por::event::event const& conflicting_event)
-		: _new_event(new_event)
-		, _conflicting_events{util::create_uninitialized, 1ul}
-		{
-			_conflicting_events[0] = &conflicting_event;
-		}
+		conflicting_extension(por::event::event const& event, por::event::event const& extension)
+		: _event(event), _extension(extension) { }
 
-		conflicting_extension(por::event::event const& new_event, std::vector<por::event::event const*> conflicting_events)
-		: _new_event(new_event)
-		, _conflicting_events{util::create_uninitialized, conflicting_events.size()}
-		{
-			std::size_t index = 0;
-			for(auto iter = conflicting_events.begin(); iter != conflicting_events.end(); ++iter, ++index) {
-				assert(*iter != nullptr && "no nullptr in conflicting events allowed");
-				_conflicting_events[index] = *iter;
-			}
-		}
-
-		por::event::event const& new_event() const {
-			return _new_event;
-		}
-
-		util::iterator_range<por::event::event const* const*> conflicts() const {
-			return util::make_iterator_range<por::event::event const* const*>(_conflicting_events.data(), _conflicting_events.data() + _conflicting_events.size());
-		}
-
-		std::size_t num_of_conflicts() const {
-			return _conflicting_events.size();
-		}
+		por::event::event const& event() const noexcept { return _event; }
+		por::event::event const& extension() const noexcept { return _extension; }
 	};
 
 	class configuration_iterator {
@@ -907,8 +883,6 @@ namespace por {
 			por::event::event const* er = e.lock_predecessor();
 			// maximal event concerning same lock in [et] (acq) or [et] \cup [es] (wait2)
 			por::event::event const* em = er;
-			// immediate successor of em / ep operating on same lock
-			por::event::event const* conflict = &e;
 			// signaling event (only for wait2)
 			por::event::event const* es = nullptr;
 
@@ -917,7 +891,6 @@ namespace por {
 			if(e.kind() == por::event::event_kind::lock_acquire) {
 				while(em != nullptr && !em->is_less_than_eq(*et)) {
 					// descend chain of lock events until em is in [et]
-					conflict = em;
 					em = em->lock_predecessor();
 				}
 			} else {
@@ -926,7 +899,6 @@ namespace por {
 				assert(es != nullptr);
 				while(em != nullptr && !em->is_less_than_eq(*et) && !em->is_less_than(*es)) {
 					// descend chain of lock events until em is in [et] \cup [es]
-					conflict = em;
 					em = em->lock_predecessor();
 				}
 			}
@@ -938,26 +910,24 @@ namespace por {
 			if(em == nullptr) {
 				// (kind(em) == lock_release || kind(em) == wait1) is included in while loop below (with correct lock predecessor)
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
-				result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, nullptr), *conflict);
+				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, nullptr));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			}
 
 			assert(er != nullptr); // if er is nullptr, em == er, so we already returned
 			por::event::event const* ep = er->lock_predecessor(); // lock events in K \ {r}
-			conflict = er;
 			while(ep != nullptr && (em == nullptr || !ep->is_less_than_eq(*em)) && (es == nullptr || !ep->is_less_than_eq(*es))) {
 				if(ep->kind() == por::event::event_kind::lock_release || ep->kind() == por::event::event_kind::wait1 || ep->kind() == por::event::event_kind::lock_create) {
 					if(e.kind() == por::event::event_kind::lock_acquire) {
-						result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, ep), *conflict);
+						result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, ep));
 						_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					} else {
 						assert(e.kind() == por::event::event_kind::wait2);
 						assert(ep->kind() != por::event::event_kind::lock_create);
-						result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), *et, *ep, *es), *conflict);
+						result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), *et, *ep, *es));
 						_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 					}
 				}
-				conflict = ep;
 				ep = ep->lock_predecessor();
 			}
 
@@ -987,7 +957,7 @@ namespace por {
 			}
 
 			comb.concurrent_combinations([&](auto const& M) {
-				bool generate_conflict = false;
+				bool cex_found = false;
 
 				por::cone cone(*et, cond_create, util::make_iterator_range<por::event::event const* const*>(M.data(), M.data() + M.size()));
 
@@ -995,36 +965,25 @@ namespace por {
 				// NOTE: lock predecessor is an event on the same thread
 				assert(cone.size() <= e.cone().size());
 				if(cone.size() != e.cone().size()) {
-					generate_conflict = true;
+					cex_found = true;
 				} else {
 					for(auto& [tid, c] : e.cone()) {
 						if(cone.at(tid)->is_less_than(*c)) {
-							generate_conflict = true;
+							cex_found = true;
 							break;
 						}
 					}
 				}
 
-				if(!generate_conflict)
+				if(!cex_found)
 					return false;
-
-				// compute conflicts (minimal events from comb \setminus [M])
-				por::comb conflict_comb(comb, [&](auto& c) {
-					for(auto &m : M) {
-						if(m->is_less_than_eq(c)) {
-							return false;
-						}
-					}
-					return true;
-				});
-				std::vector<por::event::event const*> conflicts = conflict_comb.min();
 
 				// lock predecessor is guaranteed to be in [et] (has to be an aquire/wait2 on the same thread)
 				std::vector<por::event::event const*> N(M);
 				if(cond_create) {
 					N.push_back(cond_create);
 				}
-				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), *et, *e.lock_predecessor(), std::move(N)), std::move(conflicts));
+				result.emplace_back(e, por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), *et, *e.lock_predecessor(), std::move(N)));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
 			});
@@ -1235,23 +1194,11 @@ namespace por {
 					N.push_back(cond_create);
 				}
 
-				// compute conflicts (minimal event from {e} or wait1s in (comb \setminus [M]))
-				auto conflict_comb = por::comb(wait1_comb, [&](auto& c) {
-					for(auto &m : M) {
-						if(m->is_less_than_eq(c)) {
-							return false;
-						}
-					}
-					return true;
-				});
-				conflict_comb.insert(e);
-				std::vector<por::event::event const*> conflicts = conflict_comb.min();
-
 				if(e.kind() == por::event::event_kind::signal) {
-					result.emplace_back(por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)), std::move(conflicts));
+					result.emplace_back(e, por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				} else if(e.kind() == por::event::event_kind::broadcast) {
-					result.emplace_back(por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)), std::move(conflicts));
+					result.emplace_back(e, por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
 					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 				}
 
@@ -1302,37 +1249,13 @@ namespace por {
 					if(w == sig->wait_predecessor())
 						continue;
 
-					// compute conflicts
-					std::vector<por::event::event const*> conflicts;
-					conflicts.push_back(&e);
-					// because of e \in conflicts, we only need to search comb for notification
-					// (succ(e) is excluded and w cannot be woken up by an event in [et])
-					if(notification.count(w))
-						conflicts.push_back(notification.at(w));
-
-					result.emplace_back(por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, *w), std::move(conflicts));
+					result.emplace_back(e, por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, *w));
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				}
 			}
 
 			// conflicting extensions: broadcast events
 			if(e.kind() == por::event::event_kind::broadcast) {
-				// compute pre-filtered conflict comb (only containing wait1, non-lost sig and lost bro events)
-				auto broadcast_conflict_comb = por::comb(comb, [](auto &e) {
-					if(e.kind() == por::event::event_kind::wait1) {
-						return true;
-					} else if(e.kind() == por::event::event_kind::signal) {
-						auto& sig = static_cast<por::event::signal const&>(e);
-						if(!sig.is_lost())
-							return true;
-					} else if(e.kind() == por::event::event_kind::broadcast) {
-						auto& bro = static_cast<por::event::broadcast const&>(e);
-						if(bro.is_lost())
-							return true;
-					}
-					return false;
-				});
-
 				comb.concurrent_combinations([&](auto const& M) {
 					// ensure that M differs from max
 					if(max.size() == M.size()) {
@@ -1381,23 +1304,8 @@ namespace por {
 						N.push_back(m);
 					}
 
-					// compute conflicts
-					auto conflict_comb = por::comb(broadcast_conflict_comb, [&](auto& c) {
-						for(auto &m : M) {
-							if(m->is_less_than_eq(c)) {
-								return false;
-							}
-						}
-						return true;
-					});
-
-					std::vector<por::event::event const*> conflicts = conflict_comb.min();
-
-					// as long as this is true, e does not have to be included itself
-					//assert(!conflicts.empty()); // FIXME: does fail for random-graph 144
-
-					// FIXME: conflicts and causes are incorrect!
-					// result.emplace_back(por::event::broadcast::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()), std::move(conflicts));
+					// FIXME: causes are incorrect!
+					// result.emplace_back(e, por::event::broadcast::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()));
 					// _unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 					return false; // result of concurrent_combinations not needed
 				});

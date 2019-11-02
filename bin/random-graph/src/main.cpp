@@ -362,23 +362,15 @@ int main(int argc, char** argv){
 	auto cex = configuration.conflicting_extensions();
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& entry : cex) {
-		auto& c = entry.new_event();
-		std::cerr << c.to_string(true);
-		for(auto it = c.predecessors().begin(), ie = c.predecessors().end(); it != ie; ++it) {
-			if(it == c.predecessors().begin())
-				std::cerr << " with predecessor(s): ";
-			std::cerr << (*it)->tid() << "@" << (*it)->depth();
-			if(std::next(it) != ie) {
-				std::cerr << " | ";
-			}
+		std::cerr << "for " << entry.event().to_string(true) << " @ " << &entry.event() << ": "
+		          << entry.extension().to_string(true) << " @ " << &entry.extension() << "\n";
+		std::cerr << "with immediate predecessor(s):\n";
+		for(auto e : entry.extension().immediate_predecessors()) {
+			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
-		for(auto it = entry.conflicts().begin(), ie = entry.conflicts().end(); it != ie; ++it) {
-			if(it == entry.conflicts().begin())
-				std::cerr << " and conflict(s): ";
-			std::cerr << (*it)->tid() << "@" << (*it)->depth();
-			if(std::next(it) != ie) {
-				std::cerr << " | ";
-			}
+		std::cerr << "and immediate conflicts:\n";
+		for(auto e : entry.extension().immediate_conflicts()) {
+			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
 		std::cerr << "\n";
 	}
