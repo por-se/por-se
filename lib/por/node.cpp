@@ -184,3 +184,16 @@ void node::backtrack() {
 	}
 	n->update_sweep_bit();
 }
+
+bool node::needs_catch_up() const noexcept {
+	assert(_C);
+	return _C->needs_catch_up();
+}
+
+por::event::event const* node::peek() const noexcept {
+	assert(_C);
+	if(!needs_catch_up()) {
+		return nullptr;
+	}
+	return _C->peek();
+}

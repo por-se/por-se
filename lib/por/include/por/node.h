@@ -111,6 +111,10 @@ namespace por {
 
 		void backtrack();
 
+		bool needs_catch_up() const noexcept;
+
+		por::event::event const* peek() const noexcept;
+
 		std::vector<por::event::event const*> schedule() const noexcept {
 			std::vector<por::event::event const*> sched;
 			node const* n = this;
@@ -120,6 +124,16 @@ namespace por {
 				n = n->parent();
 			}
 			return sched;
+		}
+
+		std::size_t distance_to_last_standby_state() const noexcept {
+			std::size_t result = 0;
+			node const* n = this;
+			while(n->parent() && !n->_standby_state) {
+				++result;
+				n = n->parent();
+			}
+			return result;
 		}
 
 	private:
