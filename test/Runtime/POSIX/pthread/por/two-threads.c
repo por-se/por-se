@@ -15,6 +15,7 @@ int main(void) {
   // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
   // This next check is not check-next, since there is a malloc line in between
   // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
+  // CHECK-NEXT: POR event: thread_init with current thread [[M_TID]] and initialized thread [[SEC_TID]]
   pthread_create(&thread, NULL, noop, NULL);
 
   // CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]

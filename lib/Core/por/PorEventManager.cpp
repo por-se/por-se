@@ -127,10 +127,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  state.porConfiguration->spawn_thread(state.currentThreadId(), tid);
-
-  checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_thread_create);
+  state.porConfiguration->create_thread(state.currentThreadId(), tid);
   return true;
 }
 
@@ -141,15 +138,14 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
 
-  if (tid == ExecutionState::mainThreadId) {
-    // main thread only: event already present in configuration
-    checkIfCatchUpIsNeeded(state);
-    registerStandbyState(state, por_thread_init);
-    return true;
+  if (tid != ExecutionState::mainThreadId) {
+    // main thread: event already present in configuration
+    state.porConfiguration->init_thread(tid);
   }
 
-  assert(0 && "thread_init can only be registered as part of thread_create");
-  return false;
+  checkIfCatchUpIsNeeded(state);
+  registerStandbyState(state, por_thread_init);
+  return true;
 }
 
 bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid) {
