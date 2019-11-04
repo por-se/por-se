@@ -10,14 +10,17 @@
 
 namespace por {
 	class thread_id {
+	public:
+		using thread_size_t = std::uint16_t;
+
 	private:
 		static const std::size_t asize = 4;
 
 		std::size_t _size;
 
 		union data_t {
-			std::uint16_t* p;
-			std::uint16_t a[asize];
+			thread_size_t* p;
+			thread_size_t a[asize];
 		} _data;
 
 		void resize(std::size_t new_size) {
@@ -25,8 +28,8 @@ namespace por {
 				return;
 			}
 
-			std::uint16_t* p = new_size > asize ? new std::uint16_t[new_size] : _data.a;
-			std::uint16_t* q = data();
+			thread_size_t* p = new_size > asize ? new thread_size_t[new_size] : _data.a;
+			thread_size_t* q = data();
 
 			if(p != q) {
 				for(std::size_t i = 0; i < new_size && i < _size; ++i) {
@@ -51,13 +54,13 @@ namespace por {
 			_size = 0;
 		}
 
-		std::uint16_t* data() noexcept { return _size <= asize ? _data.a : _data.p; }
-		std::uint16_t const* data() const noexcept { return _size <= asize ? _data.a : _data.p; }
+		thread_size_t* data() noexcept { return _size <= asize ? _data.a : _data.p; }
+		thread_size_t const* data() const noexcept { return _size <= asize ? _data.a : _data.p; }
 
 	public:
 		thread_id() noexcept : _size(0) { }
 
-		thread_id(thread_id const& parent, std::uint16_t localId) : thread_id() {
+		thread_id(thread_id const& parent, thread_size_t localId) : thread_id() {
 			assert(localId != 0 && "Local ids must be non-zero");
 
 			resize(parent._size + 1);
@@ -66,7 +69,7 @@ namespace por {
 		}
 
 		[[deprecated("use thread_id(thread_id(), localId) instead")]]
-		explicit thread_id(std::uint16_t localId) : thread_id(thread_id(), localId) { }
+		explicit thread_id(thread_size_t localId) : thread_id(thread_id(), localId) { }
 
 		thread_id(thread_id const& other) : thread_id() {
 			resize(other._size);
@@ -101,9 +104,9 @@ namespace por {
 		explicit operator bool() const noexcept { return !empty(); }
 		std::size_t size() const noexcept { return _size; }
 
-		std::uint16_t const* ids() const noexcept { return data(); }
+		thread_size_t const* ids() const noexcept { return data(); }
 
-		std::uint16_t operator[](std::size_t const index) const noexcept {
+		thread_size_t operator[](std::size_t const index) const noexcept {
 			return data()[index];
 		}
 
@@ -199,7 +202,7 @@ namespace por {
 				}
 
 				// First read the local identifier
-				std::uint16_t lid = 0;
+				thread_size_t lid = 0;
 				sstream >> lid;
 
 				// If the stream either fails or it was not possible to read a correct lid, then
