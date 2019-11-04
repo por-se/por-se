@@ -112,6 +112,8 @@ namespace klee {
       std::unique_ptr<pseudoalloc::allocator_t> threadHeapAlloc;
       std::unique_ptr<pseudoalloc::stack_allocator_t> threadStackAlloc;
 
+      MemoryFingerprint fingerprint;
+
     public:
       Thread() = delete;
       Thread(const Thread &thread);

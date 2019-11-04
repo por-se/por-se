@@ -269,8 +269,11 @@ void MemoryState::registerExternalFunctionCall() {
   // we cannot make any assumptions about the state after this call
 
   // mask fingerprint with global counter
-  fingerprint.updateExternalCallFragment(externalFunctionCallCounter++);
-  fingerprint.addToFingerprint();
+  for (auto &thread : executionState->threads) {
+    auto &fingerprint = thread.second.fingerprint;
+    fingerprint.updateExternalCallFragment(externalFunctionCallCounter++);
+    fingerprint.addToFingerprint();
+  }
 }
 
 void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
@@ -316,6 +319,8 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
     // change is only to be made to delta of current stack frame
     return;
   }
+
+  auto &fingerprint = executionState->currentThread().fingerprint;
 
   ref<Expr> offset = mo.getOffsetExpr(address);
   ConstantExpr *concreteOffset = dyn_cast<ConstantExpr>(offset);
@@ -399,6 +404,7 @@ void MemoryState::registerArgument(const ThreadId &threadID,
   }
 
   Thread &thread = executionState->currentThread();
+  auto &fingerprint = thread.fingerprint;
   MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
   fingerprint.addToFingerprintAndDelta(delta);
@@ -441,6 +447,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
   }
 
   Thread &thread = executionState->currentThread();
+  auto &fingerprint = thread.fingerprint;
   MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
 
   // second but last stack frame
@@ -473,75 +480,59 @@ void MemoryState::registerPopFrame(const StackFrame &sf) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
+  auto &fingerprint = executionState->currentThread().fingerprint;
   fingerprint.removeDelta(sf.fingerprintDelta);
 }
 
-MemoryFingerprint::value_t MemoryState::getFingerprint() const {
-  MemoryFingerprintDelta temporary;
-  MemoryFingerprint copy = fingerprint;
+MemoryFingerprintDelta MemoryState::getThreadDelta(const Thread &thread) const {
+  MemoryFingerprint copy = thread.fingerprint;
 
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
-  temporary.fingerprintValue.state = executionState;
-#endif
-
-  // include live locals in current stack frames of all (non-exited) threads
-  for (auto &it : executionState->threads) {
-    auto threadID = it.first;
-    const Thread &thread = it.second;
-    if (thread.state == ThreadState::Exited || !thread.liveSetPc)
-      continue;
-
-    copy.updateProgramCounterFragment(threadID,
-                                      thread.stack.size() - 1,
-                                      thread.pc->inst);
-    copy.addToDeltaOnly(temporary);
-
-    llvm::Instruction *liveInst = thread.liveSetPc->inst;
+  // include live locals in current stack frame
+  bool isFirstOfEntryBB = false;
+  llvm::Instruction *liveInst = nullptr;
+  if (thread.liveSetPc) {
+    liveInst = thread.liveSetPc->inst;
 
     // first instruction of function (on call)
     auto &entryBasicBlockInst = liveInst->getFunction()->front().front();
-    bool isFirstOfEntryBB = (&entryBasicBlockInst == liveInst);
+    isFirstOfEntryBB = (&entryBasicBlockInst == liveInst);
+  }
 
-    if (isFirstOfEntryBB)
-      continue;
+  if (thread.state != ThreadState::Exited) {
+    copy.updateProgramCounterFragment(thread.getThreadId(),
+                                      thread.stack.size() - 1,
+                                      thread.pc->inst);
+    copy.addToFingerprint();
 
-    const std::vector<const KInstruction *> *liveSet = nullptr;
-    if (liveInst == thread.pc->inst) {
-      // liveInst is yet to be executed: excution is at start of BasicBlock
-      assert(&liveInst->getParent()->front() == liveInst);
-      assert(!isa<llvm::PHINode>(liveInst));
+    if (thread.liveSetPc && !isFirstOfEntryBB) {
+      const std::vector<const KInstruction *> *liveSet = nullptr;
+      if (liveInst == thread.pc->inst) {
+        // liveInst is yet to be executed: excution is at start of BasicBlock
+        assert(&liveInst->getParent()->front() == liveInst);
+        assert(!isa<llvm::PHINode>(liveInst));
 
-      llvm::BasicBlock *parentBB = liveInst->getParent();
-      const KFunction *parentKF = kmodule->functionMap[parentBB->getParent()];
-      liveSet = parentKF->getLiveLocals(parentBB);
-    } else {
-      assert(liveInst == thread.prevPc->inst);
+        llvm::BasicBlock *parentBB = liveInst->getParent();
+        const KFunction *parentKF = kmodule->functionMap[parentBB->getParent()];
+        liveSet = parentKF->getLiveLocals(parentBB);
+      } else {
+        assert(liveInst == thread.prevPc->inst);
 
-      liveSet = &thread.liveSetPc->info->getLiveLocals();
-    }
+        liveSet = &thread.liveSetPc->info->getLiveLocals();
+      }
 
-    assert(liveSet != nullptr);
-    for (const KInstruction *ki : *liveSet) {
-      ref<Expr> value = thread.stack.back().locals[ki->dest].value;
-      if (value.isNull())
-        continue;
+      assert(liveSet != nullptr);
+      for (const KInstruction *ki : *liveSet) {
+        ref<Expr> value = thread.stack.back().locals[ki->dest].value;
+        if (value.isNull())
+          continue;
 
-      copy.updateLocalFragment(threadID, thread.stack.size() - 1, ki->inst, value);
-      copy.addToDeltaOnly(temporary);
+        copy.updateLocalFragment(thread.getThreadId(), thread.stack.size() - 1, ki->inst, value);
+        copy.addToFingerprint();
+      }
     }
   }
 
-  std::vector<ref<Expr>> expressions;
-  for (auto expr : executionState->constraints) {
-    expressions.push_back(expr);
-  }
-  return copy.getFingerprintWithDelta(expressions, temporary);
-}
-
-MemoryFingerprint::value_t MemoryState::getGlobalFingerprintValue() const {
-  std::vector<ref<Expr>> empty;
-  MemoryFingerprint tmp = fingerprint;
-  return tmp.getFingerprint(empty);
+  return copy.getFingerprintAsDelta();
 }
 
 std::string MemoryState::ExprString(ref<Expr> expr) {

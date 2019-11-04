@@ -2,6 +2,8 @@
 #include "../CoreStats.h"
 #include "../Executor.h"
 
+#include "por/configuration.h"
+#include "por/event/event.h"
 #include "por/node.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -161,6 +163,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
 
   extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
     por::event::event const* e = cfg.create_thread(state.currentThreadId(), tid);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, nullptr);
   });
 
@@ -207,6 +210,7 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
   extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
     por::event::event const* e = cfg.exit_thread(tid);
     auto standby = createStandbyState(state, por_thread_exit);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -225,6 +229,7 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
   extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.join_thread(state.currentThreadId(), joinedThread);
     auto standby = createStandbyState(state, por_thread_join);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -244,6 +249,7 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_lock(state.currentThreadId(), mId);
     auto standby = createStandbyState(state, por_lock_create);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -262,6 +268,7 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_lock(state.currentThreadId(), mId);
     auto standby = createStandbyState(state, por_lock_destroy);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -282,8 +289,10 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
 
     if(snapshotsAllowed) {
       auto standby = createStandbyState(state, por_lock_acquire);
+      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::make_shared<const ExecutionState>(nullptr));
   });
 
@@ -302,6 +311,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId);
     auto standby = createStandbyState(state, por_lock_release);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -321,6 +331,7 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_cond(state.currentThreadId(), cId);
     auto standby = createStandbyState(state, por_condition_variable_create);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -339,6 +350,7 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_cond(state.currentThreadId(), cId);
     auto standby = createStandbyState(state, por_condition_variable_destroy);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -357,6 +369,7 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
   extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.signal_thread(state.currentThreadId(), cId, notifiedThread);
     auto standby = createStandbyState(state, por_signal);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -380,6 +393,7 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
   extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
     por::event::event const* e = cfg.broadcast_threads(state.currentThreadId(), cId, threads);
     auto standby = createStandbyState(state, por_broadcast);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -398,6 +412,7 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
   extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait1(state.currentThreadId(), cId, mId);
     auto standby = createStandbyState(state, por_wait1);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -416,8 +431,29 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
   extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait2(state.currentThreadId(), cId, mId);
     auto standby = createStandbyState(state, por_wait2);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
   return true;
+}
+
+void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
+  auto thread = state.getThreadById(event.tid());
+  assert(thread && "no thread with given id found");
+
+  event._thread_delta = state.memoryState.getThreadDelta(*thread);
+
+  MemoryFingerprint fingerprint;
+  fingerprint.addDelta(event._thread_delta);
+  for (auto &[tid, c] : event.cone()) {
+    fingerprint.addDelta(c->_thread_delta);
+  }
+
+  std::vector<ref<Expr>> expressions;
+  for (auto expr : state.constraints) {
+    expressions.push_back(expr);
+  }
+
+  event._fingerprint = fingerprint.getFingerprint(expressions);
 }

@@ -6,6 +6,9 @@
 
 namespace por {
   class node;
+  namespace event {
+    class event;
+  }
 }
 
 namespace klee {
@@ -47,6 +50,8 @@ namespace klee {
       bool registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId, const std::vector<ThreadId> &threads);
       bool registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
       bool registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
+
+      void attachFingerprintToEvent(ExecutionState &state, const por::event::event &event);
   };
 };
 

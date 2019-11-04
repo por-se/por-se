@@ -4,7 +4,7 @@
 #include "Memory.h"
 #include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/StatePruningCmdLine.h"
-#include "klee/ThreadId.h"
+#include "klee/Thread.h"
 
 #include <cstdint>
 #include <vector>
@@ -26,7 +26,6 @@ class MemoryState {
   MemoryState(const MemoryState &) = default;
 
   ExecutionState *executionState = nullptr;
-  MemoryFingerprint fingerprint;
 
   bool disableMemoryState = false;
   bool globalDisableMemoryState = false;
@@ -177,8 +176,7 @@ public:
                          const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(const StackFrame &sf);
 
-  MemoryFingerprint::value_t getFingerprint() const;
-  MemoryFingerprint::value_t getGlobalFingerprintValue() const;
+  MemoryFingerprintDelta getThreadDelta(const Thread &thread) const;
 };
 }
 
