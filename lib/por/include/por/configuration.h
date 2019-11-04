@@ -1090,8 +1090,8 @@ namespace por {
 				por::comb comb;
 				for(auto& p : e.condition_variable_predecessors()) {
 					// cond predecessors contain all causes outside of [et]
-						if(p->tid() == e.tid() || p->is_less_than(*et))
-							continue; // cond_create and wait1s (because of their lock relation) can be in in [et]
+					if(p->tid() == e.tid() || p->is_less_than(*et))
+						continue; // cond_create and wait1s (because of their lock relation) can be in in [et]
 					comb.insert(*p);
 				}
 				max = comb.max();
