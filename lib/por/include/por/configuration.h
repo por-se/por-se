@@ -910,9 +910,12 @@ namespace por {
 			}
 
 			if(em == nullptr) {
-				// (kind(em) == lock_release || kind(em) == wait1) is included in while loop below (with correct lock predecessor)
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
 				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, nullptr));
+				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
+			} else if(em->kind() == por::event::event_kind::lock_release || em->kind() == por::event::event_kind::wait1 || em->kind() == por::event::event_kind::lock_create) {
+				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
+				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, em));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			}
 
