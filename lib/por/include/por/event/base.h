@@ -56,7 +56,11 @@ namespace por::event {
 	};
 
 	class event {
-		std::size_t _depth;
+	public:
+		using depth_t = std::size_t;
+
+	private:
+		depth_t _depth;
 		por::cone _cone; // maximal predecessor per thread (excl. program_init)
 		thread_id_t _tid;
 		event_kind _kind;
@@ -86,7 +90,7 @@ namespace por::event {
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
-		std::size_t depth() const noexcept { return _depth; }
+		depth_t depth() const noexcept { return _depth; }
 		auto const& cone() const noexcept { return _cone; }
 
 		event(event&& that)
