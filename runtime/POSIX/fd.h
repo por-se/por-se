@@ -49,16 +49,33 @@ typedef enum {
   eOpen         = (1 << 0),
   eCloseOnExec  = (1 << 1),
   eReadable     = (1 << 2),
-  eWriteable    = (1 << 3)
+  eWriteable    = (1 << 3),
+  eNonBlock     = (1 << 4)
 } exe_file_flag_t;
 
-typedef struct {      
+#define PIPE_BUFFER_SIZE 512
+
+typedef struct {
+  unsigned bufSize; /* in bytes */
+  unsigned readIndex; /* in bytes */
+  unsigned writeIndex; /* in bytes */
+  int free_capacity; /* in bytes */
+
+  char contents[PIPE_BUFFER_SIZE];
+  pthread_cond_t cond;
+
+  int readFd;
+  int writeFd;
+} exe_pipe_t;
+
+typedef struct {
   int fd;                   /* actual fd if not symbolic */
   unsigned flags;           /* set of exe_file_flag_t values. fields
                                are only defined when flags at least
                                has eOpen. */
   off64_t off;              /* offset */
   exe_disk_file_t* dfile;   /* ptr to file on disk, if symbolic */
+  exe_pipe_t* pipe;         /* ptr to the pipe, if own pipe */
 } exe_file_t;
 
 typedef struct {

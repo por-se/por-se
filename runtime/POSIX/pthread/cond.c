@@ -39,7 +39,8 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
 
   klee_toggle_thread_scheduling(0);
 
-  int result = kpr_mutex_unlock_internal(m);
+  int acquiredCount = m->acquired;
+  int result = kpr_mutex_unlock_internal(m, true);
   if (result != 0) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
@@ -59,6 +60,7 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   klee_wait_on(lock, m); // registers wait1 event
 
   result = kpr_mutex_lock_internal(m, NULL);
+  m->acquired = acquiredCount;
 
   klee_por_register_event(por_wait2, lock, m);
 

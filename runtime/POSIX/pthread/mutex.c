@@ -161,7 +161,7 @@ int pthread_mutex_consistent(pthread_mutex_t *mutex) {
   return result;
 }
 
-int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
+int kpr_mutex_unlock_internal(pthread_mutex_t *mutex, bool forceUnlock) {
   pthread_t thread = pthread_self();
 
   if (mutex->acquired == 0 || mutex->holdingThread != thread) {
@@ -177,7 +177,7 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex) {
     mutex->robustState = KPR_MUTEX_UNUSABLE;
   }
 
-  if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
+  if (mutex->type == PTHREAD_MUTEX_RECURSIVE && !forceUnlock) {
     mutex->acquired--;
 
     if (mutex->acquired > 0) {
@@ -197,7 +197,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
   klee_toggle_thread_scheduling(0);
 
-  int result = kpr_mutex_unlock_internal(mutex);
+  int result = kpr_mutex_unlock_internal(mutex, false);
   if (result == 0 && mutex->acquired == 0) {
     klee_por_register_event(por_lock_release, mutex);
   }

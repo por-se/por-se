@@ -4,6 +4,7 @@
 #include "klee/runtime/pthread.h"
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define KPR_OTHER_INIT (0)
 #define KPR_RANDOM_INIT (1)
@@ -12,7 +13,7 @@
 
 void kpr_key_clear_data_of_thread(pthread_t th);
 
-int kpr_mutex_unlock_internal(pthread_mutex_t *m);
+int kpr_mutex_unlock_internal(pthread_mutex_t *m, bool forceUnlock);
 
 int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept);
 

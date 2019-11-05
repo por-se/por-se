@@ -135,20 +135,32 @@ static int has_permission(int flags, struct stat64 *s) {
   return 1;
 }
 
-
-int __fd_open(const char *pathname, int flags, mode_t mode) {
-  exe_disk_file_t *df;
-  exe_file_t *f;
+static int __get_unused_fd(void) {
   int fd;
 
-  for (fd = 0; fd < MAX_FDS; ++fd)
-    if (!(__exe_env.fds[fd].flags & eOpen))
+  for (fd = 0; fd < MAX_FDS; ++fd) {
+    if (!(__exe_env.fds[fd].flags & eOpen)) {
       break;
+    }
+  }
+
   if (fd == MAX_FDS) {
     errno = EMFILE;
     return -1;
   }
-  
+
+  return fd;
+}
+
+int __fd_open(const char *pathname, int flags, mode_t mode) {
+  exe_disk_file_t *df;
+  exe_file_t *f;
+  int fd = __get_unused_fd();
+
+  if (fd < 0) {
+    return fd;
+  }
+
   f = &__exe_env.fds[fd];
 
   /* Should be the case if file was available, but just in case. */
@@ -229,11 +241,8 @@ int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode) {
     return __fd_open(pathname, flags, mode);
   }
 
-  for (fd = 0; fd < MAX_FDS; ++fd)
-    if (!(__exe_env.fds[fd].flags & eOpen))
-      break;
-  if (fd == MAX_FDS) {
-    errno = EMFILE;
+  fd = __get_unused_fd();
+  if (fd < 0) {
     return -1;
   }
   
@@ -350,6 +359,21 @@ int close(int fd) {
   else r = 0;
 #endif
 
+  if (f->pipe) {
+    if ((f->flags & eWriteable) != 0) {
+      f->pipe->writeFd = 0;
+    } else if ((f->flags & eReadable) != 0) {
+      f->pipe->readFd = 0;
+    }
+
+    int bothClosed = f->pipe->readFd == 0 && f->pipe->writeFd == 0;
+
+    if (bothClosed) {
+      pthread_cond_destroy(&f->pipe->cond);
+      free(f->pipe);
+    }
+  }
+
   memset(f, 0, sizeof *f);
   
   pthread_mutex_unlock(klee_fs_lock());
@@ -389,8 +413,59 @@ ssize_t read(int fd, void *buf, size_t count) {
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
   }
-  
-  if (!f->dfile) {
+
+  if (f->pipe) {
+    if ((f->flags & eReadable) == 0) {
+      errno = EBADF;
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
+    exe_pipe_t* pipe_obj = f->pipe;
+
+    // If this is a non blocking pipe, then we should not
+    // try actually modifiy it if we would have to block
+
+    if ((f->flags & eNonBlock) != 0) {
+      if ((pipe_obj->bufSize - pipe_obj->free_capacity) < count) {
+        errno = EWOULDBLOCK;
+        pthread_mutex_unlock(klee_fs_lock());
+        return -1;
+      }
+    }
+
+    size_t i = 0;
+    char* dest = (char*) buf;
+
+    while (i < count) {
+      if (pipe_obj->bufSize == pipe_obj->free_capacity) {
+        if (pipe_obj->writeFd == 0) {
+          // So we now know that the reader will no longer send any
+          // data
+          errno = EPIPE;
+          pthread_mutex_unlock(klee_fs_lock());
+          return -1;
+        }
+
+        pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
+      }
+
+      int wasFull = pipe_obj->bufSize == pipe_obj->free_capacity;
+
+      while (pipe_obj->free_capacity < pipe_obj->bufSize && i < count) {
+        dest[i] = pipe_obj->contents[pipe_obj->readIndex];
+        i++;
+        pipe_obj->free_capacity++;
+        pipe_obj->readIndex = (pipe_obj->readIndex + 1) % pipe_obj->bufSize;
+      }
+
+      if (wasFull) {
+        pthread_cond_signal(&pipe_obj->cond);
+      }
+    }
+
+    return i;
+  } else if (!f->dfile) {
     /* concrete file */
     int r;
     buf = __concretize_ptr(buf);
@@ -459,7 +534,58 @@ ssize_t write(int fd, const void *buf, size_t count) {
     return -1;
   }
 
-  if (!f->dfile) {
+  if (f->pipe) {
+    if ((f->flags & eWriteable) == 0) {
+      errno = EBADF;
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
+    exe_pipe_t* pipe_obj = f->pipe;
+
+    // If this is a non blocking pipe, then we should not
+    // try actually modifiy it if we would have to block
+
+    if ((f->flags & eNonBlock) != 0) {
+      if (pipe_obj->free_capacity < count) {
+        errno = EWOULDBLOCK;
+        pthread_mutex_unlock(klee_fs_lock());
+        return -1;
+      }
+    }
+
+    size_t i = 0;
+    const char* src = (const char*) buf;
+
+    while (i < count) {
+      if (pipe_obj->free_capacity == 0) {
+        if (pipe_obj->readFd == 0) {
+          // So we now know that the reader will no longer send any
+          // data
+          errno = EPIPE;
+          pthread_mutex_unlock(klee_fs_lock());
+          return -1;
+        }
+
+        pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
+      }
+
+      int wasEmpty = pipe_obj->free_capacity == pipe_obj->bufSize;
+
+      while (pipe_obj->free_capacity > 0 && i < count) {
+        pipe_obj->contents[pipe_obj->writeIndex] = src[i];
+        i++;
+        pipe_obj->free_capacity--;
+        pipe_obj->writeIndex = (pipe_obj->writeIndex + 1) % pipe_obj->bufSize;
+      }
+
+      if (wasEmpty) {
+        pthread_cond_signal(&pipe_obj->cond);
+      }
+    }
+    pthread_mutex_unlock(klee_fs_lock());
+    return i;
+  } else if (!f->dfile) {
     int r;
 
     buf = __concretize_ptr(buf);
@@ -519,7 +645,7 @@ off64_t __fd_lseek(int fd, off64_t offset, int whence) {
   off64_t new_off;
   exe_file_t *f = __get_file(fd);
 
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     return -1;
   }
@@ -592,7 +718,7 @@ int fstatat(int fd, const char *path, struct stat *buf, int flags) {
   if (fd != AT_FDCWD) {
     exe_file_t *f = __get_file(fd);
 
-    if (!f) {
+    if (!f || f->pipe) {
       errno = EBADF;
 
       pthread_mutex_unlock(klee_fs_lock());
@@ -728,8 +854,8 @@ int fchmod(int fd, mode_t mode) {
   static int n_calls = 0;
 
   exe_file_t *f = __get_file(fd);
-  
-  if (!f) {
+
+  if (!f || f->pipe) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -779,7 +905,7 @@ int fchown(int fd, uid_t owner, gid_t group) {
   pthread_mutex_lock(klee_fs_lock());
   exe_file_t *f = __get_file(fd);
 
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -816,7 +942,7 @@ int lchown(const char *path, uid_t owner, gid_t group) {
 int __fd_fstat(int fd, struct stat64 *buf) {
   exe_file_t *f = __get_file(fd);
 
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     return -1;
   }
@@ -839,7 +965,7 @@ int __fd_ftruncate(int fd, off64_t length) {
 
   n_calls++;
 
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     return -1;
   }
@@ -870,7 +996,11 @@ int __fd_getdents(unsigned int fd, struct dirent64 *dirp, unsigned int count) {
     return -1;
   }
 
-  if (f->dfile) {
+  if (f->pipe) {
+    klee_warning("pipe fd, ignoring (EINVAL)");
+    errno = EINVAL;
+    return -1;
+  } else if (f->dfile) {
     klee_warning("symbolic file, ignoring (EINVAL)");
     errno = EINVAL;
     return -1;
@@ -973,7 +1103,7 @@ int ioctl(int fd, unsigned long request, ...) {
   va_start(ap, request);
   buf = va_arg(ap, void*);
   va_end(ap);
-  if (f->dfile) {
+  if (f->dfile || f->pipe) {
     struct stat *stat = (struct stat*) f->dfile->stat;
 
     switch (request) {
@@ -1145,7 +1275,7 @@ int fcntl(int fd, int cmd, ...) {
     va_end(ap);
   }
 
-  if (f->dfile) {
+  if (f->dfile || f->pipe) {
     switch(cmd) {
     case F_GETFD: {
       int flags = 0;
@@ -1169,15 +1299,30 @@ int fcntl(int fd, int cmd, ...) {
 	 discard these flags during open().  We should save them and
 	 return them here.  These same flags can be set by F_SETFL,
 	 which we could also handle properly. 
-      */
-      pthread_mutex_unlock(klee_fs_lock());
-      return 0;
-    }
-    default:
-      klee_warning("symbolic file, ignoring (EINVAL)");
-      errno = EINVAL;
-      pthread_mutex_unlock(klee_fs_lock());
-      return -1;
+        */
+        if (f->pipe && (f->flags & eNonBlock) != 0) {
+          pthread_mutex_unlock(klee_fs_lock());
+          return O_NONBLOCK;
+        }
+
+        pthread_mutex_unlock(klee_fs_lock());
+        return 0;
+      }
+      case F_SETFL: {
+        // Flags that should be possible to set:
+        // O_APPEND, O_ASYNC, O_DIRECT, O_NOATIME, O_NONBLOCK
+
+        // We can acutally properly support O_NONBLOCK for pipes
+        if (f->pipe && (arg & O_NONBLOCK) != 0 && (arg & ~O_NONBLOCK) == 0) {
+          f->flags |= eNonBlock;
+          break;
+        }
+      }
+      default:
+        klee_warning("symbolic file, ignoring (EINVAL)");
+        errno = EINVAL;
+        pthread_mutex_unlock(klee_fs_lock());
+        return -1;
     }
   }
   int ret = syscall(__NR_fcntl, f->fd, cmd, arg);
@@ -1202,7 +1347,7 @@ int fstatfs(int fd, struct statfs *buf) {
 
   exe_file_t *f = __get_file(fd);
 
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -1228,6 +1373,10 @@ int fsync(int fd) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
+  } else if (f->pipe) {
+    errno = EINVAL;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
   } else if (f->dfile) {
     pthread_mutex_unlock(klee_fs_lock());
     return 0;
@@ -1242,7 +1391,7 @@ int dup2(int oldfd, int newfd) {
 
   exe_file_t *f = __get_file(oldfd);
 
-  if (!f || !(newfd>=0 && newfd<MAX_FDS)) {
+  if (!f || !(newfd>=0 && newfd<MAX_FDS) || f->pipe) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -1270,7 +1419,7 @@ int dup(int oldfd) {
   pthread_mutex_lock(klee_fs_lock());
 
   exe_file_t *f = __get_file(oldfd);
-  if (!f) {
+  if (!f || f->pipe) {
     errno = EBADF;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -1610,6 +1759,13 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
   }
 
   if (offset != NULL) {
+    if (fIn->pipe) {
+      errno = ESPIPE;
+
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
     if (lseek(in_fd, *offset, SEEK_SET) < 0) {
       pthread_mutex_unlock(klee_fs_lock());
       return -1;
@@ -1761,4 +1917,79 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
 
   pthread_mutex_unlock(klee_fs_lock());
   return total;
+}
+
+int pipe2(int pipefd[2], int flags) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  if (pipefd == NULL) {
+    errno = EFAULT;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  if ((flags & (O_CLOEXEC | O_DIRECT | O_NONBLOCK)) != 0) {
+    errno = EINVAL;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  int fdRead = __get_unused_fd();
+  if (fdRead < 0) {
+    errno = ENFILE;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+  exe_file_t* fReadEnd = &__exe_env.fds[fdRead];
+  fReadEnd->flags = (eOpen | eReadable);
+
+  int fdWrite = __get_unused_fd();
+
+  if (fdWrite < 0) {
+    // Reset flags since we do not use the read-fd
+    fReadEnd->flags = 0;
+    errno = ENFILE;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  exe_file_t* fWriteEnd = &__exe_env.fds[fdWrite];
+  fWriteEnd->flags = (eOpen | eWriteable);
+
+  assert(fReadEnd != fWriteEnd);
+
+  exe_pipe_t* pipe_obj = (exe_pipe_t*) calloc(1, sizeof(exe_pipe_t));
+  pipe_obj->writeFd = fdWrite;
+  pipe_obj->readFd = fdRead;
+
+  pipe_obj->bufSize = PIPE_BUFFER_SIZE;
+  pipe_obj->free_capacity = pipe_obj->bufSize;
+
+  pthread_cond_init(&pipe_obj->cond, NULL);
+
+  pipefd[0] = fdRead;
+  pipefd[1] = fdWrite;
+
+  fWriteEnd->pipe = pipe_obj;
+  fReadEnd->pipe = pipe_obj;
+
+  if (flags & O_NONBLOCK) {
+    fWriteEnd->flags |= eNonBlock;
+    fReadEnd->flags |= eNonBlock;
+  }
+
+  if (flags & O_CLOEXEC) {
+    fWriteEnd->flags |= eCloseOnExec;
+    fReadEnd->flags |= eCloseOnExec;
+  }
+
+  assert(__get_file(pipefd[0])->flags & eReadable);
+  assert(__get_file(pipefd[1])->flags & eWriteable);
+
+  pthread_mutex_unlock(klee_fs_lock());
+  return 0;
+}
+
+int pipe(int pipefds[2]) {
+  return pipe2(pipefds, 0);
 }
