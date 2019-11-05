@@ -363,15 +363,20 @@ namespace por::event {
 
 	std::vector<event const*> event::immediate_predecessors() const noexcept {
 		std::vector<event const*> result;
+		[[maybe_unused]] bool program_init = false;
 		for(auto& p : predecessors()) {
-			if(p == _cone.at(p->tid())) {
+			if(p->kind() == event_kind::program_init) {
+				assert(!program_init);
+				program_init = true;
+				result.push_back(p);
+			} else if(p == _cone.at(p->tid())) {
 				if(std::find(result.begin(), result.end(), p) != result.end()) {
 					continue;
 				}
 				result.push_back(p);
 			}
 		}
-		assert(result.size() <= _cone.size());
+		assert(result.size() <= _cone.size() || (program_init && result.size() <= _cone.size() + 1));
 		assert(result.size() <= predecessors().size());
 		return result;
 	}
