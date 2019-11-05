@@ -1675,3 +1675,90 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
   pthread_mutex_unlock(klee_fs_lock());
   return wtotal;
 }
+
+ssize_t pread64(int fd, void *buf, size_t count, off_t offset) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  off_t cur = lseek(fd, 0, SEEK_CUR);
+  if (cur < 0) {
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  if (lseek(fd, offset, SEEK_SET) < 0) {
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  ssize_t retRead = read(fd, buf, count);
+  int retLastSeek = lseek(fd, cur, SEEK_SET);
+
+  pthread_mutex_unlock(klee_fs_lock());
+
+  return retLastSeek < 0 ? -1 : retRead;
+}
+
+ssize_t pwrite64(int fd, const void *buf, size_t count, off_t offset) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  off_t cur = lseek(fd, 0, SEEK_CUR);
+  if (cur < 0) {
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  if (lseek(fd, offset, SEEK_SET) < 0) {
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  size_t retWrite = write(fd, buf, count);
+  int retLastSeek = lseek(fd, cur, SEEK_SET);
+
+  pthread_mutex_unlock(klee_fs_lock());
+  return retLastSeek < 0 ? -1 : retWrite;
+}
+
+ssize_t readv(int fd, const struct iovec *iov, int iovcnt) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  ssize_t total = 0;
+
+  int i;
+  for (i = 0; i < iovcnt; i++) {
+    const struct iovec* cur = &iov[i];
+
+    ssize_t ret = read(fd, cur->iov_base, cur->iov_len);
+    if (ret < 0) {
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
+    total += ret;
+  }
+
+  pthread_mutex_unlock(klee_fs_lock());
+  return total;
+}
+
+ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  ssize_t total = 0;
+
+  int i;
+  for (i = 0; i < iovcnt; i++) {
+    const struct iovec* cur = &iov[i];
+
+    ssize_t ret = write(fd, cur->iov_base, cur->iov_len);
+    if (ret < 0) {
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
+    total += ret;
+  }
+
+  pthread_mutex_unlock(klee_fs_lock());
+  return total;
+}
