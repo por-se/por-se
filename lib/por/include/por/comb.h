@@ -26,8 +26,11 @@ namespace por {
 		bool _sorted = true;
 
 	public:
-		auto begin() const { return _events.begin(); }
-		auto end() const { return _events.end(); }
+		using iterator = decltype(_events)::const_iterator;
+		using const_iterator = iterator;
+
+		iterator begin() const { return _events.cbegin(); }
+		iterator end() const { return _events.cend(); }
 		auto size() const { return _events.size(); }
 		auto empty() const { return _events.empty(); }
 
@@ -41,10 +44,49 @@ namespace por {
 		void sort() noexcept;
 	};
 
+	class comb;
+
+	class comb_iterator {
+		por::comb const* _comb = nullptr;
+		std::map<thread_id, tooth>::const_iterator _tooth;
+		por::tooth::const_iterator _event;
+
+	public:
+		using value_type = por::event::event const*;
+		using difference_type = std::ptrdiff_t;
+		using pointer = por::event::event const* const*;
+		using reference = por::event::event const* const&;
+
+		using iterator_category = std::forward_iterator_tag;
+
+		comb_iterator() = default;
+		explicit comb_iterator(por::comb const& comb, bool end=false);
+
+		reference operator*() const noexcept { return *_event; }
+		pointer operator->() const noexcept { return &*_event; }
+
+		comb_iterator& operator++() noexcept;
+		comb_iterator operator++(int) noexcept {
+			comb_iterator tmp = *this;
+			++(*this);
+			return tmp;
+		}
+
+		bool operator==(const comb_iterator& rhs) const noexcept {
+			return _comb == rhs._comb && _tooth == rhs._tooth && _event == rhs._event;
+		}
+		bool operator!=(const comb_iterator& rhs) const noexcept {
+			return !(*this == rhs);
+		}
+	};
+
 	class comb {
 		std::map<thread_id, tooth> _teeth;
 
 	public:
+		using iterator = comb_iterator;
+		using const_iterator = iterator;
+
 		comb() = default;
 		comb(const comb&) = default;
 		comb(comb const& comb, std::function<bool(por::event::event const&)> filter);
@@ -52,6 +94,9 @@ namespace por {
 		comb& operator=(const comb&) = default;
 		comb& operator=(comb&&) = default;
 		~comb() = default;
+
+		iterator begin() const noexcept { return comb_iterator(*this); }
+		iterator end() const noexcept { return comb_iterator(*this, true); }
 
 		auto threads_begin() const noexcept { return _teeth.cbegin(); }
 		auto threads_end() const noexcept { return _teeth.cend(); }

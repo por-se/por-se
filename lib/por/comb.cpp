@@ -85,6 +85,33 @@ bool tooth::is_sorted() const noexcept {
 	return _sorted;
 }
 
+comb_iterator::comb_iterator(por::comb const& comb, bool end) {
+	_comb = &comb;
+	if(!end && !comb.empty()) {
+		_tooth = _comb->threads_begin();
+		_event = _tooth->second.begin();
+	}
+}
+
+comb_iterator& comb_iterator::operator++() noexcept {
+	if(!_comb) {
+		return *this;
+	}
+
+	if(std::next(_event) != _tooth->second.end()) {
+		++_event;
+	} else if(std::next(_tooth) != _comb->threads_end()) {
+		++_tooth;
+		_event = _tooth->second.begin();
+		assert(_event != _tooth->second.end());
+	} else {
+		_tooth = decltype(_tooth)();
+		_event = decltype(_event)();
+	}
+
+	return *this;
+}
+
 comb::comb(comb const& comb, std::function<bool(por::event::event const&)> filter) {
 	for(auto& [tid, tooth] : comb.threads()) {
 		for(auto const& event : tooth) {
