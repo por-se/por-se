@@ -1,24 +1,11 @@
 #ifndef KPR_LIST_H
 #define KPR_LIST_H
 
-#include "klee/runtime/pthread.h"
-
 #include <stdbool.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
 
-typedef struct kpr_list_node {
-  struct kpr_list_node* prev;
-  struct kpr_list_node* next;
-  void* data;
-} kpr_list_node;
-
-#define KPR_LIST_INITIALIZER { NULL, NULL, 0 }
-
-typedef struct {
-  kpr_list_node* current;
-  kpr_list_node* next;
-} kpr_list_iterator;
+#include "list-types.h"
 
 void kpr_list_create(kpr_list* stack);
 void kpr_list_clear(kpr_list* stack);

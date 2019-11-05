@@ -1,5 +1,6 @@
 #include "klee/klee.h"
-#include "../kpr/list.h"
+
+#include "klee/runtime/kpr/list.h"
 
 #include <stdlib.h>
 #include <errno.h>

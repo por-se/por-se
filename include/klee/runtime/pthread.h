@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "kpr/list-types.h"
+
 #define _USING_PORSE_PTHREAD (1)
 
 // What is the magic stuff?
@@ -17,13 +19,6 @@ typedef struct {
 } pthread_internal_t;
 #define PTHREAD_INTERNAL_MAGIC_VALUE 42
 #define PTHREAD_INTERNAL_MAGIC {.magic = 42}
-
-// A small helper that is often needed in the runtime
-typedef struct {
-  void* tail;
-  void* head;
-  size_t size;
-} kpr_list;
 
 // Constants that should be defined
 #define PTHREAD_BARRIER_SERIAL_THREAD -1
@@ -190,7 +185,17 @@ typedef struct {
   int pshared;
 } pthread_rwlockattr_t;
 
-typedef void* pthread_key_t;
+typedef struct {
+  pthread_t thread;
+  void* value;
+} kpr_key_data;
+
+typedef struct {
+  void (*destructor)(void*);
+  kpr_list values;
+} kpr_key;
+
+typedef kpr_key* pthread_key_t;
 
 #define PTHREAD_ONCE_INIT { 0, PTHREAD_MUTEX_INITIALIZER }
 

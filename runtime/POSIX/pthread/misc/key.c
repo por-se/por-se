@@ -1,7 +1,7 @@
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
 
-#include "../kpr/key.h"
+#include "klee/runtime/kpr/list.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -24,10 +24,8 @@ int pthread_key_create(pthread_key_t *k, void (*destructor) (void*)) {
   return 0;
 }
 
-static kpr_key_data* kpr_get_data(pthread_key_t k) {
+static kpr_key_data* kpr_get_data(pthread_key_t key) {
   pthread_t th = pthread_self();
-
-  kpr_key* key = (kpr_key*) k;
 
   kpr_list_iterator it = kpr_list_iterate(&key->values);
   while(kpr_list_iterator_valid(it)) {
@@ -50,9 +48,7 @@ static kpr_key_data* kpr_get_data(pthread_key_t k) {
   return d;
 }
 
-int pthread_key_delete(pthread_key_t k) {
-  kpr_key* key = (kpr_key*) k;
-
+int pthread_key_delete(pthread_key_t key) {
   // Ensure that no destructor is called
   kpr_list_clear(&key->values);
 
