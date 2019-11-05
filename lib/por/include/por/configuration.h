@@ -1216,7 +1216,7 @@ namespace por {
 
 				// generate set W with all wait1 events in comb and those that are outstanding in [et]
 				std::vector<por::event::event const*> W = outstanding_wait1(cid, et->cone());
-				for(auto& [tid, tooth] : wait1_comb) {
+				for(auto& [tid, tooth] : wait1_comb.threads()) {
 					W.reserve(W.size() + tooth.size());
 					for(auto& e : tooth) {
 						W.push_back(e);
@@ -1225,7 +1225,7 @@ namespace por {
 
 				// compute map from each w1 to its (non-lost) notification in comb
 				std::map<por::event::event const*, por::event::event const*> notification;
-				for(auto& [tid, tooth] : comb) {
+				for(auto& [tid, tooth] : comb.threads()) {
 					for(auto& n : tooth) {
 						if(n->kind() != por::event::event_kind::signal && n->kind() != por::event::event_kind::broadcast)
 							continue;

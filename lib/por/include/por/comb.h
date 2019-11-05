@@ -2,6 +2,8 @@
 
 #include "por/thread_id.h"
 
+#include <util/iterator_range.h>
+
 #include <deque>
 #include <functional>
 #include <map>
@@ -51,8 +53,10 @@ namespace por {
 		comb& operator=(comb&&) = default;
 		~comb() = default;
 
-		auto begin() const { return _teeth.begin(); }
-		auto end() const { return _teeth.end(); }
+		auto threads_begin() const noexcept { return _teeth.cbegin(); }
+		auto threads_end() const noexcept { return _teeth.cend(); }
+
+		auto threads() const noexcept { return util::make_iterator_range(threads_begin(), threads_end()); }
 
 		std::size_t num_threads() const noexcept { return _teeth.size(); }
 		std::size_t size() const noexcept {
@@ -76,7 +80,7 @@ namespace por {
 
 		bool is_sorted() const noexcept {
 			// FIXME: value can be cached if we prevent teeth from being modified (or monitor changes)
-			return std::all_of(begin(), end(), [](auto& t) { return t.second.is_sorted(); });
+			return std::all_of(threads_begin(), threads_end(), [](auto& t) { return t.second.is_sorted(); });
 		}
 		std::vector<por::event::event const*> min() const noexcept;
 		std::vector<por::event::event const*> max() const noexcept;

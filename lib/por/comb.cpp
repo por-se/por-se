@@ -86,7 +86,7 @@ bool tooth::is_sorted() const noexcept {
 }
 
 comb::comb(comb const& comb, std::function<bool(por::event::event const&)> filter) {
-	for(auto& [tid, tooth] : comb) {
+	for(auto& [tid, tooth] : comb.threads()) {
 		for(auto const& event : tooth) {
 			if(filter(*event)) {
 				insert(*event);
@@ -209,10 +209,10 @@ comb::concurrent_combinations(std::function<bool(std::vector<por::event::event c
 			std::vector<std::size_t> highest_index;
 			highest_index.reserve(popcount);
 
-			auto it = begin();
+			auto it = threads_begin();
 			for(std::size_t i = 0; i < num_threads(); ++i, ++it) {
-				assert(std::next(begin(), i) == it);
-				assert(std::next(begin(), i) != end());
+				assert(std::next(threads_begin(), i) == it);
+				assert(std::next(threads_begin(), i) != threads_end());
 				if((mask >> i) & 1) {
 					selected_threads.push_back(it->first);
 					highest_index.push_back(it->second.size() - 1);
