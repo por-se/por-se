@@ -35,9 +35,9 @@ exe_file_system_t __exe_fs;
 
 
 exe_sym_env_t __exe_env = { 
-  {{ 0, eOpen | eReadable, 0, 0, 0 },
-   { 1, eOpen | eWriteable, 0, 0, 0 },
-   { 2, eOpen | eWriteable, 0, 0, 0 }},
+  {{ 0, eOpen | eReadable, 0, 0, 0, KPR_LIST_INITIALIZER },
+   { 1, eOpen | eWriteable, 0, 0, 0, KPR_LIST_INITIALIZER },
+   { 2, eOpen | eWriteable, 0, 0, 0, KPR_LIST_INITIALIZER }},
   022,
   0,
   0

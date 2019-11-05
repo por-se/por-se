@@ -11,8 +11,10 @@
 #define KLEE_FD_H
 
 #include "klee/Config/config.h"
+#include "klee/runtime/kpr/list-types.h"
 
 #include <pthread.h>
+#include <stdbool.h>
 
 #ifndef _LARGEFILE64_SOURCE
 #error "_LARGEFILE64_SOURCE should be defined"
@@ -76,6 +78,8 @@ typedef struct {
   off64_t off;              /* offset */
   exe_disk_file_t* dfile;   /* ptr to file on disk, if symbolic */
   exe_pipe_t* pipe;         /* ptr to the pipe, if own pipe */
+
+  kpr_list notification_list;  /* should be notified about possible changes to the file */
 } exe_file_t;
 
 typedef struct {
@@ -118,6 +122,8 @@ void klee_init_env(int *argcPtr, char ***argvPtr);
 /* *** */
 
 pthread_mutex_t* klee_fs_lock(void);
+exe_file_t *__get_file(int fd);
+exe_file_t *__get_file_ignore_flags(int fd);
 
 int __fd_open(const char *pathname, int flags, mode_t mode);
 int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode);

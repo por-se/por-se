@@ -9,8 +9,10 @@
 
 #define _LARGEFILE64_SOURCE
 #include "fd.h"
+#include "fd-poll.h"
 
 #include "klee/klee.h"
+#include "klee/runtime/kpr/list.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -38,6 +40,21 @@
 static pthread_mutex_t fs_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 pthread_mutex_t* klee_fs_lock(void) {
   return &fs_lock;
+}
+
+static void kpr_notify_file_changed(int fd) {
+  exe_file_t* f = __get_file_ignore_flags(fd);
+  assert(f != NULL);
+
+  kpr_list_iterator it = kpr_list_iterate(&f->notification_list);
+
+  while(kpr_list_iterator_valid(it)) {
+    klee_poll_request* req = kpr_list_iterator_value(it);
+
+    kpr_handle_fd_notification(req, fd);
+
+    kpr_list_iterator_next(&it);
+  }
 }
 
 /* Returns pointer to the symbolic file structure fs the pathname is symbolic */
@@ -68,14 +85,23 @@ static size_t __concretize_size(size_t s);
 static const char *__concretize_string(const char *s);
 
 /* Returns pointer to the file entry for a valid fd */
-static exe_file_t *__get_file(int fd) {
+exe_file_t *__get_file_ignore_flags(int fd) {
   if (fd>=0 && fd<MAX_FDS) {
     exe_file_t *f = &__exe_env.fds[fd];
-    if (f->flags & eOpen)
-      return f;
+    return f;  
   }
 
   return 0;
+}
+
+exe_file_t* __get_file(int fd) {
+  exe_file_t* f = __get_file_ignore_flags(fd);
+
+  if (f != NULL && (f->flags & eOpen) == 0) {
+    return NULL;
+  }
+
+  return f;
 }
 
 int access(const char *pathname, int mode) {
@@ -359,6 +385,8 @@ int close(int fd) {
   else r = 0;
 #endif
 
+  f->flags &= ~eOpen;
+
   if (f->pipe) {
     if ((f->flags & eWriteable) != 0) {
       f->pipe->writeFd = 0;
@@ -374,6 +402,12 @@ int close(int fd) {
     }
   }
 
+  kpr_notify_file_changed(fd);
+
+  assert(kpr_list_size(&f->notification_list) == 0);
+
+  // TODO: really really bad since we
+  //       may have to consider the files waiting on changes
   memset(f, 0, sizeof *f);
   
   pthread_mutex_unlock(klee_fs_lock());
@@ -447,6 +481,11 @@ ssize_t read(int fd, void *buf, size_t count) {
           return -1;
         }
 
+        // Before actually blocking until the pipe is emptied
+        // make sure that another consumer that might be 'blocked' by a poll
+        // request can now be activated 
+        kpr_notify_file_changed(pipe_obj->writeFd);
+
         pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
       }
 
@@ -464,6 +503,7 @@ ssize_t read(int fd, void *buf, size_t count) {
       }
     }
 
+    kpr_notify_file_changed(pipe_obj->writeFd);
     return i;
   } else if (!f->dfile) {
     /* concrete file */
@@ -493,6 +533,7 @@ ssize_t read(int fd, void *buf, size_t count) {
   else {
     assert(f->off >= 0);
     if (((off64_t)f->dfile->size) < f->off) {
+      kpr_notify_file_changed(fd);
       pthread_mutex_unlock(klee_fs_lock());
       return 0;
     }
@@ -505,6 +546,7 @@ ssize_t read(int fd, void *buf, size_t count) {
     memcpy(buf, f->dfile->contents + f->off, count);
     f->off += count;
     
+    kpr_notify_file_changed(fd);
     pthread_mutex_unlock(klee_fs_lock());
     return count;
   }
@@ -567,6 +609,10 @@ ssize_t write(int fd, const void *buf, size_t count) {
           return -1;
         }
 
+        // Similar to the read situation, make sure blocked by a poll
+        // readers get a chance
+        kpr_notify_file_changed(pipe_obj->readFd);
+
         pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
       }
 
@@ -583,6 +629,9 @@ ssize_t write(int fd, const void *buf, size_t count) {
         pthread_cond_signal(&pipe_obj->cond);
       }
     }
+
+    kpr_notify_file_changed(pipe_obj->readFd);
+
     pthread_mutex_unlock(klee_fs_lock());
     return i;
   } else if (!f->dfile) {
@@ -634,6 +683,8 @@ ssize_t write(int fd, const void *buf, size_t count) {
       __exe_fs.stdout_writes += actual_count;
 
     f->off += count;
+
+    kpr_notify_file_changed(fd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return count;
@@ -1928,7 +1979,7 @@ int pipe2(int pipefd[2], int flags) {
     return -1;
   }
 
-  if ((flags & (O_CLOEXEC | O_DIRECT | O_NONBLOCK)) != 0) {
+  if ((flags & ~(O_CLOEXEC | O_DIRECT | O_NONBLOCK)) != 0) {
     errno = EINVAL;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
@@ -1940,6 +1991,7 @@ int pipe2(int pipefd[2], int flags) {
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
   }
+
   exe_file_t* fReadEnd = &__exe_env.fds[fdRead];
   fReadEnd->flags = (eOpen | eReadable);
 

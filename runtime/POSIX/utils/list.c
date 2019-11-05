@@ -114,7 +114,9 @@ bool kpr_list_iterator_valid(kpr_list_iterator it) {
 }
 
 void kpr_list_iterator_next(kpr_list_iterator* it) {
-  if (it->next == NULL) {
+  if (it->current == NULL && it->next == NULL) {
+    return;
+  } else if (it->next == NULL) {
     it->current = it->current->next;
   } else {
     it->current = it->next;
