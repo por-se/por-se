@@ -95,6 +95,20 @@ namespace por {
 		comb& operator=(comb&&) = default;
 		~comb() = default;
 
+		template<typename T>
+		comb(T begin, T end) {
+			for(auto it = begin; it != end; ++it) {
+				por::event::event const* e = *it;
+				if(!e) {
+					continue;
+				}
+				insert(*e);
+			}
+		}
+
+		template<typename T>
+		comb(util::iterator_range<T> range) : comb(range.begin(), range.end()) { }
+
 		iterator begin() const noexcept { return comb_iterator(*this); }
 		iterator end() const noexcept { return comb_iterator(*this, true); }
 
