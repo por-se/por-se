@@ -4,6 +4,10 @@
 using namespace por;
 
 void cone::insert(por::event::event const& p) {
+	if(p.kind() == por::event::event_kind::program_init) {
+		return;
+	}
+
 	for(auto& [tid, event] : p.cone()) {
 		if(_map.count(tid) == 0 || _map[tid]->depth() < event->depth()) {
 			_map[tid] = event;
@@ -19,6 +23,10 @@ void cone::insert(por::event::event const& p) {
 cone::cone(por::event::event const& immediate_predecessor)
 : _map(immediate_predecessor.cone()._map)
 {
+	if(immediate_predecessor.kind() == por::event::event_kind::program_init) {
+		return;
+	}
+
 	// immediate_predecessor may be on different thread than this new event, e.g. in thread_init
 	_map[immediate_predecessor.tid()] = &immediate_predecessor;
 }
@@ -78,6 +86,7 @@ void cone::extend_unchecked_single(por::event::event const& event) noexcept {
 #ifndef NDEBUG // FIXME: expensive
 	assert(is_lte_for_all_of(event.cone()));
 #endif
+	assert(event.kind() != por::event::event_kind::program_init);
 	assert(!_map.count(event.tid()) || _map[event.tid()]->depth() <= event.depth());
 	_map[event.tid()] = &event;
 }

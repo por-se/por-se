@@ -11,12 +11,16 @@ namespace por::event {
 }
 
 namespace por {
+	// includes maximal event per thread (excl. program_init / thread 0)
 	class cone {
 		std::map<thread_id, por::event::event const*> _map;
 
 	public:
-		auto begin() const { return _map.begin(); }
-		auto end() const { return _map.end(); }
+		using iterator = decltype(_map)::const_iterator;
+		using const_iterator = iterator;
+
+		iterator begin() const { return _map.cbegin(); }
+		iterator end() const { return _map.cend(); }
 		auto size() const { return _map.size(); }
 		auto empty() const { return _map.empty(); }
 		auto find(thread_id const& tid) const { return _map.find(tid); }

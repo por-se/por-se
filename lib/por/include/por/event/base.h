@@ -57,7 +57,7 @@ namespace por::event {
 
 	class event {
 		std::size_t _depth;
-		por::cone _cone;
+		por::cone _cone; // maximal predecessor per thread (excl. program_init)
 		thread_id_t _tid;
 		event_kind _kind;
 
