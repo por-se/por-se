@@ -12,6 +12,8 @@
 
 #include "klee/Config/config.h"
 
+#include <pthread.h>
+
 #ifndef _LARGEFILE64_SOURCE
 #error "_LARGEFILE64_SOURCE should be defined"
 #endif
@@ -97,6 +99,8 @@ void klee_init_fds(unsigned n_files, unsigned file_length,
 void klee_init_env(int *argcPtr, char ***argvPtr);
 
 /* *** */
+
+pthread_mutex_t* klee_fs_lock(void);
 
 int __fd_open(const char *pathname, int flags, mode_t mode);
 int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode);
