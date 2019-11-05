@@ -27,21 +27,13 @@ if (ENABLE_POSIX_RUNTIME)
     message(AUTHOR_WARNING
       "Disabling POSIX runtime tests because they depend on klee-uclibc"
       "\nFIXME!")
-  set(ENABLE_POSIX_RUNTIME 0)
+    set(ENABLE_POSIX_RUNTIME 0)
   endif()
-else()
-  set(ENABLE_POSIX_RUNTIME 0)
-endif()
-
-if (ENABLE_PTHREAD_RUNTIME)
-  set(ENABLE_PTHREAD_RUNTIME 1)
 
   set(LLVMCC "${LLVMCC} -I${CMAKE_SOURCE_DIR}/include/klee/runtime")
   set(LLVMCXX "${LLVMCXX} -I${CMAKE_SOURCE_DIR}/include/klee/runtime")
 else()
-    message(AUTHOR_WARNING
-      "Disabling pthread runtime tests!")
-  set(ENABLE_PTHREAD_RUNTIME 0)
+  set(ENABLE_POSIX_RUNTIME 0)
 endif()
 
 

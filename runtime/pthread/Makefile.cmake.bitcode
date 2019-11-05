@@ -1,7 +1,0 @@
-LEVEL := ../
-
-include $(LEVEL)/Makefile.cmake.bitcode.config
-
-ARCHIVE_NAME=kleeRuntimePThread
-
-include $(LEVEL)/Makefile.cmake.bitcode.rules

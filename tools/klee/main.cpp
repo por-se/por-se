@@ -197,12 +197,6 @@ namespace {
                    cl::init(false),
                    cl::cat(LinkCat));
 
-  cl::opt<bool>
-  WithPThreadRuntime("pthread-runtime",
-                     cl::desc("Link with pthread runtime."),
-                     cl::init(false),
-                     cl::cat(LinkCat));
-
   /*** Checks options ***/
 
   cl::OptionCategory ChecksCat("Checks options",
@@ -1285,17 +1279,6 @@ int main(int argc, char **argv, char **envp) {
 
     std::string libcPrefix = (Libc == LibcType::UcLibc ? "__user_" : "");
     preparePOSIX(loadedModules, libcPrefix);
-  }
-
-  if (WithPThreadRuntime) {
-    SmallString<128> Path(Opts.LibraryDir);
-    llvm::sys::path::append(Path, "libkleeRuntimePThread.bca");
-    klee_message("NOTE: Using PThread model: %s", Path.c_str());
-
-    if (!klee::loadFile(Path.c_str(), mainModule->getContext(), loadedModules,
-                        errorMsg))
-      klee_error("error loading PThread support '%s': %s", Path.c_str(),
-                 errorMsg.c_str());
   }
 
   if (Libcxx) {

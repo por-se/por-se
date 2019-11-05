@@ -32,12 +32,6 @@ else()
   set(BUILD_POSIX_RUNTIME 0)
 endif()
 
-if (ENABLE_PTHREAD_RUNTIME)
-  set(BUILD_PTHREAD_RUNTIME 1)
-else()
-  set(BUILD_PTHREAD_RUNTIME 0)
-endif()
-
 # Configure the bitcode build system
 configure_file("Makefile.cmake.bitcode.config.in"
   "Makefile.cmake.bitcode.config"
@@ -53,9 +47,6 @@ configure_file("Makefile.cmake.bitcode.rules" "Makefile.cmake.bitcode.rules" COP
 set(BITCODE_LIBRARIES "Intrinsic" "klee-libc" "FreeStanding")
 if (ENABLE_POSIX_RUNTIME)
   list(APPEND BITCODE_LIBRARIES "POSIX")
-endif()
-if (ENABLE_PTHREAD_RUNTIME)
-  list(APPEND BITCODE_LIBRARIES "pthread")
 endif()
 foreach (bl ${BITCODE_LIBRARIES})
   configure_file("${bl}/Makefile.cmake.bitcode"
@@ -106,7 +97,7 @@ if (${LLVM_VERSION_MAJOR} GREATER 4)
 endif()
 
 set(RUNTIME_ADD_INCLUDES "")
-if (ENABLE_PTHREAD_RUNTIME)
+if (ENABLE_POSIX_RUNTIME)
 	set(RUNTIME_ADD_INCLUDES "-I${CMAKE_SOURCE_DIR}/include/klee/runtime")
 endif()
 
@@ -147,11 +138,6 @@ list(APPEND RUNTIME_FILES_TO_INSTALL
 if (ENABLE_POSIX_RUNTIME)
   list(APPEND RUNTIME_FILES_TO_INSTALL
     "${KLEE_RUNTIME_DIRECTORY}/libkleeRuntimePOSIX.bca")
-endif()
-
-if (ENABLE_PTHREAD_RUNTIME)
-  list(APPEND RUNTIME_FILES_TO_INSTALL
-          "${KLEE_RUNTIME_DIRECTORY}/libkleeRuntimePThread.bca")
 endif()
 
 install(FILES
