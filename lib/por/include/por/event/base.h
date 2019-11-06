@@ -284,6 +284,7 @@ namespace por::event {
 			return util::make_iterator_range(causes_begin(include_program_init), causes_end(include_program_init));
 		}
 
+		virtual lock_id_t lid() const noexcept { return 0; }
 		virtual cond_id_t cid() const noexcept { return 0; }
 
 		bool is_independent_of(event const* other) const noexcept;

@@ -116,6 +116,9 @@ namespace por {
 		// contains all previously used condition variable ids
 		std::set<por::event::cond_id_t> _used_cond_ids;
 
+		// contains all previously used lock ids
+		std::set<por::event::lock_id_t> _used_lock_ids;
+
 		// sequence of events that need to be caught up
 		std::deque<por::event::event const*> _catch_up;
 
@@ -287,7 +290,9 @@ namespace por {
 				assert(peek()->kind() == por::event::event_kind::lock_create);
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
+				assert(_used_lock_ids.count(lock) == 0 && "Lock id cannot be reused");
 				_lock_heads.emplace(lock, _catch_up.front());
+				_used_lock_ids.insert(lock);
 				_catch_up.pop_front();
 
 				++_size;
@@ -300,12 +305,14 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 
-			assert(lock > 0);
+			assert(lock > 0 && "Lock id must not be zero");
 			assert(_lock_heads.find(lock) == _lock_heads.end() && "Lock id already taken");
+			assert(_used_lock_ids.count(lock) == 0 && "Lock id cannot be reused");
 
-			thread_event = &event::lock_create::alloc(*_unfolding, thread, *thread_event);
+			thread_event = &event::lock_create::alloc(*_unfolding, thread, lock, *thread_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_create);
 			_lock_heads.emplace(lock, thread_event);
+			_used_lock_ids.insert(lock);
 
 			++_size;
 			return thread_event;
@@ -317,6 +324,9 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads.erase(lock);
+				if constexpr(optional_creation_events) {
+					_used_lock_ids.insert(lock);
+				}
 				_catch_up.pop_front();
 
 				++_size;
@@ -331,8 +341,10 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			if constexpr(optional_creation_events) {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
-					thread_event = &event::lock_destroy::alloc(*_unfolding, thread, *thread_event, nullptr);
+					assert(lock > 0 && "Lock id must not be zero");
+					thread_event = &event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
+					_used_lock_ids.insert(lock);
 
 					++_size;
 					return thread_event;
@@ -340,7 +352,7 @@ namespace por {
 			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_destroy::alloc(*_unfolding, thread, *thread_event, lock_event);
+			thread_event = &event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 			_lock_heads.erase(lock_it);
 
@@ -354,6 +366,9 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads[lock] = _catch_up.front();
+				if constexpr(optional_creation_events) {
+					_used_lock_ids.insert(lock);
+				}
 				_catch_up.pop_front();
 
 				++_size;
@@ -368,9 +383,11 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			if constexpr(optional_creation_events) {
 				if(lock_it == _lock_heads.end()) {
-					thread_event = &event::lock_acquire::alloc(*_unfolding, thread, *thread_event, nullptr);
+					assert(lock > 0 && "Lock id must not be zero");
+					thread_event = &event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					_lock_heads.emplace(lock, thread_event);
+					_used_lock_ids.insert(lock);
 
 					++_size;
 					return thread_event;
@@ -378,7 +395,7 @@ namespace por {
 			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_acquire::alloc(*_unfolding, thread, *thread_event, lock_event);
+			thread_event = &event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			lock_event = thread_event;
 
@@ -406,7 +423,7 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_release::alloc(*_unfolding, thread, *thread_event, *lock_event);
+			thread_event = &event::lock_release::alloc(*_unfolding, thread, lock, *thread_event, *lock_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_release);
 			lock_event = thread_event;
 
@@ -535,6 +552,7 @@ namespace por {
 				_lock_heads[lock] = _catch_up.front();
 				_cond_heads[cond].push_back(_catch_up.front());
 				if constexpr(optional_creation_events) {
+					_used_lock_ids.insert(lock);
 					_used_cond_ids.insert(cond);
 				}
 				_catch_up.pop_front();
@@ -553,12 +571,14 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(cond_head_it == _cond_heads.end()) {
 					assert(cond > 0 && "Condition variable id must not be zero");
+					assert(lock > 0 && "Lock id must not be zero");
 					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 					auto& lock_event = lock_it->second;
-					thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, *thread_event, *lock_event, {});
+					thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, {});
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
+					_used_lock_ids.insert(lock);
 					_used_cond_ids.insert(cond);
 
 					++_size;
@@ -572,7 +592,7 @@ namespace por {
 			auto& lock_event = lock_it->second;
 
 			std::vector<por::event::event const*> non_waiting = wait1_predecessors_cond(*thread_event, cond_preds);
-			thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, *thread_event, *lock_event, std::move(non_waiting));
+			thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, std::move(non_waiting));
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
@@ -630,7 +650,7 @@ namespace por {
 			auto& lock_event = lock_it->second;
 
 			auto& cond_event = wait2_predecessor_cond(*thread_event, cond_preds);
-			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, *thread_event, *lock_event, cond_event);
+			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, cond_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
 
@@ -924,11 +944,11 @@ namespace por {
 
 			if(em == nullptr) {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
-				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, nullptr));
+				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, nullptr));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			} else if(em->kind() == por::event::event_kind::lock_release || em->kind() == por::event::event_kind::wait1 || em->kind() == por::event::event_kind::lock_create) {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
-				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, em));
+				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			}
 
@@ -937,12 +957,12 @@ namespace por {
 			while(ep != nullptr && (em == nullptr || !ep->is_less_than_eq(*em)) && (es == nullptr || !ep->is_less_than_eq(*es))) {
 				if(ep->kind() == por::event::event_kind::lock_release || ep->kind() == por::event::event_kind::wait1 || ep->kind() == por::event::event_kind::lock_create) {
 					if(e.kind() == por::event::event_kind::lock_acquire) {
-						result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), *et, ep));
+						result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, ep));
 						_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					} else {
 						assert(e.kind() == por::event::event_kind::wait2);
 						assert(ep->kind() != por::event::event_kind::lock_create);
-						result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), *et, *ep, *es));
+						result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *ep, *es));
 						_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 					}
 				}
@@ -1001,7 +1021,7 @@ namespace por {
 				if(cond_create) {
 					N.push_back(cond_create);
 				}
-				result.emplace_back(e, por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), *et, *e.lock_predecessor(), std::move(N)));
+				result.emplace_back(e, por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *e.lock_predecessor(), std::move(N)));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
 			});

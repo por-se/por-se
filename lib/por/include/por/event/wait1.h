@@ -19,10 +19,12 @@ namespace por::event {
 		util::sso_array<event const*, 2> _predecessors;
 
 		cond_id_t _cid;
+		lock_id_t _lid;
 
 	protected:
 		wait1(thread_id_t tid,
 			cond_id_t cid,
+			lock_id_t lid,
 			event const& thread_predecessor,
 			event const& lock_predecessor,
 			util::iterator_range<event const* const*> condition_variable_predecessors
@@ -30,6 +32,7 @@ namespace por::event {
 			: event(event_kind::wait1, tid, thread_predecessor, &lock_predecessor, condition_variable_predecessors)
 			, _predecessors{util::create_uninitialized, 2ul + condition_variable_predecessors.size()}
 			, _cid(cid)
+			, _lid(lid)
 		{
 			_predecessors[0] = &thread_predecessor;
 			_predecessors[1] = &lock_predecessor;
@@ -48,6 +51,7 @@ namespace por::event {
 			assert(this->lock_predecessor());
 			assert(this->lock_predecessor()->kind() == event_kind::lock_acquire || this->lock_predecessor()->kind() == event_kind::wait2);
 			assert(this->lock_predecessor()->tid() == this->tid());
+			assert(this->lock_predecessor()->lid() == this->lid());
 
 			for(auto& e : this->condition_variable_predecessors()) {
 				if(e->kind() == event_kind::signal) {
@@ -65,6 +69,7 @@ namespace por::event {
 			}
 
 			assert(this->cid());
+			assert(this->lid());
 		}
 
 	public:
@@ -72,6 +77,7 @@ namespace por::event {
 			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
+			lock_id_t lid,
 			event const& thread_predecessor,
 			event const& lock_predecessor,
 			std::vector<event const*> cond_predecessors
@@ -81,6 +87,7 @@ namespace por::event {
 			return unfolding.deduplicate(wait1{
 				tid,
 				cid,
+				lid,
 				thread_predecessor,
 				lock_predecessor,
 				util::make_iterator_range<event const* const*>(cond_predecessors.data(),
@@ -91,7 +98,8 @@ namespace por::event {
 		wait1(wait1&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _cid(std::move(that._cid)) {
+		, _cid(std::move(that._cid))
+		, _lid(std::move(that._lid)) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -113,7 +121,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: wait1 cid: " + std::to_string(cid()) + "]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: wait1 cid: " + std::to_string(cid()) + " lid: " + std::to_string(lid()) + "]";
 			return "wait1";
 		}
 
@@ -132,6 +140,7 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data() + 2, _predecessors.data() + _predecessors.size());
 		}
 
+		lock_id_t lid() const noexcept override { return _lid; }
 		cond_id_t cid() const noexcept override { return _cid; }
 	};
 }

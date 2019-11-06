@@ -13,33 +13,40 @@ namespace por::event {
 		// 1. same-thread predecessor
 		std::array<event const*, 1> _predecessors;
 
+		lock_id_t _lid;
+
 	protected:
-		lock_create(thread_id_t tid, event const& thread_predecessor)
+		lock_create(thread_id_t tid, lock_id_t lid, event const& thread_predecessor)
 			: event(event_kind::lock_create, tid, thread_predecessor)
 			, _predecessors{&thread_predecessor}
+			, _lid(lid)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
+			assert(this->lid());
 		}
 
 	public:
 		static event const& alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
+			lock_id_t lid,
 			event const& thread_predecessor
 		) {
 			return unfolding.deduplicate(lock_create{
 				tid,
+				lid,
 				thread_predecessor
 			});
 		}
 
 		lock_create(lock_create&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors)) {
+		, _predecessors(std::move(that._predecessors))
+		, _lid(std::move(that._lid)) {
 			assert(_predecessors.size() == 1);
 			assert(thread_predecessor() != nullptr);
 			replace_successor_of(*thread_predecessor(), that);
@@ -59,7 +66,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_create]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_create lid: " + std::to_string(lid()) + "]";
 			return "lock_create";
 		}
 
@@ -71,5 +78,6 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
+		lock_id_t lid() const noexcept override { return _lid; }
 	};
 }

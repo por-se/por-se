@@ -16,10 +16,12 @@ namespace por::event {
 		std::array<event const*, 3> _predecessors;
 
 		cond_id_t _cid;
+		lock_id_t _lid;
 
 	protected:
 		wait2(thread_id_t tid,
 			cond_id_t cid,
+			lock_id_t lid,
 			event const& thread_predecessor,
 			event const& lock_predecessor,
 			event const& condition_variable_predecessor
@@ -27,6 +29,7 @@ namespace por::event {
 			: event(event_kind::wait2, tid, thread_predecessor, lock_predecessor, &condition_variable_predecessor)
 			, _predecessors{&thread_predecessor, &condition_variable_predecessor, &lock_predecessor}
 			, _cid(cid)
+			, _lid(lid)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -35,8 +38,10 @@ namespace por::event {
 
 			assert(this->lock_predecessor());
 			assert(this->lock_predecessor()->kind() == event_kind::lock_release || this->lock_predecessor()->kind() == event_kind::wait1);
+			assert(this->lock_predecessor()->lid() == this->lid());
 
 			assert(this->cid());
+			assert(this->lid());
 
 			assert(this->notifying_event());
 			assert(this->notifying_event()->tid() != this->tid());
@@ -66,6 +71,7 @@ namespace por::event {
 			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
+			lock_id_t lid,
 			event const& thread_predecessor,
 			event const& lock_predecessor,
 			event const& condition_variable_predecessor
@@ -73,6 +79,7 @@ namespace por::event {
 			return unfolding.deduplicate(wait2{
 				tid,
 				cid,
+				lid,
 				thread_predecessor,
 				lock_predecessor,
 				condition_variable_predecessor
@@ -82,7 +89,8 @@ namespace por::event {
 		wait2(wait2&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _cid(that._cid) {
+		, _cid(that._cid)
+		, _lid(that._lid) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -104,7 +112,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: wait2 cid: " + std::to_string(cid()) + "]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: wait2 cid: " + std::to_string(cid()) + " lid: " + std::to_string(lid()) + "]";
 			return "wait2";
 		}
 
@@ -122,6 +130,7 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);
 		}
 
+		lock_id_t lid() const noexcept override { return _lid; }
 		cond_id_t cid() const noexcept override { return _cid; }
 
 		event const* notifying_event() const noexcept { return _predecessors[1]; }

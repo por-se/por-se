@@ -14,10 +14,13 @@ namespace por::event {
 		// 2. previous operation on same lock (may be nullptr if only preceded by lock_create event)
 		std::array<event const*, 2> _predecessors;
 
+		lock_id_t _lid;
+
 	protected:
-		lock_destroy(thread_id_t tid, event const& thread_predecessor, event const* lock_predecessor)
+		lock_destroy(thread_id_t tid, lock_id_t lid, event const& thread_predecessor, event const* lock_predecessor)
 			: event(event_kind::lock_destroy, tid, thread_predecessor, lock_predecessor)
 			, _predecessors{&thread_predecessor, lock_predecessor}
+			, _lid(lid)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -28,6 +31,7 @@ namespace por::event {
 			if(this->lock_predecessor()) {
 				assert(this->lock_predecessor()->kind() != event_kind::lock_acquire && "destroying an acquired lock is UB");
 				assert(this->lock_predecessor()->kind() == event_kind::lock_create || this->lock_predecessor()->kind() == event_kind::lock_release);
+				assert(this->lock_predecessor()->lid() == this->lid());
 			}
 		}
 
@@ -35,11 +39,13 @@ namespace por::event {
 		static event const& alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
+			lock_id_t lid,
 			event const& thread_predecessor,
 			event const* lock_predecessor
 		) {
 			return unfolding.deduplicate(lock_destroy{
 				tid,
+				lid,
 				thread_predecessor,
 				lock_predecessor
 			});
@@ -47,7 +53,8 @@ namespace por::event {
 
 		lock_destroy(lock_destroy&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors)) {
+		, _predecessors(std::move(that._predecessors))
+		, _lid(std::move(that._lid)) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -69,7 +76,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_destroy]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_destroy lid: " + std::to_string(lid()) + "]";
 			return "lock_destroy";
 		}
 
@@ -87,5 +94,7 @@ namespace por::event {
 
 		// may return nullptr if only preceded by lock_create event
 		event const* lock_predecessor() const noexcept override { return _predecessors[1]; }
+
+		lock_id_t lid() const noexcept override { return _lid; }
 	};
 }
