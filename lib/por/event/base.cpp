@@ -18,41 +18,13 @@ namespace {
 
 		// dependent iff events operate on same lock
 
-		switch(other->kind()) {
-			case por::event::event_kind::lock_create:
-			case por::event::event_kind::lock_acquire:
-			case por::event::event_kind::lock_release:
-			case por::event::event_kind::lock_destroy:
-			case por::event::event_kind::wait1:
-			case por::event::event_kind::wait2: {
-				break;
-			}
-			default: {
-				// other is not a lock event
-				return true;
-			}
+		assert(lock_event->lid());
+
+		if(other->lid() != 0) {
+			return lock_event->lid() != other->lid();
 		}
 
-		por::event::event const* max = lock_event;
-		por::event::event const* min = other;
-		if(max->is_less_than(*min)) {
-			std::swap(max, min);
-		} else if(!min->is_less_than(*max)) {
-			// no causal dependency
-			return true;
-		}
-
-		// descent lock chain from <-max event
-		por::event::event const* pred = max;
-		do {
-			if(pred == min) {
-				// one event part of other lock chain
-				return false;
-			}
-			pred = pred->lock_predecessor();
-		} while(pred && min->is_less_than_eq(*pred));
-
-		// distinct lock chains
+		// other is not a lock event
 		return true;
 	}
 
