@@ -271,17 +271,22 @@ namespace por::event {
 
 		std::vector<event const*> immediate_conflicts() const noexcept;
 
-		color_t color() const noexcept {
-			return _color;
-		}
+		color_t color() const noexcept { return _color; }
+		[[nodiscard]] static color_t new_color() noexcept { return ++_next_color; }
+		color_t colorize(color_t color) const noexcept { return _color = color; }
+		[[nodiscard]] color_t colorize() const noexcept { return colorize(new_color()); }
 
 		template<typename T>
-		static color_t colorize(T begin, T end) {
-			color_t color = ++_next_color;
+		static color_t colorize(color_t color, T begin, T end) {
 			for (; begin != end; ++begin) {
 				(*begin)->_color = color;
 			}
 			return color;
+		}
+
+		template<typename T>
+		[[nodiscard]] static color_t colorize(T begin, T end) {
+			return colorize(new_color(), std::move(begin), std::move(end));
 		}
 	};
 }
