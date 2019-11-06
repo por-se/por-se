@@ -422,6 +422,7 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 				_cond_heads.emplace(cond, std::vector{_catch_up.front()});
+				_used_cond_ids.insert(cond);
 				_catch_up.pop_front();
 
 				++_size;
@@ -452,6 +453,9 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_cond_heads.erase(cond);
+				if constexpr(optional_creation_events) {
+					_used_cond_ids.insert(cond);
+				}
 				_catch_up.pop_front();
 
 				++_size;
@@ -530,6 +534,9 @@ namespace por {
 				_thread_heads[thread] = _catch_up.front();
 				_lock_heads[lock] = _catch_up.front();
 				_cond_heads[cond].push_back(_catch_up.front());
+				if constexpr(optional_creation_events) {
+					_used_cond_ids.insert(cond);
+				}
 				_catch_up.pop_front();
 
 				++_size;
@@ -692,6 +699,9 @@ namespace por {
 				} else {
 					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _catch_up.front();
 				}
+				if constexpr(optional_creation_events) {
+					_used_cond_ids.insert(cond);
+				}
 				_catch_up.pop_front();
 
 				++_size;
@@ -758,6 +768,9 @@ namespace por {
 					}
 				}
 				_cond_heads[cond].push_back(_catch_up.front());
+				if constexpr(optional_creation_events) {
+					_used_cond_ids.insert(cond);
+				}
 				_catch_up.pop_front();
 
 				++_size;
