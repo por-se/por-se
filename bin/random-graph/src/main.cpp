@@ -427,6 +427,87 @@ int main(int argc, char** argv){
 	}
 	assert(E.size() == std::distance(configuration.begin(), configuration.end()));
 	assert(E.size() == configuration.size());
+
+	// check event_iterator for all events (and for all its options)
+	for(auto&e : E) {
+		auto& program_init = configuration.unfolding()->root();
+
+		// compute causes(e) \setminus {program_init}
+		por::comb causes_no_root;
+		for(auto [tid, c] : e->cone()) {
+			do {
+				causes_no_root.insert(*c);
+				c = c->thread_predecessor();
+			} while(c);
+		}
+		assert(causes_no_root.is_sorted());
+
+		// compute causes(e)
+		por::comb causes = causes_no_root;
+		if(e != &program_init) {
+			causes.insert(program_init);
+			assert(causes.size() == causes_no_root.size() + 1);
+		} else {
+			assert(causes.size() == 0);
+			assert(causes.size() == causes_no_root.size());
+		}
+
+		// compute [e] \setminus {program_init}
+		por::comb configuration_no_root = causes_no_root;
+		configuration_no_root.insert(*e);
+		assert(configuration_no_root.size() == causes_no_root.size() + 1);
+
+		// compute [e]
+		por::comb configuration = configuration_no_root;
+		configuration.insert(program_init);
+		if(e != &program_init) {
+			assert(configuration.size() == configuration_no_root.size() + 1);
+		} else {
+			assert(configuration.size() == 1);
+			assert(configuration.size() == configuration_no_root.size());
+		}
+
+
+		// with_root = false, with_event = false => ⌈e⌉ \ {program_init} (causes of e without root event)
+		por::event::event_iterator causes_no_root_it(*e, false, false);
+		por::event::event_iterator causes_no_root_ie(*e, false, false, true);
+
+		assert(causes_no_root.size() == std::distance(causes_no_root_it, causes_no_root_ie));
+		std::set<por::event::event const*> causes_no_root_set(causes_no_root.begin(), causes_no_root.end());
+		std::set<por::event::event const*> causes_no_root_it_set(causes_no_root_it, causes_no_root_ie);
+		assert(causes_no_root_set == causes_no_root_it_set);
+
+
+		// with_root =  true, with_event = false => ⌈e⌉ := [e] \ {e} (causes of e)
+		por::event::event_iterator causes_it(*e, true, false);
+		por::event::event_iterator causes_ie(*e, true, false, true);
+
+		assert(causes.size() == std::distance(causes_it, causes_ie));
+		std::set<por::event::event const*> causes_set(causes.begin(), causes.end());
+		std::set<por::event::event const*> causes_it_set(causes_it, causes_ie);
+		assert(causes_set == causes_it_set);
+
+
+		// with_root =  true, with_event =  true => [e] (local configuration of e)
+		por::event::event_iterator configuration_it(*e, true, true);
+		por::event::event_iterator configuration_ie(*e, true, true, true);
+
+		assert(configuration.size() == std::distance(configuration_it, configuration_ie));
+		std::set<por::event::event const*> configuration_set(configuration.begin(), configuration.end());
+		std::set<por::event::event const*> configuration_it_set(configuration_it, configuration_ie);
+		assert(configuration_set == configuration_it_set);
+
+
+		// with_root = false, with_event =  true => [e] \ {program_init} (local configuration without root event)
+		por::event::event_iterator configuration_no_root_it(*e, false, true);
+		por::event::event_iterator configuration_no_root_ie(*e, false, true, true);
+
+		assert(configuration_no_root.size() == std::distance(configuration_no_root_it, configuration_no_root_ie));
+		std::set<por::event::event const*> configuration_no_root_set(configuration_no_root.begin(), configuration_no_root.end());
+		std::set<por::event::event const*> configuration_no_root_it_set(configuration_no_root_it, configuration_no_root_ie);
+		assert(configuration_no_root_set == configuration_no_root_it_set);
+	}
+
 #endif
 
 #ifndef NDEBUG

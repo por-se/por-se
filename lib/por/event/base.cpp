@@ -175,6 +175,68 @@ namespace {
 namespace por::event {
 	por::event::event::color_t event::_next_color = 1;
 
+	event_iterator::event_iterator(event const& event, bool with_root, bool with_event, bool end)
+	: _lc(&event), _with_root(with_root) {
+		if(event.kind() == por::event::event_kind::program_init) {
+			_with_root = false;
+		}
+
+		if(end) {
+			return;
+		}
+
+		if(with_event) {
+			_event = _lc;
+		} else if(!_lc->cone().empty()) {
+			_thread = _lc->cone().rbegin();
+			_event = _thread->second;
+		} else if(_with_root) {
+			assert(_lc->kind() == por::event::event_kind::thread_init);
+			_event = *_lc->predecessors().begin();
+			assert(_event->kind() == por::event::event_kind::program_init);
+			_thread = _lc->cone().rend();
+		}
+	}
+
+	event_iterator& event_iterator::operator++() noexcept {
+		if(!_event) {
+			return *this;
+		}
+
+		if(_lc->cone().empty() || _thread == _lc->cone().rend()) {
+			if(_event == _lc && _with_root) {
+				assert(_lc->kind() == por::event::event_kind::thread_init);
+				_event = *_lc->predecessors().begin();
+				assert(_event->kind() == por::event::event_kind::program_init);
+				_thread = _lc->cone().rend();
+			} else {
+				_thread = decltype(_thread)();
+				_event = nullptr;
+			}
+		} else if(_event == _lc) {
+			_thread = _lc->cone().rbegin();
+			_event = _thread->second;
+		} else if(por::event::event const* p = _event->thread_predecessor()) {
+			_event = p;
+			assert(_event);
+		} else if(_thread != std::prev(_lc->cone().rend())) {
+			++_thread;
+			_event = _thread->second;
+			assert(_event);
+		} else if(_with_root) {
+			assert(_thread == std::prev(_lc->cone().rend()));
+			assert(_event->kind() == event_kind::thread_init);
+			assert((*_event->predecessors().begin())->kind() == event_kind::program_init);
+			_thread = _lc->cone().rend();
+			_event = *_event->predecessors().begin();
+			assert(_event);
+		} else {
+			_thread = decltype(_thread)();
+			_event = nullptr;
+		}
+		return *this;
+	}
+
 	bool event::is_independent_of(event const* other) const noexcept {
 		if(tid() == other->tid()) {
 			// events on the same thread are always dependent
