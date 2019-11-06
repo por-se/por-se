@@ -93,6 +93,14 @@ namespace por {
 			return _right.get();
 		}
 
+		bool is_left_child() const noexcept {
+			return !parent() || parent()->left_child() == this;
+		}
+
+		bool is_right_child() const noexcept {
+			return !parent() || parent()->right_child() == this;
+		}
+
 		bool has_event() const noexcept {
 			return _event != nullptr;
 		}
