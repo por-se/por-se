@@ -58,6 +58,7 @@ namespace por::event {
 	class event {
 	public:
 		using depth_t = std::size_t;
+		using color_t = std::size_t;
 
 	private:
 		depth_t _depth;
@@ -65,8 +66,8 @@ namespace por::event {
 		thread_id_t _tid;
 		event_kind _kind;
 
-		mutable std::size_t _color = 0;
-		static std::size_t _next_color;
+		mutable color_t _color = 0;
+		static color_t _next_color;
 
 		mutable std::set<event const*> _successors;
 
@@ -193,9 +194,9 @@ namespace por::event {
 			succ.insert(this);
 		}
 
-		std::set<event const*> local_configuration(std::size_t color) const noexcept;
+		std::set<event const*> local_configuration(color_t color) const noexcept;
 
-		std::set<event const*> causes(std::size_t color) const noexcept {
+		std::set<event const*> causes(color_t color) const noexcept {
 			std::size_t orig_color = _color;
 			auto W = local_configuration(color);
 			W.erase(this);
@@ -270,13 +271,13 @@ namespace por::event {
 
 		std::vector<event const*> immediate_conflicts() const noexcept;
 
-		std::size_t color() const noexcept {
+		color_t color() const noexcept {
 			return _color;
 		}
 
 		template<typename T>
-		static std::size_t colorize(T begin, T end) {
-			std::size_t color = ++_next_color;
+		static color_t colorize(T begin, T end) {
+			color_t color = ++_next_color;
 			for (; begin != end; ++begin) {
 				(*begin)->_color = color;
 			}

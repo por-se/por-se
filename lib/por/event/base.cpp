@@ -173,7 +173,7 @@ namespace {
 }
 
 namespace por::event {
-	std::size_t event::_next_color = 1;
+	por::event::event::color_t event::_next_color = 1;
 
 	bool event::is_independent_of(event const* other) const noexcept {
 		if(tid() == other->tid()) {
@@ -382,8 +382,8 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::immediate_conflicts() const noexcept {
-		std::size_t red = _next_color++;
-		std::size_t blue = _next_color++;
+		color_t red = _next_color++;
+		color_t blue = _next_color++;
 
 		auto red_set = causes(red);
 		std::vector<event const*> W(red_set.begin(), red_set.end());
