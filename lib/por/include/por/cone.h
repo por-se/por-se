@@ -18,9 +18,13 @@ namespace por {
 	public:
 		using iterator = decltype(_map)::const_iterator;
 		using const_iterator = iterator;
+		using reverse_iterator = decltype(_map)::const_reverse_iterator;
+		using const_reverse_iterator = reverse_iterator;
 
 		iterator begin() const { return _map.cbegin(); }
 		iterator end() const { return _map.cend(); }
+		reverse_iterator rbegin() const { return _map.crbegin(); }
+		reverse_iterator rend() const { return _map.crend(); }
 		auto size() const { return _map.size(); }
 		auto empty() const { return _map.empty(); }
 		auto find(thread_id const& tid) const { return _map.find(tid); }
