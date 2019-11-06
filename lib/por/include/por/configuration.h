@@ -946,7 +946,16 @@ namespace por {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
 				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, nullptr));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
-			} else if(em->kind() == por::event::event_kind::lock_release || em->kind() == por::event::event_kind::wait1 || em->kind() == por::event::event_kind::lock_create) {
+			} else if(em->kind() == por::event::event_kind::lock_release || em->kind() == por::event::event_kind::wait1) {
+				if(e.kind() == por::event::event_kind::lock_acquire) {
+					result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
+					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
+				} else {
+					assert(e.kind() == por::event::event_kind::wait2);
+					result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *em, *es));
+					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
+				}
+			} else if(em->kind() == por::event::event_kind::lock_create) {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
 				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
