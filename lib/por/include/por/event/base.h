@@ -25,10 +25,6 @@ namespace klee {
 }
 #endif
 
-namespace por {
-	class unfolding;
-}
-
 namespace por::event {
 	using thread_id_t = por::thread_id;
 	using lock_id_t = std::uint64_t;
@@ -237,16 +233,6 @@ namespace por::event {
 			succ.insert(this);
 		}
 
-		std::set<event const*> local_configuration(color_t color) const noexcept;
-
-		std::set<event const*> causes(color_t color) const noexcept {
-			std::size_t orig_color = _color;
-			auto W = local_configuration(color);
-			W.erase(this);
-			_color = orig_color;
-			return W;
-		}
-
 	public:
 		bool has_successors() const noexcept {
 			return !_successors.empty();
@@ -273,12 +259,29 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
 
-		std::set<event const*> local_configuration() const noexcept {
-			return local_configuration(_next_color++);
+		event_iterator local_configuration_begin(bool include_program_init=true) const noexcept {
+			return event_iterator(*this, include_program_init, true);
 		}
 
-		std::set<event const*> causes() const noexcept {
-			return causes(_next_color++);
+		event_iterator local_configuration_end(bool include_program_init=true) const noexcept {
+			return event_iterator(*this, include_program_init, true, true);
+		}
+
+		auto local_configuration(bool include_program_init=true) const noexcept {
+			return util::make_iterator_range(local_configuration_begin(include_program_init),
+			                                 local_configuration_end(include_program_init));
+		}
+
+		event_iterator causes_begin(bool include_program_init=true) const noexcept {
+			return event_iterator(*this, include_program_init, false);
+		}
+
+		event_iterator causes_end(bool include_program_init=true) const noexcept {
+			return event_iterator(*this, include_program_init, false, true);
+		}
+
+		auto causes(bool include_program_init=true) const noexcept {
+			return util::make_iterator_range(causes_begin(include_program_init), causes_end(include_program_init));
 		}
 
 		virtual cond_id_t cid() const noexcept { return 0; }

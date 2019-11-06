@@ -393,36 +393,6 @@ namespace por::event {
 		}
 	}
 
-	std::set<event const*> event::local_configuration(std::size_t color) const noexcept {
-		std::stack<event const*> W;
-		std::set<event const*> result;
-
-		W.push(this);
-		while(!W.empty()) {
-			auto event = W.top();
-			W.pop();
-
-			assert(event != nullptr);
-
-			if(event->_color == color) {
-				continue;
-			}
-
-			for(auto& pred : event->predecessors()) {
-				if(pred == nullptr) {
-					continue;
-				}
-				if(pred->_color != color) {
-					W.push(pred);
-				}
-			}
-			result.insert(event);
-			event->_color = color;
-		}
-
-		return result;
-	}
-
 	std::vector<event const*> event::immediate_predecessors() const noexcept {
 		std::vector<event const*> result;
 		[[maybe_unused]] bool program_init = false;
@@ -444,11 +414,10 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::immediate_conflicts() const noexcept {
-		color_t red = _next_color++;
-		color_t blue = _next_color++;
+		color_t blue = new_color();
 
-		auto red_set = causes(red);
-		std::vector<event const*> W(red_set.begin(), red_set.end());
+		std::vector<event const*> W(causes_begin(), causes_end());
+		color_t red = colorize(W.begin(), W.end());
 
 		std::vector<event const*> result;
 
