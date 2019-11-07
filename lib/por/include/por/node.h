@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <memory>
+#include <stack>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -110,7 +111,33 @@ namespace por {
 		node(node&&) = delete;
 		node& operator=(const node&) = delete;
 		node& operator=(node&&) = delete;
-		~node() = default;
+		~node() {
+			// avoid infinite recursion: use post-order tree traversal
+			std::stack<node*> S;
+			node* n = this;
+			node* last = nullptr;
+			while(!S.empty() || n) {
+				if(n) {
+					S.push(n);
+					n = n->left_child();
+				} else {
+					node* c = S.top();
+					if(c->right_child() && last != c->right_child()) {
+						n = c->right_child();
+					} else {
+						node *p = c->parent();
+						assert(!c->has_children());
+						if(p && c->is_right_child()) {
+							p->_right.reset();
+						} else if(p && c->is_left_child()) {
+							p->_left.reset();
+						}
+						last = c;
+						S.pop();
+					}
+				}
+			}
+		}
 
 		por::configuration const& configuration() const noexcept {
 			assert(_C);
