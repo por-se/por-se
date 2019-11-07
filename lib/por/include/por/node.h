@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,57 @@ namespace por {
 	}
 
 	using event_set_t = std::vector<por::event::event const*>;
+
+	template<typename V>
+	class node_branch_iterator {
+	public:
+		using value_type = V;
+		using difference_type = std::ptrdiff_t;
+		using pointer = value_type const*;
+		using reference = value_type const&;
+
+	private:
+		value_type _branch = nullptr;
+		value_type _node = nullptr;
+
+	public:
+		using iterator_category = std::forward_iterator_tag;
+
+		node_branch_iterator() = default;
+		explicit node_branch_iterator(std::remove_pointer_t<value_type>& branch, bool end=false) : _branch(&branch) {
+			if(!end) {
+				_node = &branch;
+			}
+		}
+
+		reference operator*() const noexcept { return _node; }
+		pointer operator->() const noexcept { return &_node; }
+
+		node_branch_iterator& operator++() noexcept {
+			if(!_node) {
+				return *this;
+			}
+
+			do {
+				_node = _node->parent();
+			} while(_node && _node->parent() && _node->is_right_child());
+			assert(!_node || _node->is_left_child());
+
+			return *this;
+		}
+		node_branch_iterator operator++(int) noexcept {
+			node_branch_iterator tmp = *this;
+			++(*this);
+			return tmp;
+		}
+
+		bool operator==(const node_branch_iterator& rhs) const noexcept {
+			return _branch == rhs._branch && _node == rhs._node;
+		}
+		bool operator!=(const node_branch_iterator& rhs) const noexcept {
+			return !(*this == rhs);
+		}
+	};
 
 	class node {
 		class passkey {
@@ -122,6 +174,19 @@ namespace por {
 		bool needs_catch_up() const noexcept;
 
 		por::event::event const* peek() const noexcept;
+
+		auto branch_begin() const noexcept { return node_branch_iterator<node const*>(*this); }
+		auto branch_end() const noexcept { return node_branch_iterator<node const*>(*this, true); }
+
+		auto branch_cbegin() const noexcept { return node_branch_iterator<node const*>(*this); }
+		auto branch_cend() const noexcept { return node_branch_iterator<node const*>(*this, true); }
+
+		auto branch_begin() noexcept { return node_branch_iterator<node*>(*this); }
+		auto branch_end() noexcept { return node_branch_iterator<node*>(*this, true); }
+
+		auto branch() noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
+		auto branch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
+		auto cbranch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
 
 		std::vector<por::event::event const*> schedule() const noexcept {
 			std::vector<por::event::event const*> sched;
