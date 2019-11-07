@@ -188,14 +188,26 @@ namespace por {
 		auto branch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
 		auto cbranch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
 
-		std::vector<por::event::event const*> schedule() const noexcept {
+		std::vector<por::event::event const*> rschedule() const noexcept {
 			std::vector<por::event::event const*> sched;
-			node const* n = this;
-			while(n->parent()) {
-				assert(n->has_event());
-				sched.push_back(n->_event);
-				n = n->parent();
+			sched.reserve(_C->size() + _C->_catch_up.size());
+			auto it = branch_begin();
+			auto ie = branch_end();
+			if(it != ie) {
+				assert(*it == this); // we want to skip the current node
+				for(++it; it != ie; ++it) {
+					node const* n = *it;
+					assert(n->has_event());
+					sched.push_back(n->_event);
+				}
 			}
+			sched.push_back(&_C->unfolding()->root());
+			assert(sched.size() == _C->size() + _C->_catch_up.size());
+			return sched;
+		}
+		std::vector<por::event::event const*> schedule() const noexcept {
+			auto sched = rschedule();
+			std::reverse(sched.begin(), sched.end());
 			return sched;
 		}
 
