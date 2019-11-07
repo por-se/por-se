@@ -85,9 +85,7 @@ ExecutionState::~ExecutionState() {
   }
 
   // We have to clean up all stack frames of all threads
-  for (auto& it : threads) {
-    Thread thread = it.second;
-
+  for (auto& [_, thread] : threads) {
     while (!thread.stack.empty()) {
       popFrameOfThread(&thread);
     }
