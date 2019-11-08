@@ -177,6 +177,8 @@ namespace por {
 			return res;
 		}
 
+		void to_dotgraph() const noexcept;
+
 		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
 			if(needs_catch_up()) {
 				assert(peek()->kind() == por::event::event_kind::thread_create);
