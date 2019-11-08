@@ -10,6 +10,7 @@
 #include <cassert>
 #include <iterator>
 #include <map>
+#include <ostream>
 #include <set>
 #include <vector>
 #include <memory>
@@ -177,7 +178,7 @@ namespace por {
 			return res;
 		}
 
-		void to_dotgraph() const noexcept;
+		void to_dotgraph(std::ostream& os) const noexcept;
 
 		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
 			if(needs_catch_up()) {

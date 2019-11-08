@@ -519,5 +519,5 @@ int main(int argc, char** argv){
 #endif
 
 	std::cout << "\n\n";
-	configuration.to_dotgraph();
+	configuration.to_dotgraph(std::cout);
 }
