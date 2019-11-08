@@ -30,8 +30,8 @@ public:
 
   VerifiedMemoryFingerprintValue() = default;
   VerifiedMemoryFingerprintValue(const VerifiedMemoryFingerprintValue &other) = default;
-  VerifiedMemoryFingerprintValue(VerifiedMemoryFingerprintValue &&) = delete;
-  VerifiedMemoryFingerprintValue& operator=(VerifiedMemoryFingerprintValue &&) = delete;
+  VerifiedMemoryFingerprintValue(VerifiedMemoryFingerprintValue &&) = default;
+  VerifiedMemoryFingerprintValue& operator=(VerifiedMemoryFingerprintValue &&) = default;
   ~VerifiedMemoryFingerprintValue() = default;
 };
 
