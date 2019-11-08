@@ -49,14 +49,14 @@ namespace por {
 		pointer operator->() const noexcept { return &_node; }
 
 		node_branch_iterator& operator++() noexcept {
-			if(!_node) {
-				return *this;
+			while(_node && _node->is_right_child()) {
+				// skip parent of right child
+				_node = _node->parent();
 			}
 
-			do {
+			if(_node) {
 				_node = _node->parent();
-			} while(_node && _node->parent() && _node->is_right_child());
-			assert(!_node || _node->is_left_child());
+			}
 
 			return *this;
 		}
