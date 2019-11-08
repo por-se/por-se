@@ -31,40 +31,24 @@ configuration_iterator& configuration_iterator::operator++() noexcept {
 }
 
 void configuration::to_dotgraph(std::ostream& os) const noexcept {
-	std::set<por::event::event const*> visited;
-	std::vector<por::event::event const*> open;
-	std::map<por::event::thread_id_t, std::vector<por::event::event const*>> threads;
-	std::vector<std::pair<por::event::event const*, por::event::event const*>> inter_thread_dependencies;
-	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> non_immediate_intra_thread_dependencies;
-	std::map<por::event::thread_id_t, std::vector<std::pair<por::event::event const*, por::event::event const*>>> intra_thread_dependencies;
+	using event_relation_t = std::pair<por::event::event const*, por::event::event const*>;
 
-	for(auto& t : thread_heads()) {
-		open.push_back(t.second);
-	}
-	while(!open.empty()) {
-		por::event::event const* event = open.back();
-		open.pop_back();
-		if(!visited.insert(event).second) {
-			// already visited
-			continue;
-		}
-		por::event::thread_id_t tid = event->tid();
-		threads[tid].push_back(event);
+	std::vector<event_relation_t> inter_thread_dependencies;
+	std::map<por::event::thread_id_t, std::vector<event_relation_t>> non_immediate_intra_thread_dependencies;
+
+	for(por::event::event const* event : *this) {
+		por::event::thread_id_t const& tid = event->tid();
+		por::event::event const* thread_pred = event->thread_predecessor();
 		bool first = true;
-		for(auto& p : event->predecessors()) {
-			por::event::event const* predecessor = p;
-			if(visited.count(predecessor) == 0) {
-				open.push_back(predecessor);
-			}
+		for(por::event::event const* predecessor : event->predecessors()) {
 			if(tid != predecessor->tid()) {
 				inter_thread_dependencies.emplace_back(std::make_pair(event, predecessor));
 			} else {
 				if(first) {
-					intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
-					first = false; // only insert thread_predecessor, not lock or cond predecessor on same thread
-				} else {
-					non_immediate_intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
+					first = false;
+					continue;
 				}
+				non_immediate_intra_thread_dependencies[tid].emplace_back(std::make_pair(event, predecessor));
 			}
 		}
 	}
@@ -74,41 +58,38 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 
 	std::size_t event_id = 1;
 	std::map<por::event::event const*, std::size_t> events;
-	for(auto const& t : threads) {
-		por::event::thread_id_t tid = t.first;
-		if(!tid) {
-			os << "\n"
-			  << "  subgraph \"cluster_T0\" {\n"
-			  << "    graph[style=invis]\n\n"
-			  << "    node[shape=box style=dashed fixedsize=false width=1 label=\"\"]\n"
-			  << "    // single visible node\n";
 
-		} else {
-			os << "\n"
-			  << "  subgraph \"cluster_T" << tid << "\" {\n"
-			  << "    graph[label=\"Thread " << tid << "\"]\n\n"
-			  << "    node[shape=box fixedsize=false width=1 label=\"\"]\n"
-			  << "    // visible and invisible nodes\n";
-		}
+	por::event::event const* program_init = &_unfolding->root();
 
-		// topological sort of thread's events
-		auto const& relation = intra_thread_dependencies[tid];
-		std::vector<por::event::event const*> thread_events;
-		auto _init = std::find_if(threads[tid].begin(), threads[tid].end(), [](por::event::event const* e) {
-			return e->kind() == por::event::event_kind::thread_init || e->kind() == por::event::event_kind::program_init;
-		});
-		assert(_init != threads[tid].end() && "each thread should have an init event");
-		auto head = *_init;
-		while(head != nullptr) {
-			thread_events.push_back(head);
-			auto it = std::find_if(relation.begin(), relation.end(), [&](auto const& edge) {
-				return edge.second == head;
-			});
-			head = (it != relation.end()) ? it->first : nullptr;
+	os << "\n"
+	   << "  subgraph \"cluster_T0\" {\n"
+	   << "    graph[style=invis]\n\n"
+	   << "    node[shape=box style=dashed fixedsize=false width=1 label=\"\"]\n"
+	   << "    // single visible node\n"
+	   << "    e" << event_id << " [label=\"init depth=" << program_init->depth() << "\"]\n"
+	   << "  }\n";
+
+	events[program_init] = event_id++;
+
+
+	for(auto const& [tid, head] : thread_heads()) {
+		os << "\n"
+		  << "  subgraph \"cluster_T" << tid << "\" {\n"
+		  << "    graph[label=\"Thread " << tid << "\"]\n\n"
+		  << "    node[shape=box fixedsize=false width=1 label=\"\"]\n"
+		  << "    // visible and invisible nodes\n";
+
+		std::deque<por::event::event const*> thread_events;
+		{
+			por::event::event const* e = head;
+			do {
+				thread_events.push_front(e);
+				e = e->thread_predecessor();
+			} while(e);
 		}
 
 		std::size_t first_id = event_id;
-		std::size_t depth = (*_init)->depth();
+		std::size_t depth = thread_events.front()->depth();
 		std::vector<std::size_t> visibleNodes;
 		for(auto* e : thread_events) {
 			// account for difference in depth by inserting a number of invisible nodes
@@ -122,9 +103,6 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 
 			os << "    e" << event_id << " [label=\"";
 			switch(e->kind()) {
-				case por::event::event_kind::program_init:
-					os << "init";
-					break;
 				case por::event::event_kind::local:
 					os << "loc";
 					break;
@@ -170,6 +148,8 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 				case por::event::event_kind::broadcast:
 					os << "bro";
 					break;
+				default:
+					assert(0 && "unhandled event_kind!");
 			}
 
 			os << " depth=" << e->depth();
@@ -177,7 +157,7 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 			++event_id;
 		}
 
-		std::vector<std::pair<por::event::event const*, por::event::event const*>> deps = non_immediate_intra_thread_dependencies[tid];
+		std::vector<event_relation_t> deps = non_immediate_intra_thread_dependencies[tid];
 
 		if(visibleNodes.size() > 1) {
 			os << "\n"
