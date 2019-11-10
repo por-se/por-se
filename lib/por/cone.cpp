@@ -1,4 +1,7 @@
 #include "include/por/cone.h"
+
+#include "include/por/configuration.h"
+#include "include/por/comb.h"
 #include "include/por/event/event.h"
 
 using namespace por;
@@ -58,6 +61,8 @@ cone::cone(por::event::event const& immediate_predecessor,
 	}
 }
 
+cone::cone(por::configuration const& configuration) : _map(configuration.thread_heads()) { }
+
 bool cone::is_lte_for_all_of(cone const& rhs) const noexcept {
 	for(auto& [tid, event] : rhs) {
 		if(count(tid) && at(tid)->depth() > event->depth()) {
@@ -89,4 +94,34 @@ void cone::extend_unchecked_single(por::event::event const& event) noexcept {
 	assert(event.kind() != por::event::event_kind::program_init);
 	assert(!_map.count(event.tid()) || _map[event.tid()]->depth() <= event.depth());
 	_map[event.tid()] = &event;
+}
+
+// computes a comb of [*this] \setminus [rhs]
+por::comb cone::setminus(por::cone const& rhs) const noexcept {
+	por::comb result;
+	for(auto& [tid, event] : *this) {
+		if(!rhs.count(tid)) {
+			// no event on tid removed by rhs
+			por::event::event const* e = event;
+			do {
+				result.insert(*e);
+				e = e->thread_predecessor();
+			} while(e);
+			continue;
+		}
+
+		por::event::event const* r = rhs.at(tid);
+
+		if(r->depth() > event->depth()) {
+			// all events on tid removed by rhs
+			continue;
+		}
+
+		por::event::event const* e = event;
+		while(e && r->depth() < e->depth()) {
+			result.insert(*e);
+			e = e->thread_predecessor();
+		}
+	}
+	return result;
 }

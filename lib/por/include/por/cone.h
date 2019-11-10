@@ -1,5 +1,6 @@
 #pragma once
 
+#include "por/comb.h"
 #include "por/thread_id.h"
 
 #include <util/iterator_range.h>
@@ -11,6 +12,8 @@ namespace por::event {
 }
 
 namespace por {
+	class configuration;
+
 	// includes maximal event per thread (excl. program_init / thread 0)
 	class cone {
 		std::map<thread_id, por::event::event const*> _map;
@@ -43,6 +46,8 @@ namespace por {
 			por::event::event const* single_other_predecessor,
 			util::iterator_range<por::event::event const* const*> other_predecessors);
 
+		cone(por::configuration const& configuration);
+
 		// IMPORTANT: assumes no conflict between this and rhs
 		bool is_lte_for_all_of(cone const& rhs) const noexcept;
 
@@ -50,5 +55,7 @@ namespace por {
 		bool is_gte_for_all_of(cone const& rhs) const noexcept;
 
 		void extend_unchecked_single(por::event::event const& event) noexcept;
+
+		por::comb setminus(cone const& rhs) const noexcept;
 	};
 }
