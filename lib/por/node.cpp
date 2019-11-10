@@ -99,9 +99,10 @@ node* node::make_right_branch(por::comb A) {
 		auto min = A.min();
 
 		for(por::event::event const* a : min) {
-			n = n->make_left_child([&](por::configuration& config) {
+			n = n->make_left_child([&a, &n](por::configuration&) {
 				return std::make_pair(a, n->_standby_state);
 			});
+			assert(n->parent()->_event == a);
 			n->_C->_catch_up.push_back(a);
 			n->_catch_up_ptr = catch_up_ptr;
 			if(!catch_up_ptr) {
@@ -115,23 +116,30 @@ node* node::make_right_branch(por::comb A) {
 	return n;
 }
 
-void node::create_right_branches(std::vector<por::node*> B) {
+std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
+	std::vector<por::node*> leaves;
 	for(auto n : B) {
+		if(n->right_child()) {
+			continue;
+		}
+
 		assert(n->_event != nullptr);
-		por::unfolding const& u = *n->_C->unfolding();
-		por::event::event const* j = u.compute_alternative(*n->_C, n->_D);
+		por::configuration const& cfg = n->configuration();
+		auto D = n->_D;
+		D.push_back(n->_event);
+		por::event::event const* j = cfg.compute_alternative(std::move(D));
 
 		if(j == nullptr) {
-			return;
+			continue;
 		}
 
 		// compute A := [j] \setminus _C
-		auto const& C = _C->thread_heads(); // FIXME: cone?
+		auto const& C = cfg.thread_heads();
 		por::cone J = j->cone();
 		J.insert(*j);
 
 		por::comb A;
-		for(auto [tid, e] : J) {
+		for(auto& [tid, e] : J) {
 			por::event::event const* t = e;
 			if(C.count(tid) == 0) {
 				// all events in [j] with same tid as e are not in C
@@ -147,8 +155,9 @@ void node::create_right_branches(std::vector<por::node*> B) {
 				}
 			}
 		}
-		n->make_right_branch(std::move(A));
+		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
+	return leaves;
 }
 
 void node::update_sweep_bit() {

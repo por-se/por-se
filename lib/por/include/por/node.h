@@ -192,7 +192,7 @@ namespace por {
 
 		node* make_left_child(std::function<registration_t(por::configuration&)>);
 
-		void create_right_branches(std::vector<por::node*>);
+		static std::vector<por::node*> create_right_branches(std::vector<por::node*>);
 
 		void catch_up(std::function<registration_t(por::configuration&)>);
 
