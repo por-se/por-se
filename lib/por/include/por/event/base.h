@@ -108,6 +108,10 @@ namespace por::event {
 		mutable color_t _color = 0;
 		static color_t _next_color;
 
+		// distinct color for immediate_conflicts()
+		mutable color_t _imm_cfl_color = 0;
+		static color_t _imm_cfl_next_color;
+
 		mutable std::set<event const*> _successors;
 
 		bool is_explorable() const {

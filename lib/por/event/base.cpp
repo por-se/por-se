@@ -146,6 +146,7 @@ namespace {
 
 namespace por::event {
 	por::event::event::color_t event::_next_color = 1;
+	por::event::event::color_t event::_imm_cfl_next_color = 1;
 
 	event_iterator::event_iterator(event const& event, bool with_root, bool with_event, bool end)
 	: _lc(&event), _with_root(with_root) {
@@ -386,10 +387,13 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::immediate_conflicts() const noexcept {
-		color_t blue = new_color();
+		color_t blue = ++_imm_cfl_next_color;
+		color_t red = ++_imm_cfl_next_color;
 
 		std::vector<event const*> W(causes_begin(), causes_end());
-		color_t red = colorize(W.begin(), W.end());
+		for(auto& w : W) {
+			w->_imm_cfl_color = red;
+		}
 
 		std::vector<event const*> result;
 
@@ -400,27 +404,26 @@ namespace por::event {
 			assert(event != nullptr);
 
 			for(auto& succ : event->successors()) {
-				if(succ == this || succ->_color == red || succ->_color == blue) {
+				if(succ == this || succ->_imm_cfl_color == red || succ->_imm_cfl_color == blue) {
 					continue;
 				}
 
 				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
 					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
-					return e->_color != red;
+					return e->_imm_cfl_color != red;
 				})) {
 					continue;
 				}
 
 				if(is_independent_of(succ)) {
 					assert(succ->is_independent_of(this));
-					succ->_color = red;
+					succ->_imm_cfl_color = red;
 					W.push_back(succ);
 				} else {
-					succ->_color = blue;
+					succ->_imm_cfl_color = blue;
 					result.push_back(succ);
 				}
 			}
-
 		}
 
 #ifndef NDEBUG
