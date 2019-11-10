@@ -61,6 +61,13 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 	std::vector<por::event::event const*> C(c.begin(), c.end());
 	auto red = por::event::event::colorize(C.cbegin(), C.cend());
 
+	auto blue = por::event::event::new_color();
+	for(auto c : C) {
+		for(auto x : c->immediate_conflicts()) {
+			x->colorize(blue);
+		}
+	}
+
 	for(auto d : D) {
 		// Choose some event d \in D such that d does not conflict with any event in C
 		assert(d != nullptr);
@@ -77,6 +84,11 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 
 		// find an event e (\in U \setminus D) in immediate conflict with d
 		for(auto& e : imm) {
+			if(e->color() == blue) {
+				// e is in conflict with C
+				continue;
+			}
+
 			if(std::find(D.begin(), D.end(), e) != D.end()) {
 				// e is not in U \setminus D
 				continue;
@@ -92,24 +104,9 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 			// thus: [e] is not in conflict with C => [e] \cup C is a valid configuration
 			// also: there ex. no event x in ([e] \setminus C) with x #_i c \in C => [e] \cup C is a valid configuration
 			bool is_conflict_free = true;
-			for(auto* cfl : e->immediate_conflicts()) {
-				if(cfl->color() == red) {
-					// conflict of candidate e is in C
-					is_conflict_free = false;
-					break;
-				}
-			}
-
-#ifndef NDEBUG // FIXME: EXPENSIVE / OBSOLETE
-			bool prev = is_conflict_free;
-			is_conflict_free = true;
-			auto blue = por::event::event::new_color();
-			for(auto& x : c.conflicting_extensions()) {
-				x.extension().colorize(blue);
-			}
-
+			std::set<por::event::event const*> imm_conflicts;
 			std::vector<por::event::event const*> W{e};
-			while(!W.empty()) {
+			while(is_conflict_free && !W.empty()) {
 				auto w = W.back();
 				W.pop_back();
 
@@ -119,17 +116,35 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 				}
 
 				if(w->color() == blue) {
-					// e conflicts with some event in C
+					// w is in conflict with C
 					is_conflict_free = false;
 					break;
 				}
 
 				for(auto& p : w->immediate_predecessors()) {
+					for(auto& x : p->immediate_conflicts()) {
+						if(x->color() == red) {
+							// conflict of candidate e is in C
+							is_conflict_free = false;
+							break;
+						}
+						imm_conflicts.insert(x);
+					}
+					if(!is_conflict_free) {
+						break;
+					}
 					W.push_back(p);
 				}
 			}
-			assert((prev == is_conflict_free) || !prev);
-#endif
+
+			if(is_conflict_free) {
+				for(auto x : imm_conflicts) {
+					if(x->color() == red) {
+						is_conflict_free = false;
+						break;
+					}
+				}
+			}
 
 			if(is_conflict_free) {
 				return e;
