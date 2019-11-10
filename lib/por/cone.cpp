@@ -60,7 +60,7 @@ cone::cone(por::event::event const& immediate_predecessor,
 
 bool cone::is_lte_for_all_of(cone const& rhs) const noexcept {
 	for(auto& [tid, event] : rhs) {
-		if(at(tid)->depth() > event->depth()) {
+		if(count(tid) && at(tid)->depth() > event->depth()) {
 			// By construction, rhs also includes all elements of event's cone.
 			// Thus, we only need to check against the depth on the same tid.
 			return false;
