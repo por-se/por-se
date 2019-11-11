@@ -144,27 +144,10 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 		}
 
 		// compute A := [j] \setminus _C
-		auto const& C = cfg.thread_heads();
-		por::cone J = j->cone();
-		J.insert(*j);
+		por::cone J(*j);
+		por::cone C(cfg);
+		por::comb A = J.setminus(C);
 
-		por::comb A;
-		for(auto& [tid, e] : J) {
-			por::event::event const* t = e;
-			if(C.count(tid) == 0) {
-				// all events in [j] with same tid as e are not in C
-				do {
-					A.insert(*t);
-					t = t->thread_predecessor();
-				} while(t != nullptr);
-			} else {
-				por::event::event const* x = C.at(tid);
-				while(x->depth() < t->depth()) {
-					A.insert(*t);
-					t = t->thread_predecessor();
-				}
-			}
-		}
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
 	return leaves;
