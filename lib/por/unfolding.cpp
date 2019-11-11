@@ -55,101 +55,45 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 	return true;
 }
 
+namespace {
+	bool in_conflict_with_color(por::event::event const& e, por::event::event::color_t color) {
+		auto imm = e.immediate_conflicts_sup();
+		return std::any_of(imm.begin(), imm.end(), [&color](auto cfl) {
+			return cfl->color() == color;
+		});
+	}
+}
+
 por::event::event const*
 unfolding::compute_alternative(por::configuration const& c, std::vector<por::event::event const*> D) const noexcept {
 	assert(!D.empty());
 	std::vector<por::event::event const*> C(c.begin(), c.end());
 	auto red = por::event::event::colorize(C.cbegin(), C.cend());
+	auto blue = por::event::event::colorize(D.begin(), D.end());
 
-	auto blue = por::event::event::new_color();
-	for(auto c : C) {
-		for(auto x : c->immediate_conflicts_sup()) {
-			x->colorize(blue);
-		}
-	}
-
+	por::event::event const* e = nullptr;
 	for(auto d : D) {
-		// Choose some event d \in D such that d does not conflict with any event in C
-		assert(d != nullptr);
-
-		assert(d->color() != red); // D \cap C = \emptyset
-
-		auto imm = d->immediate_conflicts_sup();
-		if(std::any_of(imm.begin(), imm.end(), [&red](auto cfl) {
-			return cfl->color() == red;
-		})) {
-			// d is in immediate conflict with some event in C
-			continue;
-		}
-
-		// find an event e (\in U \setminus D) in immediate conflict with d
-		for(auto& e : imm) {
-			if(e->color() == blue) {
-				// e is in conflict with C
-				continue;
-			}
-
-			if(std::find(D.begin(), D.end(), e) != D.end()) {
-				// e is not in U \setminus D
-				continue;
-			}
-
-#ifndef NDEBUG // FIXME: expensive
-			// check if e is an extension of C
-			assert(std::find(C.begin(), C.end(), e) == C.end());
-#endif
-
-			// check if [e] \cup C is a valid configuration
-			// we already know that C is a valid configuration
-			// thus: [e] is not in conflict with C => [e] \cup C is a valid configuration
-			// also: there ex. no event x in ([e] \setminus C) with x #_i c \in C => [e] \cup C is a valid configuration
-			bool is_conflict_free = true;
-			std::set<por::event::event const*> imm_conflicts;
-			std::vector<por::event::event const*> W{e};
-			while(is_conflict_free && !W.empty()) {
-				auto w = W.back();
-				W.pop_back();
-
-				if(w->color() == red) {
-					// predecessors of w cannot be in conflict with events in C
-					continue;
-				}
-
-				if(w->color() == blue) {
-					// w is in conflict with C
-					is_conflict_free = false;
-					break;
-				}
-
-				for(auto& p : w->immediate_predecessors()) {
-					for(auto& x : p->immediate_conflicts_sup()) {
-						if(x->color() == red) {
-							// conflict of candidate e is in C
-							is_conflict_free = false;
-							break;
-						}
-						imm_conflicts.insert(x);
-					}
-					if(!is_conflict_free) {
-						break;
-					}
-					W.push_back(p);
-				}
-			}
-
-			if(is_conflict_free) {
-				for(auto x : imm_conflicts) {
-					if(x->color() == red) {
-						is_conflict_free = false;
-						break;
-					}
-				}
-			}
-
-			if(is_conflict_free) {
-				return e;
-			}
+		if(!in_conflict_with_color(*d, red)) {
+			e = d;
+			break;
 		}
 	}
+	assert(e != nullptr);
+
+	por::event::event const* ep = nullptr;
+	for(auto f : e->immediate_conflicts_sup()) {
+		assert(f->color() != red); // f should not be in C
+
+		// determine if f is in conflict with some event in C
+		if(!in_conflict_with_color(*f, red) && f->color() != blue) {
+			ep = f;
+			break;
+		}
+	}
+
+	if(ep != nullptr) {
+		return ep;
+	}
+
 	return nullptr;
 }
