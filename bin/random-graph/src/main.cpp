@@ -368,8 +368,8 @@ int main(int argc, char** argv){
 		for(auto e : entry.extension().immediate_predecessors()) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
-		std::cerr << "and immediate conflicts:\n";
-		for(auto e : entry.extension().immediate_conflicts()) {
+		std::cerr << "and immediate conflicts superset:\n";
+		for(auto e : entry.extension().immediate_conflicts_sup()) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
 		std::cerr << "\n";

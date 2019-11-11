@@ -63,7 +63,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 
 	auto blue = por::event::event::new_color();
 	for(auto c : C) {
-		for(auto x : c->immediate_conflicts()) {
+		for(auto x : c->immediate_conflicts_sup()) {
 			x->colorize(blue);
 		}
 	}
@@ -74,7 +74,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 
 		assert(d->color() != red); // D \cap C = \emptyset
 
-		auto imm = d->immediate_conflicts();
+		auto imm = d->immediate_conflicts_sup();
 		if(std::any_of(imm.begin(), imm.end(), [&red](auto cfl) {
 			return cfl->color() == red;
 		})) {
@@ -122,7 +122,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 				}
 
 				for(auto& p : w->immediate_predecessors()) {
-					for(auto& x : p->immediate_conflicts()) {
+					for(auto& x : p->immediate_conflicts_sup()) {
 						if(x->color() == red) {
 							// conflict of candidate e is in C
 							is_conflict_free = false;

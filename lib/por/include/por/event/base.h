@@ -108,7 +108,7 @@ namespace por::event {
 		mutable color_t _color = 0;
 		static color_t _next_color;
 
-		// distinct color for immediate_conflicts()
+		// distinct color for immediate_conflicts_sup()
 		mutable color_t _imm_cfl_color = 0;
 		static color_t _imm_cfl_next_color;
 
@@ -320,7 +320,8 @@ namespace por::event {
 
 		std::vector<event const*> immediate_predecessors() const noexcept;
 
-		std::vector<event const*> immediate_conflicts() const noexcept;
+		// computes a superset of immediate conflicts
+		std::vector<event const*> immediate_conflicts_sup() const noexcept;
 
 		color_t color() const noexcept { return _color; }
 		[[nodiscard]] static color_t new_color() noexcept { return ++_next_color; }
