@@ -148,6 +148,13 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 		por::cone C(cfg);
 		por::comb A = J.setminus(C);
 
+		if(n->needs_catch_up()) {
+			for(auto& u : n->_C->_catch_up) {
+				A.remove(*u);
+			}
+		}
+		assert(A.is_sorted()); // FIXME: expensive?
+
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
 	return leaves;
