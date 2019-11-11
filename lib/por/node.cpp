@@ -15,6 +15,9 @@ node* node::make_left_child(std::function<registration_t(por::configuration&)> f
 	_left = allocate_left_child();
 	std::tie(_event, _left->_standby_state) = func(*_left->_C);
 
+	// FIXME: expensive?
+	assert(std::find(_D.begin(), _D.end(), _event) == _D.end());
+
 	// propagate sweep bit
 	_left->_is_sweep_node = _is_sweep_node;
 	_is_sweep_node = false;
@@ -36,10 +39,14 @@ node* node::make_right_child() {
 }
 
 void node::catch_up(std::function<node::registration_t(por::configuration&)> func) {
-	assert(_C->needs_catch_up() && _catch_up_ptr != nullptr);
+	assert(_C->needs_catch_up());
 	[[maybe_unused]] auto next = _C->peek();
 	auto [event, standby_state] = func(*_C);
 	assert(next == event);
+
+	// FIXME: expensive?
+	assert(std::find(_D.begin(), _D.end(), event) == _D.end());
+
 	if(standby_state) {
 		_standby_state = standby_state;
 	}
@@ -76,6 +83,9 @@ void node::catch_up(std::function<node::registration_t(por::configuration&)> fun
 
 node* node::make_right_branch(por::comb A) {
 	assert(_event && "no event attached to node");
+
+	// FIXME: root node includes configuration with both program_init and thread_init event
+	assert(parent() && "cannot be called on root node");
 
 	node* n = make_right_child();
 	node* catch_up_ptr = nullptr;

@@ -224,6 +224,7 @@ namespace por {
 				assert(*it == this); // we want to skip the current node
 				for(++it; it != ie; ++it) {
 					node const* n = *it;
+					assert(n != this);
 					assert(n->has_event());
 					sched.push_back(n->_event);
 				}
