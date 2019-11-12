@@ -167,9 +167,6 @@ private:
   /// scheduled again
   std::vector<ExecutionState *> continuedStates;
 
-  /// Used for conflicting extensions.
-  std::vector<ExecutionState *> standbyStates;
-
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order
   /// (outside the normal search interface) until they terminate. When

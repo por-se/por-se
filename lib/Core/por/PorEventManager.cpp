@@ -2,12 +2,13 @@
 #include "../CoreStats.h"
 #include "../Executor.h"
 
-#include "por/configuration.h"
+#include "por/node.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <string>
+#include <utility>
 
 using namespace klee;
 
@@ -36,6 +37,15 @@ namespace {
           "Record standby states for all events (default).")
         KLEE_LLVM_CL_VAL_END),
     llvm::cl::init(StandbyStatePolicy::All));
+
+  void extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
+    if(state.porNode->needs_catch_up()) {
+      state.porNode->catch_up(std::move(callback));
+      return;
+    }
+
+    state.porNode = state.porNode->make_left_child(std::move(callback));
+  }
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -69,52 +79,74 @@ void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_eve
 }
 
 void PorEventManager::checkIfCatchUpIsNeeded(ExecutionState &state) {
-  if (state.porConfiguration->needs_catch_up() || roundRobin) {
+  if (state.porNode->needs_catch_up() || roundRobin) {
     // make sure we do not miss any events in case a different
     // thread needs to be scheduled after catching up to this event
     state.needsThreadScheduling = true;
   }
 }
 
-void PorEventManager::registerStandbyState(ExecutionState &state, por_event_t kind) {
-  assert(state.porConfiguration != nullptr);
-
-  bool registerStandbyState = true;
+bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind) {
+  bool result = true;
   if (StandbyStates != StandbyStatePolicy::All) {
-    registerStandbyState = (kind == por_thread_init && state.isOnMainThread()) || (kind == por_condition_variable_create);
+    result = (kind == por_thread_init && state.isOnMainThread()) || (kind == por_condition_variable_create);
 
-    if (!registerStandbyState && StandbyStates != StandbyStatePolicy::Minimal) {
-      auto dist = state.porConfiguration->distance_to_last_standby_state(&state);
+    if (!result && StandbyStates != StandbyStatePolicy::Minimal) {
+      auto dist = state.porNode->distance_to_last_standby_state();
       if (StandbyStates == StandbyStatePolicy::Half) {
-        registerStandbyState = (dist >= 2);
+        result = (dist >= 2);
       } else if (StandbyStates == StandbyStatePolicy::Third) {
-        registerStandbyState = (dist >= 3);
+        result = (dist >= 3);
       }
     }
   }
+  return result && (state.threads.size() > 1 || kind == por_thread_init);
+}
 
-  // Exception is por_thread_init since we need a standby state for init of the program
-  if (registerStandbyState && (state.threads.size() > 1 || kind == por_thread_init)) {
-    ExecutionState *newState = new ExecutionState(state);
-    executor.standbyStates.push_back(newState);
-    newState->porConfiguration = std::make_unique<por::configuration>(*state.porConfiguration);
-    state.porConfiguration->standby_execution_state(newState);
+std::shared_ptr<const ExecutionState> PorEventManager::createStandbyState(const ExecutionState &s, por_event_t kind) {
+  if(shouldRegisterStandbyState(s, kind)) {
+    auto standby = std::make_shared<const ExecutionState>(s);
     ++stats::standbyStates;
+    return standby;
   }
+  return nullptr;
 }
 
 
-bool PorEventManager::registerLocal(ExecutionState &state, std::vector<bool> path) {
+bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<ExecutionState *> &addedStates) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_local);
 
     llvm::errs() << "\n";
   }
 
-  state.porConfiguration->local(state.currentThreadId(), std::move(path));
+  assert(std::find(addedStates.begin(), addedStates.end(), &state) == addedStates.end());
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_local);
+
+  por::node *n = state.porNode;
+  state.porNode = state.porNode->make_left_child([this, &state](por::configuration& cfg) {
+    auto& thread = state.currentThread();
+    std::vector<bool> path = std::move(thread.pathSincePorLocal);
+    thread.pathSincePorLocal = {};
+    por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+    auto standby = createStandbyState(state, por_local);
+    return std::make_pair(e, std::move(standby));
+  });
+
+  assert(state.porNode->parent() == n);
+
+  for(auto& s : addedStates) {
+    s->porNode = n->make_right_local_child([this, &s](por::configuration& cfg) {
+      auto& thread = s->currentThread();
+      std::vector<bool> path = std::move(thread.pathSincePorLocal);
+      thread.pathSincePorLocal = {};
+      por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+      auto standby = createStandbyState(*s, por_local);
+      return std::make_pair(e, std::move(standby));
+    });
+    n = s->porNode->parent();
+  }
 
   return true;
 }
@@ -127,7 +159,11 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  state.porConfiguration->create_thread(state.currentThreadId(), tid);
+  extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
+    por::event::event const* e = cfg.create_thread(state.currentThreadId(), tid);
+    return std::make_pair(e, nullptr);
+  });
+
   return true;
 }
 
@@ -138,13 +174,24 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
 
-  if (tid != ExecutionState::mainThreadId) {
-    // main thread: event already present in configuration
-    state.porConfiguration->init_thread(tid);
+  checkIfCatchUpIsNeeded(state);
+
+  if (tid == ExecutionState::mainThreadId) {
+    // event already present in configuration
+    state.porNode = state.porNode->make_left_child([this, &tid, &state](por::configuration& cfg) {
+      auto it = cfg.thread_heads().find(tid);
+      assert(it != cfg.thread_heads().end());
+      por::event::event const* e = it->second;
+      auto standby = createStandbyState(state, por_thread_init);
+      return std::make_pair(e, std::move(standby));
+    });
+  } else {
+    extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
+      por::event::event const* e = cfg.init_thread(tid);
+      return std::make_pair(e, nullptr);
+    });
   }
 
-  checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_thread_init);
   return true;
 }
 
@@ -154,11 +201,15 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
 
     llvm::errs() << " and exited thread " << tid << "\n";
   }
-  
-  state.porConfiguration->exit_thread(tid);
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_thread_exit);
+
+  extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
+    por::event::event const* e = cfg.exit_thread(tid);
+    auto standby = createStandbyState(state, por_thread_exit);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -168,11 +219,15 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
 
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
-  
-  state.porConfiguration->join_thread(state.currentThreadId(), joinedThread);
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_thread_join);
+
+  extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
+    por::event::event const* e = cfg.join_thread(state.currentThreadId(), joinedThread);
+    auto standby = createStandbyState(state, por_thread_join);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -183,11 +238,15 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
 
     llvm::errs() << " on mutex " << mId << "\n";
   }
-  
-  state.porConfiguration->create_lock(state.currentThreadId(), mId);
 
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_lock_create);
+
+  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
+    por::event::event const* e = cfg.create_lock(state.currentThreadId(), mId);
+    auto standby = createStandbyState(state, por_lock_create);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -198,10 +257,14 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->destroy_lock(state.currentThreadId(), mId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_lock_destroy);
+
+  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
+    por::event::event const* e = cfg.destroy_lock(state.currentThreadId(), mId);
+    auto standby = createStandbyState(state, por_lock_destroy);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -212,12 +275,18 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->acquire_lock(state.currentThreadId(), mId);
-
   checkIfCatchUpIsNeeded(state);
-  if (snapshotsAllowed) {
-    registerStandbyState(state, por_lock_acquire);
-  }
+
+  extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) {
+    por::event::event const* e = cfg.acquire_lock(state.currentThreadId(), mId);
+
+    if(snapshotsAllowed) {
+      auto standby = createStandbyState(state, por_lock_acquire);
+      return std::make_pair(e, std::move(standby));
+    }
+    return std::make_pair(e, std::make_shared<const ExecutionState>(nullptr));
+  });
+
   return true;
 }
 
@@ -228,10 +297,14 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.porConfiguration->release_lock(state.currentThreadId(), mId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_lock_release);
+
+  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
+    por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId);
+    auto standby = createStandbyState(state, por_lock_release);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -243,10 +316,14 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  state.porConfiguration->create_cond(state.currentThreadId(), cId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_condition_variable_create);
+
+  extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
+    por::event::event const* e = cfg.create_cond(state.currentThreadId(), cId);
+    auto standby = createStandbyState(state, por_condition_variable_create);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -257,10 +334,14 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  state.porConfiguration->destroy_cond(state.currentThreadId(), cId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_condition_variable_destroy);
+
+  extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
+    por::event::event const* e = cfg.destroy_cond(state.currentThreadId(), cId);
+    auto standby = createStandbyState(state, por_condition_variable_destroy);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -271,10 +352,14 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
 
-  state.porConfiguration->signal_thread(state.currentThreadId(), cId, notifiedThread);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_signal);
+
+  extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
+    por::event::event const* e = cfg.signal_thread(state.currentThreadId(), cId, notifiedThread);
+    auto standby = createStandbyState(state, por_signal);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -290,10 +375,14 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
     llvm::errs() << "\n";
   }
 
-  state.porConfiguration->broadcast_threads(state.currentThreadId(), cId, threads);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_broadcast);
+
+  extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
+    por::event::event const* e = cfg.broadcast_threads(state.currentThreadId(), cId, threads);
+    auto standby = createStandbyState(state, por_broadcast);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -304,10 +393,14 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  state.porConfiguration->wait1(state.currentThreadId(), cId, mId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_wait1);
+
+  extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
+    por::event::event const* e = cfg.wait1(state.currentThreadId(), cId, mId);
+    auto standby = createStandbyState(state, por_wait1);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }
 
@@ -318,9 +411,13 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  state.porConfiguration->wait2(state.currentThreadId(), cId, mId);
-
   checkIfCatchUpIsNeeded(state);
-  registerStandbyState(state, por_wait2);
+
+  extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
+    por::event::event const* e = cfg.wait2(state.currentThreadId(), cId, mId);
+    auto standby = createStandbyState(state, por_wait2);
+    return std::make_pair(e, std::move(standby));
+  });
+
   return true;
 }

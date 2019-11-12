@@ -115,11 +115,6 @@ cl::OptionCategory TestGenCat("Test generation options",
 } // namespace klee
 
 namespace {
-    cl::opt<bool> LogConflictingExtensions(
-      "log-conflicting-extensions",
-      cl::desc("Log conflicting extensions that are added for multi-threaded executions with alternative interleavings (default=false)"),
-      cl::init(false));
-
   cl::opt<bool> LogStateJSON(
       "log-state-json-files",
       cl::desc("Creates two files (states.json, states_fork.json) in output directory that record relevant information about states (default=false)"),
@@ -1211,8 +1206,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     return StatePair(0, &current);
   } else {
-    if (current.porConfiguration && current.porConfiguration->needs_catch_up()) {
-      const por::event::event* event = current.porConfiguration->peek();
+    if (current.porNode && current.porNode->needs_catch_up()) {
+      const por::event::event* event = current.porNode->peek();
       assert(event->kind() == por::event::event_kind::local);
       auto local = static_cast<const por::event::local*>(event);
 
@@ -1225,7 +1220,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         addConstraint(current, condition);
         current.currentThread().pathSincePorLocal.push_back(true);
         return StatePair(&current, nullptr);
-      } else  {
+      } else {
         addConstraint(current, Expr::createIsZero(condition));
         current.currentThread().pathSincePorLocal.push_back(false);
         return StatePair(nullptr, &current);
@@ -1567,7 +1562,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
-  if(state.porConfiguration->needs_catch_up())
+  if(state.porNode->needs_catch_up())
     ++stats::catchUpInstructions;
 
   Thread &thread = state.currentThread();
@@ -3272,10 +3267,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::updateStates(ExecutionState *current) {
   if (current && !current->currentThread().pathSincePorLocal.empty()) {
-    // pathSincePorLocal has to be empty in standby state attached to event
-    std::vector<bool> path = std::move(current->currentThread().pathSincePorLocal);
-    current->currentThread().pathSincePorLocal = {};
-    porEventManager.registerLocal(*current, path);
+    porEventManager.registerLocal(*current, addedStates);
   }
 
   if (current && current->needsThreadScheduling) {
@@ -3737,52 +3729,32 @@ void Executor::terminateState(ExecutionState &state) {
 
   interpreterHandler->incPathsExplored();
 
-  if (LogConflictingExtensions) {
-    llvm::errs() << "Completed Interleaving: ";
-    for(auto& s : state.porConfiguration->schedule()) {
-      llvm::errs() << s->to_string(true);
-    }
-    llvm::errs() << "\n";
-  }
 
-  std::vector<por::conflicting_extension> cex = state.porConfiguration->conflicting_extensions();
-  for(auto& c : cex) {
-    por::configuration newSchedule(*state.porConfiguration, c);
-    const ExecutionState *standby = newSchedule.standby_execution_state();
-    ExecutionState *toExecute = new ExecutionState(*standby);
-    ++toExecute->depth;
-    toExecute->coveredNew = false;
-    toExecute->coveredLines.clear();
+  if(state.porNode->parent()) {
+    auto cex = state.porNode->configuration().conflicting_extensions();
 
-    toExecute->porConfiguration = std::make_unique<por::configuration>(std::move(newSchedule));
-    registerFork(state, toExecute);
-    addedStates.push_back(toExecute);
+    std::vector<por::node*> branch(state.porNode->parent()->branch_begin(), state.porNode->parent()->branch_end());
+    branch.pop_back(); // remove root node
 
-    // thread of last event may not be runnable or lead to wrong event
-    toExecute->needsThreadScheduling = true;
-    scheduleThreads(*toExecute);
+    auto leaves = por::node::create_right_branches(branch);
+    for(auto l : leaves) {
+      const ExecutionState *standby = l->standby_state();
+      ExecutionState *toExecute = new ExecutionState(*standby);
+      toExecute->porNode = l;
+      ++toExecute->depth;
+      toExecute->coveredNew = false;
+      toExecute->coveredLines.clear();
 
-    if (LogConflictingExtensions) {
-      llvm::errs() << "New Event: " << c.new_event().to_string(true) << "; Conflicting Event(s): ";
-      for(auto& conflict : c.conflicts()) {
-        llvm::errs() << conflict->to_string(true);
-      }
-      llvm::errs() << "\nOld Interleaving: ";
-      for(auto& s : state.porConfiguration->schedule()) {
-        llvm::errs() << s->to_string(true);
-      }
-      llvm::errs() << "\nNew Interleaving Prefix: ";
-      for(auto& s : toExecute->porConfiguration->schedule()) {
-        llvm::errs() << s->to_string(true);
-      }
-      llvm::errs() << "\nPeek: ";
-      llvm::errs() << toExecute->porConfiguration->peek()->to_string(true) << "\n";
+      registerFork(state, toExecute);
+      addedStates.push_back(toExecute);
+
+      // thread of last event may not be runnable or lead to wrong event
+      toExecute->needsThreadScheduling = true;
+      scheduleThreads(*toExecute);
     }
   }
 
-  if (LogConflictingExtensions) {
-    llvm::errs() << "added " << cex.size() << " conflicting extension(s)\n";
-  }
+  state.porNode->backtrack();
 
   terminateStateSilently(state);
 }
@@ -5018,8 +4990,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   if (!onlyOne) {
     std::vector<ThreadId> notifiedThreads;
 
-    if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
-      const por::event::event* event = state.porConfiguration->peek();
+    if (registerAsNotificationEvent && state.porNode->needs_catch_up()) {
+      const por::event::event* event = state.porNode->peek();
       assert(event->kind() == por::event::event_kind::broadcast);
       auto broadcast = static_cast<const por::event::broadcast*>(event);
       for (const auto &wait1 : broadcast->wait_predecessors()) {
@@ -5045,8 +5017,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   }
 
   std::vector<ThreadId> choices;
-  if (registerAsNotificationEvent && state.porConfiguration->needs_catch_up()) {
-      const por::event::event* event = state.porConfiguration->peek();
+  if (registerAsNotificationEvent && state.porNode->needs_catch_up()) {
+      const por::event::event* event = state.porNode->peek();
       assert(event->kind() == por::event::event_kind::signal);
       auto signal = static_cast<const por::event::signal*>(event);
       if (!signal->is_lost())
@@ -5083,12 +5055,10 @@ void Executor::preemptThread(ExecutionState &state) {
 }
 
 void Executor::exitThread(ExecutionState &state) {
+  static std::vector<ExecutionState *> emptyVec;
   // needs to come before thread_exit event
   if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
-    // pathSincePorLocal has to be empty in standby state attached to event
-    std::vector<bool> path = std::move(state.currentThread().pathSincePorLocal);
-    state.currentThread().pathSincePorLocal = {};
-    porEventManager.registerLocal(state, path);
+    porEventManager.registerLocal(state, emptyVec);
   }
 
   const ThreadId& tid = state.currentThreadId();
@@ -5243,7 +5213,7 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
-  if (!state.threadSchedulingEnabled && !state.porConfiguration->needs_catch_up()) {
+  if (!state.threadSchedulingEnabled && !state.porNode->needs_catch_up()) {
     // So now we have to check if the current thread may be scheduled
     // or if we have a deadlock
 
@@ -5298,22 +5268,22 @@ void Executor::scheduleThreads(ExecutionState &state) {
           tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
           break;
       case ThreadSchedulingPolicy::RoundRobin: {
-        tid = *std::next(runnable.begin(), state.porConfiguration->schedule().size() % runnable.size());
+        tid = *std::next(runnable.begin(), state.porNode->configuration().size() % runnable.size());
         break;
       }
   }
 
   // or (if possible) pick thread that needs to catch up
-  if (state.porConfiguration->needs_catch_up()) {
-    tid = state.porConfiguration->peek()->tid();
+  if (state.porNode->needs_catch_up()) {
+    tid = state.porNode->peek()->tid();
 
     if (!state.threadSchedulingEnabled) {
       state.threadSchedulingEnabled = true;
       state.currentThread().threadSchedulingWasDisabled = true;
     }
 
-    if (state.porConfiguration->peek()->kind() == por::event::event_kind::thread_join) {
-      auto *join = static_cast<por::event::thread_join const*>(state.porConfiguration->peek());
+    if (state.porNode->peek()->kind() == por::event::event_kind::thread_join) {
+      auto *join = static_cast<por::event::thread_join const*>(state.porNode->peek());
       auto jid = join->joined_thread();
       auto it = state.threads.find(jid);
       if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {

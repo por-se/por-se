@@ -4,6 +4,10 @@
 #include "klee/Thread.h"
 #include "klee/por/events.h"
 
+namespace por {
+  class node;
+}
+
 namespace klee {
   class ExecutionState;
 
@@ -15,13 +19,14 @@ namespace klee {
       PorEventManager() = delete;
       explicit PorEventManager(Executor &executor) : executor(executor) {}
 
-      bool registerLocal(ExecutionState &state, std::vector<bool> path);
+      bool registerLocal(ExecutionState &state, const std::vector<ExecutionState *> &addedStates);
 
       void enableRoundRobinMode() { roundRobin = true; }
 
     private:
       static std::string getNameOfEvent(por_event_t kind);
-      void registerStandbyState(ExecutionState &state, por_event_t kind);
+      bool shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind);
+      std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por_event_t kind);
       void logEventThreadAndKind(const ExecutionState &state, por_event_t kind);
       void checkIfCatchUpIsNeeded(ExecutionState &state);
 
