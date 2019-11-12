@@ -185,6 +185,7 @@ namespace por {
 				assert(peek()->kind() == por::event::event_kind::thread_create);
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
+				_thread_create.emplace(new_tid, _catch_up.front());
 				_catch_up.pop_front();
 
 				++_size;
@@ -214,6 +215,7 @@ namespace por {
 				assert(peek()->tid() == thread);
 				_thread_heads[thread] = _catch_up.front();
 				_catch_up.pop_front();
+				_thread_create.erase(thread);
 
 				++_size;
 				return _thread_heads[thread];
