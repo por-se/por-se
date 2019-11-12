@@ -25,6 +25,8 @@
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Statistics.h"
 
+#include "por/node.h"
+
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
@@ -122,6 +124,10 @@ namespace {
                 cl::desc("Write .sym.path files for each test case (default=false)"),
                 cl::cat(TestCaseCat));
 
+  cl::opt<bool>
+  WriteDotConfigurations("write-dot-configurations",
+                         cl::init(false),
+                         cl::desc("Write .configuration.dot files for each test case (default=false)"));
 
   /*** Startup options ***/
 
@@ -534,6 +540,15 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
 
     auto fDataRaceStats = openTestFile("race-stats.json", id);
     *fDataRaceStats << state.getDataRaceStats();
+
+    if (WriteDotConfigurations) {
+      auto fConfiguration = openTestFile("configuration.dot", id);
+      {
+        std::stringstream conf;
+        state.porNode->configuration().to_dotgraph(conf);
+        *fConfiguration << conf.str();
+      }
+    }
 
     if (m_pathWriter) {
       std::vector<unsigned char> concreteBranches;
