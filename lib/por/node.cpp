@@ -143,6 +143,15 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 		if(n->right_child()) {
 			continue;
 		}
+		if(n->_event->kind() == por::event::event_kind::local) {
+			// do not compute alternatives to local events, this is done by KLEE
+			continue;
+		}
+		if(n->_event->kind() == por::event::event_kind::thread_init) {
+			// thread_init always has to immediately succeed its thread_create
+			// there is no (unique) alternative to be found here
+			continue;
+		}
 
 		assert(n->_event != nullptr);
 		por::configuration const& cfg = n->configuration();
