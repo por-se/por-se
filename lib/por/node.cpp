@@ -25,6 +25,14 @@ node* node::make_left_child(std::function<registration_t(por::configuration&)> f
 	return _left.get();
 }
 
+node* node::make_right_local_child(std::function<registration_t(por::configuration&)> func) {
+	assert(_event);
+	assert(_event->kind() == por::event::event_kind::local);
+
+	node* n = make_right_child();
+	return n->make_left_child(std::move(func));
+}
+
 node* node::make_right_child() {
 	assert(!_right && "node already has right child");
 	assert(_event && "no event attached to node");
