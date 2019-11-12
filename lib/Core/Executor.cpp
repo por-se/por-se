@@ -1621,16 +1621,55 @@ void Executor::executeCall(ExecutionState &state,
 
   if (DebugPrintCalls) {
     auto sid = state.id;
-    auto tid = thread.getThreadId();
+    auto tid = thread.getThreadId().to_string();
+
     std::stringstream tmp;
     tmp << "[state: " << std::setw(6) << sid
-        << " thread: " << std::setw(2) << tid
-        << "] " << std::setfill(' ') << std::setw(thread.stack.size()) << "+";
+        << " thread: " << std::setw(5) << tid
+        << "] " << std::setfill(' ') << std::setw(thread.stack.size() * 2) << "+";
     if (f->hasName()) {
-      llvm::errs() << tmp.str() << f->getName() << "\n";
+      llvm::errs() << tmp.str() << f->getName() << '(';
     } else {
-      llvm::errs() << tmp.str() << "unnamed function\n";
+      llvm::errs() << tmp.str() << "<unnamed function>(";
     }
+
+    bool first = true;
+
+    for (std::size_t i = 0; i < arguments.size(); i++) {
+      if (first) {
+        first = false;
+      } else {
+        llvm::errs() << ", ";
+      }
+
+      const auto& argValue = arguments[i];
+
+      if (i < f->arg_size()) {
+        const auto* fArg = (f->args().begin() + i);
+
+        if (fArg->hasName()) {
+          llvm::errs() << fArg->getName() << " = ";
+        }
+
+        if (auto v = dyn_cast<ConstantExpr>(argValue.get())) {
+          if (fArg->getType()->isPointerTy()) {
+            llvm::errs() << "0x" << v->getAPValue().toString(16, false);
+          } else {
+            llvm::errs() << v->getAPValue();
+          }
+        } else {
+          llvm::errs() << " <sym>";
+        }
+      } else {
+        if (auto v = dyn_cast<ConstantExpr>(argValue.get())) {
+          llvm::errs() << v->getAPValue();
+        } else {
+          llvm::errs() << " <sym>";
+        }
+      }
+    }
+
+    llvm::errs() << ")\n";
   }
 
   Instruction *i = ki->inst;
@@ -1974,6 +2013,38 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
+    }
+
+    if (DebugPrintCalls) {
+      auto sid = state.id;
+      auto tid = thread.getThreadId().to_string();
+      auto* f = sf.kf->function;
+
+      std::stringstream tmp;
+      tmp << "[state: " << std::setw(6) << sid
+          << " thread: " << std::setw(5) << tid
+          << "] " << std::setfill(' ') << std::setw((thread.stack.size() - 1) * 2) << "-";
+      if (f->hasName()) {
+        llvm::errs() << tmp.str() << f->getName() << " -> ";
+      } else {
+        llvm::errs() << tmp.str() << "<unnamed function> -> ";
+      }
+
+      if (isVoidReturn) {
+        llvm::errs() << " <void>";
+      } else {
+        if (auto v = dyn_cast<ConstantExpr>(result.get())) {
+          if (caller && caller->getType()->isPointerTy()) {
+            llvm::errs() << "0x" << v->getAPValue().toString(16, false);
+          } else {
+            llvm::errs() << v->getAPValue();
+          }
+        } else {
+          llvm::errs() << " <sym>";
+        }
+      }
+
+      llvm::errs() << '\n';
     }
     
     if (thread.stack.size() <= 1) {
