@@ -55,6 +55,29 @@ typedef enum {
   eNonBlock     = (1 << 4)
 } exe_file_flag_t;
 
+#define EXE_SOCKET_INIT (1)
+#define EXE_SOCKET_BOUND (2)
+#define EXE_SOCKET_CONNECTING (3)
+#define EXE_SOCKET_PASSIVE (4)
+#define EXE_SOCKET_CONNECTED (5)
+
+typedef struct {
+  int opened_port;
+  int state;
+
+  // Needed for passive sockets
+  kpr_list queued_peers;
+  pthread_cond_t cond;
+
+  // Needed for sockets that attempt a connection
+  int requested_port;
+
+  // Needed for connected sockets that actually establish a connection
+  // -> simply a pipe
+  int readFd;
+  int writeFd;
+} exe_socket_t;
+
 #define PIPE_BUFFER_SIZE 512
 
 typedef struct {
@@ -78,6 +101,7 @@ typedef struct {
   off64_t off;              /* offset */
   exe_disk_file_t* dfile;   /* ptr to file on disk, if symbolic */
   exe_pipe_t* pipe;         /* ptr to the pipe, if own pipe */
+  exe_socket_t* socket;
 
   kpr_list notification_list;  /* should be notified about possible changes to the file */
 } exe_file_t;
@@ -96,7 +120,7 @@ typedef struct {
   int *chmod_fail, *fchmod_fail;
 } exe_file_system_t;
 
-#define MAX_FDS 32
+#define MAX_FDS 128
 
 /* Note, if you change this structure be sure to update the
    initialization code if necessary. New fields should almost
@@ -124,6 +148,7 @@ void klee_init_env(int *argcPtr, char ***argvPtr);
 pthread_mutex_t* klee_fs_lock(void);
 exe_file_t *__get_file(int fd);
 exe_file_t *__get_file_ignore_flags(int fd);
+int __get_unused_fd(void);
 
 int __fd_open(const char *pathname, int flags, mode_t mode);
 int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode);

@@ -161,7 +161,7 @@ static int has_permission(int flags, struct stat64 *s) {
   return 1;
 }
 
-static int __get_unused_fd(void) {
+int __get_unused_fd(void) {
   int fd;
 
   for (fd = 0; fd < MAX_FDS; ++fd) {
