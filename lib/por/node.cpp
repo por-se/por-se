@@ -83,9 +83,13 @@ void node::catch_up(std::function<node::registration_t(por::configuration&)> fun
 		new_C->_catch_up.pop_back();
 		n->_C = new_C;
 		n->_standby_state = standby_state;
-	} while(n != _catch_up_ptr || new_C->_catch_up.size() > 0);
+	} while(n != _catch_up_ptr && new_C->_catch_up.size() > 0);
 	if(!n->_C->needs_catch_up() || n->_C->peek() != _C->peek()) {
 		_catch_up_ptr = n->left_child();
+		_catch_up_ptr->_catch_up_ptr = nullptr;
+		for(node* c = parent(); c != _catch_up_ptr && c; c = c->parent()) {
+			n->_catch_up_ptr = _catch_up_ptr;
+		}
 	}
 }
 
