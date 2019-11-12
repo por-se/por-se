@@ -78,7 +78,6 @@ void node::catch_up(std::function<node::registration_t(por::configuration&)> fun
 		if(std::find(cu.begin(), cu.end(), event) == cu.end()) {
 			break;
 		}
-		assert(n->_C->_catch_up.front() == event);
 		new_C = std::make_shared<por::configuration>(*new_C);
 		new_C->_catch_up.pop_back();
 		n->_C = new_C;
