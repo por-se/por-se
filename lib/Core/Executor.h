@@ -140,7 +140,6 @@ private:
   TimingSolver *solver;
   MemoryManager *memory;
   std::set<ExecutionState*> states;
-  std::set<MemoryFingerprint::value_t> fingerprints;
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
@@ -268,9 +267,6 @@ private:
   void transferToBasicBlock(llvm::BasicBlock *dst, 
 			    llvm::BasicBlock *src,
 			    ExecutionState &state);
-  void enterBasicBlock(const llvm::BasicBlock *dst,
-                       const llvm::BasicBlock *src,
-                       ExecutionState &state);
 
   void callExternalFunction(ExecutionState &state,
                             KInstruction *target,

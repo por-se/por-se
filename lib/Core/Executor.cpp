@@ -1879,11 +1879,6 @@ void Executor::executeCall(ExecutionState &state,
     unsigned numFormals = f->arg_size();
     for (unsigned i=0; i<numFormals; ++i) 
       bindArgument(kf, i, state, arguments[i]);
-
-    const llvm::BasicBlock *dst = thread.pc->inst->getParent();
-
-    // including arguments and va_args
-    enterBasicBlock(dst, nullptr, state);
   }
 }
 
@@ -1913,42 +1908,6 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   } else {
     // liveSetPc == pc: first instruction has not yet been executed
     thread.liveSetPc = thread.pc;
-    enterBasicBlock(dst, src, state);
-  }
-}
-
-void Executor::enterBasicBlock(const BasicBlock *dst,
-                               const BasicBlock *src,
-                               ExecutionState &state) {
-  if (PruneStates && state.memoryState.isEnabled()) {
-    MemoryFingerprint::value_t fingerprint = state.memoryState.getFingerprint();
-
-    if (fingerprints.count(fingerprint) != 0) {
-      if (DebugStatePruning) {
-        std::string str = MemoryFingerprint::toString(fingerprint);
-        std::string warning = "same state found! (" + str + ") @ ";
-        if (src != nullptr) {
-          warning += src->getName().str() + " -> " + dst->getName().str();
-        } else {
-          warning += dst->getName().str();
-        }
-        klee_warning("%s", warning.c_str());
-      }
-
-      // we can only remove a state if this state was not removed before
-      auto it = std::find(removedStates.begin(), removedStates.end(), &state);
-      if (it == removedStates.end()) {
-        interpreterHandler->incStatesPruned();
-        // silently terminate state
-        terminateState(state);
-      }
-    } else {
-      if (DebugStatePruning) {
-        std::string str = MemoryFingerprint::toString(fingerprint);
-        klee_warning("inserting new fingerprint: %s", str.c_str());
-      }
-      fingerprints.insert(fingerprint);
-    }
   }
 }
 
@@ -2437,11 +2396,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> result = eval(ki, thread.incomingBBIndex, state).value;
     bindLocal(ki, state, result);
     assert(ki == thread.prevPc && "executing instruction different from thread.prevPc");
-    if (thread.pc->inst->getOpcode() != Instruction::PHI) {
-      // no more PHI nodes coming
-      BasicBlock *src = cast<PHINode>(i)->getIncomingBlock(thread.incomingBBIndex);
-      enterBasicBlock(i->getParent(), src, state);
-    }
     break;
   }
 
