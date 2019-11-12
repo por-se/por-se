@@ -53,6 +53,12 @@ cl::opt<bool>
                               "condition given to klee_assume() rather than "
                               "emitting an error (default=false)"),
                      cl::cat(TerminationCat));
+
+cl::opt<unsigned>
+    AllowedLostNotifications("allowed-lost-notifications", cl::init(3),
+                             cl::desc("Number of allowed lost notifications "
+                                           "before terminating path (default=3)"),
+                              cl::cat(TerminationCat));
 } // namespace
 
 /// \todo Almost all of the demands in this file should be replaced
@@ -989,8 +995,8 @@ void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
   }
 
   executor.threadWakeUpWaiting(state, lid, releaseSingle, registerAsNotificationEvent);
-  if (registerAsNotificationEvent && state.lostNotifications >= 3) {
-    klee_warning("%s", "Three lost notifications, terminating to avoid infinite loop");
+  if (registerAsNotificationEvent && state.lostNotifications >= AllowedLostNotifications.getValue()) {
+    klee_warning("%s", "Too many lost notifications, terminating to avoid infinite loop");
     executor.terminateStateSilently(state);
   }
 }
