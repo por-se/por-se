@@ -114,7 +114,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_prefer_cex", handlePreferCex, false),
   add("klee_posix_prefer_cex", handlePosixPreferCex, false),
   add("klee_print_expr", handlePrintExpr, false),
-  add("klee_print_fingerprint", handlePrintFingerprint, false),
   add("klee_print_range", handlePrintRange, false),
   add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
@@ -501,13 +500,6 @@ void SpecialFunctionHandler::handlePrintExpr(ExecutionState &state,
   llvm::errs() << msg_str << ":" << arguments[1] << "\n";
 }
 
-void SpecialFunctionHandler::handlePrintFingerprint(ExecutionState &state,
-                                                    KInstruction *target,
-                                                    std::vector<ref<Expr>> &arguments) {
-  assert(arguments.size() == 0 && "invalid number of arguments to klee_print_fingerprint");
-
-  state.printFingerprint();
-}
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,
                                               KInstruction *target,
                                               std::vector<ref<Expr> > &arguments) {

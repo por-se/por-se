@@ -247,8 +247,6 @@ public:
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
   void dumpAllThreadStacks(llvm::raw_ostream &out) const;
-
-  void printFingerprint() const;
 };
 }
 

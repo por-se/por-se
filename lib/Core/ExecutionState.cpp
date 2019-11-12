@@ -344,23 +344,3 @@ void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {
     dumpStackOfThread(out, thread);
   }
 }
-
-void ExecutionState::printFingerprint() const {
-  auto current = memoryState.getFingerprint();
-  llvm::errs() << "Current Fingerprint: " << MemoryFingerprint::toString(current) << "\n";
-
-  auto global = memoryState.getGlobalFingerprintValue();
-  llvm::errs() << "Global: " << MemoryFingerprint::toString(global) << "\n";
-
-  for (auto &t : threads) {
-    const Thread &thread = t.second;
-    for (std::size_t i = 0; i < thread.stack.size(); ++i) {
-      auto delta = thread.stack[i].fingerprintDelta;
-      bool isCurrent = (currentThreadId() == t.first) && (thread.stack.size() - 1 == i);
-      llvm::errs() << "Thread " << t.first << ":" << i
-                   << (isCurrent ? " (current)" : "")
-                   << " Delta: " << MemoryFingerprint::toString(delta) << "\n";
-    }
-  }
-}
-

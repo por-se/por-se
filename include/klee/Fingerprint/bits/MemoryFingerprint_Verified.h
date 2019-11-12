@@ -112,25 +112,15 @@ class VerifiedMemoryFingerprint
 
   static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {
     dst.state = src.state;
-    bool success = MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
-    if (!success) {
-      assert(src.state != nullptr && "state not correctly propagated");
-      dst.state->printFingerprint();
-      llvm::errs().flush();
-      assert(0 && "fragment already in fingerprint");
-    }
+    [[maybe_unused]] bool success = MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
+    assert(success && "fragment already in fingerprint");
     hashT::executeAdd(dst.hash, src.hash);
   }
 
   static void executeRemove(typename Base::value_t &dst, const typename Base::value_t &src) {
     dst.state = src.state;
-    bool success = MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
-    if (!success) {
-      assert(src.state != nullptr && "state not correctly propagated");
-      dst.state->printFingerprint();
-      llvm::errs().flush();
-      assert(0 && "fragment not in fingerprint");
-    }
+    [[maybe_unused]] bool success = MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
+    assert(success && "fragment not in fingerprint");
     hashT::executeRemove(dst.hash, src.hash);
   }
 
