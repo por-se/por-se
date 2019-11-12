@@ -28,9 +28,8 @@
 #include <set>
 #include <vector>
 
-// We do not want to expose the por::configuration type directly
 namespace por {
-  class configuration;
+  class node;
 };
 
 namespace klee {
@@ -164,10 +163,11 @@ public:
 
   MemoryState memoryState;
 
+  // node for Partial Order Reduction based exploration
+  por::node* porNode = nullptr;
+
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
-
-  std::unique_ptr<por::configuration> porConfiguration;
 
 private:
   void popFrameOfThread(Thread* thread);

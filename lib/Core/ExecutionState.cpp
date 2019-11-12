@@ -141,10 +141,6 @@ ExecutionState *ExecutionState::branch() {
   weight *= .5;
   falseState->weight -= weight;
 
-  if (porConfiguration) {
-    falseState->porConfiguration = std::make_unique<por::configuration>(*porConfiguration);
-  }
-
   return falseState;
 }
 
@@ -368,7 +364,3 @@ void ExecutionState::printFingerprint() const {
   }
 }
 
-por::configuration *klee::configuration_from_execution_state(const ExecutionState *s) {
-  assert(s != nullptr && s->porConfiguration != nullptr);
-  return s->porConfiguration.get();
-}

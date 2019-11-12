@@ -72,7 +72,7 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "por/configuration.h"
+#include "por/node.h"
 
 #include "RaceDetection/DataRaceDetection.h"
 #include "RaceDetection/StateBoundTimingSolver.h"
@@ -4604,9 +4604,6 @@ void Executor::runFunctionAsMain(Function *f,
   // we cannot correctly initialize / allocate the needed memory regions
   auto *state = new ExecutionState(kmodule->functionMap[f]);
 
-  // This creates a new configuration with one thread (aka our main thread)
-  state->porConfiguration = std::make_unique<por::configuration>();
-
   // By default the state should create the main thread
   Thread &thread = state->currentThread();
   thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
@@ -4705,6 +4702,9 @@ void Executor::runFunctionAsMain(Function *f,
 
   processTree = std::make_unique<PTree>(state);
 
+  auto rootNode = std::make_unique<por::node>();
+  state->porNode = rootNode.get();
+
   // register thread_init event for main thread at last possible moment
   // to ensure that all data structures are properly set up
   porEventManager.registerThreadInit(*state, thread.getThreadId());
@@ -4713,14 +4713,12 @@ void Executor::runFunctionAsMain(Function *f,
     porEventManager.enableRoundRobinMode();
   }
 
-  std::shared_ptr<por::unfolding> unfolding = state->porConfiguration->unfolding();
+  auto unfolding = rootNode->configuration().unfolding();
 
   run(*state);
   processTree = nullptr;
 
-  for (ExecutionState *state : standbyStates) {
-    delete state;
-  }
+  rootNode.reset();
 
   // hack to clear memory objects
   delete memory;
