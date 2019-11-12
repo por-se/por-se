@@ -1,5 +1,8 @@
 #include "DataRaceDetection.h"
 
+#include "por/event/event.h"
+#include "por/node.h"
+
 #include "llvm/Support/CommandLine.h"
 
 #include <iostream>
@@ -52,15 +55,15 @@ const DataRaceDetection::Stats& DataRaceDetection::getStats() const {
   return stats;
 }
 
-void DataRaceDetection::trackAccess(const std::unique_ptr<por::configuration>& cfg, const MemoryOperation& op) {
+void DataRaceDetection::trackAccess(const por::node& node, const MemoryOperation& op) {
   assert(op.instruction != nullptr);
   assert(op.object != nullptr);
   assert(op.type != MemoryOperation::Type::UNKNOWN);
   assert(op.tid);
   assert(op.isAlloc() || op.isFree() || (op.numBytes != 0 && op.offset.get() != nullptr));
 
-  auto evtIt = cfg->thread_heads().find(op.tid);
-  assert(evtIt != cfg->thread_heads().end());
+  auto evtIt = node.configuration().thread_heads().find(op.tid);
+  assert(evtIt != node.configuration().thread_heads().end());
 
   auto& acc = getAccessesAfter(*evtIt->second);
 
@@ -85,7 +88,7 @@ void DataRaceDetection::trackAccess(const std::unique_ptr<por::configuration>& c
 }
 
 std::optional<RaceDetectionResult>
-DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
+DataRaceDetection::isDataRace(const por::node& node,
                               const SolverInterface &interface,
                               const MemoryOperation& operation) {
   RaceDetectionResult finalResult;
@@ -96,7 +99,7 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
   auto clockStart = std::chrono::steady_clock::now();
 
   // Test if we can try a fast path -> races with a concrete offset or alloc/free
-  const auto& easyResult = FastPath(cfg, operation);
+  const auto& easyResult = FastPath(node, operation);
 
   if (easyResult.has_value()) {
     // So if the fast path could produce any definite claims, then either
@@ -105,7 +108,7 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
     if (DebugDrd) {
       auto& r = easyResult.value();
 
-      llvm::errs() << "DRD: @" << cfg->schedule().size()
+      llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
                    << " type=" << operation.getTypeString()
@@ -127,7 +130,7 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
     return easyResult;
   }
 
-  const auto& solverResult = SolverPath(cfg, interface, operation);
+  const auto& solverResult = SolverPath(node, interface, operation);
 
   stats.numSolverRaceChecks++;
   globalStats.numSolverRaceChecks++;
@@ -142,21 +145,21 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
 
   if (DebugDrd) {
     if (!solverResult.has_value()) {
-      llvm::errs() << "DRD: @" << cfg->schedule().size()
+      llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
                    << " type=" << operation.getTypeString()
                    << " race=unknown (solver failure)"
                    << "\n";
     } else if (!solverResult->isRace) {
-      llvm::errs() << "DRD: @" << cfg->schedule().size()
+      llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
                    << " type=" << operation.getTypeString()
                    << " race=0 [solver]"
                    << "\n";
     } else {
-      llvm::errs() << "DRD: @" << cfg->schedule().size()
+      llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
                    << " type=" << operation.getTypeString()
@@ -170,11 +173,11 @@ DataRaceDetection::isDataRace(const std::unique_ptr<por::configuration>& cfg,
 }
 
 std::optional<RaceDetectionResult>
-DataRaceDetection::SolverPath(const std::unique_ptr<por::configuration>& cfg,
+DataRaceDetection::SolverPath(const por::node& node,
                               const SolverInterface &interface,
                               const MemoryOperation &operation) {
   // So we have to check if we have potentially raced with any thread
-  const auto& threadsToCheck = cfg->thread_heads();
+  const auto& threadsToCheck = node.configuration().thread_heads();
   auto it = threadsToCheck.find(operation.tid);
   assert(it != threadsToCheck.end());
   auto& curEventOfOperatingThread = it->second;
@@ -318,10 +321,10 @@ DataRaceDetection::SolverPath(const std::unique_ptr<por::configuration>& cfg,
 }
 
 std::optional<RaceDetectionResult>
-DataRaceDetection::FastPath(const std::unique_ptr<por::configuration>& cfg,
+DataRaceDetection::FastPath(const por::node& node,
                             const MemoryOperation& operation) {
   // So we have to check if we have potentially raced with any thread
-  const auto& threadsToCheck = cfg->thread_heads();
+  const auto& threadsToCheck = node.configuration().thread_heads();
   auto it = threadsToCheck.find(operation.tid);
   assert(it != threadsToCheck.end());
   auto& curEventOfOperatingThread = it->second;

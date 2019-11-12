@@ -3,10 +3,15 @@
 #include "CommonTypes.h"
 #include "EpochMemoryAccesses.h"
 
-#include "por/configuration.h"
-
 #include <deque>
 #include <unordered_map>
+
+namespace por {
+  namespace event {
+    class event;
+  }
+  class node;
+}
 
 namespace klee {
   class DataRaceDetection {
@@ -32,10 +37,10 @@ namespace klee {
       DataRaceDetection() = default;
       DataRaceDetection(const DataRaceDetection& drd) = default;
 
-      void trackAccess(const std::unique_ptr<por::configuration>& cfg, const MemoryOperation& operation);
+      void trackAccess(const por::node& node, const MemoryOperation& operation);
 
       std::optional<RaceDetectionResult>
-      isDataRace(const std::unique_ptr<por::configuration>& cfg,
+      isDataRace(const por::node& node,
                  const SolverInterface &interface,
                  const MemoryOperation &operation);
 
@@ -45,13 +50,13 @@ namespace klee {
 
     private:
       std::optional<RaceDetectionResult>
-      SolverPath(const std::unique_ptr<por::configuration>& cfg,
+      SolverPath(const por::node& node,
                  const SolverInterface &interface,
                  const MemoryOperation& operation);
 
       /// The fast-path tries to check if the access is safe without using the solver
       std::optional<RaceDetectionResult>
-      FastPath(const std::unique_ptr<por::configuration>& cfg,
+      FastPath(const por::node& node,
                const MemoryOperation& operation);
 
       EpochMemoryAccesses& getAccessesAfter(const por::event::event& evt) {

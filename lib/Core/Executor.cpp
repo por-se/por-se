@@ -5119,12 +5119,12 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
 
   StateBoundTimingSolver solv(state, *solver, coreSolverTimeout);
 
-  auto result = state.raceDetection.isDataRace(state.porConfiguration, solv, operation);
+  auto result = state.raceDetection.isDataRace(*state.porNode, solv, operation);
   if (!result.has_value()) {
     klee_warning("Failure at determining whether an accesses races - assuming safe access");
 
     if (!state.onlyOneThreadRunnableSinceEpochStart) {
-      state.raceDetection.trackAccess(state.porConfiguration, operation);
+      state.raceDetection.trackAccess(*state.porNode, operation);
     }
     return true;
   }
@@ -5142,7 +5142,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
       terminateStateOnUnsafeMemAccess(*unsafeState, mo, result->racingThread, result->racingInstruction);
 
       if (!state.onlyOneThreadRunnableSinceEpochStart) {
-        safeState->raceDetection.trackAccess(state.porConfiguration, operation);
+        safeState->raceDetection.trackAccess(*state.porNode, operation);
       }
 
       return safeState == &state;
@@ -5157,7 +5157,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
     }
 
     if (!state.onlyOneThreadRunnableSinceEpochStart) {
-      state.raceDetection.trackAccess(state.porConfiguration, operation);
+      state.raceDetection.trackAccess(*state.porNode, operation);
     }
     return true;
   }
