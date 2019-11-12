@@ -114,12 +114,13 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
 
   check_for_unsupported_acquire(result);
 
-  if (mutex->acquired == 1) {
+  size_t acquired = mutex->acquired;
+  if (acquired == 1) {
     klee_por_register_event(por_lock_acquire, mutex);
   }
 
   klee_toggle_thread_scheduling(1);
-  if (hasSlept == 0) {
+  if (hasSlept == 0 && acquired == 1) {
     klee_preempt_thread();
   }
 
@@ -198,13 +199,17 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
   klee_toggle_thread_scheduling(0);
 
   int result = kpr_mutex_unlock_internal(mutex, false);
-  if (result == 0 && mutex->acquired == 0) {
+  size_t acquired = mutex->acquired;
+
+  if (result == 0 && acquired == 0) {
     klee_por_register_event(por_lock_release, mutex);
   }
 
   klee_toggle_thread_scheduling(1);
 
-  klee_preempt_thread();
+  if (acquired == 0) {
+    klee_preempt_thread();
+  }
 
   return result;
 }

@@ -13,6 +13,8 @@
 #endif
 #include "fd.h"
 
+#include "klee/runtime/kpr/list.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -117,7 +119,10 @@ usage: (klee_init_env) [options] [program arguments]\n\
                               writes exceeding the initial file size are discarded.\n\
                               Note: file offset is always incremented.\n\
   -max-fail <N>             - Allow up to N injected failures\n\
-  -fd-fail                  - Shortcut for '-max-fail 1'\n\n");
+  -fd-fail                  - Shortcut for '-max-fail 1'\n\
+  -sym-packet <PORT> <N>    - Send symbolic packet of size N to a listening socket\n\
+                              at port PORT. PORT accepts arbitrary content.\n\
+    \n");
   }
 
   while (k < argc) {
@@ -217,6 +222,19 @@ usage: (klee_init_env) [options] [program arguments]\n\
         __emit_error(msg);
 
       fd_fail = __str_to_int(argv[k++], msg);
+    } else if (__streq(argv[k], "--sym-packet") ||
+               __streq(argv[k], "-sym-packet")) {
+      const char *msg = "--sym-packet expects two integer arguments "
+                        "<PORT> <N>";
+
+      if (k + 2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      int port = __str_to_int(argv[k++], msg);
+      int len = __str_to_int(argv[k++], msg);
+
+      klee_init_sym_port(port, len);
     } else {
       /* simply copy arguments */
       __add_arg(&new_argc, new_argv, argv[k++], 1024);

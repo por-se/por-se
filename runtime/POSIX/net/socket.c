@@ -2,6 +2,7 @@
 #include "klee/runtime/kpr/list.h"
 
 #include "../fd.h"
+#include "socket.h"
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -15,7 +16,9 @@
 
 static kpr_list open_sockets = KPR_LIST_INITIALIZER;
 static kpr_list waiting_sockets = KPR_LIST_INITIALIZER;
-static int port_counter = 12042;
+
+// Just assume that we do not have any conflict
+static int port_counter = 49152;
 
 static exe_socket_t* get_socket_by_port(int port) {
   kpr_list_iterator it = kpr_list_iterate(&open_sockets);
@@ -40,14 +43,17 @@ static int create_socket(exe_socket_t** target) {
   }
 
   exe_file_t* f = __get_file_ignore_flags(fd);
-  f->flags = eOpen;
+  f->flags = (eOpen | eWriteable | eReadable);
   kpr_list_create(&f->notification_list);
 
   exe_socket_t* socket = calloc(sizeof(exe_socket_t), 1);
-  f->socket = socket;
-
+  socket->writeFd = -1;
+  socket->readFd = -1;
   socket->state = EXE_SOCKET_INIT;
   pthread_cond_init(&socket->cond, NULL);
+
+  f->socket = socket;
+  socket->own_fd = fd;
 
   if (target) {
     *target = socket;
@@ -86,7 +92,41 @@ static exe_socket_t* find_waiting_by_req_port(int port) {
   return NULL;
 }
 
+static void check_for_sym_ports(exe_socket_t* socket) {
+  assert(socket->state == EXE_SOCKET_PASSIVE);
+
+  kpr_list_iterator it = kpr_list_iterate(&__exe_env.sym_port);
+  while(kpr_list_iterator_valid(it)) {
+    exe_sym_port_t* sym_port = kpr_list_iterator_value(it);
+
+    if (socket->opened_port == sym_port->port) {
+      exe_socket_t* symSocket;
+      int fd = create_socket(&symSocket);
+
+      if (fd < 0) {
+        klee_warning("could not create socket for sym port - aborting");
+        return;
+      }
+
+      symSocket->state = EXE_SOCKET_CONNECTING;
+      symSocket->requested_port = sym_port->port;
+      symSocket->readFd = 0;
+      symSocket->writeFd = 0;
+      symSocket->sym_port = sym_port;
+
+      kpr_list_push(&socket->queued_peers, symSocket);
+
+      // Only remove once we set up the requesting peer
+      kpr_list_erase(&__exe_env.sym_port, &it);
+    }
+
+    kpr_list_iterator_next(&it);
+  }
+}
+
 int socket(int domain, int typeAndFlags, int protocol) {
+  // TODO: handle protocol a bit better
+
   if (domain != AF_INET) {
     klee_warning("socket request with unsupported domain");
     errno = ENOMEM;
@@ -111,7 +151,6 @@ int socket(int domain, int typeAndFlags, int protocol) {
   pthread_mutex_unlock(klee_fs_lock());
   return fd;
 }
-
 
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   pthread_mutex_lock(klee_fs_lock());
@@ -161,7 +200,7 @@ int listen(int sockfd, int backlog) {
   // Adding it to the list of known sockets
   kpr_list_push(&open_sockets, f->socket);
 
-  // TODO: check whether we want to send symbolic data on the port
+  check_for_sym_ports(f->socket);
 
   pthread_mutex_unlock(klee_fs_lock());
   return 0;
@@ -257,9 +296,23 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   // Just hope that we do not have any conflict ...
   newSocket->opened_port = port_counter++;
+  assert(port_counter <= 65535);
 
   // And wake up the peer
-  pthread_cond_signal(&peer->cond);
+  if (peer->sym_port == NULL) {
+    pthread_cond_signal(&peer->cond);
+  } else {
+    // If we write too many bytes, then we risk blocking this
+    assert(peer->sym_port->packet_length <= PIPE_BUFFER_SIZE);
+    ssize_t ctn = write(peer->writeFd, peer->sym_port->data, peer->sym_port->packet_length);
+    if (ctn < 0) {
+      klee_warning("Failed to write the symbolic data");
+    } else if (ctn != peer->sym_port->packet_length) {
+      klee_warning("Failed to write all symbolic data - only parts");
+    }
+
+    close(peer->own_fd);
+  }
 
   pthread_mutex_unlock(klee_fs_lock());
   return newSocketFd;
@@ -346,4 +399,156 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   pthread_mutex_unlock(klee_fs_lock());
   return 0;
+}
+
+int kpr_close_socket(exe_file_t* file) {
+  assert(file->socket != NULL);
+
+  if (file->socket->writeFd != -1) {
+    close(file->socket->writeFd);
+    file->socket->writeFd = -1;
+  }
+
+  if (file->socket->readFd != -1) {
+    close(file->socket->readFd);
+    file->socket->readFd = -1;
+  }
+
+  kpr_list_iterator it = kpr_list_iterate(&open_sockets);
+  while(kpr_list_iterator_valid(it)) {
+    exe_socket_t* socket = kpr_list_iterator_value(it);
+
+    if (socket == file->socket) {
+      kpr_list_erase(&open_sockets, &it);
+    }
+
+    kpr_list_iterator_next(&it);
+  }
+
+  pthread_cond_destroy(&file->socket->cond);
+
+  free(file->socket);
+  file->socket = NULL;
+
+  return 0;
+}
+
+int shutdown(int sockfd, int how) {
+  if (how != SHUT_RDWR && how != SHUT_RD && how != SHUT_WR) {
+    return EINVAL;
+  }
+
+  int ret;
+
+  pthread_mutex_lock(klee_fs_lock());
+
+  exe_file_t* file = __get_file(sockfd);
+  if (!file) {
+    ret = EBADF;
+  } else if (!file->socket) {
+    ret = ENOTSOCK;
+  } else if (file->socket->state != EXE_SOCKET_CONNECTED) {
+    ret = ENOTCONN;
+  } else {
+    // So this is a valid socket
+    if ((how == SHUT_RDWR || how == SHUT_RD) && file->socket->readFd != 0) {
+      exe_file_t* f = __get_file(file->socket->readFd);
+      f->flags &= ~eReadable;
+
+      close(file->socket->readFd);
+      file->socket->readFd = 0;
+    }
+
+    if ((how == SHUT_RDWR || how == SHUT_WR) && file->socket->writeFd != 0) {
+      exe_file_t* f = __get_file(file->socket->writeFd);
+      f->flags &= ~eWriteable;
+
+      close(file->socket->writeFd);
+      file->socket->writeFd= 0;
+    }
+
+    ret = 0;
+  }
+
+  pthread_mutex_unlock(klee_fs_lock());
+
+  return ret;
+}
+
+ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
+  ssize_t ret;
+
+  if (flags != 0) {
+    klee_warning("Ignoring flags for send()");
+  }
+
+  pthread_mutex_lock(klee_fs_lock());
+
+  exe_file_t* file = __get_file(sockfd);
+  if (!file) {
+    ret = -1;
+    errno = EBADF;
+  } else if (!file->socket) {
+    ret = -1;
+    errno = ENOTSOCK;
+  } else {
+    ret = write(sockfd, buf, len);
+  }
+
+  pthread_mutex_unlock(klee_fs_lock());
+
+  return ret;
+}
+
+ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
+  ssize_t ret;
+
+  if (flags != 0) {
+    klee_warning("Ignoring flags for recv()");
+  }
+
+  pthread_mutex_lock(klee_fs_lock());
+
+  exe_file_t* file = __get_file(sockfd);
+  if (!file) {
+    ret = -1;
+    errno = EBADF;
+  } else if (!file->socket) {
+    ret = -1;
+    errno = ENOTSOCK;
+  } else {
+    ret = read(sockfd, buf, len);
+  }
+
+  pthread_mutex_unlock(klee_fs_lock());
+
+  return ret;
+}
+
+/* Unsupported operations */
+
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+               const struct sockaddr *dest_addr, socklen_t addrlen) {
+  // TODO: implement
+  assert(0 && "unsupported");
+  return -1;
+}
+
+ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
+  // TODO: implement
+  assert(0 && "unsupported");
+  return -1;
+}
+
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+                 struct sockaddr *src_addr, socklen_t *addrlen) {
+  // TODO: implement
+  assert(0 && "unsupported");
+  return -1;
+}
+
+ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
+  // TODO: implement
+  assert(0 && "unsupported");
+  return -1;
 }

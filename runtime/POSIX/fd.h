@@ -42,6 +42,13 @@
 #endif
 
 typedef struct {
+  int port;
+  int packet_length;
+
+  char* data;
+} exe_sym_port_t;
+
+typedef struct {
   unsigned size;  /* in bytes */
   char* contents;
   struct stat64* stat;
@@ -64,6 +71,7 @@ typedef enum {
 typedef struct {
   int opened_port;
   int state;
+  int own_fd;
 
   // Needed for passive sockets
   kpr_list queued_peers;
@@ -76,9 +84,12 @@ typedef struct {
   // -> simply a pipe
   int readFd;
   int writeFd;
+
+  // If this is a sym socket port
+  exe_sym_port_t* sym_port;
 } exe_socket_t;
 
-#define PIPE_BUFFER_SIZE 512
+#define PIPE_BUFFER_SIZE 2048
 
 typedef struct {
   unsigned bufSize; /* in bytes */
@@ -132,12 +143,15 @@ typedef struct {
   /* If set, writes execute as expected.  Otherwise, writes extending
      the file size only change the contents up to the initial
      size. The file offset is always incremented correctly. */
-  int save_all_writes; 
+  int save_all_writes;
+
+  kpr_list sym_port;
 } exe_sym_env_t;
 
 extern exe_file_system_t __exe_fs;
 extern exe_sym_env_t __exe_env;
 
+void klee_init_sym_port(int port, int len);
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    unsigned stdin_length, int sym_stdout_flag,
                    int do_all_writes_flag, unsigned max_failures);
@@ -149,6 +163,8 @@ pthread_mutex_t* klee_fs_lock(void);
 exe_file_t *__get_file(int fd);
 exe_file_t *__get_file_ignore_flags(int fd);
 int __get_unused_fd(void);
+
+/* *** */
 
 int __fd_open(const char *pathname, int flags, mode_t mode);
 int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode);

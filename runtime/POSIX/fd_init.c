@@ -12,6 +12,7 @@
 #include "fd.h"
 
 #include "klee/klee.h"
+#include "klee/runtime/kpr/list.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -35,12 +36,14 @@ exe_file_system_t __exe_fs;
 
 
 exe_sym_env_t __exe_env = { 
-  {{ 0, eOpen | eReadable, 0, 0, 0, KPR_LIST_INITIALIZER },
-   { 1, eOpen | eWriteable, 0, 0, 0, KPR_LIST_INITIALIZER },
-   { 2, eOpen | eWriteable, 0, 0, 0, KPR_LIST_INITIALIZER }},
-  022,
-  0,
-  0
+  .fds = {
+    { 0, eOpen | eReadable,  0, NULL, NULL, NULL, KPR_LIST_INITIALIZER },
+    { 1, eOpen | eWriteable, 0, NULL, NULL, NULL, KPR_LIST_INITIALIZER },
+    { 2, eOpen | eWriteable, 0, NULL, NULL, NULL, KPR_LIST_INITIALIZER }
+  },
+  .umask = 022,
+  .version = 0,
+  .save_all_writes = 0
 };
 
 static void __create_new_dfile(exe_disk_file_t *dfile, unsigned size, 
@@ -98,6 +101,28 @@ static unsigned __sym_uint32(const char *name) {
   unsigned x;
   klee_make_symbolic(&x, sizeof x, name);
   return x;
+}
+
+void klee_init_sym_port(int port, int len) {
+  exe_sym_port_t* p = (exe_sym_port_t*) malloc(sizeof(exe_sym_port_t));
+
+  p->packet_length = len;
+  p->port = port;
+
+  // TODO: validate that we have not set up this port twice or more
+
+  char name[15] = "sym-port-?????";
+
+  name[9] = '0' + ((port / 10000) % 10);
+  name[10] = '0' + ((port / 1000) % 10);
+  name[11] = '0' + ((port / 100) % 10);
+  name[12] = '0' + ((port / 10) % 10);
+  name[13] = '0' + (port % 10);
+
+  p->data = (char*) malloc(sizeof(char) * len);
+  klee_make_symbolic(p->data, sizeof(char) * len, name);
+
+  kpr_list_push(&__exe_env.sym_port, p);
 }
 
 /* n_files: number of symbolic input files, excluding stdin

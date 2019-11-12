@@ -512,6 +512,10 @@ void klee_mark_global(void *object) {
   ;
 }
 
+void kpr_list_push(void* a, void* b) {
+  ;
+}
+
 /*** HELPER FUNCTIONS ***/
 
 static void __emit_error(const char *msg) {
