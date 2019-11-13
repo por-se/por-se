@@ -3709,8 +3709,8 @@ void Executor::terminateState(ExecutionState &state) {
   interpreterHandler->incPathsExplored();
 
 
-  if(state.porNode->parent()) {
-    auto cex = state.porNode->configuration().conflicting_extensions();
+  if(state.porNode && state.porNode->parent()) {
+    state.porNode->configuration().conflicting_extensions();
 
     std::vector<por::node*> branch(state.porNode->parent()->branch_begin(), state.porNode->parent()->branch_end());
     branch.pop_back(); // remove root node
@@ -3730,10 +3730,16 @@ void Executor::terminateState(ExecutionState &state) {
       // thread of last event may not be runnable or lead to wrong event
       toExecute->needsThreadScheduling = true;
       scheduleThreads(*toExecute);
+      // FIXME: should we really do both here?
+
+
+      llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l->to_string() << "\n";
     }
   }
 
-  state.porNode->backtrack();
+  if(state.porNode) {
+    state.porNode->backtrack();
+  }
 
   terminateStateSilently(state);
 }
