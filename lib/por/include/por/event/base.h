@@ -30,7 +30,7 @@ namespace por::event {
 	using lock_id_t = std::uint64_t;
 	using cond_id_t = std::uint64_t;
 
-	using path_t = std::vector<bool>;
+	using path_t = std::vector<std::uint64_t>;
 
 	enum class event_kind : std::uint8_t {
 		local,
