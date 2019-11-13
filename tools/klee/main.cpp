@@ -541,7 +541,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
     auto fDataRaceStats = openTestFile("race-stats.json", id);
     *fDataRaceStats << state.getDataRaceStats();
 
-    if (WriteDotConfigurations) {
+    if (WriteDotConfigurations && state.porNode) {
       auto fConfiguration = openTestFile("configuration.dot", id);
       {
         std::stringstream conf;
