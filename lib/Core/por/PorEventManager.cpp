@@ -303,7 +303,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
 
   checkIfCatchUpIsNeeded(state);
 
-  extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) {
+  extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.acquire_lock(state.currentThreadId(), mId);
 
     if(snapshotsAllowed) {
@@ -312,7 +312,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
       return std::make_pair(e, std::move(standby));
     }
     attachFingerprintToEvent(state, *e);
-    return std::make_pair(e, std::make_shared<const ExecutionState>(nullptr));
+    return std::make_pair(e, nullptr);
   });
 
   return true;
