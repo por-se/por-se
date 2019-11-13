@@ -126,6 +126,21 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
 
   checkIfCatchUpIsNeeded(state);
 
+  if(state.porNode->needs_catch_up()) {
+    assert(addedStates.empty());
+
+    state.porNode->catch_up([this, &state](por::configuration& cfg) {
+      auto& thread = state.currentThread();
+      std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
+      thread.pathSincePorLocal = {};
+      por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+      auto standby = createStandbyState(state, por_local);
+      return std::make_pair(e, std::move(standby));
+    });
+
+    return true;
+  }
+
   por::node *n = state.porNode;
   state.porNode = state.porNode->make_left_child([this, &state](por::configuration& cfg) {
     auto& thread = state.currentThread();
