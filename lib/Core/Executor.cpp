@@ -973,7 +973,29 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
-  if (MaxForks!=~0u && stats::forks >= MaxForks) {
+  if (state.porNode && state.porNode->needs_catch_up()) {
+    const por::event::event* event = state.porNode->peek();
+    assert(event->kind() == por::event::event_kind::local);
+    auto local = static_cast<const por::event::local*>(event);
+
+    std::size_t nextIndex = state.currentThread().pathSincePorLocal.size();
+    assert(local->path().size() > nextIndex);
+    std::uint64_t branch = local->path()[nextIndex];
+
+    for (unsigned i=0; i<N; ++i) {
+      if (i == branch) {
+        result.push_back(&state);
+      } else {
+        result.push_back(nullptr);
+      }
+    }
+
+    addConstraint(state, conditions[branch]);
+    state.currentThread().pathSincePorLocal.push_back(branch);
+
+    return;
+
+  } else if (MaxForks!=~0u && stats::forks >= MaxForks) {
     unsigned next = theRNG.getInt32() % N;
     for (unsigned i=0; i<N; ++i) {
       if (i == next) {
@@ -1044,9 +1066,12 @@ void Executor::branch(ExecutionState &state,
     }
   }
 
-  for (unsigned i=0; i<N; ++i)
-    if (result[i])
+  for (unsigned i=0; i<N; ++i) {
+    if (result[i]) {
       addConstraint(*result[i], conditions[i]);
+      result[i]->currentThread().pathSincePorLocal.push_back(i);
+    }
+  }
 }
 
 Executor::StatePair 
