@@ -129,8 +129,8 @@ namespace por::event {
 		}
 
 	public:
-		klee::MemoryFingerprintValue _fingerprint;
-		klee::MemoryFingerprintDelta _thread_delta;
+		mutable klee::MemoryFingerprintValue _fingerprint;
+		mutable klee::MemoryFingerprintDelta _thread_delta;
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
