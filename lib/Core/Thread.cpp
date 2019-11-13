@@ -72,6 +72,7 @@ Thread::Thread(const Thread &t)
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
+          porHasBeenInitialized(t.porHasBeenInitialized),
           waitingHandle(t.waitingHandle),
           runtimeStructPtr(t.runtimeStructPtr),
           errnoMo(t.errnoMo),

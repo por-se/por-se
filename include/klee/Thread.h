@@ -92,6 +92,9 @@ namespace klee {
       /// @brief life cycle state of this thread, Runnable by default
       ThreadState state = ThreadState::Runnable;
 
+      // FIXME: use ThreadState for this in the future?
+      bool porHasBeenInitialized = false;
+
       std::uint64_t waitingHandle = 0;
 
       /// @brief value of the pthread_t pointer the thread was created with

@@ -4534,6 +4534,7 @@ void Executor::runFunctionAsMain(Function *f,
   Thread &thread = state->currentThread();
   thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
   thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
+  thread.porHasBeenInitialized = true;
   
   MemoryObject *argvMO = nullptr;
 
@@ -4932,6 +4933,8 @@ ThreadId Executor::createThread(ExecutionState &state,
   if (statsTracker)
     statsTracker->framePushed(threadStartFrame, nullptr);
 
+  porEventManager.registerThreadCreate(state, thread.getThreadId());
+
   return thread.getThreadId();
 }
 
@@ -5248,6 +5251,12 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   state.scheduleNextThread(tid);
+  auto thread = state.getThreadById(tid);
+  assert(thread.has_value());
+  if(!thread->get().porHasBeenInitialized) {
+    thread->get().porHasBeenInitialized = true;
+    porEventManager.registerThreadInit(state, tid);
+  }
 }
 
 /// Returns the errno location in memory

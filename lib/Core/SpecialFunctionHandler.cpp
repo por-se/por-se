@@ -890,8 +890,6 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   }
 
   const ThreadId& tid = executor.createThread(state, kfuncPair->second, arguments[1]);
-  executor.porEventManager.registerThreadCreate(state, tid);
-  executor.porEventManager.registerThreadInit(state, tid);
 }
 
 void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
