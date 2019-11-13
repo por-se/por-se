@@ -129,7 +129,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
   por::node *n = state.porNode;
   state.porNode = state.porNode->make_left_child([this, &state](por::configuration& cfg) {
     auto& thread = state.currentThread();
-    std::vector<bool> path = std::move(thread.pathSincePorLocal);
+    std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
     thread.pathSincePorLocal = {};
     por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
     auto standby = createStandbyState(state, por_local);
@@ -141,7 +141,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
   for(auto& s : addedStates) {
     s->porNode = n->make_right_local_child([this, &s](por::configuration& cfg) {
       auto& thread = s->currentThread();
-      std::vector<bool> path = std::move(thread.pathSincePorLocal);
+      std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
       thread.pathSincePorLocal = {};
       por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
       auto standby = createStandbyState(*s, por_local);

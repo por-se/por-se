@@ -107,7 +107,7 @@ namespace klee {
       bool threadSchedulingWasDisabled = false;
 
       /// @brief Contains true / false for each decision since last por_local registration
-      std::vector<bool> pathSincePorLocal;
+      std::vector<std::uint64_t> pathSincePorLocal;
 
       /// @brief counts how many threads this thread already created
       std::uint16_t spawnedThreads = 0;

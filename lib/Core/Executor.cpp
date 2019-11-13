@@ -1213,16 +1213,16 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
       std::size_t nextIndex = current.currentThread().pathSincePorLocal.size();
       assert(local->path().size() > nextIndex);
-      bool branch = local->path()[nextIndex];
+      std::uint64_t branch = local->path()[nextIndex];
 
       // add constraints
       if (branch) {
         addConstraint(current, condition);
-        current.currentThread().pathSincePorLocal.push_back(true);
+        current.currentThread().pathSincePorLocal.push_back(1);
         return StatePair(&current, nullptr);
       } else {
         addConstraint(current, Expr::createIsZero(condition));
-        current.currentThread().pathSincePorLocal.push_back(false);
+        current.currentThread().pathSincePorLocal.push_back(0);
         return StatePair(nullptr, &current);
       }
     }
@@ -1289,8 +1289,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         falseState->symPathOS << "0";
       }
     }
-    trueState->currentThread().pathSincePorLocal.push_back(true);
-    falseState->currentThread().pathSincePorLocal.push_back(false);
+    trueState->currentThread().pathSincePorLocal.push_back(1);
+    falseState->currentThread().pathSincePorLocal.push_back(0);
 
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
     addConstraint(*trueState, condition);
