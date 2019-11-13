@@ -85,6 +85,16 @@ namespace por {
 			return *store_event(std::forward<T>(e));
 		}
 
+		void remove_event(por::event::event const& e) {
+			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
+			if(it != _events.end()) {
+				auto& events = it->second;
+				events.erase(std::remove_if(events.begin(), events.end(), [&e](auto& v) {
+					return &e == v.get();
+				}));
+			}
+		}
+
 		por::event::event const& root() {
 			return *_root;
 		}
