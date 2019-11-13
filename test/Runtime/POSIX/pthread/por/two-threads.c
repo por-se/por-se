@@ -1,6 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --posix-runtime --exit-on-error --log-por-events %t.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --thread-scheduling=first --posix-runtime --exit-on-error --log-por-events %t.bc 2>&1 | FileCheck %s
 
 #include <pthread.h>
 
@@ -15,13 +15,13 @@ int main(void) {
   // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
   // This next check is not check-next, since there is a malloc line in between
   // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
-  // CHECK-NEXT: POR event: thread_init with current thread [[M_TID]] and initialized thread [[SEC_TID]]
   pthread_create(&thread, NULL, noop, NULL);
 
-  // CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 
   pthread_join(thread, NULL);
 
+  // CHECK-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
+  // CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
   // CHECK-DAG: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
   // CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 

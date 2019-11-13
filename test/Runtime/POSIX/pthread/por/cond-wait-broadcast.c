@@ -39,9 +39,9 @@ int main(void) {
 // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
 // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
 // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
-// CHECK-DAG: POR event: thread_init with current thread [[M_TID]] and initialized thread [[SEC_TID]]
 // CHECK-DAG: POR event: wait1 with current thread [[M_TID]] on cond. var [[COND:[0-9]+]] and mutex [[LID]]
 
+// CHECK-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
 // CHECK-DAG: POR event: lock_acquire with current thread [[SEC_TID]] on mutex [[LID]]
 // CHECK-DAG: POR event: broadcast with current thread [[SEC_TID]] on cond. var [[COND]] and broadcasted threads: [[M_TID]]
 // CHECK-DAG: POR event: lock_release with current thread [[SEC_TID]] on mutex [[LID]]
