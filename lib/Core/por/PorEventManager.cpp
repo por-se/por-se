@@ -127,6 +127,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
     llvm::errs() << "\n";
   }
 
+  assert(!state.currentThread().pathSincePorLocal.empty());
   assert(std::find(addedStates.begin(), addedStates.end(), &state) == addedStates.end());
 
   checkIfCatchUpIsNeeded(state);
@@ -159,15 +160,17 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
   assert(state.porNode->parent() == n);
 
   for(auto& s : addedStates) {
-    s->porNode = n->make_right_local_child([this, &s](por::configuration& cfg) {
-      auto& thread = s->currentThread();
-      std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
-      thread.pathSincePorLocal = {};
-      por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
-      auto standby = createStandbyState(*s, por_local);
-      return std::make_pair(e, std::move(standby));
-    });
-    n = s->porNode->parent();
+    if(!s->currentThread().pathSincePorLocal.empty()) {
+      s->porNode = n->make_right_local_child([this, &s](por::configuration& cfg) {
+        auto& thread = s->currentThread();
+        std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
+        thread.pathSincePorLocal = {};
+        por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+        auto standby = createStandbyState(*s, por_local);
+        return std::make_pair(e, std::move(standby));
+      });
+      n = s->porNode->parent();
+    }
   }
 
   return true;
