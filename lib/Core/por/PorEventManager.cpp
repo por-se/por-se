@@ -513,6 +513,10 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 }
 
 void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
+  if (!PruneStates) {
+    return;
+  }
+
   auto thread = state.getThreadById(event.tid());
   assert(thread && "no thread with given id found");
 
@@ -521,7 +525,9 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   MemoryFingerprint fingerprint;
   fingerprint.addDelta(event._thread_delta);
   for (auto &[tid, c] : event.cone()) {
-    fingerprint.addDelta(c->_thread_delta);
+    if (tid != event.tid()) {
+      fingerprint.addDelta(c->_thread_delta);
+    }
   }
 
   std::vector<ref<Expr>> expressions;
