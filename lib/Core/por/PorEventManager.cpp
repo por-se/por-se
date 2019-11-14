@@ -200,6 +200,8 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
@@ -218,6 +220,8 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
 
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
+
+  assert(state.currentThread().pathSincePorLocal.empty());
 
   checkIfCatchUpIsNeeded(state);
 
@@ -250,6 +254,8 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and exited thread " << tid << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &tid, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
@@ -273,6 +279,8 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
@@ -293,6 +301,8 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
@@ -311,6 +321,8 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
 
     llvm::errs() << " on mutex " << mId << "\n";
   }
+
+  assert(state.currentThread().pathSincePorLocal.empty());
 
   checkIfCatchUpIsNeeded(state);
 
@@ -354,6 +366,8 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
@@ -374,6 +388,8 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
@@ -393,6 +409,8 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
@@ -411,6 +429,8 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
 
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
+
+  assert(state.currentThread().pathSincePorLocal.empty());
 
   checkIfCatchUpIsNeeded(state);
 
@@ -436,6 +456,8 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
     llvm::errs() << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
@@ -455,6 +477,8 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
+  assert(state.currentThread().pathSincePorLocal.empty());
+
   checkIfCatchUpIsNeeded(state);
 
   extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
@@ -473,6 +497,8 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
+
+  assert(state.currentThread().pathSincePorLocal.empty());
 
   checkIfCatchUpIsNeeded(state);
 
