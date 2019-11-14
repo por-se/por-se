@@ -22,7 +22,7 @@ namespace klee {
       PorEventManager() = delete;
       explicit PorEventManager(Executor &executor) : executor(executor) {}
 
-      bool registerLocal(ExecutionState &state, const std::vector<ExecutionState *> &addedStates);
+      bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
 
       void enableRoundRobinMode() { roundRobin = true; }
 
@@ -35,7 +35,7 @@ namespace klee {
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
-      bool registerThreadExit(ExecutionState &state, const ThreadId &tid);
+      bool registerThreadExit(ExecutionState &state, const ThreadId &tid, bool snapshotsAllowed = true);
       bool registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread);
       bool registerThreadInit(ExecutionState &state, const ThreadId &tid);
 
