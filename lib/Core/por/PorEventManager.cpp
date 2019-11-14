@@ -119,6 +119,11 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_local);
 
+    llvm::errs() << " and path ";
+    for(auto b : state.currentThread().pathSincePorLocal) {
+      llvm::errs() << b << " ";
+    }
+
     llvm::errs() << "\n";
   }
 
