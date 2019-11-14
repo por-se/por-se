@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Executor.h"
+#include "MemoryManager.h"
 
 #include "Context.h"
 
@@ -49,7 +50,7 @@ namespace klee {
       } else if (const ConstantFP *cf = dyn_cast<ConstantFP>(c)) {
         return ConstantExpr::alloc(cf->getValueAPF().bitcastToAPInt());
       } else if (const GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
-        return globalObjectsMap->lookupGlobal(gv, byTid);
+        return memory->lookupGlobal(gv, byTid);
       } else if (isa<ConstantPointerNull>(c)) {
         return Expr::createPointer(0);
       } else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c)) {

@@ -25,7 +25,6 @@
 
 #include "klee/por/events.h"
 #include "por/PorEventManager.h"
-#include "GlobalObjectsMap.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -179,10 +178,6 @@ private:
   /// happens with other states (that don't satisfy the seeds) depends
   /// on as-yet-to-be-determined flags.
   std::map<ExecutionState*, std::vector<SeedInfo> > seedMap;
-
-  /// Map of globals to their bound address. This also includes
-  /// globals that have no representative object (i.e. functions).
-  std::unique_ptr<GlobalObjectsMap> globalObjectsMap;
 
   /// The set of legal function addresses, used to validate function
   /// pointers. We use the actual Function* address as the function address.

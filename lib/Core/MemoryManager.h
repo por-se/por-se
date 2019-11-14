@@ -10,6 +10,8 @@
 #ifndef KLEE_MEMORYMANAGER_H
 #define KLEE_MEMORYMANAGER_H
 
+#include "GlobalObjectsMap.h"
+
 #include "klee/ThreadId.h"
 #include "klee/Thread.h"
 
@@ -40,6 +42,10 @@ private:
   ArrayCache *const arrayCache;
 
   std::map<ThreadId, ThreadMemorySegments> threadMemoryMappings;
+
+  /// Map of globals to their bound address. This also includes
+  /// globals that have no representative object (i.e. functions).
+  GlobalObjectsMap globalObjectsMap;
 
   std::size_t threadHeapSize;
   std::size_t threadStackSize;
@@ -97,6 +103,37 @@ public:
   std::unique_ptr<pseudoalloc::stack_allocator_t> createThreadStackAllocator(const ThreadId &tid);
 
   void markMemoryRegionsAsUnneeded();
+
+  // Forwards to the Global Object Map
+  template<typename... Args>
+  auto registerFunction(Args&&... args)
+  noexcept(noexcept(globalObjectsMap.registerFunction(std::forward<Args>(args)...))) {
+    return globalObjectsMap.registerFunction(std::forward<Args>(args)...);
+  }
+
+  template<typename... Args>
+  auto registerAlias(Args&&... args)
+  noexcept(noexcept(globalObjectsMap.registerAlias(std::forward<Args>(args)...))) {
+    return globalObjectsMap.registerAlias(std::forward<Args>(args)...);
+  }
+
+  template<typename... Args>
+  auto registerGlobalData(Args&&... args)
+  noexcept(noexcept(globalObjectsMap.registerGlobalData(this, std::forward<Args>(args)...))) {
+    return globalObjectsMap.registerGlobalData(this, std::forward<Args>(args)...);
+  }
+
+  template<typename... Args>
+  auto lookupGlobal(Args&&... args)
+  noexcept(noexcept(globalObjectsMap.lookupGlobal(this, std::forward<Args>(args)...))) {
+    return globalObjectsMap.lookupGlobal(this, std::forward<Args>(args)...);
+  }
+
+  template<typename... Args>
+  auto lookupGlobalMemoryObject(Args&&... args)
+  noexcept(noexcept(globalObjectsMap.lookupGlobalMemoryObject(this, std::forward<Args>(args)...))) {
+    return globalObjectsMap.lookupGlobalMemoryObject(this, std::forward<Args>(args)...);
+  }
 };
 
 } // End klee namespace

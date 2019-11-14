@@ -91,6 +91,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
 }
 
 MemoryManager::~MemoryManager() {
+  globalObjectsMap.clear();
   while (!objects.empty()) {
     MemoryObject *mo = *objects.begin();
     objects.erase(mo);

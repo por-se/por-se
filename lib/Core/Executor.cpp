@@ -794,8 +794,6 @@ extern void *__dso_handle __attribute__ ((__weak__));
 void Executor::initializeGlobals(ExecutionState &state) {
   Module *m = kmodule->module.get();
 
-  globalObjectsMap = std::make_unique<GlobalObjectsMap>(memory);
-
   if (!m->getModuleInlineAsm().empty())
     klee_warning("executable has module level assembly (ignoring)");
   // represent function globals using the address of the actual llvm function
@@ -817,7 +815,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       legalFunctions.insert(reinterpret_cast<std::uint64_t>(f));
     }
 
-    globalObjectsMap->registerFunction(f, addr);
+    memory->registerFunction(f, addr);
   }
 
 #ifndef WINDOWS
@@ -899,7 +897,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 			(int)i->getName().size(), i->getName().data());
       }
 
-      auto *mo = globalObjectsMap->registerGlobalData(v, size, globalObjectAlignment);
+      auto *mo = memory->registerGlobalData(v, size, globalObjectAlignment);
       ObjectState *os = bindObjectInState(state, mo, false);
 
       // Program already running = object already initialized.  Read
@@ -926,7 +924,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       Type *ty = i->getType()->getElementType();
       uint64_t size = kmodule->targetData->getTypeStoreSize(ty);
 
-      auto mo = globalObjectsMap->registerGlobalData(v, size, globalObjectAlignment);
+      auto mo = memory->registerGlobalData(v, size, globalObjectAlignment);
 
       if (!mo)
         llvm::report_fatal_error("out of memory");
@@ -955,7 +953,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       alias = ga;
     }
 
-    globalObjectsMap->registerAlias(&*i, evalConstant(alias->getAliasee(), state.currentThreadId()));
+    memory->registerAlias(&*i, evalConstant(alias->getAliasee(), state.currentThreadId()));
   }
 
   // once all objects are allocated, do the actual initialization
@@ -965,7 +963,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
     if (i->hasInitializer()) {
       const GlobalVariable *v = &*i;
 
-      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, state.currentThreadId());
+      auto mo = memory->lookupGlobalMemoryObject(v, state.currentThreadId());
 
       const ObjectState *os = state.addressSpace.findObject(mo);
       assert(os);
@@ -4727,9 +4725,6 @@ void Executor::runFunctionAsMain(Function *f,
     delete state;
   }
 
-  auto globalMap = globalObjectsMap.release();
-  delete globalMap;
-
   // hack to clear memory objects
   delete memory;
   memory = new MemoryManager(NULL);
@@ -5002,7 +4997,7 @@ ThreadId Executor::createThread(ExecutionState &state,
     const GlobalVariable *v = &*i;
 
     if (i->hasInitializer() && i->isThreadLocal()) {
-      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, thread.getThreadId());
+      auto mo = memory->lookupGlobalMemoryObject(v, thread.getThreadId());
 
       ObjectState *os = bindObjectInState(state, mo, false);
       initializeGlobalObject(state, os, i->getInitializer(), 0, thread.getThreadId());
@@ -5140,7 +5135,7 @@ void Executor::exitThread(ExecutionState &state) {
     const GlobalVariable *v = &*i;
 
     if (v->isThreadLocal()) {
-      auto mo = globalObjectsMap->lookupGlobalMemoryObject(v, tid);
+      auto mo = memory->lookupGlobalMemoryObject(v, tid);
 
       if (PruneStates) {
         auto os = state.addressSpace.findObject(mo);

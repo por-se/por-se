@@ -1,8 +1,8 @@
 #include "GlobalObjectsMap.h"
 
-#include "klee/ExecutionState.h"
 #include "MemoryManager.h"
 
+#include "klee/ExecutionState.h"
 
 using namespace klee;
 
@@ -10,31 +10,50 @@ using namespace klee;
 // GlobalObjectReference
 //
 
-GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::Function* f, ref<ConstantExpr> addr)
-        : type(ReferencedType::Function), value(f), address(addr), size(0) {}
+GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
+    const llvm::Function *f, ref<ConstantExpr> addr)
+    : type(ReferencedType::Function), value(f), address(addr), size(0) {}
 
-GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr)
-        : type(ReferencedType::Alias), value(a), address(addr), size(0) {}
+GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
+    const llvm::GlobalAlias *a, ref<ConstantExpr> addr)
+    : type(ReferencedType::Alias), value(a), address(addr), size(0) {}
 
-GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(const llvm::GlobalValue* v, std::size_t size)
-        : type(ReferencedType::Data), value(v), address(0), size(size) {}
+GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
+    const llvm::GlobalValue *v, std::size_t size)
+    : type(ReferencedType::Data), value(v), address(0), size(size) {}
 
-const llvm::Function* GlobalObjectsMap::GlobalObjectReference::getFunction() {
+GlobalObjectsMap::GlobalObjectReference::~GlobalObjectReference() {
+  if (type == ReferencedType::Data) {
+    // FIXME: it should not be our job to clean this up ...
+    for (auto &[_tid, mo] : threadLocalMemory) {
+      assert(mo->refCount > 0);
+      --mo->refCount;
+
+      if (mo->refCount == 0) {
+        delete mo;
+      }
+    }
+  }
+}
+
+const llvm::Function *GlobalObjectsMap::GlobalObjectReference::getFunction() {
   assert(type == ReferencedType::Function && "Calling on invalid type");
-  return static_cast<const llvm::Function*>(value);
+  return static_cast<const llvm::Function *>(value);
 }
 
-const llvm::GlobalAlias* GlobalObjectsMap::GlobalObjectReference::getAlias() {
+const llvm::GlobalAlias *GlobalObjectsMap::GlobalObjectReference::getAlias() {
   assert(type == ReferencedType::Alias && "Calling on invalid type");
-  return static_cast<const llvm::GlobalAlias*>(value);
+  return static_cast<const llvm::GlobalAlias *>(value);
 }
 
-const llvm::GlobalValue* GlobalObjectsMap::GlobalObjectReference::getGlobalValue() {
+const llvm::GlobalValue *
+GlobalObjectsMap::GlobalObjectReference::getGlobalValue() {
   assert(type == ReferencedType::Data && "Calling on invalid type");
-  return static_cast<const llvm::GlobalValue*>(value);
+  return static_cast<const llvm::GlobalValue *>(value);
 }
 
-MemoryObject* GlobalObjectsMap::GlobalObjectReference::getMemoryObject(const ThreadId& tid) {
+MemoryObject *
+GlobalObjectsMap::GlobalObjectReference::getMemoryObject(const ThreadId &tid) {
   assert(type == ReferencedType::Data && "Calling on invalid type");
 
   auto it = threadLocalMemory.find(tid);
@@ -49,42 +68,47 @@ MemoryObject* GlobalObjectsMap::GlobalObjectReference::getMemoryObject(const Thr
 // GlobalObjectsMap
 //
 
-GlobalObjectsMap::GlobalObjectsMap(MemoryManager* manager)
-  : memoryManager(manager) {
-}
-
-void GlobalObjectsMap::registerFunction(const llvm::Function* func, ref<ConstantExpr> addr) {
+void GlobalObjectsMap::registerFunction(const llvm::Function *func,
+                                        ref<ConstantExpr> addr) {
   assert(findObject(func) == nullptr);
 
-  globalObjects.insert(std::make_pair(func, GlobalObjectReference(func, addr)));
+  globalObjects.emplace(func, GlobalObjectReference(func, addr));
 }
 
-void GlobalObjectsMap::registerAlias(const llvm::GlobalAlias* alias, ref<ConstantExpr> addr) {
+void GlobalObjectsMap::registerAlias(const llvm::GlobalAlias *alias,
+                                     ref<ConstantExpr> addr) {
   assert(findObject(alias) == nullptr);
 
-  globalObjects.insert(std::make_pair(alias, GlobalObjectReference(alias, addr)));
+  globalObjects.emplace(alias, GlobalObjectReference(alias, addr));
 }
 
-const MemoryObject * GlobalObjectsMap::registerGlobalData(const llvm::GlobalValue *gv, std::size_t size,
-                                                          std::size_t alignment) {
+const MemoryObject *
+GlobalObjectsMap::registerGlobalData(MemoryManager *manager,
+                                     const llvm::GlobalValue *gv,
+                                     std::size_t size, std::size_t alignment) {
   assert(findObject(gv) == nullptr);
 
   GlobalObjectReference reference(gv, size);
 
   // For the main thread we create the memory object directly
-  auto mo = memoryManager->allocateGlobal(size, gv, ExecutionState::mainThreadId, alignment);
-  reference.threadLocalMemory.insert(std::make_pair(ExecutionState::mainThreadId, mo));
+  auto mo = manager->allocateGlobal(size, gv, ExecutionState::mainThreadId,
+                                    alignment);
+  ++mo->refCount;
+  reference.threadLocalMemory.emplace(ExecutionState::mainThreadId, mo);
 
   if (!gv->isThreadLocal() && mo != nullptr) {
     reference.address = mo->getBaseExpr();
   }
 
-  globalObjects.insert(std::make_pair(gv, reference));
+  globalObjects.emplace(gv, std::move(reference));
 
   return mo;
 }
 
-const MemoryObject* GlobalObjectsMap::lookupGlobalMemoryObject(const llvm::GlobalValue* gv, const ThreadId& byTid) {
+const MemoryObject *
+GlobalObjectsMap::lookupGlobalMemoryObject(MemoryManager *manager,
+                                           const llvm::GlobalValue *gv,
+                                           const ThreadId &byTid) {
   auto globalObject = findObject(gv);
 
   if (globalObject == nullptr) {
@@ -99,18 +123,23 @@ const MemoryObject* GlobalObjectsMap::lookupGlobalMemoryObject(const llvm::Globa
     return globalObject->threadLocalMemory[ExecutionState::mainThreadId];
   }
 
-  // Now we have to check if we actually have already created the object for this specific thread
+  // Now we have to check if we actually have already created the object for
+  // this specific thread
   auto it = globalObject->threadLocalMemory.find(byTid);
   if (it != globalObject->threadLocalMemory.end()) {
     return it->second;
   }
 
-  auto mo = memoryManager->allocateGlobal(globalObject->size, gv, byTid, gv->getAlignment());
-  globalObject->threadLocalMemory.insert(std::make_pair(byTid, mo));
+  auto mo = manager->allocateGlobal(globalObject->size, gv, byTid,
+                                    gv->getAlignment());
+  ++mo->refCount;
+  globalObject->threadLocalMemory.emplace(byTid, mo);
   return mo;
 }
 
-ref<ConstantExpr> GlobalObjectsMap::lookupGlobal(const llvm::GlobalValue* gv, const ThreadId& byTid) {
+ref<ConstantExpr> GlobalObjectsMap::lookupGlobal(MemoryManager *manager,
+                                                 const llvm::GlobalValue *gv,
+                                                 const ThreadId &byTid) {
   auto globalObject = findObject(gv);
 
   if (globalObject == nullptr) {
@@ -122,10 +151,11 @@ ref<ConstantExpr> GlobalObjectsMap::lookupGlobal(const llvm::GlobalValue* gv, co
     return globalObject->address;
   }
 
-  return lookupGlobalMemoryObject(gv, byTid)->getBaseExpr();
+  return lookupGlobalMemoryObject(manager, gv, byTid)->getBaseExpr();
 }
 
-GlobalObjectsMap::GlobalObjectReference* GlobalObjectsMap::findObject(const llvm::GlobalValue* gv) {
+GlobalObjectsMap::GlobalObjectReference *
+GlobalObjectsMap::findObject(const llvm::GlobalValue *gv) {
   auto it = globalObjects.find(gv);
   if (it != globalObjects.end()) {
     return &it->second;
@@ -133,3 +163,5 @@ GlobalObjectsMap::GlobalObjectReference* GlobalObjectsMap::findObject(const llvm
 
   return nullptr;
 }
+
+void GlobalObjectsMap::clear() noexcept { globalObjects.clear(); }

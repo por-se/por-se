@@ -33,12 +33,14 @@ class BitArray;
 class MemoryManager;
 class Solver;
 class ArrayCache;
+class GlobalObjectsMap;
 
 class MemoryObject {
   friend class STPBuilder;
   friend class ObjectState;
   friend class ExecutionState;
   friend class Thread;
+  friend class GlobalObjectsMap;
 
 private:
   static uint64_t counter;

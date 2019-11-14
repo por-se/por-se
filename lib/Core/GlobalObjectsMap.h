@@ -22,9 +22,7 @@ namespace klee {
       };
 
       // Wrapper object that is added for every global that klee keeps track of
-      class GlobalObjectReference {
-        friend class GlobalObjectsMap;
-
+      struct GlobalObjectReference {
         ReferencedType type;
         const llvm::GlobalValue* value;
 
@@ -36,28 +34,29 @@ namespace klee {
         GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr);
         GlobalObjectReference(const llvm::GlobalValue* v, std::size_t size);
 
+        GlobalObjectReference(GlobalObjectReference const&) = delete;
+        GlobalObjectReference& operator=(GlobalObjectReference const&) = delete;
+        GlobalObjectReference(GlobalObjectReference&&) = default;
+        GlobalObjectReference& operator=(GlobalObjectReference&&) = default;
+        ~GlobalObjectReference();
+
         const llvm::Function* getFunction();
         const llvm::GlobalAlias* getAlias();
         const llvm::GlobalValue* getGlobalValue();
         MemoryObject* getMemoryObject(const ThreadId& tid);
       };
 
-      /// The memory manager that should manage the global objects
-      // -> used for allocating thread local globals
-      // -> lifecycle managed by the `Executor`
-      MemoryManager* memoryManager = nullptr;
-
       std::map<const llvm::GlobalValue*, GlobalObjectReference> globalObjects;
 
     public:
-      explicit GlobalObjectsMap(MemoryManager* manager);
-
       void registerFunction(const llvm::Function* func, ref<ConstantExpr> addr);
       void registerAlias(const llvm::GlobalAlias* alias, ref<ConstantExpr> addr);
-      const MemoryObject *registerGlobalData(const llvm::GlobalValue *gv, std::size_t size, std::size_t alignment);
+      const MemoryObject *registerGlobalData(MemoryManager* manager, const llvm::GlobalValue *gv, std::size_t size, std::size_t alignment);
 
-      const MemoryObject* lookupGlobalMemoryObject(const llvm::GlobalValue* gv, const ThreadId& byTid);
-      ref<ConstantExpr> lookupGlobal(const llvm::GlobalValue* gv, const ThreadId& byTid);
+      const MemoryObject* lookupGlobalMemoryObject(MemoryManager* manager, const llvm::GlobalValue* gv, const ThreadId& byTid);
+      ref<ConstantExpr> lookupGlobal(MemoryManager* manager, const llvm::GlobalValue* gv, const ThreadId& byTid);
+
+      void clear() noexcept;
 
     private:
       GlobalObjectReference* findObject(const llvm::GlobalValue* gv);
