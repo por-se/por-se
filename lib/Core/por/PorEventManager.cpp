@@ -147,7 +147,6 @@ bool PorEventManager::registerLocal(ExecutionState &state,
         attachFingerprintToEvent(state, *e);
         return std::make_pair(e, std::move(standby));
       }
-      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, nullptr);
     });
 
@@ -166,7 +165,6 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, nullptr);
   });
 
@@ -185,7 +183,6 @@ bool PorEventManager::registerLocal(ExecutionState &state,
           attachFingerprintToEvent(*s, *e);
           return std::make_pair(e, std::move(standby));
         }
-        attachFingerprintToEvent(*s, *e);
         return std::make_pair(e, nullptr);
       });
       n = s->porNode->parent();
@@ -263,7 +260,6 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
       attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, nullptr);
   });
 
@@ -345,7 +341,6 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
       attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, nullptr);
   });
 
