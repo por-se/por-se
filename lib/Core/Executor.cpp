@@ -5050,7 +5050,7 @@ void Executor::exitThread(ExecutionState &state) {
   static std::vector<ExecutionState *> emptyVec;
   // needs to come before thread_exit event
   if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
-    porEventManager.registerLocal(state, emptyVec);
+    porEventManager.registerLocal(state, emptyVec, false);
   }
 
   const ThreadId& tid = state.currentThreadId();
@@ -5059,7 +5059,7 @@ void Executor::exitThread(ExecutionState &state) {
   if (state.isOnMainThread()) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
-    porEventManager.registerThreadExit(state, tid);
+    porEventManager.registerThreadExit(state, tid, false);
   }
 
   auto m = kmodule->module.get();
