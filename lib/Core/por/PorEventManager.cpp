@@ -141,6 +141,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
       thread.pathSincePorLocal = {};
       por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
       auto standby = createStandbyState(state, por_local);
+      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     });
 
@@ -154,6 +155,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
     thread.pathSincePorLocal = {};
     por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
     auto standby = createStandbyState(state, por_local);
+    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -167,6 +169,7 @@ bool PorEventManager::registerLocal(ExecutionState &state, const std::vector<Exe
         thread.pathSincePorLocal = {};
         por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
         auto standby = createStandbyState(*s, por_local);
+        attachFingerprintToEvent(*s, *e);
         return std::make_pair(e, std::move(standby));
       });
       n = s->porNode->parent();
@@ -212,12 +215,14 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
       assert(it != cfg.thread_heads().end());
       por::event::event const* e = it->second;
       auto standby = createStandbyState(state, por_thread_init);
+      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     });
   } else {
     extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
       por::event::event const* e = cfg.init_thread(tid);
       auto standby = createStandbyState(state, por_thread_init);
+      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, standby);
     });
   }
