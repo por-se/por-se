@@ -2,6 +2,8 @@
 
 #include "por/event/event.h"
 
+#include "util/check.h"
+
 #include <algorithm>
 #include <cassert>
 #include <set>
@@ -197,9 +199,9 @@ namespace por::event {
 			_event = _thread->second;
 			assert(_event);
 		} else if(_with_root) {
-			assert(_thread == std::prev(_lc->cone().rend()));
-			assert(_event->kind() == event_kind::thread_init);
-			assert((*_event->predecessors().begin())->kind() == event_kind::program_init);
+			libpor_check(_thread == std::prev(_lc->cone().rend()));
+			libpor_check(_event->kind() == event_kind::thread_init);
+			libpor_check((*_event->predecessors().begin())->kind() == event_kind::program_init);
 			_thread = _lc->cone().rend();
 			_event = *_event->predecessors().begin();
 			assert(_event);
@@ -381,8 +383,8 @@ namespace por::event {
 				result.push_back(p);
 			}
 		}
-		assert(result.size() <= _cone.size() || (program_init && result.size() <= _cone.size() + 1));
-		assert(result.size() <= predecessors().size());
+		libpor_check(result.size() <= _cone.size() || (program_init && result.size() <= _cone.size() + 1));
+		libpor_check(result.size() <= predecessors().size());
 		return result;
 	}
 
@@ -416,7 +418,7 @@ namespace por::event {
 				}
 
 				if(is_independent_of(succ)) {
-					assert(succ->is_independent_of(this));
+					libpor_check(succ->is_independent_of(this));
 					succ->_imm_cfl_color = red;
 					W.push_back(succ);
 				} else {
@@ -426,11 +428,11 @@ namespace por::event {
 			}
 		}
 
-#ifndef NDEBUG
+#ifdef LIBPOR_CHECKED
 		std::sort(result.begin(), result.end());
-		assert(std::adjacent_find(result.begin(), result.end()) == result.end() && "absence of duplicates");
-		assert(std::find(result.begin(), result.end(), this) == result.end() && "event is in immediate conflict with itself");
-		assert(std::none_of(result.begin(), result.end(), [this](auto& e) {
+		libpor_check(std::adjacent_find(result.begin(), result.end()) == result.end() && "absence of duplicates");
+		libpor_check(std::find(result.begin(), result.end(), this) == result.end() && "event is in immediate conflict with itself");
+		libpor_check(std::none_of(result.begin(), result.end(), [this](auto& e) {
 			auto lc = e->local_configuration();
 			return std::find(lc.begin(), lc.end(), this) != lc.end();
 		}) && "conflicting event is causally dependent on this");

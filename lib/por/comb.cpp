@@ -1,6 +1,8 @@
 #include "include/por/comb.h"
 #include "include/por/event/event.h"
 
+#include "util/check.h"
+
 #include <algorithm>
 #include <cassert>
 
@@ -73,13 +75,13 @@ void tooth::sort() noexcept {
 }
 
 bool tooth::is_sorted() const noexcept {
-#ifndef NDEBUG // FIXME: EXPENSIVE
-	assert(std::all_of(std::next(begin()), end(), [this](auto* e) { return _events.front()->is_less_than(*e); }));
-	assert(std::all_of(begin(), std::prev(end()), [this](auto* e) { return e->is_less_than(*_events.back()); }));
+#ifdef LIBPOR_CHECKED
+	libpor_check(std::all_of(std::next(begin()), end(), [this](auto* e) { return _events.front()->is_less_than(*e); }));
+	libpor_check(std::all_of(begin(), std::prev(end()), [this](auto* e) { return e->is_less_than(*_events.back()); }));
 	if(_sorted) {
 		std::vector<por::event::event const*> tmp(begin(), end());
 		std::sort(tmp.begin(), tmp.end(), [](auto a, auto b) { return a->is_less_than(*b); });
-		assert(std::equal(tmp.begin(), tmp.end(), begin()));
+		libpor_check(std::equal(tmp.begin(), tmp.end(), begin()));
 	}
 #endif
 	return _sorted;
@@ -153,13 +155,13 @@ std::vector<por::event::event const*> comb::max() const noexcept {
 		}
 	}
 
-#ifndef NDEBUG // FIXME: expensive?
+#ifdef LIBPOR_CHECKED
 	for(auto& a : result) {
 		for(auto& b : result) {
 			if(a == b) {
 				continue;
 			}
-			assert(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
+			libpor_check(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
 		}
 	}
 #endif
@@ -189,13 +191,13 @@ std::vector<por::event::event const*> comb::min() const noexcept {
 		}
 	}
 
-#ifndef NDEBUG // FIXME: expensive?
+#ifdef LIBPOR_CHECKED
 	for(auto& a : result) {
 		for(auto& b : result) {
 			if(a == b) {
 				continue;
 			}
-			assert(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
+			libpor_check(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
 		}
 	}
 #endif

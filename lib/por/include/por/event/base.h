@@ -3,7 +3,8 @@
 #include "por/cone.h"
 #include "por/thread_id.h"
 
-#include <util/iterator_range.h>
+#include "util/check.h"
+#include "util/iterator_range.h"
 
 #include <algorithm>
 #include <cassert>
@@ -174,7 +175,7 @@ namespace por::event {
 		, _kind(kind)
 		{
 			assert(immediate_predecessor._depth < _depth);
-			assert(_cone.size() >= immediate_predecessor._cone.size());
+			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
 			immediate_predecessor._successors.insert(this);
 		}
 
@@ -191,13 +192,13 @@ namespace por::event {
 			_depth = max_depth + 1;
 
 			assert(immediate_predecessor._depth < _depth);
-			assert(_cone.size() >= immediate_predecessor._cone.size());
+			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
 			if(&immediate_predecessor == _cone.at(immediate_predecessor.tid())) {
 				immediate_predecessor._successors.insert(this);
 			}
 			if(single_other_predecessor != nullptr) {
 				assert(single_other_predecessor->_depth < _depth);
-				assert(_cone.size() >= single_other_predecessor->_cone.size());
+				libpor_check(_cone.size() >= single_other_predecessor->_cone.size());
 				if(single_other_predecessor == _cone.at(single_other_predecessor->tid())) {
 					single_other_predecessor->_successors.insert(this);
 				}
@@ -207,7 +208,7 @@ namespace por::event {
 					continue;
 				}
 				assert(op->_depth < _depth);
-				assert(_cone.size() >= op->_cone.size());
+				libpor_check(_cone.size() >= op->_cone.size());
 				if(op == _cone.at(op->tid())) {
 					op->_successors.insert(this);
 				}

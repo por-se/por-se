@@ -3,6 +3,8 @@
 #include "include/por/configuration.h"
 #include "include/por/event/event.h"
 
+#include "util/check.h"
+
 #include <algorithm>
 #include <cassert>
 #include <sstream>
@@ -16,8 +18,7 @@ node* node::make_left_child(std::function<registration_t(por::configuration&)> f
 	_left = allocate_left_child();
 	std::tie(_event, _left->_standby_state) = func(*_left->_C);
 
-	// FIXME: expensive?
-	assert(std::find(_D.begin(), _D.end(), _event) == _D.end());
+	libpor_check(std::find(_D.begin(), _D.end(), _event) == _D.end());
 
 	// propagate sweep bit
 	_left->_is_sweep_node = _is_sweep_node;
@@ -53,8 +54,7 @@ void node::catch_up(std::function<node::registration_t(por::configuration&)> fun
 	auto [event, standby_state] = func(*_C);
 	assert(next == event);
 
-	// FIXME: expensive?
-	assert(std::find(_D.begin(), _D.end(), event) == _D.end());
+	libpor_check(std::find(_D.begin(), _D.end(), event) == _D.end());
 
 	if(standby_state) {
 		_standby_state = standby_state;
@@ -174,7 +174,7 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 				A.remove(*u);
 			}
 		}
-		assert(A.is_sorted()); // FIXME: expensive?
+		libpor_check(A.is_sorted());
 
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
