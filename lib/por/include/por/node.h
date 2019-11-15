@@ -5,6 +5,7 @@
 #include <cassert>
 #include <memory>
 #include <stack>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -250,6 +251,8 @@ namespace por {
 			}
 			return result;
 		}
+
+		std::string to_string(bool with_schedule=true) const noexcept;
 
 	private:
 		node* make_right_child();

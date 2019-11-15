@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <sstream>
 
 using namespace por;
 
@@ -225,4 +226,71 @@ por::event::event const* node::peek() const noexcept {
 		return nullptr;
 	}
 	return _C->peek();
+}
+
+std::string node::to_string(bool with_schedule) const noexcept {
+	std::ostringstream result;
+	result << "node " << this << "\n";
+
+	result << "branch:\n";
+	std::vector<node const*> br(branch_begin(), branch_end());
+	std::reverse(br.begin(), br.end());
+	for(node const* n : br) {
+		result << "  node: " << n << "\n";
+		result << "    parent: ";
+		if(!n->parent()) {
+			result << "nullptr\n";
+		} else {
+			result << n->parent();
+			if(n->parent()->left_child() == n) {
+				result << " (left child)\n";
+			} else if(n->parent()->right_child() == n) {
+				result << " (right child)\n";
+			}
+		}
+		result << "    event: ";
+		if(!n->_event) {
+			result << "nullptr\n";
+		} else {
+			result << n->_event->to_string(true) << " @ " << n->_event << "\n";
+		}
+		result << "    standby_state: ";
+		if(!n->_standby_state) {
+			result << "nullptr\n";
+		} else {
+			result << n->_standby_state << "\n";
+		}
+		result << "    catch_up_ptr: ";
+		if(!n->_catch_up_ptr) {
+			result << "nullptr\n";
+		} else {
+			result << n->_catch_up_ptr << "\n";
+		}
+		result << "    is_sweep_node: " << n->_is_sweep_node << "\n";
+		result << "    |C| = " << std::to_string(n->configuration().size());
+		if(n->configuration().needs_catch_up()) {
+			result << " (+ " << n->configuration()._catch_up.size() << " catch-up)";
+			for(auto x : n->configuration()._catch_up) {
+				result << "\n      catch-up: " <<  x->to_string(true) << " @ " << x;
+			}
+		}
+		result << "\n";
+		result << "    |D| = " << std::to_string(n->_D.size()) << "\n";
+		for(auto& d : n->_D) {
+			result << "      " << d->to_string(true) << " @ " << d << "\n";
+		}
+	}
+
+	if(with_schedule) {
+		auto sched = schedule();
+		if(!sched.empty()) {
+			result << "schedule:\n";
+			for(auto* e : sched) {
+				assert(e);
+				result << "  " << e->to_string(true) << " @ " << e << "\n";
+			}
+		}
+	}
+
+	return result.str();
 }
