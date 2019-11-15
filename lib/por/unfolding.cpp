@@ -85,32 +85,30 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 		assert(f->color() != red); // f should not be in C
 
 		// determine if f is in conflict with some event in C or intersects with D
-		if(!in_immediate_conflict_with_color(*f, red) && f->color() != blue) {
-			bool in_conflict = false;
-			std::vector<por::event::event const*> W{f};
-			while(!W.empty()) {
-				auto w = W.back();
-				W.pop_back();
+		bool in_conflict = false;
+		std::vector<por::event::event const*> W{f};
+		while(!W.empty()) {
+			auto w = W.back();
+			W.pop_back();
 
-				if(w->color() == red) {
-					// predecessors of w cannot be in D or in conflict with C
-					continue;
-				}
-
-				if(w->color() == blue || in_immediate_conflict_with_color(*w, red)) {
-					in_conflict = true;
-					break;
-				}
-
-				for(auto p : w->immediate_predecessors()) {
-					W.push_back(p);
-				}
+			if(w->color() == red) {
+				// predecessors of w cannot be in D or in conflict with C
+				continue;
 			}
 
-			if(!in_conflict) {
-				ep = f;
+			if(w->color() == blue || in_immediate_conflict_with_color(*w, red)) {
+				in_conflict = true;
 				break;
 			}
+
+			for(auto p : w->immediate_predecessors()) {
+				W.push_back(p);
+			}
+		}
+
+		if(!in_conflict) {
+			ep = f;
+			break;
 		}
 	}
 
