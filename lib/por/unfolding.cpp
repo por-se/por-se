@@ -56,7 +56,7 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 }
 
 namespace {
-	bool in_conflict_with_color(por::event::event const& e, por::event::event::color_t color) {
+	bool in_immediate_conflict_with_color(por::event::event const& e, por::event::event::color_t color) {
 		auto imm = e.immediate_conflicts_sup();
 		return std::any_of(imm.begin(), imm.end(), [&color](auto cfl) {
 			return cfl->color() == color;
@@ -73,7 +73,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 
 	por::event::event const* e = nullptr;
 	for(auto d : D) {
-		if(!in_conflict_with_color(*d, red)) {
+		if(!in_immediate_conflict_with_color(*d, red)) {
 			e = d;
 			break;
 		}
@@ -84,21 +84,21 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 	for(auto f : e->immediate_conflicts_sup()) {
 		assert(f->color() != red); // f should not be in C
 
-		// determine if f is in conflict with some event in C
-		if(!in_conflict_with_color(*f, red) && f->color() != blue) {
-			bool intersects_with_d = false;
+		// determine if f is in conflict with some event in C or intersects with D
+		if(!in_immediate_conflict_with_color(*f, red) && f->color() != blue) {
+			bool in_conflict = false;
 			std::vector<por::event::event const*> W{f};
 			while(!W.empty()) {
 				auto w = W.back();
 				W.pop_back();
 
 				if(w->color() == red) {
-					// predecessors of w cannot be in D
+					// predecessors of w cannot be in D or in conflict with C
 					continue;
 				}
 
-				if(w->color() == blue) {
-					intersects_with_d = true;
+				if(w->color() == blue || in_immediate_conflict_with_color(*w, red)) {
+					in_conflict = true;
 					break;
 				}
 
@@ -107,7 +107,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 				}
 			}
 
-			if(!intersects_with_d) {
+			if(!in_conflict) {
 				ep = f;
 				break;
 			}
