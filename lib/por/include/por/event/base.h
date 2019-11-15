@@ -324,7 +324,7 @@ namespace por::event {
 		std::vector<event const*> immediate_conflicts_sup() const noexcept;
 
 		color_t color() const noexcept { return _color; }
-		[[nodiscard]] static color_t new_color() noexcept { return ++_next_color; }
+		[[nodiscard]] static color_t new_color() noexcept { return _next_color++; }
 		color_t colorize(color_t color) const noexcept { return _color = color; }
 		[[nodiscard]] color_t colorize() const noexcept { return colorize(new_color()); }
 
