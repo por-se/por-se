@@ -107,6 +107,7 @@ namespace util {
 				for(std::size_t i = 0; i < _size; ++i) {
 					new(lhs_data + i) T(std::move(rhs_data[i]));
 				}
+				rhs._size = 0;
 			}
 		}
 		sso_array& operator=(sso_array&&) = delete;
@@ -154,5 +155,6 @@ namespace util {
 		T const& operator[](std::size_t const index) const noexcept { return data()[index]; }
 
 		std::size_t size() const noexcept { return _size; }
+		bool empty() const noexcept { return _size == 0; }
 	};
 }

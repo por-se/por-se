@@ -64,7 +64,7 @@ namespace por::event {
 			util::iterator_range<event const* const*> condition_variable_predecessors
 		)
 			: event(event_kind::signal, tid, thread_predecessor, condition_variable_predecessors)
-			, _predecessors{util::create_uninitialized, 1ul + condition_variable_predecessors.size()}
+			, _predecessors{util::create_uninitialized, std::max(1ul + condition_variable_predecessors.size(), 2ul)}
 			, _cid(cid)
 		{
 			_predecessors[0] = &thread_predecessor;
@@ -183,7 +183,9 @@ namespace por::event {
 		}
 
 		util::iterator_range<event const* const*> predecessors() const noexcept override {
-			if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
+			if(_predecessors.empty()) {
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr);
+			} else if(_predecessors.size() > 2 || _predecessors[1] != nullptr) {
 				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 			} else {
 				return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 1);
