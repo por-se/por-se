@@ -8,7 +8,7 @@
 int main() {
 	// initialize a mapping and an associated allocator (using the location "0" gives an OS-assigned location)
 	pseudoalloc::mapping_t mapping(static_cast<std::size_t>(1) << 12);
-	pseudoalloc::allocator_t allocator(mapping);
+	pseudoalloc::allocator_t allocator(mapping, 0); /// allocator without a quarantine zone
 
 	std::deque<void*> allocations;
 	for(std::size_t i = 0; i < 10; ++i) {

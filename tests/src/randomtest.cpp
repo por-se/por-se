@@ -34,7 +34,7 @@ namespace {
 		  : rng(seed)
 #if defined(USE_PSEUDOALLOC)
 		  , mapping(static_cast<std::size_t>(1) << 40)
-		  , allocator(mapping)
+		  , allocator(mapping, 0) /// allocator without a quarantine zone
 #endif
 		  , allocation_bin_distribution(0.3)
 		  , large_allocation_distribution(0.00003) {

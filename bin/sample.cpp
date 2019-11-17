@@ -5,7 +5,7 @@
 int main(void) {
 	// initialize a mapping and an associated allocator (using the location "0" gives an OS-assigned location)
 	pseudoalloc::mapping_t mapping(static_cast<std::size_t>(1) << 40);
-	pseudoalloc::allocator_t allocator(mapping);
+	pseudoalloc::allocator_t allocator(mapping, 0); /// allocator without a quarantine zone
 
 	// let us create an integer
 	void* ptr = allocator.allocate(sizeof(int));
@@ -14,7 +14,7 @@ int main(void) {
 	assert(*my_int == 42 && "While we can use the addresses, this is not the point of pseudoalloc");
 
 	{
-		auto allocator2 = pseudoalloc::allocator_t(mapping);
+		auto allocator2 = pseudoalloc::allocator_t(mapping, 0); /// allocator without a quarantine zone
 		int* my_second_int = static_cast<int*>(allocator2.allocate(sizeof(int)));
 		assert(reinterpret_cast<std::uintptr_t>(my_int) == reinterpret_cast<std::uintptr_t>(my_second_int) &&
 		       "pseudoalloc is intended to produce reproducible addresses");
