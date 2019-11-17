@@ -388,7 +388,7 @@ namespace por::event {
 		return result;
 	}
 
-	std::vector<event const*> event::immediate_conflicts_sup() const noexcept {
+	std::vector<event const*> event::compute_immediate_conflicts_sup() const noexcept {
 		color_t blue = _imm_cfl_next_color++;
 		color_t red = _imm_cfl_next_color++;
 

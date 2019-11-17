@@ -69,7 +69,7 @@ namespace por {
 			}
 		}
 
-		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
+		template<typename T, typename = std::enable_if<std::is_base_of_v<por::event::event, T>>>
 		por::event::event const& deduplicate(T&& e) {
 			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
 			if(it != _events.end()) {
@@ -82,15 +82,26 @@ namespace por {
 			}
 			// new event
 			stats_inc_unique_event(e.kind());
-			return *store_event(std::forward<T>(e));
+			auto ptr = store_event(std::forward<T>(e));
+			ptr->cache_immediate_conflicts_sup();
+			for(auto& ic : ptr->immediate_conflicts_sup()) {
+				ic->cache_immediate_conflicts_sup();
+			}
+			return *ptr;
 		}
 
 		void remove_event(por::event::event const& e) {
 			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
 			if(it != _events.end()) {
 				auto& events = it->second;
-				events.erase(std::remove_if(events.begin(), events.end(), [&e](auto& v) {
-					return &e == v.get();
+				events.erase(std::remove_if(events.begin(), events.end(), [this, &e](auto& v) {
+					if(&e != v.get()) {
+						return false;
+					}
+
+					for(auto& ic : e.immediate_conflicts_sup()) {
+						ic->remove_from_immediate_conflicts_sup(e);
+					}
 				}));
 			}
 		}

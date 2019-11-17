@@ -26,6 +26,10 @@ namespace klee {
 }
 #endif
 
+namespace por {
+	class unfolding;
+}
+
 namespace por::event {
 	using thread_id_t = por::thread_id;
 	using lock_id_t = std::uint64_t;
@@ -96,6 +100,8 @@ namespace por::event {
 	};
 
 	class event {
+		friend class por::unfolding; // for caching of immediate_conflict_sup
+
 	public:
 		using depth_t = std::size_t;
 		using color_t = std::size_t;
@@ -115,6 +121,25 @@ namespace por::event {
 
 		mutable std::set<event const*> _successors;
 
+		mutable std::vector<event const*> _immediate_conflicts_sup;
+
+		std::vector<event const*> compute_immediate_conflicts_sup() const noexcept;
+
+		void cache_immediate_conflicts_sup() const noexcept {
+			_immediate_conflicts_sup = compute_immediate_conflicts_sup();
+		}
+
+		void clear_cache_immediate_conflicts_sup() const noexcept {
+			_immediate_conflicts_sup.clear();
+		}
+
+		void remove_from_immediate_conflicts_sup(event const& event) const noexcept {
+			auto it = std::find(_immediate_conflicts_sup.begin(), _immediate_conflicts_sup.end(), &event);
+			if(it == _immediate_conflicts_sup.end()) {
+				return;
+			}
+			_immediate_conflicts_sup.erase(it);
+		}
 
 	public:
 		mutable klee::MemoryFingerprintValue _fingerprint;
@@ -308,8 +333,10 @@ namespace por::event {
 
 		std::vector<event const*> immediate_predecessors() const noexcept;
 
-		// computes a superset of immediate conflicts
-		std::vector<event const*> immediate_conflicts_sup() const noexcept;
+		// returns a superset of immediate conflicts
+		std::vector<event const*> immediate_conflicts_sup() const noexcept {
+			return _immediate_conflicts_sup;
+		}
 
 		color_t color() const noexcept { return _color; }
 		[[nodiscard]] static color_t new_color() noexcept { return _next_color++; }
