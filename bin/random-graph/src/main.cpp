@@ -368,9 +368,14 @@ int main(int argc, char** argv){
 		for(auto e : entry.extension().immediate_predecessors()) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
-		std::cerr << "and immediate conflicts superset:\n";
-		for(auto e : entry.extension().immediate_conflicts_sup()) {
+		std::cerr << "and immediate conflict(s):\n";
+		auto icfl = entry.extension().immediate_conflicts();
+		for(auto e : icfl) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
+			auto e_icfl = e->immediate_conflicts();
+			for(auto c : e_icfl) {
+				assert(std::find(e_icfl.begin(), e_icfl.end(), &entry.extension()) != icfl.end());
+			}
 		}
 		std::cerr << "\n";
 	}

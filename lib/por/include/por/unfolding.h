@@ -83,10 +83,19 @@ namespace por {
 			// new event
 			stats_inc_unique_event(e.kind());
 			auto ptr = store_event(std::forward<T>(e));
-			ptr->cache_immediate_conflicts_sup();
-			for(auto& ic : ptr->immediate_conflicts_sup()) {
-				ic->cache_immediate_conflicts_sup();
-			}
+
+			// compute exact immediate conflict relation
+			auto ptr_icfl = ptr->compute_immediate_conflicts_sup();
+			ptr_icfl.erase(std::remove_if(ptr_icfl.begin(), ptr_icfl.end(), [&ptr](auto& other) {
+				auto other_icfl_sup = other->compute_immediate_conflicts_sup();
+				bool in_imm_cfl = std::find(other_icfl_sup.begin(), other_icfl_sup.end(), ptr) == other_icfl_sup.end();
+				if(!in_imm_cfl) {
+					return true;
+				}
+				other->_immediate_conflicts.push_back(ptr);
+				return false;
+			}), ptr_icfl.end());
+			ptr->_immediate_conflicts = std::move(ptr_icfl);
 			return *ptr;
 		}
 
@@ -99,8 +108,12 @@ namespace por {
 						return false;
 					}
 
-					for(auto& ic : e.immediate_conflicts_sup()) {
-						ic->remove_from_immediate_conflicts_sup(e);
+					for(auto& ic : e.immediate_conflicts()) {
+						auto it = std::find(ic->_immediate_conflicts.begin(), ic->_immediate_conflicts.end(), &e);
+						if(it == ic->_immediate_conflicts.end()) {
+							continue;
+						}
+						ic->_immediate_conflicts.erase(it);
 					}
 				}));
 			}

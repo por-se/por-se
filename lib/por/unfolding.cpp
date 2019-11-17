@@ -57,7 +57,7 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 
 namespace {
 	bool in_immediate_conflict_with_color(por::event::event const& e, por::event::event::color_t color) {
-		auto imm = e.immediate_conflicts_sup();
+		auto imm = e.immediate_conflicts();
 		return std::any_of(imm.begin(), imm.end(), [&color](auto cfl) {
 			return cfl->color() == color;
 		});
@@ -81,7 +81,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 	assert(e != nullptr);
 
 	por::event::event const* ep = nullptr;
-	for(auto f : e->immediate_conflicts_sup()) {
+	for(auto f : e->immediate_conflicts()) {
 		assert(f->color() != red); // f should not be in C
 
 		// determine if f is in conflict with some event in C or intersects with D

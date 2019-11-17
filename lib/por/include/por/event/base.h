@@ -100,7 +100,7 @@ namespace por::event {
 	};
 
 	class event {
-		friend class por::unfolding; // for caching of immediate_conflict_sup
+		friend class por::unfolding; // for caching of immediate_conflicts
 
 	public:
 		using depth_t = std::size_t;
@@ -115,30 +115,26 @@ namespace por::event {
 		mutable color_t _color = 0;
 		static color_t _next_color;
 
-		// distinct color for immediate_conflicts_sup()
+		// distinct color for compute_immediate_conflicts_sup()
 		mutable color_t _imm_cfl_color = 0;
 		static color_t _imm_cfl_next_color;
 
 		mutable std::set<event const*> _successors;
 
-		mutable std::vector<event const*> _immediate_conflicts_sup;
+		mutable std::vector<event const*> _immediate_conflicts;
 
 		std::vector<event const*> compute_immediate_conflicts_sup() const noexcept;
 
-		void cache_immediate_conflicts_sup() const noexcept {
-			_immediate_conflicts_sup = compute_immediate_conflicts_sup();
+		void clear_cache_immediate_conflicts() const noexcept {
+			_immediate_conflicts.clear();
 		}
 
-		void clear_cache_immediate_conflicts_sup() const noexcept {
-			_immediate_conflicts_sup.clear();
-		}
-
-		void remove_from_immediate_conflicts_sup(event const& event) const noexcept {
-			auto it = std::find(_immediate_conflicts_sup.begin(), _immediate_conflicts_sup.end(), &event);
-			if(it == _immediate_conflicts_sup.end()) {
+		void remove_from_immediate_conflicts(event const& event) const noexcept {
+			auto it = std::find(_immediate_conflicts.begin(), _immediate_conflicts.end(), &event);
+			if(it == _immediate_conflicts.end()) {
 				return;
 			}
-			_immediate_conflicts_sup.erase(it);
+			_immediate_conflicts.erase(it);
 		}
 
 	public:
@@ -333,9 +329,8 @@ namespace por::event {
 
 		std::vector<event const*> immediate_predecessors() const noexcept;
 
-		// returns a superset of immediate conflicts
-		std::vector<event const*> immediate_conflicts_sup() const noexcept {
-			return _immediate_conflicts_sup;
+		std::vector<event const*> const& immediate_conflicts() const noexcept {
+			return _immediate_conflicts;
 		}
 
 		color_t color() const noexcept { return _color; }
