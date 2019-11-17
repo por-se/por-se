@@ -388,7 +388,7 @@ namespace por::event {
 		return result;
 	}
 
-	std::vector<event const*> event::compute_immediate_conflicts_sup() const noexcept {
+	std::vector<event const*> event::compute_immediate_conflicts_sup(event const* find) const noexcept {
 		color_t blue = _imm_cfl_next_color++;
 		color_t red = _imm_cfl_next_color++;
 
@@ -422,6 +422,9 @@ namespace por::event {
 					succ->_imm_cfl_color = red;
 					W.push_back(succ);
 				} else {
+					if(succ == find) {
+						return {find};
+					}
 					succ->_imm_cfl_color = blue;
 					result.push_back(succ);
 				}
@@ -438,6 +441,9 @@ namespace por::event {
 		}) && "conflicting event is causally dependent on this");
 #endif
 
+		if(find != nullptr) {
+			return {};
+		}
 		return result;
 	}
 }
