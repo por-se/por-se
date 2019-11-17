@@ -115,19 +115,6 @@ namespace por::event {
 
 		mutable std::set<event const*> _successors;
 
-		bool is_explorable() const {
-			switch(_kind) {
-				case por::event::event_kind::local:
-				case por::event::event_kind::lock_acquire:
-				case por::event::event_kind::wait1:
-				case por::event::event_kind::wait2:
-				case por::event::event_kind::signal:
-				case por::event::event_kind::broadcast:
-					return true;
-				default:
-					return false;
-			}
-		}
 
 	public:
 		mutable klee::MemoryFingerprintValue _fingerprint;
