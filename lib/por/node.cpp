@@ -178,6 +178,9 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
+
+	assert(B.empty() || B.size() == (B.front()->configuration().size() - 1));
+
 	return leaves;
 }
 
