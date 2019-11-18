@@ -83,20 +83,6 @@ static int create_socket(exe_socket_t** target) {
   return fd;
 }
 
-static void remove_from_waiting(exe_socket_t* s) {
-  kpr_list_iterator it = kpr_list_iterate(&waiting_sockets);
-  while(kpr_list_iterator_valid(it)) {
-    exe_socket_t* socket = kpr_list_iterator_value(it);
-
-    if (socket == s) {
-      kpr_list_erase(&waiting_sockets, &it);
-      return;
-    }
-
-    kpr_list_iterator_next(&it);
-  }
-}
-
 static exe_socket_t* find_waiting_by_req_port(int port) {
   kpr_list_iterator it = kpr_list_iterate(&waiting_sockets);
   while(kpr_list_iterator_valid(it)) {
@@ -463,6 +449,12 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
       }
     }
 
+    if (f->flags & eNonBlock) {
+      pthread_mutex_unlock(klee_fs_lock());
+      errno = EWOULDBLOCK;
+      return -1;
+    }
+
     kpr_list_push(&f->socket->blocked_threads, pthread_self());
     kpr_wait_thread_self(klee_fs_lock());
   }
@@ -496,6 +488,8 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   // And wake up the peer
   if (peer->faked_packet == NULL) {
     notify_thread_list(&peer->blocked_threads);
+
+    kpr_handle_fd_changed(peer->own_fd);
   } else {
     // If we write too many bytes, then we risk blocking this
     assert(peer->faked_packet->packet_length <= PIPE_BUFFER_SIZE);
@@ -595,7 +589,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     if (socket) {
       if (socket->state != EXE_SOCKET_PASSIVE) {
         if (inWaitingList) {
-          remove_from_waiting(f->socket);
+          kpr_list_remove(&waiting_sockets, f->socket);
         }
 
         pthread_mutex_unlock(klee_fs_lock());
@@ -603,7 +597,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
         return -1;
       } else {
         if (inWaitingList) {
-          remove_from_waiting(f->socket);
+          kpr_list_remove(&waiting_sockets, f->socket);
         }
 
         break;
@@ -621,7 +615,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   assert(socket != NULL);
   if (inWaitingList) {
-    remove_from_waiting(f->socket);
+    kpr_list_remove(&waiting_sockets, f->socket);
   }
 
   // Now we add ourselfs to the waiting list of the socket
@@ -635,6 +629,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     }
 
     notify_thread_list(&socket->blocked_threads);
+    kpr_handle_fd_changed(socket->own_fd);
 
     if (f->flags & eNonBlock) {
       pthread_mutex_unlock(klee_fs_lock());
@@ -664,23 +659,18 @@ int kpr_close_socket(exe_file_t* file) {
     file->socket->readFd = -1;
   }
 
-  kpr_list_iterator it = kpr_list_iterate(&open_sockets);
-  while(kpr_list_iterator_valid(it)) {
-    exe_socket_t* socket = kpr_list_iterator_value(it);
-
-    if (socket == file->socket) {
-      kpr_list_erase(&open_sockets, &it);
-    }
-
-    kpr_list_iterator_next(&it);
-  }
+  kpr_list_remove(&open_sockets, file->socket);
 
   if (file->socket->saddress) {
     free(file->socket->saddress);
     file->socket->saddress = NULL;
   }
 
+  kpr_handle_fd_changed(file->socket->own_fd);
+
   if (file->socket->peer) {
+    kpr_handle_fd_changed(file->socket->peer->own_fd);
+
     assert(file->socket->peer->peer == file->socket);
     file->socket->peer->peer = NULL;
   }
@@ -732,6 +722,14 @@ int shutdown(int sockfd, int how) {
     }
 
     ret = 0;
+  }
+
+  if (ret > 0) {
+    kpr_handle_fd_changed(file->socket->own_fd);
+
+    if (file->socket->peer) {
+      kpr_handle_fd_changed(file->socket->peer->own_fd);
+    }
   }
 
   pthread_mutex_unlock(klee_fs_lock());
