@@ -145,6 +145,10 @@ namespace por {
 			return *_C.get();
 		}
 
+		event_set_t const& D() const noexcept {
+			return _D;
+		}
+
 		node* parent() noexcept {
 			return _parent;
 		}
