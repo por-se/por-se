@@ -21,6 +21,8 @@ namespace por {
 		std::map<key_t, value_t> _events;
 		por::event::event const* _root;
 
+		std::size_t _size;
+
 		// NOTE: do not use for other purposes, only compares pointers of predecessors
 		bool compare_events(por::event::event const& a, por::event::event const& b);
 
@@ -82,6 +84,7 @@ namespace por {
 			}
 			// new event
 			stats_inc_unique_event(e.kind());
+			++_size;
 			auto ptr = store_event(std::forward<T>(e));
 
 			// compute exact immediate conflict relation
@@ -102,6 +105,7 @@ namespace por {
 			if(it != _events.end()) {
 				auto& events = it->second;
 				events.erase(std::remove_if(events.begin(), events.end(), [this, &e](auto& v) {
+					--_size;
 					if(&e != v.get()) {
 						return false;
 					}
@@ -119,6 +123,10 @@ namespace por {
 
 		por::event::event const& root() {
 			return *_root;
+		}
+
+		std::size_t size() const noexcept {
+			return _size;
 		}
 
 		por::event::event const* compute_alternative(por::configuration const& C,
