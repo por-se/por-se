@@ -430,6 +430,11 @@ cl::opt<bool> DebugCheckForImpliedValues(
     cl::desc("Debug the implied value optimization"),
     cl::cat(DebugCat));
 
+cl::opt<bool>ExploreSchedules(
+      "explore-schedules",
+      cl::desc("Explore alternative thread schedules (default=true)"),
+      cl::init(true));
+
 enum class ThreadSchedulingPolicy {
   First, // first runnable thread (by id)
   Last, // last runnable thread (by id)
@@ -3713,7 +3718,7 @@ void Executor::terminateState(ExecutionState &state) {
   interpreterHandler->incPathsExplored();
 
 
-  if(state.porNode && state.porNode->parent()) {
+  if(ExploreSchedules && state.porNode && state.porNode->parent()) {
     state.porNode->configuration().conflicting_extensions();
 
     std::vector<por::node*> branch(state.porNode->parent()->branch_begin(), state.porNode->parent()->branch_end());
@@ -3741,7 +3746,7 @@ void Executor::terminateState(ExecutionState &state) {
     }
   }
 
-  if(state.porNode) {
+  if(ExploreSchedules && state.porNode) {
     state.porNode->backtrack();
   }
 
