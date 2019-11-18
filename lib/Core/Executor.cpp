@@ -142,9 +142,9 @@ cl::opt<bool> OnlyOutputStatesCoveringNew(
     cl::cat(TestGenCat));
 
 cl::opt<bool> EmitAllErrors(
-    "emit-all-errors", cl::init(false),
+    "emit-all-errors", cl::init(true),
     cl::desc("Generate tests cases for all errors "
-             "(default=false, i.e. one per (error,instruction) pair)"),
+             "(default=true, i.e. one per (error,instruction) pair)"),
     cl::cat(TestGenCat));
 
 
