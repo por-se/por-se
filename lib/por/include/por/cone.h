@@ -32,7 +32,7 @@ namespace por {
 		auto empty() const { return _map.empty(); }
 		auto find(thread_id const& tid) const { return _map.find(tid); }
 		auto at(thread_id const& tid) const { return _map.at(tid); }
-		auto count(thread_id const& tid) const { return _map.count(tid); }
+		auto has(thread_id const& tid) const { return _map.count(tid) != 0; }
 
 		void insert(por::event::event const& event);
 

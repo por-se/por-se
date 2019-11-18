@@ -14,13 +14,13 @@ void cone::insert(por::event::event const& p) {
 	}
 
 	for(auto& [tid, event] : p.cone()) {
-		if(_map.count(tid) == 0 || _map[tid]->depth() < event->depth()) {
+		if(!has(tid) || at(tid)->depth() < event->depth()) {
 			_map[tid] = event;
 		}
 	}
 
 	// p is not yet part of cone
-	if(_map.count(p.tid()) == 0 || _map[p.tid()]->depth() < p.depth()) {
+	if(!has(p.tid()) || at(p.tid())->depth() < p.depth()) {
 		_map[p.tid()] = &p;
 	}
 }
@@ -58,19 +58,19 @@ cone::cone(por::configuration const& configuration) : _map(configuration.thread_
 
 bool cone::is_lte_for_all_of(cone const& rhs) const noexcept {
 	for(auto& [tid, event] : rhs) {
-		if(count(tid) && at(tid)->depth() > event->depth()) {
+		if(has(tid) && at(tid)->depth() > event->depth()) {
 			// By construction, rhs also includes all elements of event's cone.
 			// Thus, we only need to check against the depth on the same tid.
 			return false;
 		}
-		libpor_check(!count(tid) || at(tid) == event || at(tid)->is_less_than_eq(*event));
+		libpor_check(!has(tid) || at(tid) == event || at(tid)->is_less_than_eq(*event));
 	}
 	return true;
 }
 
 bool cone::is_gte_for_all_of(cone const& rhs) const noexcept {
 	for(auto& [tid, event] : rhs) {
-		if(!count(tid) || at(tid)->depth() < event->depth()) {
+		if(!has(tid) || at(tid)->depth() < event->depth()) {
 			// By construction, rhs also includes all elements of event's cone.
 			// Thus, we only need to check against the depth on the same tid.
 			return false;
@@ -83,7 +83,7 @@ bool cone::is_gte_for_all_of(cone const& rhs) const noexcept {
 void cone::extend_unchecked_single(por::event::event const& event) noexcept {
 	libpor_check(is_lte_for_all_of(event.cone()));
 	assert(event.kind() != por::event::event_kind::program_init);
-	assert(!_map.count(event.tid()) || _map[event.tid()]->depth() <= event.depth());
+	assert(!has(event.tid()) || at(event.tid())->depth() <= event.depth());
 	_map[event.tid()] = &event;
 }
 
@@ -91,7 +91,7 @@ void cone::extend_unchecked_single(por::event::event const& event) noexcept {
 por::comb cone::setminus(por::cone const& rhs) const noexcept {
 	por::comb result;
 	for(auto& [tid, event] : *this) {
-		if(!rhs.count(tid)) {
+		if(!rhs.has(tid)) {
 			// no event on tid removed by rhs
 			por::event::event const* e = event;
 			do {
