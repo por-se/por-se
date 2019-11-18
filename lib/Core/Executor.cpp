@@ -73,6 +73,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "por/node.h"
+#include "por/configuration.h"
 
 #include "RaceDetection/DataRaceDetection.h"
 #include "RaceDetection/StateBoundTimingSolver.h"
@@ -5230,10 +5231,55 @@ void Executor::scheduleThreads(ExecutionState &state) {
     state.threadSchedulingEnabled = true;
   }
 
-  std::set<ThreadId>& runnable = state.runnableThreads;
+  std::set<ThreadId> runnable = state.runnableThreads;
+
+  bool disabledThread = false;
+  bool wasEmpty = runnable.empty();
+
+  if (!state.porNode->needs_catch_up() && !state.porNode->D().empty()) {
+    const por::configuration &C = state.porNode->configuration();
+    por::comb D(state.porNode->D().begin(), state.porNode->D().end());
+    D.sort();
+
+    for (auto &[tid, tooth] : D.threads()) {
+      if (!C.thread_heads().count(tid)) {
+        continue; // go to next thread
+      }
+      for (auto &d : tooth) {
+        if (d->depth() <= C.thread_heads().at(tid)->depth()) {
+          // d is justified, no need to exclude it anymore
+          continue; // go to next event
+        }
+        // d is excluded
+        if (d->is_enabled(C)) {
+          bool isJustified = false;
+          if (d->lid()) {
+            if (C.lock_heads().count(d->lid()) == 0 && d->lock_predecessor() != nullptr) {
+              isJustified = true;
+            } else if(C.lock_heads().count(d->lid())) {
+              if (d->lock_predecessor() != C.lock_heads().at(d->lid())) {
+                isJustified = true;
+              }
+            }
+          }
+
+          if(!isJustified) {
+            disabledThread = true;
+            runnable.erase(d->tid());
+            break; // go to next thread
+          }
+        }
+      }
+    }
+  }
 
   // Another point of we cannot schedule any other thread
   if (runnable.empty()) {
+    if (disabledThread && !wasEmpty) {
+      klee_error("Disabled all threads because of porNode->D(). Terminating State.");
+      terminateState(state);
+    }
+
     bool allExited = true;
 
     for (auto& threadIt : state.threads) {
