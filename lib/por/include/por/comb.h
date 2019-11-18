@@ -134,6 +134,7 @@ namespace por {
 		auto find(thread_id const& tid) const { return _teeth.find(tid); }
 		auto& at(thread_id const& tid) const { return _teeth.at(tid); }
 
+		bool has(thread_id const& tid) const noexcept { return _teeth.count(tid) != 0; }
 		std::size_t count(thread_id const& tid) const noexcept {
 			auto it = _teeth.find(tid);
 			if(it == _teeth.end()) {
