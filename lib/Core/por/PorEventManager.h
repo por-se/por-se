@@ -31,7 +31,6 @@ namespace klee {
       bool shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind);
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por_event_t kind);
       void logEventThreadAndKind(const ExecutionState &state, por_event_t kind);
-      void checkIfCatchUpIsNeeded(ExecutionState &state);
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);

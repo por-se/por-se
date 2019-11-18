@@ -80,14 +80,6 @@ void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_eve
   llvm::errs() << "POR event: " << getNameOfEvent(kind) << " with current thread " << state.currentThreadId();
 }
 
-void PorEventManager::checkIfCatchUpIsNeeded(ExecutionState &state) {
-  if (state.porNode->needs_catch_up() || roundRobin) {
-    // make sure we do not miss any events in case a different
-    // thread needs to be scheduled after catching up to this event
-    state.needsThreadScheduling = true;
-  }
-}
-
 bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind) {
   bool result = true;
   if (StandbyStates != StandbyStatePolicy::All) {
@@ -132,7 +124,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   assert(!state.currentThread().pathSincePorLocal.empty());
   assert(std::find(addedStates.begin(), addedStates.end(), &state) == addedStates.end());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   if(state.porNode->needs_catch_up()) {
     assert(addedStates.empty());
@@ -202,7 +194,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
     por::event::event const* e = cfg.create_thread(state.currentThreadId(), tid);
@@ -223,7 +215,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   if (tid == ExecutionState::mainThreadId) {
     // event already present in configuration
@@ -256,7 +248,7 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &tid, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.exit_thread(tid);
@@ -281,7 +273,7 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.join_thread(state.currentThreadId(), joinedThread);
@@ -303,7 +295,7 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_lock(state.currentThreadId(), mId);
@@ -324,7 +316,7 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_lock(state.currentThreadId(), mId);
@@ -343,7 +335,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.acquire_lock(state.currentThreadId(), mId);
@@ -368,7 +360,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId);
@@ -390,7 +382,7 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_cond(state.currentThreadId(), cId);
@@ -411,7 +403,7 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_cond(state.currentThreadId(), cId);
@@ -432,7 +424,7 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.signal_thread(state.currentThreadId(), cId, notifiedThread);
@@ -458,7 +450,7 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
     por::event::event const* e = cfg.broadcast_threads(state.currentThreadId(), cId, threads);
@@ -479,7 +471,7 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait1(state.currentThreadId(), cId, mId);
@@ -500,7 +492,7 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
-  checkIfCatchUpIsNeeded(state);
+  state.needsThreadScheduling = true;
 
   extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait2(state.currentThreadId(), cId, mId);
