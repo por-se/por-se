@@ -40,7 +40,19 @@ namespace por {
 
 		cone(por::event::event const& immediate_predecessor);
 
-		cone(util::iterator_range<por::event::event const* const*> events);
+		template<typename T>
+		cone(T begin, T end) {
+			for(auto it = begin; it != end; ++it) {
+				por::event::event const* e = *it;
+				if(!e) {
+					continue;
+				}
+				insert(*e);
+			}
+		}
+
+		template<typename T>
+		cone(util::iterator_range<T> range) : cone(range.begin(), range.end()) { }
 
 		cone(por::event::event const& immediate_predecessor,
 			por::event::event const* single_other_predecessor,
