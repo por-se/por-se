@@ -133,7 +133,14 @@ namespace por {
 
 		auto find(thread_id const& tid) const { return _teeth.find(tid); }
 		auto& at(thread_id const& tid) const { return _teeth.at(tid); }
-		auto count(thread_id const& tid) const { return _teeth.count(tid); }
+
+		std::size_t count(thread_id const& tid) const noexcept {
+			auto it = _teeth.find(tid);
+			if(it == _teeth.end()) {
+				return 0;
+			}
+			return it->second.size();
+		}
 
 		void insert(por::event::event const& event) noexcept;
 
