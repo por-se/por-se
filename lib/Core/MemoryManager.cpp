@@ -58,6 +58,11 @@ llvm::cl::opt<std::string> ThreadSegmentsFile(
       "allocate-thread-segments-file",
       llvm::cl::desc("File that specifies the start addresses of thread segments"),
       llvm::cl::init(""), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<std::uint32_t> QuarantineSize(
+      "allocate-quarantine",
+      llvm::cl::desc("Size of quarantine queues in allocator (default=8)"),
+      llvm::cl::init(8), llvm::cl::cat(MemoryCat));
 } // namespace
 
 /***/
@@ -87,7 +92,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
-  globalAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalMemorySegment);
+  globalAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalMemorySegment, QuarantineSize);
 }
 
 MemoryManager::~MemoryManager() {
@@ -383,12 +388,12 @@ MemoryManager::ThreadMemorySegments& MemoryManager::getThreadSegments(const Thre
 
 std::unique_ptr<pseudoalloc::allocator_t> MemoryManager::createThreadHeapAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::allocator_t>(*seg.heap);
+  return std::make_unique<pseudoalloc::allocator_t>(*seg.heap, QuarantineSize);
 }
 
 std::unique_ptr<pseudoalloc::stack_allocator_t> MemoryManager::createThreadStackAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::stack_allocator_t>(*seg.stack);
+  return std::make_unique<pseudoalloc::stack_allocator_t>(*seg.stack, QuarantineSize);
 }
 
 void MemoryManager::markMemoryRegionsAsUnneeded() {
