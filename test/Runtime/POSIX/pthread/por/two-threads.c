@@ -17,12 +17,12 @@ int main(void) {
   // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
   pthread_create(&thread, NULL, noop, NULL);
 
-  // CHECK-NEXT: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
+  // CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 
   pthread_join(thread, NULL);
 
-  // CHECK-NEXT: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
-  // CHECK-NEXT: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
+  // CHECK-DAG: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
+  // CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 
   return 0;
 }

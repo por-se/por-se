@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 #include "kpr/list.h"
 

@@ -14,6 +14,7 @@
 
 #include "klee/klee.h"
 #include "klee/runtime/kpr/list.h"
+#include "klee/runtime/kpr/signalling.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -41,21 +42,6 @@
 static pthread_mutex_t fs_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 pthread_mutex_t* klee_fs_lock(void) {
   return &fs_lock;
-}
-
-static void kpr_notify_file_changed(int fd) {
-  exe_file_t* f = __get_file_ignore_flags(fd);
-  assert(f != NULL);
-
-  kpr_list_iterator it = kpr_list_iterate(&f->notification_list);
-
-  while(kpr_list_iterator_valid(it)) {
-    klee_poll_request* req = kpr_list_iterator_value(it);
-
-    kpr_handle_fd_notification(req, fd);
-
-    kpr_list_iterator_next(&it);
-  }
 }
 
 /* Returns pointer to the symbolic file structure fs the pathname is symbolic */
@@ -402,14 +388,13 @@ int close(int fd) {
     int bothClosed = f->pipe->readFd == 0 && f->pipe->writeFd == 0;
 
     if (bothClosed) {
-      pthread_cond_destroy(&f->pipe->cond);
       free(f->pipe);
     }
   }
 
-  kpr_notify_file_changed(fd);
+  kpr_handle_fd_changed(fd);
 
-  assert(kpr_list_size(&f->notification_list) == 0);
+  // assert(kpr_list_size(&f->notification_list) == 0);
 
   // TODO: really really bad since we
   //       may have to consider the files waiting on changes
@@ -417,6 +402,19 @@ int close(int fd) {
   
   pthread_mutex_unlock(klee_fs_lock());
   return r;
+}
+
+void notify_thread_list(kpr_list* blocked_threads) {
+  kpr_list_iterator it = kpr_list_iterate(blocked_threads);
+  while (kpr_list_iterator_valid(it)) {
+    pthread_t th = kpr_list_iterator_value(it);
+
+    assert(kpr_signal_thread(th) == 0);
+    
+    kpr_list_iterator_next(&it);
+  }
+
+  kpr_list_clear(blocked_threads);
 }
 
 ssize_t read(int fd, void *buf, size_t count) {
@@ -454,27 +452,7 @@ ssize_t read(int fd, void *buf, size_t count) {
   }
 
   if (f->socket) {
-    ssize_t ret;
-
-    if (f->socket->state != EXE_SOCKET_CONNECTED) {
-      errno = ENOTCONN;
-      ret = -1;
-    } else if (f->socket->readFd == 0) {
-      // Was closed by a shutdown command
-      errno = EINVAL;
-      ret = -1;
-    } else {
-      exe_file_t* pipeFile = __get_file(f->socket->readFd);
-      assert(pipeFile != NULL);
-
-      // Save the original pipes flags and use the ones from the socket
-      int origFlags = pipeFile->flags;
-      pipeFile->flags = f->flags;
-
-      ret = read(f->socket->readFd, buf, count);
-
-      pipeFile->flags = origFlags;
-    }
+    ssize_t ret = kpr_read_socket(f, f->flags, buf, count);
 
     pthread_mutex_unlock(klee_fs_lock());
     return ret;
@@ -482,8 +460,6 @@ ssize_t read(int fd, void *buf, size_t count) {
     if ((f->flags & eReadable) == 0) {
       errno = EBADF;
       pthread_mutex_unlock(klee_fs_lock());
-
-      assert(0);
       return -1;
     }
 
@@ -510,10 +486,11 @@ ssize_t read(int fd, void *buf, size_t count) {
       }
 
       // Wait until something is written, the writer needs to signal
-      pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
+      kpr_list_push(&pipe_obj->blocked_threads, pthread_self());
+      kpr_wait_thread_self(klee_fs_lock());
     }
 
-    bool wasFull = pipe_obj->bufSize == pipe_obj->free_capacity;
+    bool wasFull = pipe_obj->free_capacity == 0;
 
     ssize_t i = 0;
     char* dest = (char*) buf;
@@ -527,10 +504,10 @@ ssize_t read(int fd, void *buf, size_t count) {
     }
 
     if (wasFull) {
-      pthread_cond_signal(&pipe_obj->cond);
+      notify_thread_list(&pipe_obj->blocked_threads);
     }
 
-    kpr_notify_file_changed(pipe_obj->writeFd);
+    kpr_handle_fd_changed(pipe_obj->writeFd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return i;
@@ -562,7 +539,7 @@ ssize_t read(int fd, void *buf, size_t count) {
   else {
     assert(f->off >= 0);
     if (((off64_t)f->dfile->size) < f->off) {
-      kpr_notify_file_changed(fd);
+      kpr_handle_fd_changed(fd);
       pthread_mutex_unlock(klee_fs_lock());
       return 0;
     }
@@ -575,12 +552,11 @@ ssize_t read(int fd, void *buf, size_t count) {
     memcpy(buf, f->dfile->contents + f->off, count);
     f->off += count;
 
-    kpr_notify_file_changed(fd);
+    kpr_handle_fd_changed(fd);
     pthread_mutex_unlock(klee_fs_lock());
     return count;
   }
 }
-
 
 ssize_t write(int fd, const void *buf, size_t count) {
   pthread_mutex_lock(klee_fs_lock());
@@ -606,88 +582,62 @@ ssize_t write(int fd, const void *buf, size_t count) {
   }
 
   if (f->socket) {
-    ssize_t ret;
-
-    if (f->socket->state != EXE_SOCKET_CONNECTED) {
-      errno = ENOTCONN;
-      ret = -1;
-    } else if (f->socket->writeFd == 0) {
-      errno = EINVAL;
-      ret = -1;
-    } else {
-      exe_file_t* pipeFile = __get_file(f->socket->readFd);
-      assert(pipeFile != NULL);
-
-      // Save the original pipes flags and use the ones from the socket
-      int origFlags = pipeFile->flags;
-      pipeFile->flags = f->flags;
-
-      ret = write(f->socket->writeFd, buf, count);
-
-      pipeFile->flags = origFlags;
-    }
-
+    ssize_t ret = kpr_write_socket(f, f->flags, buf, count);
+    
     pthread_mutex_unlock(klee_fs_lock());
     return ret;
   } else if (f->pipe) {
     if ((f->flags & eWriteable) == 0) {
       errno = EBADF;
-
-      assert(0);
       pthread_mutex_unlock(klee_fs_lock());
       return -1;
     }
 
     exe_pipe_t* pipe_obj = f->pipe;
 
-    // TODO: maybe we should use the same technique as in read?
+    // First wait until at least something can be written
+    while (1) {
+      if (pipe_obj->free_capacity > 0) {
+        break;
+      }
 
-    // If this is a non blocking pipe, then we should not
-    // try actually modifiy it if we would have to block
+      if (pipe_obj->readFd == 0) {
+        // So we now know that the reader will no longer send any
+        // data
+        errno = EPIPE;
+        pthread_mutex_unlock(klee_fs_lock());
+        return -1;
+      }
 
-    if ((f->flags & eNonBlock) != 0) {
-      if (pipe_obj->free_capacity < count) {
+      if ((f->flags & eNonBlock) != 0) {
         errno = EWOULDBLOCK;
         pthread_mutex_unlock(klee_fs_lock());
         return -1;
       }
+
+      // Wait until something is read, the reader needs to signal
+      kpr_list_push(&pipe_obj->blocked_threads, pthread_self());
+      kpr_wait_thread_self(klee_fs_lock());
     }
 
-    size_t i = 0;
-    const char* src = (const char*) buf;
+    bool wasEmpty = pipe_obj->bufSize == pipe_obj->free_capacity;
 
-    while (i < count) {
-      if (pipe_obj->free_capacity == 0) {
-        if (pipe_obj->readFd == 0) {
-          // So we now know that the reader will no longer send any
-          // data
-          errno = EPIPE;
-          pthread_mutex_unlock(klee_fs_lock());
-          return -1;
-        }
+    ssize_t i = 0;
+    char* src = (char*) buf;
 
-        // Similar to the read situation, make sure blocked by a poll
-        // readers get a chance
-        kpr_notify_file_changed(pipe_obj->readFd);
-
-        pthread_cond_wait(&pipe_obj->cond, klee_fs_lock());
-      }
-
-      int wasEmpty = pipe_obj->free_capacity == pipe_obj->bufSize;
-
-      while (pipe_obj->free_capacity > 0 && i < count) {
-        pipe_obj->contents[pipe_obj->writeIndex] = src[i];
-        i++;
-        pipe_obj->free_capacity--;
-        pipe_obj->writeIndex = (pipe_obj->writeIndex + 1) % pipe_obj->bufSize;
-      }
-
-      if (wasEmpty) {
-        pthread_cond_signal(&pipe_obj->cond);
-      }
+    // Write as much as possible
+     while (pipe_obj->free_capacity > 0 && i < count) {
+      pipe_obj->contents[pipe_obj->writeIndex] = src[i];
+      i++;
+      pipe_obj->free_capacity--;
+      pipe_obj->writeIndex = (pipe_obj->writeIndex + 1) % pipe_obj->bufSize;
     }
 
-    kpr_notify_file_changed(pipe_obj->readFd);
+    if (wasEmpty) {
+      notify_thread_list(&pipe_obj->blocked_threads);
+    }
+
+    kpr_handle_fd_changed(pipe_obj->readFd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return i;
@@ -740,7 +690,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
     f->off += count;
 
-    kpr_notify_file_changed(fd);
+    kpr_handle_fd_changed(fd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return count;
@@ -1407,7 +1357,7 @@ int fcntl(int fd, int cmd, ...) {
 	 return them here.  These same flags can be set by F_SETFL,
 	 which we could also handle properly. 
         */
-        if (f->pipe && (f->flags & eNonBlock) != 0) {
+        if ((f->pipe || f->socket) && (f->flags & eNonBlock) != 0) {
           pthread_mutex_unlock(klee_fs_lock());
           return O_NONBLOCK;
         }
@@ -1420,7 +1370,7 @@ int fcntl(int fd, int cmd, ...) {
         // O_APPEND, O_ASYNC, O_DIRECT, O_NOATIME, O_NONBLOCK
 
         // We can acutally properly support O_NONBLOCK for pipes
-        if (f->pipe && (arg & O_NONBLOCK) != 0 && (arg & ~O_NONBLOCK) == 0) {
+        if ((f->pipe || f->socket) && (arg & O_NONBLOCK) != 0 && (arg & ~O_NONBLOCK) == 0) {
           f->flags |= eNonBlock;
           break;
         }
@@ -2075,7 +2025,7 @@ int pipe2(int pipefd[2], int flags) {
   pipe_obj->bufSize = PIPE_BUFFER_SIZE;
   pipe_obj->free_capacity = pipe_obj->bufSize;
 
-  pthread_cond_init(&pipe_obj->cond, NULL);
+  kpr_list_create(&pipe_obj->blocked_threads);
 
   pipefd[0] = fdRead;
   pipefd[1] = fdWrite;

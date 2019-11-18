@@ -62,6 +62,12 @@ static int __streq(const char *a, const char *b) {
   return 0;
 }
 
+static int __strlen(const char *a) {
+  int i = 0;
+  for (; *a != '\0'; i++, a++);
+  return i;
+}
+
 static char *__get_sym_str(int numChars, char *name) {
   int i;
   char *s = malloc(numChars+1);
@@ -234,7 +240,34 @@ usage: (klee_init_env) [options] [program arguments]\n\
       int port = __str_to_int(argv[k++], msg);
       int len = __str_to_int(argv[k++], msg);
 
+      if (port == 0)
+        __emit_error("The first argument to --sym-packet (port number) "
+                     "cannot be 0\n");
+
+      if (len == 0)
+        __emit_error("The second argument to --sym-packet (packet size) "
+                     "cannot be 0\n");
+
       klee_init_sym_port(port, len);
+    } else if (__streq(argv[k], "--fake-packet") ||
+               __streq(argv[k], "-fake-packet")) {
+      const char *msg = "--fake-packet expects arguments "
+                        "<PORT> <DATA>";
+
+      if (k + 2 >= argc)
+        __emit_error(msg);
+
+      k++;
+      int port = __str_to_int(argv[k++], msg);
+      const char* data = argv[k++];
+
+      if (port == 0)
+        __emit_error("The first argument to --fake-packet (port number) "
+                     "cannot be 0\n");
+
+      int len = __strlen(data);
+
+      klee_init_fake_packet(port, data, len);
     } else {
       /* simply copy arguments */
       __add_arg(&new_argc, new_argv, argv[k++], 1024);

@@ -99,6 +99,16 @@ enum
 #define PTHREAD_SCOPE_PROCESS   PTHREAD_SCOPE_PROCESS
 };
 
+// Forward declare this one only because it is needed in the kpr_thread
+struct kpr_mutex;
+
+typedef struct kpr_cond {
+  pthread_internal_t magic;
+  struct kpr_mutex* waitingMutex;
+  uint64_t waitingCount;
+} pthread_cond_t;
+#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 }
+
 typedef struct {
   uint8_t state;
   uint8_t mode;
@@ -110,10 +120,12 @@ typedef struct {
   void* returnValue;
 
   kpr_list cleanupStack;
+
+  pthread_cond_t cond;
 } kpr_thread;
 typedef kpr_thread* pthread_t;
 
-typedef struct {
+typedef struct kpr_mutex {
   pthread_internal_t magic;
   int acquired;
   int type;
@@ -124,13 +136,6 @@ typedef struct {
 } pthread_mutex_t;
 #define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, 0, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL }
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { PTHREAD_INTERNAL_MAGIC, 0, PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_STALLED, 0, NULL }
-
-typedef struct {
-  pthread_internal_t magic;
-  pthread_mutex_t* waitingMutex;
-  uint64_t waitingCount;
-} pthread_cond_t;
-#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 }
 
 typedef struct {
   pthread_internal_t magic;

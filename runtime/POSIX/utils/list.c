@@ -161,3 +161,16 @@ void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it) {
 
   free(nodeToDelete);
 }
+
+void kpr_list_remove(kpr_list* list, void * data) {
+  kpr_list_iterator it = kpr_list_iterate(list);
+  while(kpr_list_iterator_valid(it)) {
+    void* d = kpr_list_iterator_value(it);
+
+    if (data == d) {
+      kpr_list_erase(list, &it);
+    }
+
+    kpr_list_iterator_next(&it);
+  }
+}

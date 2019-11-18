@@ -117,13 +117,6 @@ int mknod(const char *pathname, mode_t mode, dev_t dev) {
   return -1;
 }
 
-int pipe(int filedes[2]) __attribute__((weak));
-int pipe(int filedes[2]) {
-  klee_warning("ignoring (ENFILE)");
-  errno = ENFILE;
-  return -1;
-}
-
 int link(const char *oldpath, const char *newpath) __attribute__((weak));
 int link(const char *oldpath, const char *newpath) {
   klee_warning("ignoring (EPERM)");

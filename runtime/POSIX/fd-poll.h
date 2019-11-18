@@ -3,22 +3,44 @@
 
 #include <poll.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 #include "fd.h"
 
+#define KPR_EVENT_CLOSED (1 << 0)
+#define KPR_EVENT_READABLE (1 << 1)
+#define KPR_EVENT_WRITABLE (1 << 2)
+#define KPR_EVENT_READY (1 << 3)
+#define KPR_EVENT_ERROR (1 << 4)
+#define KPR_EVENT_HUP (1 << 5)
+
 typedef struct {
-  // Original request data
-  struct pollfd *fds;
-  nfds_t nfd;
+  int fd;
 
-  bool *on_notification_list;
+  int track_event_types;
 
-  // How many entries changed inside fds -> make sure to count the same entry twice
-  nfds_t num_changed;
+  // To enable correct tracking we have to add the initial
+  // state to the file
+  union {
+    struct socket {
+      int state;
+    } socket;
+  } initial_state;
 
-  pthread_cond_t cond;
-} klee_poll_request;
+  bool closed;
+  bool on_notification_list;
+} kpr_poll_request_entry;
 
-void kpr_handle_fd_notification(klee_poll_request* req, int fd);
+typedef struct {
+  kpr_poll_request_entry* entries;
+
+  size_t entry_count;
+
+  bool has_event;
+
+  pthread_t blocked_thread;
+} kpr_poll_request;
+
+void kpr_handle_fd_changed(int fd);
 
 #endif

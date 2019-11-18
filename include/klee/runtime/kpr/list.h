@@ -23,4 +23,6 @@ void* kpr_list_iterator_value(kpr_list_iterator it);
 
 void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it);
 
+void kpr_list_remove(kpr_list* list, void * data);
+
 #endif // KPR_LIST_H

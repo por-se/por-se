@@ -46,7 +46,7 @@ typedef struct {
   int packet_length;
 
   char* data;
-} exe_sym_port_t;
+} exe_fake_packet_t;
 
 typedef struct {
   unsigned size;  /* in bytes */
@@ -68,25 +68,48 @@ typedef enum {
 #define EXE_SOCKET_PASSIVE (4)
 #define EXE_SOCKET_CONNECTED (5)
 
-typedef struct {
-  int opened_port;
+typedef struct exe_socket {
   int state;
   int own_fd;
 
+  // General options
+  int domain;
+  int type;
+
+  struct {
+    bool reuseAddress;
+    bool keepAlive;
+    bool tcpNoDelay;
+    bool broadcast;
+  } options;
+
+  pthread_t blocked_thread;
+
+  struct sockaddr *saddress;
+  size_t saddress_len;
+
   // Needed for passive sockets
   kpr_list queued_peers;
-  pthread_cond_t cond;
+  kpr_list blocked_threads;
 
-  // Needed for sockets that attempt a connection
-  int requested_port;
+  union {
+    int port;
+    char* path;
+  } requested;
+
+  union {
+    int port;
+    char* path;
+  } opened;
 
   // Needed for connected sockets that actually establish a connection
   // -> simply a pipe
   int readFd;
   int writeFd;
+  struct exe_socket* peer;
 
   // If this is a sym socket port
-  exe_sym_port_t* sym_port;
+  exe_fake_packet_t* faked_packet;
 } exe_socket_t;
 
 #define PIPE_BUFFER_SIZE 2048
@@ -102,6 +125,8 @@ typedef struct {
 
   int readFd;
   int writeFd;
+
+  kpr_list blocked_threads;
 } exe_pipe_t;
 
 typedef struct {
@@ -145,13 +170,15 @@ typedef struct {
      size. The file offset is always incremented correctly. */
   int save_all_writes;
 
-  kpr_list sym_port;
+  kpr_list fake_packets;
 } exe_sym_env_t;
 
 extern exe_file_system_t __exe_fs;
 extern exe_sym_env_t __exe_env;
 
 void klee_init_sym_port(int port, int len);
+void klee_init_fake_packet(int port, const char* data, int len);
+
 void klee_init_fds(unsigned n_files, unsigned file_length,
                    unsigned stdin_length, int sym_stdout_flag,
                    int do_all_writes_flag, unsigned max_failures);
@@ -163,6 +190,8 @@ pthread_mutex_t* klee_fs_lock(void);
 exe_file_t *__get_file(int fd);
 exe_file_t *__get_file_ignore_flags(int fd);
 int __get_unused_fd(void);
+
+void notify_thread_list(kpr_list* blocked_threads);
 
 /* *** */
 

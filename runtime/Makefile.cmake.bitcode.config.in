@@ -42,7 +42,7 @@ LLVMCC.Flags += $(LLVMCC.ExtraFlags) \
 	-I@CMAKE_SOURCE_DIR@/include \
 	-I@CMAKE_BINARY_DIR@/include \
 	-emit-llvm \
-	-std=gnu89 \
+	-std=c11 \
 	-D_DEBUG -D_GNU_SOURCE -D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
 
 LLVMCC.Warnings += -Wall -Wwrite-strings

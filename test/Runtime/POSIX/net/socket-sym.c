@@ -14,7 +14,9 @@ int main() {
 
   struct sockaddr_in isa;
   memset(&isa, 0, sizeof(isa));
-  isa.sin_port = 80;
+  isa.sin_family = AF_INET;
+  isa.sin_addr.s_addr = htonl((127 << 24) | 1);
+  isa.sin_port = htons(80);
 
   assert(bind(sfd, (struct sockaddr*)&isa, sizeof isa) == 0);
   assert(listen(sfd, 1) == 0);

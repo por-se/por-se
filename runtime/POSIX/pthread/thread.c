@@ -1,16 +1,30 @@
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
+#include "klee/runtime/kpr/list.h"
 
 #include <errno.h>
 #include <stdint.h>
 #include <assert.h>
 #include <stdlib.h>
 
-#include "kpr/list.h"
 #include "kpr/flags.h"
 #include "kpr/internal.h"
 
-static kpr_thread mainThread;
+static kpr_thread mainThread = {
+  .state = KPR_THREAD_STATE_LIVE,
+  .mode = KPR_THREAD_MODE_DETACH,
+  .joinState = 0,
+
+  .startArg = NULL,
+  .startRoutine = NULL,
+
+  .returnValue = NULL,
+
+  .cleanupStack = KPR_LIST_INITIALIZER,
+
+  .cond = PTHREAD_COND_INITIALIZER
+};
+
 static _Thread_local kpr_thread* ownThread = NULL;
 
 pthread_t pthread_self(void) {
@@ -46,6 +60,8 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   thread->state = KPR_THREAD_STATE_LIVE;
   thread->mode = KPR_THREAD_MODE_JOIN;
   thread->joinState = KPR_THREAD_JSTATE_JOINABLE;
+
+  pthread_cond_init(&thread->cond, NULL);
 
 // kpr_list_create(&thread->cleanUpStack);
 
@@ -96,9 +112,11 @@ int pthread_detach(pthread_t pthread) {
 }
 
 void pthread_exit(void* arg) {
+  kpr_thread* thread = pthread_self();
+  pthread_cond_destroy(&thread->cond);
+
   klee_toggle_thread_scheduling(0);
 
-  kpr_thread* thread = pthread_self();
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
   thread->state = KPR_THREAD_STATE_DEAD;
 
@@ -201,4 +219,12 @@ void pthread_cleanup_push(void (*routine)(void*), void *arg) {
   data->argument = arg;
 
   kpr_list_push(&thread->cleanupStack, data);
+}
+
+int kpr_signal_thread(pthread_t th) {
+  return pthread_cond_signal(&th->cond);
+}
+
+int kpr_wait_thread_self(pthread_mutex_t* mutex) {
+  return pthread_cond_wait(&pthread_self()->cond, mutex);
 }

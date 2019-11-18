@@ -104,12 +104,10 @@ static unsigned __sym_uint32(const char *name) {
 }
 
 void klee_init_sym_port(int port, int len) {
-  exe_sym_port_t* p = (exe_sym_port_t*) malloc(sizeof(exe_sym_port_t));
+  exe_fake_packet_t* p = (exe_fake_packet_t*) malloc(sizeof(exe_fake_packet_t));
 
   p->packet_length = len;
   p->port = port;
-
-  // TODO: validate that we have not set up this port twice or more
 
   char name[15] = "sym-port-?????";
 
@@ -122,7 +120,19 @@ void klee_init_sym_port(int port, int len) {
   p->data = (char*) malloc(sizeof(char) * len);
   klee_make_symbolic(p->data, sizeof(char) * len, name);
 
-  kpr_list_push(&__exe_env.sym_port, p);
+  kpr_list_push(&__exe_env.fake_packets, p);
+}
+
+void klee_init_fake_packet(int port, const char* data, int len) {
+  exe_fake_packet_t* p = (exe_fake_packet_t*) malloc(sizeof(exe_fake_packet_t));
+
+  p->packet_length = len;
+  p->port = port;
+
+  p->data = (char*) malloc(sizeof(char) * len);
+  memcpy(p->data, data, len);
+
+  kpr_list_push(&__exe_env.fake_packets, p);
 }
 
 /* n_files: number of symbolic input files, excluding stdin
