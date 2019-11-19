@@ -225,6 +225,15 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   memcpy(f->socket->saddress, addr, req_size);
 
+  if (f->socket->domain == AF_INET) {
+    f->socket->requested.port = ntohs(((struct sockaddr_in*) addr)->sin_port);
+  } else if (f->socket->domain == AF_UNIX) {
+    struct sockaddr_un* un = (struct sockaddr_un*) f->socket->saddress;
+    f->socket->requested.path = un->sun_path;
+  } else {
+    assert(0);
+  }
+
   f->socket->state = EXE_SOCKET_BOUND;
 
   pthread_mutex_unlock(klee_fs_lock());
@@ -460,6 +469,8 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
   if (establish(newSocket, peer) < 0) {
     kpr_list_push(&f->socket->queued_peers, peer);
+
+    klee_warning("Internal failure - leaked socket");
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
   }
@@ -484,6 +495,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
     // If we write too many bytes, then we risk blocking this
     assert(peer->faked_packet->packet_length <= kpr_ringbuffer_size(&tcp->buffer));
+    peer->type = f->socket->type;
 
     exe_file_t* peerFile = __get_file(peer->own_fd);
     assert(peerFile != NULL);
@@ -492,12 +504,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     ssize_t ctn = kpr_write_socket(peerFile, eNonBlock, peer->faked_packet->data, peer->faked_packet->packet_length);
 
     if (ctn < 0) {
-      klee_warning("Failed to write the symbolic data");
+      klee_warning("Failed to write the data");
     } else if (ctn != peer->faked_packet->packet_length) {
-      klee_warning("Failed to write all symbolic data - only parts");
+      klee_warning("Failed to write all data - only parts");
     }
-
-    peer->type = f->socket->type;
   }
 
   pthread_mutex_unlock(klee_fs_lock());
@@ -675,7 +685,7 @@ int kpr_close_socket(exe_file_t* file) {
       tcp->peer->proto.tcp.peer = NULL;
     }
 
-    if (true /* TODO: test if has valid buffer */) {
+    if (kpr_ringbuffer_size(&tcp->buffer) > 0) {
       kpr_ringbuffer_destroy(&tcp->buffer);
     }
   } else if (file->socket->type == SOCK_DGRAM) {
@@ -741,23 +751,7 @@ int shutdown(int sockfd, int how) {
 }
 
 ssize_t kpr_write_socket(exe_file_t* f, int flags, const void *buf, size_t count) {
-  exe_socket_t* s = f->socket;
-
-  if (f->socket->faked_packet) {
-    // So we can send as much as we want to this
-    // socket
-
-    fprintf(stderr, "KLEE: received [target port=%d, count=%zu]", f->socket->faked_packet->port, count);
-
-    if (write(STDERR_FILENO, buf, count) > 0) {
-      char c = '\n';
-      write(STDERR_FILENO, &c, 1);
-    }
-
-    fflush(stderr);
-
-    return count;
-  } 
+  exe_socket_t* s = f->socket; 
 
   if ((f->flags & eWriteable) == 0) {
     errno = EINVAL;
@@ -772,6 +766,22 @@ ssize_t kpr_write_socket(exe_file_t* f, int flags, const void *buf, size_t count
 
     struct kpr_tcp* tcp = &s->proto.tcp;
     assert(tcp->peer != NULL);
+
+    if (tcp->peer->faked_packet) {
+      // So we can send as much as we want to this
+      // socket
+
+      fprintf(stderr, "KLEE: received [target port=%d, count=%zu]", tcp->peer->faked_packet->port, count);
+
+      if (write(STDERR_FILENO, buf, count) > 0) {
+        char c = '\n';
+        write(STDERR_FILENO, &c, 1);
+      }
+
+      fflush(stderr);
+
+      return count;
+    }
 
     struct kpr_tcp* p_tcp = &tcp->peer->proto.tcp;
     assert(p_tcp->peer == s);

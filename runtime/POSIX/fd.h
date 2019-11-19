@@ -118,7 +118,7 @@ typedef struct exe_socket {
   exe_fake_packet_t* faked_packet;
 } exe_socket_t;
 
-#define PIPE_BUFFER_SIZE 2048
+#define PIPE_BUFFER_SIZE 4096
 
 typedef struct {
   kpr_ringbuffer buffer;
