@@ -16,7 +16,6 @@ int main() {
   if (y < 42) {
     // CHECK-DEFAULT-KLEE-ASSUME: KLEE: ERROR: {{.*SilentKleeAssume.c:18}}: invalid klee_assume call (provably false)
     klee_assume(x < 10);
-    // CHECK-DEFAULT-KLEE-ASSUME: KLEE: NOTE: now ignoring this error at this location
     // CHECK-DEFAULT-KLEE-ASSUME: EXITING ON ERROR:
     // CHECK-DEFAULT-KLEE-ASSUME: Error: invalid klee_assume call (provably false)
     assert(0);

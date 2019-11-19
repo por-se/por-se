@@ -1,7 +1,7 @@
 // RUN: %clang %s -emit-llvm -g %O0opt -c -o %t.bc
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out -check-overshift %t.bc 2> %t.log
-// RUN: FileCheck -input-file=%t.klee-out/test000001.overshift.err %s
+// RUN: FileCheck -input-file=%t.klee-out/test000002.overshift.err %s
 
 /* This test checks that the error file isn't empty and contains the
  * right content.
