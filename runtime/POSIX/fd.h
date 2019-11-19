@@ -12,6 +12,7 @@
 
 #include "klee/Config/config.h"
 #include "klee/runtime/kpr/list-types.h"
+#include "klee/runtime/kpr/ringbuffer.h"
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -102,11 +103,16 @@ typedef struct exe_socket {
     char* path;
   } opened;
 
-  // Needed for connected sockets that actually establish a connection
-  // -> simply a pipe
-  int readFd;
-  int writeFd;
-  struct exe_socket* peer;
+  union {
+    struct kpr_tcp {
+      struct exe_socket* peer;
+      kpr_ringbuffer buffer;
+    } tcp;
+
+    struct kpr_udp {
+      kpr_list data;
+    } udp;
+  } proto;
 
   // If this is a sym socket port
   exe_fake_packet_t* faked_packet;

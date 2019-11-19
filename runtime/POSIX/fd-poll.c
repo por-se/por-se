@@ -113,14 +113,20 @@ static int kpr_get_socket_events(kpr_poll_request_entry* entry, exe_file_t* file
   } else if (socket->state == EXE_SOCKET_CONNECTED) {
     events |= KPR_EVENT_READY;
 
-    if (socket->readFd >= 0) {
-      int e = kpr_get_pipe_events(socket->readFd, __get_file_ignore_flags(socket->readFd));
-      events |= (e & (KPR_EVENT_READABLE | KPR_EVENT_HUP | KPR_EVENT_ERROR));
+    struct kpr_tcp* tcp = &socket->proto.tcp;
+
+    if (tcp->peer == NULL) {
+      events |= KPR_EVENT_HUP;
+    } else {
+      struct kpr_tcp* p_tcp = &tcp->peer->proto.tcp;
+
+      if (!kpr_ringbuffer_full(&p_tcp->buffer)) {
+        events |= KPR_EVENT_WRITABLE;
+      }
     }
 
-    if (socket->writeFd >= 0) {
-      int e = kpr_get_pipe_events(socket->writeFd, __get_file_ignore_flags(socket->writeFd));
-      events |= (e & (KPR_EVENT_WRITABLE | KPR_EVENT_HUP | KPR_EVENT_ERROR));
+    if (!kpr_ringbuffer_empty(&tcp->buffer)) {
+      events |= KPR_EVENT_READABLE;
     }
   } else if (socket->state == EXE_SOCKET_PASSIVE) {
     events |= KPR_EVENT_READY;

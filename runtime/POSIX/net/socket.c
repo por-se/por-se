@@ -4,7 +4,9 @@
 
 #include "../fd.h"
 #include "../fd-poll.h"
+
 #include "socket.h"
+#include "socket-internal.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -68,8 +70,6 @@ static int create_socket(exe_socket_t** target) {
   kpr_list_create(&f->notification_list);
 
   exe_socket_t* socket = calloc(sizeof(exe_socket_t), 1);
-  socket->writeFd = -1;
-  socket->readFd = -1;
   socket->state = EXE_SOCKET_INIT;
   kpr_list_create(&socket->blocked_threads);
 
@@ -137,8 +137,6 @@ static void check_for_fake_packets(exe_socket_t* socket) {
 
       symSocket->state = EXE_SOCKET_CONNECTING;
       symSocket->requested.port = faked_packet->port;
-      symSocket->readFd = -1;
-      symSocket->writeFd = -1;
       symSocket->faked_packet = faked_packet;
       symSocket->domain = AF_INET;
 
@@ -357,47 +355,36 @@ static bool copy_socket_addr_into(exe_socket_t* socket, struct sockaddr* addr, s
 
 static int establish(exe_socket_t* passive, exe_socket_t* connecting) {
   // Since sockets communicate in two directions, we use two pipes
-  int flags = O_NONBLOCK;
+  
+  struct kpr_tcp* p_tcp = &passive->proto.tcp;
+  struct kpr_tcp* c_tcp = &connecting->proto.tcp;
 
-  int pipeOne[2];
-  if (pipe2(pipeOne, flags) < 0) {
+  if (!kpr_ringbuffer_create(&p_tcp->buffer, PIPE_BUFFER_SIZE)) {
     return -1;
   }
 
-  int pipeTwo[2];
-  if (pipe2(pipeTwo, flags) < 0) {
-    close(pipeOne[0]);
-    close(pipeOne[1]);
+  if (!kpr_ringbuffer_create(&c_tcp->buffer, PIPE_BUFFER_SIZE)) {
+    kpr_ringbuffer_destroy(&p_tcp->buffer);
     return -1;
   }
-
-  // TODO: refactor to support udp / tcp more easily
-  passive->readFd = pipeOne[0];
-  passive->writeFd = pipeOne[1];
-
-  connecting->readFd = pipeTwo[0];
-  connecting->writeFd = pipeTwo[1];
 
   // Now mark them also as connected
   connecting->state = EXE_SOCKET_CONNECTED;
   passive->state = EXE_SOCKET_CONNECTED;
 
-  connecting->peer = passive;
-  passive->peer = connecting;
+  p_tcp->peer = connecting;
+  c_tcp->peer = passive;
 
   if (!open_to_local_env(connecting)) {
-    close(pipeOne[0]);
-    close(pipeOne[1]);
-
-    close(pipeTwo[0]);
-    close(pipeTwo[1]);
+    kpr_ringbuffer_destroy(&c_tcp->buffer);
+    kpr_ringbuffer_destroy(&p_tcp->buffer);
 
     return -1;
   }
 
   if (!open_to_local_env(passive)) {
-    close(pipeOne[0]);
-    close(pipeOne[1]);
+    kpr_ringbuffer_destroy(&c_tcp->buffer);
+    kpr_ringbuffer_destroy(&p_tcp->buffer);
 
     close(connecting->own_fd);
 
@@ -477,8 +464,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
+  exe_file_t* file = __get_file(newSocketFd);
+
   if (f->flags & eNonBlock) {
-    __get_file(newSocketFd)->flags |= eNonBlock;
+    file->flags |= eNonBlock;
   }
 
   if (addr != NULL) {
@@ -491,20 +480,18 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
     kpr_handle_fd_changed(peer->own_fd);
   } else {
+    struct kpr_tcp* tcp = &newSocket->proto.tcp;
+
     // If we write too many bytes, then we risk blocking this
-    assert(peer->faked_packet->packet_length <= PIPE_BUFFER_SIZE);
-    ssize_t ctn = write(newSocket->writeFd, peer->faked_packet->data, peer->faked_packet->packet_length);
+    assert(peer->faked_packet->packet_length <= kpr_ringbuffer_size(&tcp->buffer));
+
+    ssize_t ctn = kpr_write_socket(file, file->flags, peer->faked_packet->data, peer->faked_packet->packet_length);
+
     if (ctn < 0) {
       klee_warning("Failed to write the symbolic data");
     } else if (ctn != peer->faked_packet->packet_length) {
       klee_warning("Failed to write all symbolic data - only parts");
     }
-
-    close(peer->readFd);
-    close(peer->writeFd);
-
-    peer->readFd = -1;
-    peer->writeFd = -1;
 
     peer->type = f->socket->type;
   }
@@ -555,6 +542,12 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     return -1;
   }
 
+  if (f->socket->type != SOCK_STREAM) {
+    pthread_mutex_unlock(klee_fs_lock());
+    errno = EINVAL;
+    return -1;
+  }
+
   if (f->socket->domain == AF_INET) {
     int requestedPort = ntohs(((struct sockaddr_in*) addr)->sin_port);
     f->socket->requested.port = requestedPort;
@@ -572,8 +565,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   }
 
   f->socket->state = EXE_SOCKET_CONNECTING;
-  f->socket->readFd = -1;
-  f->socket->writeFd = -1;
+  // Make sure we have no read / write functionality for now
 
   bool inWaitingList = false;
   exe_socket_t* socket = NULL;
@@ -618,9 +610,11 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     kpr_list_remove(&waiting_sockets, f->socket);
   }
 
+  struct kpr_tcp* tcp = &f->socket->proto.tcp;
+
   // Now we add ourselfs to the waiting list of the socket
   inWaitingList = false;
-  while (f->socket->peer == NULL) {
+  while (tcp->peer == NULL) {
     // Connection was not established, but we now know that there
     // is a socket waiting
     if (!inWaitingList) {
@@ -649,14 +643,12 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 int kpr_close_socket(exe_file_t* file) {
   assert(file->socket != NULL);
 
-  if (file->socket->writeFd != -1) {
-    close(file->socket->writeFd);
-    file->socket->writeFd = -1;
+  if (file->flags & eWriteable) {
+    file->flags &= ~eWriteable;
   }
 
-  if (file->socket->readFd != -1) {
-    close(file->socket->readFd);
-    file->socket->readFd = -1;
+  if (file->flags & eReadable) {
+    file->flags &= ~eReadable;
   }
 
   kpr_list_remove(&open_sockets, file->socket);
@@ -668,11 +660,22 @@ int kpr_close_socket(exe_file_t* file) {
 
   kpr_handle_fd_changed(file->socket->own_fd);
 
-  if (file->socket->peer) {
-    kpr_handle_fd_changed(file->socket->peer->own_fd);
+  if (file->socket->type == SOCK_STREAM) {
+    struct kpr_tcp* tcp = &file->socket->proto.tcp;
 
-    assert(file->socket->peer->peer == file->socket);
-    file->socket->peer->peer = NULL;
+    if (tcp->peer) {
+      kpr_handle_fd_changed(tcp->peer->own_fd);
+
+      assert(tcp->peer->type == SOCK_STREAM);
+      assert(tcp->peer->proto.tcp.peer == file->socket);
+      tcp->peer->proto.tcp.peer = NULL;
+    }
+
+    if (true /* TODO: test if has valid buffer */) {
+      kpr_ringbuffer_destroy(&tcp->buffer);
+    }
+  } else if (file->socket->type == SOCK_DGRAM) {
+    struct kpr_udp* udp = &file->socket->proto.udp;
   }
 
   if (file->socket->domain == AF_UNIX) {
@@ -705,20 +708,12 @@ int shutdown(int sockfd, int how) {
     ret = ENOTCONN;
   } else {
     // So this is a valid socket
-    if ((how == SHUT_RDWR || how == SHUT_RD) && file->socket->readFd != -1) {
-      exe_file_t* f = __get_file(file->socket->readFd);
-      f->flags &= ~eReadable;
-
-      close(file->socket->readFd);
-      file->socket->readFd = -1;
+    if ((how == SHUT_RDWR || how == SHUT_RD) && file->flags & eReadable) {
+      file->flags &= ~eReadable;
     }
 
-    if ((how == SHUT_RDWR || how == SHUT_WR) && file->socket->writeFd != -1) {
-      exe_file_t* f = __get_file(file->socket->writeFd);
-      f->flags &= ~eWriteable;
-
-      close(file->socket->writeFd);
-      file->socket->writeFd= -1;
+    if ((how == SHUT_RDWR || how == SHUT_WR) && file->flags & eWriteable) {
+      file->flags &= ~eWriteable;
     }
 
     ret = 0;
@@ -727,8 +722,12 @@ int shutdown(int sockfd, int how) {
   if (ret > 0) {
     kpr_handle_fd_changed(file->socket->own_fd);
 
-    if (file->socket->peer) {
-      kpr_handle_fd_changed(file->socket->peer->own_fd);
+    if (file->socket->type == SOCK_STREAM) {
+      struct kpr_tcp* tcp = &file->socket->proto.tcp;
+
+      if (tcp->peer) {
+        kpr_handle_fd_changed(tcp->peer->own_fd);
+      }
     }
   }
 
@@ -740,89 +739,151 @@ int shutdown(int sockfd, int how) {
 ssize_t kpr_write_socket(exe_file_t* f, int flags, const void *buf, size_t count) {
   exe_socket_t* s = f->socket;
 
-  if (s->type == SOCK_DGRAM) {
-    assert(0 && "unsupported");
-  } else if (s->type == SOCK_STREAM) {
+  if (f->socket->faked_packet) {
+    // So we can send as much as we want to this
+    // socket
+
+    fprintf(stderr, "KLEE: received [target port=%d, count=%zu]", f->socket->faked_packet->port, count);
+
+    if (write(STDERR_FILENO, buf, count) > 0) {
+      char c = '\n';
+      write(STDERR_FILENO, &c, 1);
+    }
+
+    fflush(stderr);
+
+    return count;
+  } 
+
+  if ((f->flags & eWriteable) == 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (s->type == SOCK_STREAM) {
     if (f->socket->state != EXE_SOCKET_CONNECTED) {
       errno = ENOTCONN;
       return -1;
-    } else if (f->socket->faked_packet) {
-      // So we can send as much as we want to this
-      // socket
-
-      fprintf(stderr, "KLEE: received [target port=%d, count=%zu]", f->socket->faked_packet->port, count);
-
-      if (write(STDERR_FILENO, buf, count) > 0) {
-        char c = '\n';
-        write(STDERR_FILENO, &c, 1);
-      }
-
-      fflush(stderr);
-
-      return count;
-    } 
-    
-    int write_to = f->socket->peer->writeFd;
-
-    if (write_to == -1) {
-      errno = EINVAL;
-      return -1;
-    } else {
-      exe_file_t* pipeFile = __get_file(write_to);
-      assert(pipeFile != NULL);
-
-      int origFlags = pipeFile->flags;
-      pipeFile->flags = flags;
-
-      ssize_t ret = write(write_to, buf, count);
-
-      pipeFile->flags = origFlags;
-
-      if (ret > 0) {
-        kpr_handle_fd_changed(f->socket->peer->own_fd);
-      }
-
-      return ret;
     }
-  }
 
-  errno = EINVAL;
-  return -1;
+    struct kpr_tcp* tcp = &s->proto.tcp;
+    assert(tcp->peer != NULL);
+
+    struct kpr_tcp* p_tcp = &tcp->peer->proto.tcp;
+    assert(p_tcp->peer == s);
+
+    exe_file_t* p_file = __get_file(p_tcp->peer->own_fd);
+    
+    // First wait until at least something can be written
+    while (1) {
+      if (kpr_ringbuffer_unused_size(&p_tcp->buffer) > 0) {
+        break;
+      }
+
+      if ((p_file->flags & eReadable) == 0) {
+        // TODO: check if correct
+        errno = EPIPE;
+        return -1;
+      }
+
+      if ((f->flags & eNonBlock) != 0) {
+        errno = EWOULDBLOCK;
+        return -1;
+      }
+
+      // Wait until something is read, the reader needs to signal
+      kpr_list_push(&tcp->peer->blocked_threads, pthread_self());
+      kpr_wait_thread_self(klee_fs_lock());
+    }
+
+    bool initial_empty = kpr_ringbuffer_empty(&p_tcp->buffer);
+
+    ssize_t written = kpr_ringbuffer_push(&p_tcp->buffer, buf, count);
+
+    if (written > 0) {
+      if (initial_empty) {
+        notify_thread_list(&tcp->peer->blocked_threads);
+      }
+
+      assert(tcp->peer->own_fd != f->socket->own_fd);
+      kpr_handle_fd_changed(tcp->peer->own_fd);
+    }
+
+    return written;
+  } else if (s->type == SOCK_DGRAM) {
+    assert(0);
+    return 1;
+  } else {
+    errno = EINVAL;
+    return -1;
+  }
 }
 
 ssize_t kpr_read_socket(exe_file_t* f, int flags, void *buf, size_t count) {
   exe_socket_t* s = f->socket;
 
-  if (s->type == SOCK_DGRAM) {
-    assert(0 && "unsupported");
-  } else if (s->type == SOCK_STREAM) {
-    if (s->state != EXE_SOCKET_CONNECTED) {
+  if ((f->flags & eReadable) == 0) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  if (s->type == SOCK_STREAM) {
+    if (f->socket->state != EXE_SOCKET_CONNECTED) {
       errno = ENOTCONN;
       return -1;
     }
+
+    struct kpr_tcp* tcp = &s->proto.tcp;
+    assert(tcp->peer != NULL);
+
+    struct kpr_tcp* p_tcp = &s->proto.tcp.peer->proto.tcp;
+    assert(p_tcp->peer == s);
+
+    exe_file_t* p_file = __get_file(p_tcp->peer->own_fd);
     
-    int read_from = s->readFd;
+    // First wait until at least something can be written
+    while (1) {
+      if (kpr_ringbuffer_used_size(&tcp->buffer) > 0) {
+        break;
+      }
 
-    if (read_from == -1) {
-      errno = EINVAL;
-      return -1;
-    } else {
-      exe_file_t* pipeFile = __get_file(read_from);
-      assert(pipeFile != NULL);
+      if ((p_file->flags & eWriteable) == 0) {
+        // TODO: check if correct
+        errno = EPIPE;
+        return -1;
+      }
 
-      int origFlags = pipeFile->flags;
-      pipeFile->flags = flags;
+      if ((f->flags & eNonBlock) != 0) {
+        errno = EWOULDBLOCK;
+        return -1;
+      }
 
-      ssize_t ret = read(read_from, buf, count);
-
-      pipeFile->flags = origFlags;
-
-      return ret;
+      // Wait until something is written, the reader needs to signal
+      kpr_list_push(&f->socket->blocked_threads, pthread_self());
+      kpr_wait_thread_self(klee_fs_lock());
     }
-  }
 
-  errno = EINVAL;
-  return -1;
+    bool initial_full = kpr_ringbuffer_full(&tcp->buffer);
+
+    ssize_t read = kpr_ringbuffer_obtain(&tcp->buffer, buf, count);
+
+    if (read > 0) {
+      if (initial_full) {
+        notify_thread_list(&f->socket->blocked_threads);
+      }
+
+      assert(tcp->peer->own_fd != f->socket->own_fd);
+      kpr_handle_fd_changed(f->socket->own_fd);
+    }
+
+    return read;
+  } else if (s->type == SOCK_DGRAM) {
+    assert(0);
+    return 1;
+  } else {
+    errno = EINVAL;
+    return -1;
+  }
 }
 
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
@@ -996,15 +1057,21 @@ int getpeername(int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
     return -1;
   }
 
-  if (!f->socket->peer) {
+  if (f->socket->type != SOCK_STREAM) {
     errno = ENOTCONN;
     pthread_mutex_unlock(klee_fs_lock());
     return -1;
   }
 
-  assert(f->socket->peer != NULL);
+  struct kpr_tcp* tcp = &f->socket->proto.tcp;
 
-  copy_socket_addr_into(f->socket->peer, addr, addrlen);
+  if (!tcp->peer) {
+    errno = ENOTCONN;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
+
+  copy_socket_addr_into(tcp->peer, addr, addrlen);
 
   pthread_mutex_unlock(klee_fs_lock());
   
