@@ -80,11 +80,11 @@ static int kpr_get_pipe_events(int fd, exe_file_t* file) {
   exe_pipe_t* p = file->pipe;
   int events = 0;
 
-  if ((file->flags & eReadable) && p->bufSize > p->free_capacity) {
+  if ((file->flags & eReadable) && !kpr_ringbuffer_empty(&p->buffer)) {
     events |= KPR_EVENT_READABLE;
   }
 
-  if ((file->flags & eWriteable) && p->free_capacity > 0) {
+  if ((file->flags & eWriteable) && !kpr_ringbuffer_full(&p->buffer)) {
     events |= KPR_EVENT_WRITABLE;
   }
 

@@ -485,7 +485,11 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     // If we write too many bytes, then we risk blocking this
     assert(peer->faked_packet->packet_length <= kpr_ringbuffer_size(&tcp->buffer));
 
-    ssize_t ctn = kpr_write_socket(file, file->flags, peer->faked_packet->data, peer->faked_packet->packet_length);
+    exe_file_t* peerFile = __get_file(peer->own_fd);
+    assert(peerFile != NULL);
+    assert(peerFile->socket == newSocket->proto.tcp.peer);
+
+    ssize_t ctn = kpr_write_socket(peerFile, eNonBlock, peer->faked_packet->data, peer->faked_packet->packet_length);
 
     if (ctn < 0) {
       klee_warning("Failed to write the symbolic data");

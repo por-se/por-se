@@ -388,13 +388,12 @@ int close(int fd) {
     int bothClosed = f->pipe->readFd == 0 && f->pipe->writeFd == 0;
 
     if (bothClosed) {
+      kpr_ringbuffer_destroy(&f->pipe->buffer);
       free(f->pipe);
     }
   }
 
   kpr_handle_fd_changed(fd);
-
-  // assert(kpr_list_size(&f->notification_list) == 0);
 
   // TODO: really really bad since we
   //       may have to consider the files waiting on changes
@@ -467,7 +466,7 @@ ssize_t read(int fd, void *buf, size_t count) {
 
     // First wait until at least something can be read
     while (1) {
-      if (pipe_obj->free_capacity < pipe_obj->bufSize) {
+      if (!kpr_ringbuffer_empty(&pipe_obj->buffer)) {
         break;
       }
 
@@ -490,24 +489,17 @@ ssize_t read(int fd, void *buf, size_t count) {
       kpr_wait_thread_self(klee_fs_lock());
     }
 
-    bool wasFull = pipe_obj->free_capacity == 0;
+    bool wasFull = kpr_ringbuffer_full(&pipe_obj->buffer);
 
-    ssize_t i = 0;
-    char* dest = (char*) buf;
+    ssize_t i = kpr_ringbuffer_obtain(&pipe_obj->buffer, buf, count);
 
-    // Drain as much as possible
-    while (pipe_obj->free_capacity < pipe_obj->bufSize && i < count) {
-      dest[i] = pipe_obj->contents[pipe_obj->readIndex];
-      i++;
-      pipe_obj->free_capacity++;
-      pipe_obj->readIndex = (pipe_obj->readIndex + 1) % pipe_obj->bufSize;
+    if (i > 0) {
+      if (wasFull) {
+        notify_thread_list(&pipe_obj->blocked_threads);
+
+        kpr_handle_fd_changed(pipe_obj->writeFd);
+      }
     }
-
-    if (wasFull) {
-      notify_thread_list(&pipe_obj->blocked_threads);
-    }
-
-    kpr_handle_fd_changed(pipe_obj->writeFd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return i;
@@ -597,7 +589,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
     // First wait until at least something can be written
     while (1) {
-      if (pipe_obj->free_capacity > 0) {
+      if (kpr_ringbuffer_unused_size(&pipe_obj->buffer) > 0) {
         break;
       }
 
@@ -620,24 +612,17 @@ ssize_t write(int fd, const void *buf, size_t count) {
       kpr_wait_thread_self(klee_fs_lock());
     }
 
-    bool wasEmpty = pipe_obj->bufSize == pipe_obj->free_capacity;
+    bool wasEmpty = kpr_ringbuffer_empty(&pipe_obj->buffer);
 
-    ssize_t i = 0;
-    char* src = (char*) buf;
+    ssize_t i = kpr_ringbuffer_push(&pipe_obj->buffer, buf, count);
 
-    // Write as much as possible
-     while (pipe_obj->free_capacity > 0 && i < count) {
-      pipe_obj->contents[pipe_obj->writeIndex] = src[i];
-      i++;
-      pipe_obj->free_capacity--;
-      pipe_obj->writeIndex = (pipe_obj->writeIndex + 1) % pipe_obj->bufSize;
+    if (i > 0) {
+      if (wasEmpty) {
+        notify_thread_list(&pipe_obj->blocked_threads);
+      }
+      
+      kpr_handle_fd_changed(pipe_obj->readFd);
     }
-
-    if (wasEmpty) {
-      notify_thread_list(&pipe_obj->blocked_threads);
-    }
-
-    kpr_handle_fd_changed(pipe_obj->readFd);
 
     pthread_mutex_unlock(klee_fs_lock());
     return i;
@@ -2022,8 +2007,15 @@ int pipe2(int pipefd[2], int flags) {
   pipe_obj->writeFd = fdWrite;
   pipe_obj->readFd = fdRead;
 
-  pipe_obj->bufSize = PIPE_BUFFER_SIZE;
-  pipe_obj->free_capacity = pipe_obj->bufSize;
+  if (!kpr_ringbuffer_create(&pipe_obj->buffer, PIPE_BUFFER_SIZE)) {
+    free(pipe_obj);
+    fReadEnd = 0;
+    fWriteEnd = 0;
+
+    errno = ENOMEM;
+    pthread_mutex_unlock(klee_fs_lock());
+    return -1;
+  }
 
   kpr_list_create(&pipe_obj->blocked_threads);
 

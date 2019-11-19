@@ -121,13 +121,7 @@ typedef struct exe_socket {
 #define PIPE_BUFFER_SIZE 2048
 
 typedef struct {
-  unsigned bufSize; /* in bytes */
-  unsigned readIndex; /* in bytes */
-  unsigned writeIndex; /* in bytes */
-  int free_capacity; /* in bytes */
-
-  char contents[PIPE_BUFFER_SIZE];
-  pthread_cond_t cond;
+  kpr_ringbuffer buffer;
 
   int readFd;
   int writeFd;
