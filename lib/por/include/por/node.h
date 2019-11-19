@@ -149,6 +149,10 @@ namespace por {
 			return _D;
 		}
 
+		por::event::event const* event() const noexcept {
+			return _event;
+		}
+
 		node* parent() noexcept {
 			return _parent;
 		}
