@@ -12,7 +12,7 @@ void start(int x) {
   // CHECK: START
   printf("START\n");
   if (x == 53)
-    // CHECK: END: status = 1
+    // CHECK-DAG: END: status = 1
     exit(1);
 }
 
@@ -26,6 +26,6 @@ int main() {
   klee_make_symbolic(&x, sizeof(x), "x");
 
   start(x);
-  // CHECK: END: status = 0
+  // CHECK-DAG: END: status = 0
   end(0);
 }
