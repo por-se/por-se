@@ -4179,8 +4179,20 @@ void Executor::executeAlloc(ExecutionState &state,
       assert(success && "FIXME: Unhandled solver failure");      
       (void) success;
       if (res) {
+        if (fixedSize.second != &state) {
+          // local event after fork() is only added after executeInstruction() has finished
+          // for the purpose of data race detection, temporarily set porNode of new state
+          assert(fixedSize.second->porNode == nullptr);
+          fixedSize.second->porNode = state.porNode;
+        }
+
         executeAlloc(*fixedSize.second, tmp, isLocal,
                      target, zeroMemory, reallocFrom);
+
+        if (fixedSize.second != &state) {
+          // reset porNode to be updated after executeInstruction()
+          fixedSize.second->porNode = nullptr;
+        }
       } else {
         // See if a *really* big value is possible. If so assume
         // malloc will fail for it, so lets fork and return 0.
@@ -4241,8 +4253,20 @@ void Executor::executeFree(ExecutionState &state,
         if (PruneStates)
           it->second->memoryState.unregisterWrite(*mo, *os);
 
+        if (it->second != &state) {
+          // local event after fork() is only added after executeInstruction() has finished
+          // for the purpose of data race detection, temporarily set porNode of new state
+          assert(it->second->porNode == nullptr);
+          it->second->porNode = state.porNode;
+        }
+
         // A free operation should be tracked as well
         processMemoryAccess(*it->second, mo, nullptr, 0, MemoryOperation::Type::FREE);
+
+        if (it->second != &state) {
+          // reset porNode to be updated after executeInstruction()
+          it->second->porNode = nullptr;
+        }
 
         auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
         assert(thread.has_value() && "MemoryObject created by thread that is not known");

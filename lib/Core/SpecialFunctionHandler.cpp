@@ -646,7 +646,17 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
                                                true);
   
   if (zeroSize.first) { // size == 0
-    executor.executeFree(*zeroSize.first, address, target);   
+    if (zeroSize.first != &state) {
+      // local event after fork() is only added after executeInstruction() has finished
+      // for the purpose of data race detection, temporarily set porNode of new state
+      assert(zeroSize.first->porNode == nullptr);
+      zeroSize.first->porNode = state.porNode;
+    }
+    executor.executeFree(*zeroSize.first, address, target);
+    if (zeroSize.first != &state) {
+      // reset porNode to be updated after executeInstruction()
+      zeroSize.first->porNode = nullptr;
+    }
   }
   if (zeroSize.second) { // size != 0
     Executor::StatePair zeroPointer = executor.fork(*zeroSize.second, 
@@ -654,7 +664,17 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
                                                     true);
     
     if (zeroPointer.first) { // address == 0
+      if (zeroPointer.first != &state) {
+        // local event after fork() is only added after executeInstruction() has finished
+        // for the purpose of data race detection, temporarily set porNode of new state
+        assert(zeroPointer.first->porNode == nullptr);
+        zeroPointer.first->porNode = state.porNode;
+      }
       executor.executeAlloc(*zeroPointer.first, size, false, target);
+      if (zeroPointer.first != &state) {
+        // reset porNode to be updated after executeInstruction()
+        zeroPointer.first->porNode = nullptr;
+      }
     } 
     if (zeroPointer.second) { // address != 0
       Executor::ExactResolutionList rl;
@@ -662,8 +682,18 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
       
       for (Executor::ExactResolutionList::iterator it = rl.begin(), 
              ie = rl.end(); it != ie; ++it) {
+        if (it->second != &state) {
+          // local event after fork() is only added after executeInstruction() has finished
+          // for the purpose of data race detection, temporarily set porNode of new state
+          assert(it->second->porNode == nullptr);
+          it->second->porNode = state.porNode;
+        }
         executor.executeAlloc(*it->second, size, false, target, false, 
                               it->first.second);
+        if (it->second != &state) {
+          // reset porNode to be updated after executeInstruction()
+          it->second->porNode = nullptr;
+        }
       }
     }
   }
