@@ -327,6 +327,8 @@ namespace por::event {
 			return (&rhs == this) || is_less_than(rhs);
 		}
 
+		bool is_enabled(configuration const&) const noexcept;
+
 		std::vector<event const*> immediate_predecessors() const noexcept;
 
 		std::vector<event const*> const& immediate_conflicts() const noexcept {

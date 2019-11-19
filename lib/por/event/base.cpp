@@ -368,6 +368,32 @@ namespace por::event {
 		}
 	}
 
+	bool event::is_enabled(por::configuration const& configuration) const noexcept {
+		por::cone C(configuration);
+		if(std::any_of(cone().begin(), cone().end(), [&C](auto &pair) {
+			por::event::event const* p = pair.second;
+			if(!C.has(p->tid())) {
+				return true;
+			}
+			return p->depth() > C.at(p->tid())->depth();
+		})) {
+			// gap in depth between configuration and cone
+			return false;
+		}
+
+		for(auto &p : immediate_predecessors()) {
+			assert(C.has(p->tid()) && p->depth() <= C.at(p->tid())->depth()); // imm pred are subset of cone
+			por::event::event const* e = C.at(p->tid());
+			while(e != p) {
+				if(e == nullptr) {
+					return false;
+				}
+				e = e->thread_predecessor();
+			}
+		}
+		return true;
+	}
+
 	std::vector<event const*> event::immediate_predecessors() const noexcept {
 		std::vector<event const*> result;
 		[[maybe_unused]] bool program_init = false;
