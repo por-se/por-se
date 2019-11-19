@@ -4701,10 +4701,6 @@ void Executor::runFunctionAsMain(Function *f,
   // to ensure that all data structures are properly set up
   porEventManager.registerThreadInit(*state, thread.getThreadId());
 
-  if (ThreadScheduling == ThreadSchedulingPolicy::RoundRobin) {
-    porEventManager.enableRoundRobinMode();
-  }
-
   auto unfolding = rootNode->configuration().unfolding();
 
   run(*state);

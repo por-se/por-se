@@ -16,15 +16,12 @@ namespace klee {
 
   class PorEventManager {
     Executor &executor;
-    bool roundRobin = false;
 
     public:
       PorEventManager() = delete;
       explicit PorEventManager(Executor &executor) : executor(executor) {}
 
       bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
-
-      void enableRoundRobinMode() { roundRobin = true; }
 
     private:
       static std::string getNameOfEvent(por_event_t kind);
