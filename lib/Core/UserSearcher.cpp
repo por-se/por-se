@@ -84,8 +84,8 @@ cl::opt<std::string> BatchTime(
 void klee::initializeSearchOptions() {
   // default values
   if (CoreSearch.empty()) {
+    CoreSearch.push_back(Searcher::DFS);
     CoreSearch.push_back(Searcher::RandomPath);
-    CoreSearch.push_back(Searcher::NURS_CovNew);
   }
 }
 
