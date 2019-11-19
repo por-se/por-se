@@ -26,8 +26,7 @@ llvm::cl::OptionCategory
 
 cl::list<Searcher::CoreSearchType> CoreSearch(
     "search",
-    cl::desc("Specify the search heuristic (default=random-path interleaved "
-             "with nurs:covnew)"),
+    cl::desc("Specify the search heuristic (default=dfs interleaved with random-path)"),
     cl::values(
         clEnumValN(Searcher::DFS, "dfs", "use Depth First Search (DFS)"),
         clEnumValN(Searcher::BFS, "bfs",
