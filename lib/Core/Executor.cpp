@@ -206,9 +206,9 @@ cl::opt<bool> SuppressExternalWarnings(
 
 cl::opt<bool> AllExternalWarnings(
     "all-external-warnings",
-    cl::init(false),
+    cl::init(true),
     cl::desc("Issue a warning everytime an external call is made, "
-             "as opposed to once per function (default=false)"),
+             "as opposed to once per function (default=true)"),
     cl::cat(ExtCallsCat));
 
 

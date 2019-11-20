@@ -10,7 +10,7 @@ extern void printint(int d);
 
 int main(int argc, char * argv[]) {
 	printint(5);
-	// CHECK: KLEE: WARNING ONCE: calling external: printf
+	// CHECK: KLEE: WARNING: calling external: printf
 	return 0;
 }
 #endif
