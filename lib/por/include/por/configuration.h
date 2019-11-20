@@ -151,6 +151,30 @@ namespace por {
 		auto const& lock_heads() const noexcept { return _lock_heads; }
 		auto const& cond_heads() const noexcept { return _cond_heads; }
 
+		por::event::event const* last_of_tid(por::thread_id const& tid) const noexcept {
+			auto it = _thread_heads.find(tid);
+			if(it == _thread_heads.end()) {
+				return nullptr;
+			}
+			return it->second;
+		}
+
+		por::event::event const* last_of_lid(por::event::lock_id_t const& lid) const noexcept {
+			auto it = _lock_heads.find(lid);
+			if(it == _lock_heads.end()) {
+				return nullptr;
+			}
+			return it->second;
+		}
+
+		std::vector<por::event::event const*> last_of_cid(por::event::cond_id_t const& cid) const noexcept {
+			auto it = _cond_heads.find(cid);
+			if(it == _cond_heads.end()) {
+				return {};
+			}
+			return it->second;
+		}
+
 		auto const& unfolding() const noexcept { return _unfolding; }
 
 		std::size_t size() const noexcept { return _size; }
