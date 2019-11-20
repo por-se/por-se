@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
 
 //
 // Internal stuff
@@ -217,9 +218,8 @@ void kpr_handle_fd_changed(int fd) {
 }
 
 //
-// External api (mainly only poll for now)
+// External api (POSIX API)
 //
-
 
 int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
   if (nfds == 0) {
@@ -383,4 +383,119 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
   pthread_mutex_unlock(klee_fs_lock());
 
   return changes;
+}
+
+#undef FD_SET
+#undef FD_CLR
+#undef FD_ISSET
+#undef FD_ZERO
+#define	FD_SET(n, p)	((p)->fds_bits[(n)/NFDBITS] |= (1 << ((n) % NFDBITS)))
+#define	FD_CLR(n, p)	((p)->fds_bits[(n)/NFDBITS] &= ~(1 << ((n) % NFDBITS)))
+#define	FD_ISSET(n, p)	((p)->fds_bits[(n)/NFDBITS] & (1 << ((n) % NFDBITS)))
+#define FD_ZERO(p)	memset((char *)(p), '\0', sizeof(*(p)))
+int select(int nfds, fd_set *read, fd_set *write,
+           fd_set *except, struct timeval *timeout) {
+  pthread_mutex_lock(klee_fs_lock());
+
+  fd_set in_read, in_write, in_except;
+
+  if (read) {
+    in_read = *read;
+    FD_ZERO(read);
+  } else {
+    FD_ZERO(&in_read);
+  }
+
+  if (write) {
+    in_write = *write;
+    FD_ZERO(write);
+  } else {
+    FD_ZERO(&in_write);
+  }
+   
+  if (except) {
+    in_except = *except;
+    FD_ZERO(except);
+  } else {
+    FD_ZERO(&in_except);
+  }
+
+  struct pollfd* poll_fds = calloc(sizeof(struct pollfd), nfds);
+
+  for (int i = 0; i < nfds; i++) {
+    struct pollfd* pfd = &poll_fds[i];
+    
+    if (!FD_ISSET(i, &in_read) && !FD_ISSET(i, &in_write) && !FD_ISSET(i, &in_except)) {
+      pfd->fd = -1;
+      continue;
+    }
+
+    exe_file_t *f = __get_file(i);
+    if (!f) {
+      free(poll_fds);
+      errno = EBADF;
+      pthread_mutex_unlock(klee_fs_lock());
+      return -1;
+    }
+
+    pfd->fd = i;
+
+    if (FD_ISSET(i, &in_read)) {
+      pfd->events |= POLLERR | POLLIN | POLLHUP;
+    }
+
+    if (FD_ISSET(i, &in_write)) {
+      pfd->events |= POLLERR | POLLOUT;
+    }
+
+    if (FD_ISSET(i, &in_except)) {
+      pfd->events |= POLLERR;
+    }
+  }
+
+  int poll_timeout = -1;
+  if (timeout != NULL) {
+    // Round slightly up for microseconds as poll uses milliseconds
+    poll_timeout = (timeout->tv_usec + 999) / 1000;
+    poll_timeout += timeout->tv_sec * 1000;
+  }
+
+  int ret = poll(poll_fds, nfds, poll_timeout);
+
+  if (ret <= 0) {
+    free(poll_fds);
+    pthread_mutex_unlock(klee_fs_lock());
+    return ret;
+  }
+
+  int count_fds = 0;
+
+  for (int i = 0; i < nfds; i++) {
+    struct pollfd* pfd = &poll_fds[i];
+    
+    if (pfd->revents == 0) {
+      continue;
+    }
+
+    assert(FD_ISSET(i, &in_read) || FD_ISSET(i, &in_write) || FD_ISSET(i, &in_except));
+
+    if (FD_ISSET(i, &in_read) && (pfd->revents & (POLLERR | POLLIN | POLLHUP)) != 0) {
+      FD_SET(i, read);
+    }
+
+    if (FD_ISSET(i, &in_write) && (pfd->revents & (POLLERR | POLLOUT)) != 0) {
+      FD_SET(i, write);
+    }
+
+    if (FD_ISSET(i, &in_except) && (pfd->revents & POLLERR) != 0) {
+      FD_SET(i, except);
+    }
+
+    count_fds++;
+  }
+
+  free(poll_fds);
+
+  pthread_mutex_unlock(klee_fs_lock());
+  return count_fds;
 }
