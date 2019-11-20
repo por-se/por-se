@@ -140,6 +140,9 @@ namespace por::event {
 	public:
 		mutable klee::MemoryFingerprintValue _fingerprint;
 		mutable klee::MemoryFingerprintDelta _thread_delta;
+		mutable bool _is_cutoff = false;
+
+		bool is_cutoff() const noexcept { return _is_cutoff; }
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
@@ -153,7 +156,8 @@ namespace por::event {
 		, _kind(that._kind)
 		, _successors(std::move(that._successors))
 		, _fingerprint(std::move(that._fingerprint))
-		, _thread_delta(std::move(that._thread_delta)) {
+		, _thread_delta(std::move(that._thread_delta))
+		, _is_cutoff(that._is_cutoff) {
 			assert(!that.has_successors());
 		}
 
@@ -181,6 +185,7 @@ namespace por::event {
 		, _cone(immediate_predecessor)
 		, _tid(tid)
 		, _kind(kind)
+		, _is_cutoff(immediate_predecessor._is_cutoff)
 		{
 			assert(immediate_predecessor._depth < _depth);
 			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
@@ -196,6 +201,9 @@ namespace por::event {
 			for(auto& c : _cone) {
 				auto& event = c.second;
 				max_depth = std::max(max_depth, event->_depth);
+				if(event->_is_cutoff) {
+					_is_cutoff = true;
+				}
 			}
 			_depth = max_depth + 1;
 
@@ -328,6 +336,8 @@ namespace por::event {
 		}
 
 		bool is_enabled(configuration const&) const noexcept;
+
+		std::size_t mark_as_cutoff() const noexcept;
 
 		std::vector<event const*> immediate_predecessors() const noexcept;
 

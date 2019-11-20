@@ -394,6 +394,30 @@ namespace por::event {
 		return true;
 	}
 
+	std::size_t event::mark_as_cutoff() const noexcept {
+		if(_is_cutoff) {
+			return 0;
+		}
+
+		std::size_t new_cutoffs = 0;
+
+		std::vector<event const*> W{this};
+		while(!W.empty()) {
+			auto w = W.back();
+			W.pop_back();
+
+			w->_is_cutoff = true;
+			++new_cutoffs;
+
+			for(auto s : w->successors()) {
+				if(!s->is_cutoff()) {
+					W.push_back(s);
+				}
+			}
+		}
+		return new_cutoffs;
+	}
+
 	std::vector<event const*> event::immediate_predecessors() const noexcept {
 		std::vector<event const*> result;
 		[[maybe_unused]] bool program_init = false;
