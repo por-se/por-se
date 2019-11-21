@@ -145,6 +145,7 @@ namespace klee {
     HANDLER(handleDivRemOverflow);
 
     HANDLER(handleOutput);
+    HANDLER(handleGetPid);
 
     HANDLER(handleCreateThread);
     HANDLER(handlePreemptThread);

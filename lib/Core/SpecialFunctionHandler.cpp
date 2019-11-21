@@ -133,6 +133,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("realloc", handleRealloc, true),
 
   add("klee_output", handleOutput, true),
+  add("getpid", handleGetPid, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -1190,4 +1191,13 @@ void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
   }
 
   executor.bindLocal(target, state, ConstantExpr::create(0, Expr::Int32));
+}
+
+void SpecialFunctionHandler::handleGetPid(klee::ExecutionState &state,
+                                          klee::KInstruction *target,
+                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.empty() && "invalid number of arguments to getpid - expected none");
+
+  pid_t kleePid = getpid();
+  executor.bindLocal(target, state, ConstantExpr::create(kleePid, sizeof(kleePid) * 8));
 }
