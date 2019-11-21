@@ -382,6 +382,10 @@ llvm::cl::opt<bool> DebugPrintCalls("debug-print-calls", cl::init(false), cl::ca
 
 llvm::cl::opt<bool> DebugPrintPorStats("debug-print-por-statistics", cl::init(false), cl::cat(DebugCat));
 
+cl::opt<bool> EnableDataRaceDetection("data-race-detection",
+    cl::init(true),
+    cl::desc("Check memory accesses for races between threads"));
+
 /// The different query logging solvers that can switched on/off
 enum PrintDebugInstructionsType {
   STDERR_ALL, ///
@@ -5114,7 +5118,7 @@ void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
 bool
 Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref<Expr> &offset,
                               std::size_t numBytes, MemoryOperation::Type type) {
-  if (!state.threadSchedulingEnabled) {
+  if (!state.threadSchedulingEnabled || !EnableDataRaceDetection) {
     // These accesses are always safe and do not need to be tracked
     return true;
   }
