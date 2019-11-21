@@ -310,12 +310,16 @@ namespace pseudoalloc {
 			}
 
 			[[nodiscard]] void* allocate() {
+				_pa_check(_finger <= _bitmap.size());
 				while(_finger < _bitmap.size() && _bitmap[_finger] == 0) {
 					++_finger;
 				}
 				if(_finger < _bitmap.size()) {
 					auto shift = util::ctz(_bitmap[_finger]);
-					_bitmap[_finger] ^= static_cast<::std::uint64_t>(1) << shift;
+					auto mask = static_cast<::std::uint64_t>(1) << shift;
+					_pa_check(mask != 0);
+					_pa_check((_bitmap[_finger] & mask) == mask);
+					_bitmap[_finger] ^= mask;
 					return _base + index2pos(_finger * 64 + shift);
 				} else {
 					_bitmap.emplace_back(~static_cast<::std::uint64_t>(1));
@@ -332,19 +336,23 @@ namespace pseudoalloc {
 				auto pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
 				_pa_check(pos < _size);
 				auto index = pos2index(pos);
-				if(index < _finger) {
-					_finger = index;
-				}
-
 				auto loc = index / 64;
 				auto shift = index % 64;
 				assert(loc < _bitmap.size() && (_bitmap[loc] & (static_cast<std::uint64_t>(1) << shift)) == 0 &&
 				       "Invalid free");
-				_bitmap[loc] |= static_cast<std::uint64_t>(1) << shift;
+				if(loc < _finger) {
+					_finger = loc;
+				}
+
+				auto mask = static_cast<std::uint64_t>(1) << shift;
+				_pa_check(mask != 0);
+				_pa_check((_bitmap[loc] & mask) == 0);
+				_bitmap[loc] |= mask;
 				if(loc + 1 == _bitmap.size()) {
 					while(!_bitmap.empty() && _bitmap.back() == ~static_cast<::std::uint64_t>(0)) {
 						_bitmap.pop_back();
 					}
+					_finger = _bitmap.size();
 				}
 			}
 		};
