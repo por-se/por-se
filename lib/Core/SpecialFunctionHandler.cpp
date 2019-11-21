@@ -132,7 +132,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
 
-  add("puts", handlePuts, true),
+  add("klee_output", handleOutput, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -1138,13 +1138,32 @@ void SpecialFunctionHandler::handlePorThreadExit(ExecutionState &state,
   }
 }
 
-void SpecialFunctionHandler::handlePuts(klee::ExecutionState &state,
-                                        klee::KInstruction *target,
-                                        std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 1 && "invalid number of arguments to puts");
+void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
+                                          klee::KInstruction *target,
+                                          std::vector<klee::ref<klee::Expr>> &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to puts - expected 2");
 
-  llvm::outs() << readStringAtAddress(state, arguments[0]) << "\n";
-  llvm::outs().flush();
+  auto outputTargetExpr = executor.toUnique(state, arguments[0]);
+  if (!isa<ConstantExpr>(outputTargetExpr)) {
+    executor.terminateStateOnError(state, "klee_output", Executor::User);
+    return;
+  }
+
+  auto outputTarget = cast<ConstantExpr>(outputTargetExpr)->getZExtValue();
+  if (outputTarget != 1 && outputTarget != 2) {
+    executor.terminateStateOnError(state, "klee_output", Executor::User);
+    return;
+  }
+
+  auto out = readStringAtAddress(state, arguments[1]);
+
+  if (outputTarget == 1) {
+    llvm::outs() << out;
+    llvm::outs().flush();
+  } else {
+    llvm::errs() << out;
+    llvm::errs().flush();
+  }
 
   executor.bindLocal(target, state, ConstantExpr::create(0, Expr::Int32));
 }
