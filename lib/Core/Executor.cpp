@@ -1877,7 +1877,6 @@ void Executor::executeCall(ExecutionState &state,
           klee_warning_once(
               0, "While allocating varargs: malloc did not align to 16 bytes.");
         }
-
         ObjectState *os = bindObjectInState(state, mo, true);
         unsigned offset = 0;
         for (unsigned i = funcArgs; i < callingArgs; i++) {
@@ -5196,12 +5195,27 @@ Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObj
   mo->getAllocInfo(memInfo);
   os << memInfo << "\n";
 
+  os << "--- Executed\n";
+  os << state.currentThreadId() << " races with " << racingThread;
+
   const InstructionInfo &ii = *racingInstruction->info;
   if (!ii.file.empty()) {
-    os << state.currentThreadId() << " races with " << racingThread << " instruction: " << ii.file << ":" << ii.line << "\n";
+    os << " instruction in: " << ii.file << ":" << ii.line << "\n";
   } else {
-    os << state.currentThreadId() << " races with " << racingThread << " instruction unknown\n";
+    os << " location of instruction unknown\n";
   }
+
+  os << "--- Operations\n";
+
+  os << racingThread
+    << " -> " << *racingInstruction->inst
+    << " (assembly.ll:" << ii.assemblyLine << ")"
+    << "\n";
+
+  os << state.currentThreadId()
+    << " -> " << *state.currentThread().prevPc->inst
+    << " (assembly.ll:" << state.currentThread().prevPc->info->assemblyLine << ")"
+    << "\n";
 
   terminateStateOnError(state, "thread unsafe memory access",
                         UnsafeMemoryAccess, nullptr, os.str());
