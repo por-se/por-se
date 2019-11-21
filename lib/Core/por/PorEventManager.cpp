@@ -1,6 +1,7 @@
 #include "PorEventManager.h"
 #include "../CoreStats.h"
-#include "../Executor.h"
+
+#include "klee/ExecutionState.h"
 
 #include "por/configuration.h"
 #include "por/event/event.h"

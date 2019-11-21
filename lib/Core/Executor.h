@@ -146,7 +146,7 @@ private:
   std::vector<TimerInfo*> timers;
   std::unique_ptr<PTree> processTree;
 
-  PorEventManager porEventManager{*this};
+  PorEventManager porEventManager;
 
   /// Used to track states that have been added during the current
   /// instructions step. 

@@ -15,12 +15,7 @@ namespace klee {
   class ExecutionState;
 
   class PorEventManager {
-    Executor &executor;
-
     public:
-      PorEventManager() = delete;
-      explicit PorEventManager(Executor &executor) : executor(executor) {}
-
       bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
 
     private:

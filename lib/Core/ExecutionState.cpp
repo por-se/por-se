@@ -99,6 +99,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     raceDetection(state.raceDetection),
     threads(state.threads),
+    needsThreadScheduling(state.needsThreadScheduling),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
     threadSchedulingEnabled(state.threadSchedulingEnabled),
