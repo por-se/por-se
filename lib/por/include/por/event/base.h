@@ -293,6 +293,10 @@ namespace por::event {
 			                                 local_configuration_end(include_program_init));
 		}
 
+		std::size_t local_configuration_size() const noexcept {
+			return std::distance(local_configuration_begin(true), local_configuration_end(true));
+		}
+
 		event_iterator causes_begin(bool include_program_init=true) const noexcept {
 			return event_iterator(*this, include_program_init, false);
 		}
