@@ -146,6 +146,11 @@ namespace klee {
 
     HANDLER(handleOutput);
     HANDLER(handleGetPid);
+    HANDLER(handleGetPPid);
+    HANDLER(handleGetUid);
+    HANDLER(handleGetEUid);
+    HANDLER(handleGetGid);
+    HANDLER(handleGetEGid);
 
     HANDLER(handleCreateThread);
     HANDLER(handlePreemptThread);

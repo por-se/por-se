@@ -134,6 +134,11 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
 
   add("klee_output", handleOutput, true),
   add("getpid", handleGetPid, true),
+  add("getppid", handleGetPPid, true),
+  add("getuid", handleGetUid, true),
+  add("geteuid", handleGetEUid, true),
+  add("getgid", handleGetGid, true),
+  add("getegid", handleGetEGid, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -1193,11 +1198,18 @@ void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
   executor.bindLocal(target, state, ConstantExpr::create(0, Expr::Int32));
 }
 
-void SpecialFunctionHandler::handleGetPid(klee::ExecutionState &state,
-                                          klee::KInstruction *target,
-                                          std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to getpid - expected none");
+#define TRIVIAL_HANDLER(handlername, funcname) \
+  void SpecialFunctionHandler::handlername(klee::ExecutionState &state, \
+                                            klee::KInstruction *target, \
+                                            std::vector<klee::ref<klee::Expr>> &arguments) { \
+    assert(arguments.empty() && "invalid number of arguments to " #funcname " - expected none"); \
+    auto result = funcname(); \
+    executor.bindLocal(target, state, ConstantExpr::create(result, sizeof(result) * 8)); \
+  }
 
-  pid_t kleePid = getpid();
-  executor.bindLocal(target, state, ConstantExpr::create(kleePid, sizeof(kleePid) * 8));
-}
+TRIVIAL_HANDLER(handleGetPid, getpid)
+TRIVIAL_HANDLER(handleGetPPid, getppid)
+TRIVIAL_HANDLER(handleGetUid, getuid)
+TRIVIAL_HANDLER(handleGetEUid, geteuid)
+TRIVIAL_HANDLER(handleGetGid, getgid)
+TRIVIAL_HANDLER(handleGetEGid, getegid)

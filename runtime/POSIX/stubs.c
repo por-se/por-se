@@ -601,19 +601,3 @@ int munmap(void*start, size_t length) {
   errno = EPERM;
   return -1;
 }
-
-uid_t getuid(void) {
-  return 1000;
-}
-
-uid_t geteuid(void) {
-  return 1000;
-}
-
-gid_t getgid(void) {
-  return 1000;
-}
-
-gid_t getegid(void) {
-  return 1000;
-}
