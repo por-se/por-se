@@ -310,7 +310,31 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
                            KInstruction *target,
                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
-  executor.exitThread(state);
+
+  // So it can happen that one thread calls exit while other
+  // threads are still running (except of the current one)
+  bool atLeastOneNotExited = false;
+
+  const auto& curTid = state.currentThreadId();
+
+  for (const auto& th : state.threads) {
+    if (th.second.state != ThreadState::Exited && curTid == th.first) {
+      atLeastOneNotExited = true;
+      break;
+    }
+  }
+
+  if (atLeastOneNotExited) {
+    executor.terminateStateOnExit(state);
+  } else {
+    std::string TmpStr;
+    llvm::raw_string_ostream os(TmpStr);
+    os << "Traces of all threads:\n";
+    state.dumpAllThreadStacks(os);
+
+    executor.terminateStateOnError(state, "exit with other threads still not exited",
+                        Executor::TerminateReason::User, nullptr, os.str());
+  }
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
