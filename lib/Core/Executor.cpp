@@ -5345,7 +5345,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   // Another point of we cannot schedule any other thread
   if (runnable.empty()) {
     if (disabledThread && !wasEmpty) {
-      klee_error("Disabled all threads because of porNode->D(). Terminating State.");
+      klee_warning("Disabled all threads because of porNode->D(). Terminating State.");
       terminateState(state);
       return;
     }
@@ -5393,8 +5393,8 @@ void Executor::scheduleThreads(ExecutionState &state) {
     auto peekTid = state.peekCatchUp()->tid();
     state.scheduleNextThread(peekTid);
     auto thread = state.getThreadById(peekTid);
-    assert(!thread->get().porHasBeenInitialized);
-    thread->get().porHasBeenInitialized = true;
+    assert(!thread.value().get().porHasBeenInitialized);
+    thread.value().get().porHasBeenInitialized = true;
     porEventManager.registerThreadInit(state, peekTid);
   }
 
@@ -5403,15 +5403,17 @@ void Executor::scheduleThreads(ExecutionState &state) {
     auto peekThread = state.getThreadById(peekTid);
 
     if (!peekThread) {
-      klee_error("Thread to catch up to not found. Terminating State.");
+      klee_warning("Thread to catch up to not found. Terminating State.");
       terminateState(state);
       return;
     }
 
-    tid = state.peekCatchUp()->tid();
-    if (state.getThreadById(tid)->get().state == ThreadState::Cutoff) {
-      state.getThreadById(tid)->get().state = ThreadState::Runnable;
-      klee_warning("Catch up on cutoff event");
+    if (peekThread.has_value()) {
+      tid = peekTid;
+      if (peekThread.value().get().state == ThreadState::Cutoff) {
+        peekThread.value().get().state = ThreadState::Runnable;
+        klee_warning("Catch up on cutoff event");
+      }
     }
 
     if (!state.threadSchedulingEnabled) {
@@ -5430,12 +5432,11 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
   }
 
-  assert(state.getThreadById(tid)->get().state == ThreadState::Runnable);
   state.scheduleNextThread(tid);
   auto thread = state.getThreadById(tid);
   assert(thread.has_value());
-  if(!thread->get().porHasBeenInitialized) {
-    thread->get().porHasBeenInitialized = true;
+  if(!thread.value().get().porHasBeenInitialized) {
+    thread.value().get().porHasBeenInitialized = true;
     porEventManager.registerThreadInit(state, tid);
   }
 }
