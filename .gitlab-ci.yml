@@ -1,4 +1,7 @@
 before_script:
+  - | # setup netrc for usage in container
+      echo -e "machine laboratory.comsys.rwth-aachen.de\nlogin gitlab-ci-token\npassword ${CI_JOB_TOKEN}" >> ~/.netrc
+      chmod 0600 ~/.netrc
   - | # derive and print WS_JOBS
       export WS_JOBS=${CI_RUNNER_DESCRIPTION##*-j} # strip the longest match of *-j from the front of the description
       if [[ "$WS_JOBS" = "$CI_RUNNER_DESCRIPTION" ]] ; then # check if no match happened
@@ -24,6 +27,10 @@ test:
   script:
     - rm -rf /workspace/porse
     - cp -r . /workspace/porse
+    - git -C /workspace/simulator pull --ff-only
+    - git -C /workspace/pseudoalloc pull --ff-only
+    - git -C /workspace/klee-uclibc pull --ff-only
+    - rm -rf /workspace/.build/klee-uclibc-*
     - /workspace/ws build >build.log 2>&1
     - |
         /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
