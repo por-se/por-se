@@ -117,6 +117,7 @@ namespace por {
 						}
 						ic->_immediate_conflicts.erase(it);
 					}
+					return true;
 				}), events.end());
 			}
 		}
