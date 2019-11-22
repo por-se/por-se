@@ -4127,11 +4127,12 @@ void Executor::executeAlloc(ExecutionState &state,
 
         // free previous allocation
         const MemoryObject *reallocatedObject = reallocFrom->getObject();
+
+        processMemoryAccess(state, reallocatedObject, nullptr, 0, MemoryOperation::Type::FREE);
+
         if (PruneStates) {
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
-
-        processMemoryAccess(state, reallocatedObject, nullptr, 0, MemoryOperation::Type::FREE);
 
         reallocatedObject->parent->deallocate(reallocatedObject, thread);
         state.addressSpace.unbindObject(reallocatedObject);
@@ -4259,10 +4260,6 @@ void Executor::executeFree(ExecutionState &state,
         terminateStateOnError(*it->second, "free of global", Free, NULL,
                               getAddressInfo(*it->second, address));
       } else {
-
-        if (PruneStates)
-          it->second->memoryState.unregisterWrite(*mo, *os);
-
         if (it->second != &state) {
           // local event after fork() is only added after executeInstruction() has finished
           // for the purpose of data race detection, temporarily set porNode of new state
@@ -4277,6 +4274,9 @@ void Executor::executeFree(ExecutionState &state,
           // reset porNode to be updated after executeInstruction()
           it->second->porNode = nullptr;
         }
+
+        if (PruneStates)
+          it->second->memoryState.unregisterWrite(*mo, *os);
 
         auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
         assert(thread.has_value() && "MemoryObject created by thread that is not known");
@@ -4436,6 +4436,8 @@ void Executor::executeMemoryWrite(ExecutionState& state,
     return;
   }
 
+  processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
+
   auto* wos = state.addressSpace.getWriteable(mo, os);
 
   if (PruneStates) {
@@ -4448,8 +4450,6 @@ void Executor::executeMemoryWrite(ExecutionState& state,
   if (PruneStates) {
     state.memoryState.registerWrite(address, *mo, *wos, bytes);
   }
-
-  processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
 }
 
 ref<Expr> Executor::executeMemoryRead(ExecutionState& state,
@@ -5105,12 +5105,12 @@ void Executor::exitThread(ExecutionState &state) {
     if (v->isThreadLocal()) {
       auto mo = memory->lookupGlobalMemoryObject(v, tid);
 
+      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
+
       if (PruneStates) {
         auto os = state.addressSpace.findObject(mo);
         state.memoryState.unregisterWrite(*mo, *os);
       }
-
-      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
 
       state.addressSpace.unbindObject(mo);
     }
