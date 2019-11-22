@@ -29,6 +29,7 @@
 #include <vector>
 
 namespace por {
+  class leaf;
   class node;
 };
 
@@ -166,6 +167,9 @@ public:
   // node for Partial Order Reduction based exploration
   por::node* porNode = nullptr;
 
+  // sequence of events that need to be caught up
+  std::deque<por::event::event const *> catchUp;
+
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
 
@@ -182,6 +186,8 @@ public:
   ExecutionState(const std::vector<ref<Expr> > &assumptions);
 
   ExecutionState(const ExecutionState &state);
+
+  ExecutionState(const por::leaf &leaf);
 
   ~ExecutionState();
 
@@ -246,6 +252,18 @@ public:
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
+
+  bool needsCatchUp() const noexcept {
+    if (!porNode) return false;
+    return !catchUp.empty();
+  }
+
+  por::event::event const *peekCatchUp() const noexcept {
+    if(!needsCatchUp()) {
+      return nullptr;
+    }
+    return catchUp.front();
+  }
 
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;

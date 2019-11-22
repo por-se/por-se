@@ -74,6 +74,7 @@
 
 #include "por/node.h"
 #include "por/configuration.h"
+#include "por/csd.h"
 
 #include "RaceDetection/DataRaceDetection.h"
 #include "RaceDetection/StateBoundTimingSolver.h"
@@ -983,8 +984,8 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
-  if (state.porNode && state.porNode->needs_catch_up()) {
-    const por::event::event* event = state.porNode->peek();
+  if (state.needsCatchUp()) {
+    const por::event::event* event = state.peekCatchUp();
     assert(event->kind() == por::event::event_kind::local);
     auto local = static_cast<const por::event::local*>(event);
 
@@ -1241,8 +1242,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     return StatePair(0, &current);
   } else {
-    if (current.porNode && current.porNode->needs_catch_up()) {
-      const por::event::event* event = current.porNode->peek();
+    if (current.needsCatchUp()) {
+      const por::event::event* event = current.peekCatchUp();
       assert(event->kind() == por::event::event_kind::local);
       auto local = static_cast<const por::event::local*>(event);
 
@@ -1597,7 +1598,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   if (statsTracker)
     statsTracker->stepInstruction(state);
 
-  if(state.porNode->needs_catch_up())
+  if(state.needsCatchUp())
     ++stats::catchUpInstructions;
 
   Thread &thread = state.currentThread();
@@ -3542,6 +3543,11 @@ void Executor::run(ExecutionState &initialState) {
     checkMemoryUsage();
 
     updateStates(&state);
+
+    if (ExploreSchedules && stats::instructions % 10000 == 0) {
+      exploreSchedules(state);
+    }
+
     firstInstruction = false;
   }
 
@@ -3549,6 +3555,41 @@ void Executor::run(ExecutionState &initialState) {
   searcher = nullptr;
 
   doDumpStates();
+}
+
+void Executor::exploreSchedules(ExecutionState &state) {
+  if (!ExploreSchedules || !state.porNode || !state.porNode->parent()) {
+    return;
+  }
+  por::configuration const& cfg = state.porNode->configuration();
+
+  for(auto cex : cfg.conflicting_extensions()) {
+    por::event::event const& x = cex.extension();
+    if (!x.has_successors()) {
+      // TODO: make configurable, improve output!
+      if (x.is_cutoff() || por::is_above_csd_limit(x, 50)) {
+        llvm::errs() << "CSD of event " << x.to_string(true) << " above limit\n";
+        cfg.unfolding()->remove_event(x);
+      }
+    }
+  }
+
+  std::vector<por::node*> branch(state.porNode->parent()->branch_begin(), state.porNode->parent()->branch_end());
+  branch.pop_back(); // remove root node
+  auto leaves = por::node::create_right_branches(branch);
+
+  for(auto l : leaves) {
+    ExecutionState *toExecute = new ExecutionState(l);
+
+    registerFork(state, toExecute);
+    addedStates.push_back(toExecute);
+
+    // thread of last event may not be runnable or lead to wrong event
+    toExecute->needsThreadScheduling = true;
+    scheduleThreads(*toExecute);
+
+//    llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l.start->to_string() << "\n";
+  }
 }
 
 void Executor::updateStatesJSON(KInstruction *ki, const ExecutionState &state,
@@ -3729,35 +3770,9 @@ void Executor::terminateState(ExecutionState &state) {
   interpreterHandler->incPathsExplored();
 
 
-  if(ExploreSchedules && state.porNode && state.porNode->parent()) {
-    state.porNode->configuration().conflicting_extensions();
+  exploreSchedules(state);
 
-    std::vector<por::node*> branch(state.porNode->parent()->branch_begin(), state.porNode->parent()->branch_end());
-    branch.pop_back(); // remove root node
-
-    auto leaves = por::node::create_right_branches(branch);
-    for(auto l : leaves) {
-      const ExecutionState *standby = l->standby_state();
-      ExecutionState *toExecute = new ExecutionState(*standby);
-      toExecute->porNode = l;
-      ++toExecute->depth;
-      toExecute->coveredNew = false;
-      toExecute->coveredLines.clear();
-
-      registerFork(state, toExecute);
-      addedStates.push_back(toExecute);
-
-      // thread of last event may not be runnable or lead to wrong event
-      toExecute->needsThreadScheduling = true;
-      scheduleThreads(*toExecute);
-      // FIXME: should we really do both here?
-
-
-      llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l->to_string() << "\n";
-    }
-  }
-
-  if(ExploreSchedules && state.porNode) {
+  if (ExploreSchedules && state.porNode) {
     state.porNode->backtrack();
   }
 
@@ -5018,8 +5033,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   if (!onlyOne) {
     std::vector<ThreadId> notifiedThreads;
 
-    if (registerAsNotificationEvent && state.porNode->needs_catch_up()) {
-      const por::event::event* event = state.porNode->peek();
+    if (registerAsNotificationEvent && state.needsCatchUp()) {
+      const por::event::event* event = state.peekCatchUp();
       assert(event->kind() == por::event::event_kind::broadcast);
       auto broadcast = static_cast<const por::event::broadcast*>(event);
       for (const auto &wait1 : broadcast->wait_predecessors()) {
@@ -5045,8 +5060,8 @@ void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, boo
   }
 
   std::vector<ThreadId> choices;
-  if (registerAsNotificationEvent && state.porNode->needs_catch_up()) {
-      const por::event::event* event = state.porNode->peek();
+  if (registerAsNotificationEvent && state.needsCatchUp()) {
+      const por::event::event* event = state.peekCatchUp();
       assert(event->kind() == por::event::event_kind::signal);
       auto signal = static_cast<const por::event::signal*>(event);
       if (!signal->is_lost())
@@ -5290,7 +5305,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   bool disabledThread = false;
   bool wasEmpty = runnable.empty();
 
-  if (!state.porNode->needs_catch_up() && !state.porNode->D().empty()) {
+  if (!state.needsCatchUp() && !state.porNode->D().empty()) {
     const por::configuration &C = state.porNode->configuration();
     por::comb D(state.porNode->D().begin(), state.porNode->D().end());
     D.sort();
@@ -5332,6 +5347,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (disabledThread && !wasEmpty) {
       klee_error("Disabled all threads because of porNode->D(). Terminating State.");
       terminateState(state);
+      return;
     }
 
     bool allExited = true;
@@ -5373,16 +5389,38 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 
   // or (if possible) pick thread that needs to catch up
-  if (state.porNode->needs_catch_up()) {
-    tid = state.porNode->peek()->tid();
+  while (state.needsCatchUp() && state.peekCatchUp()->kind() == por::event::event_kind::thread_init) {
+    auto peekTid = state.peekCatchUp()->tid();
+    state.scheduleNextThread(peekTid);
+    auto thread = state.getThreadById(peekTid);
+    assert(!thread->get().porHasBeenInitialized);
+    thread->get().porHasBeenInitialized = true;
+    porEventManager.registerThreadInit(state, peekTid);
+  }
+
+  if (state.needsCatchUp()) {
+    auto peekTid = state.peekCatchUp()->tid();
+    auto peekThread = state.getThreadById(peekTid);
+
+    if (!peekThread) {
+      klee_error("Thread to catch up to not found. Terminating State.");
+      terminateState(state);
+      return;
+    }
+
+    tid = state.peekCatchUp()->tid();
+    if (state.getThreadById(tid)->get().state == ThreadState::Cutoff) {
+      state.getThreadById(tid)->get().state = ThreadState::Runnable;
+      klee_warning("Catch up on cutoff event");
+    }
 
     if (!state.threadSchedulingEnabled) {
       state.threadSchedulingEnabled = true;
       state.currentThread().threadSchedulingWasDisabled = true;
     }
 
-    if (state.porNode->peek()->kind() == por::event::event_kind::thread_join) {
-      auto *join = static_cast<por::event::thread_join const*>(state.porNode->peek());
+    if (state.peekCatchUp()->kind() == por::event::event_kind::thread_join) {
+      auto *join = static_cast<por::event::thread_join const*>(state.peekCatchUp());
       auto jid = join->joined_thread();
       auto it = state.threads.find(jid);
       if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {

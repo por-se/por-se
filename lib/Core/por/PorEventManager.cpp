@@ -71,8 +71,9 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
 }
 
 void PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
-  if (state.porNode->needs_catch_up()) {
-    state.porNode->catch_up(std::move(callback));
+  if (state.needsCatchUp()) {
+    state.porNode = state.porNode->catch_up(std::move(callback), state.peekCatchUp());
+    state.catchUp.pop_front();
     return;
   }
 
@@ -130,10 +131,10 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
   state.needsThreadScheduling = true;
 
-  if(state.porNode->needs_catch_up()) {
+  if (state.needsCatchUp()) {
     assert(addedStates.empty());
-
-    state.porNode->catch_up([this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
+    state.porNode = state.porNode->catch_up(
+    [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
       auto& thread = state.currentThread();
       std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
       thread.pathSincePorLocal = {};
@@ -144,7 +145,8 @@ bool PorEventManager::registerLocal(ExecutionState &state,
         return std::make_pair(e, std::move(standby));
       }
       return std::make_pair(e, nullptr);
-    });
+    }, state.peekCatchUp());
+    state.catchUp.pop_front();
 
     return true;
   }

@@ -28,7 +28,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "por/configuration.h"
+#include "por/node.h"
 
 #include <algorithm>
 #include <cassert>
@@ -123,6 +123,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
     memoryState(state.memoryState, this),
+    catchUp(state.catchUp),
     steppedInstructions(state.steppedInstructions)
 {
   // Since we copied the threads, we can use the thread id to look it up
@@ -130,6 +131,14 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
+}
+
+ExecutionState::ExecutionState(const por::leaf &leaf) : ExecutionState(*leaf.start->standby_state()) {
+  catchUp = leaf.catch_up;
+  porNode = leaf.start;
+  ++depth;
+  coveredNew = false;
+  coveredLines.clear();
 }
 
 ExecutionState *ExecutionState::branch() {
@@ -239,13 +248,14 @@ void ExecutionState::wakeUpThread(const ThreadId &tid) {
   auto thread = getThreadById(tid);
   assert(thread && "Could not find thread with given id");
 
-  runnableThreads.insert(tid);
 
   // We should only wake up threads that are actually waiting
   if (thread->get().state == ThreadState::Waiting) {
     thread->get().state = ThreadState::Runnable;
 
     thread->get().waitingHandle = 0;
+
+    runnableThreads.insert(tid);
   }
 }
 
