@@ -3772,7 +3772,7 @@ void Executor::terminateState(ExecutionState &state) {
 
   exploreSchedules(state);
 
-  if (ExploreSchedules && state.porNode) {
+  if (ExploreSchedules && state.porNode && !state.porNode->has_children()) {
     state.porNode->backtrack();
   }
 
