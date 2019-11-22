@@ -5433,10 +5433,13 @@ void Executor::scheduleThreads(ExecutionState &state) {
     auto peekThread = state.getThreadById(peekTid);
 
     if (!peekThread) {
-      auto* evt = state.peekCatchUp();
-      klee_error("Thread (tid = %s) to catch up to not found. Corresponding event=%s. Terminating State.",
-                 peekTid.to_string().c_str(),
-                 evt->to_string().c_str());
+      std::cerr << "TRYING TO CATCH UP TO: " << state.peekCatchUp()->to_string(true) << "\n";
+      std::cerr << "complete sequence:\n";
+      for(auto& cu : state.catchUp) {
+        std::cerr << "\t" << cu->to_string(true) << "\n";
+      }
+
+      klee_warning("Thread to catch up to not found. Terminating State.");
       terminateState(state);
       return;
     }
