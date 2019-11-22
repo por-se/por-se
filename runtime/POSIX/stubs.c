@@ -147,10 +147,21 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
 int clock_gettime(clockid_t clk_id, struct timespec *res) __attribute__((weak));
 int clock_gettime(clockid_t clk_id, struct timespec *res) {
   /* Fake */
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  res->tv_sec = tv.tv_sec;
-  res->tv_nsec = tv.tv_usec * 1000;
+  if(clk_id == CLOCK_MONOTONIC) {
+    static struct timespec time = { .tv_sec = 1, .tv_nsec = 0};
+    *res = time;
+    ++time.tv_sec;
+    ++time.tv_nsec;
+    if(time.tv_nsec >= 1000000000) {
+      ++time.tv_sec;
+      time.tv_nsec = 0;
+    }
+  } else {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    res->tv_sec = tv.tv_sec;
+    res->tv_nsec = tv.tv_usec * 1000;
+  }
   return 0;
 }
 
