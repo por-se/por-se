@@ -235,6 +235,18 @@ namespace por {
 		auto branch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
 		auto cbranch() const noexcept { return util::make_iterator_range(branch_begin(), branch_end()); }
 
+		por::event::event const* last_included_event() const noexcept {
+			if(!_parent) {
+				// root node
+				return _event;
+			}
+
+			auto it = branch_begin();
+			assert(it != branch_end());
+			++it;
+			return (*it)->_event;
+		}
+
 		std::vector<por::event::event const*> rschedule() const noexcept {
 			std::vector<por::event::event const*> sched;
 			auto it = branch_begin();

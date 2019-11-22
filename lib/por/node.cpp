@@ -97,8 +97,9 @@ por::leaf node::make_right_branch(por::comb A) {
 	}
 	assert(s != nullptr);
 
+	auto s_last = s->last_included_event();
 	for(auto& r : rschedule()) {
-		if (r == s->parent()->event()) {
+		if (r == s_last) {
 			break;
 		}
 		catch_up.push_front(r);
