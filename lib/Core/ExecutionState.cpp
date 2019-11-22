@@ -155,7 +155,8 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
     addressSpace.unbindObject(mo);
   }
 
-  if (PruneStates) {
+  if (PruneStates && porNode && thread->stack.size() > 1) {
+    // FIXME: detect when in tmp state of Executor::getSymbolicSolution()
     memoryState.registerPopFrame(sf);
   }
 
@@ -261,6 +262,15 @@ void ExecutionState::exitThread(const ThreadId &tid) {
   }
 }
 
+void ExecutionState::cutoffThread(const ThreadId &tid) {
+  auto thread = getThreadById(tid);
+  assert(thread && "Could not find thread with given id");
+
+  thread->get().state = ThreadState::Cutoff;
+  runnableThreads.erase(tid);
+  threadSchedulingEnabled = true; // TODO: is this really safe?
+}
+
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
   mo->refCount++;
   symbolics.emplace_back(mo, array);
@@ -293,6 +303,8 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
       stateName = "runnable";
     } else if (thread->state == ThreadState::Exited) {
       stateName = "exited";
+    } else if (thread->state == ThreadState::Cutoff) {
+      stateName = "cutoff";
     } else {
       stateName = "unknown";
       assert(0 && "ThreadState value not defined!");

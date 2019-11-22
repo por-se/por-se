@@ -236,6 +236,9 @@ public:
   /// @brief will exit the referenced thread
   void exitThread(const ThreadId &tid);
 
+  /// @brief will mark the referenced thread as cutoff
+  void cutoffThread(const ThreadId &tid);
+
   /// @brief update the current scheduled thread
   void scheduleNextThread(const ThreadId &tid);
 

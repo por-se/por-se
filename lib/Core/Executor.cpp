@@ -3263,6 +3263,13 @@ void Executor::updateStates(ExecutionState *current) {
   }
 
   if (current && current->needsThreadScheduling) {
+    const por::configuration &cfg = current->porNode->configuration();
+    auto tid = current->currentThreadId();
+    const por::event::event *lastEvent = cfg.last_of_tid(tid);
+
+    if (lastEvent && lastEvent->is_cutoff()) {
+        current->cutoffThread(tid);
+    }
     scheduleThreads(*current);
     current->needsThreadScheduling = false;
   }
@@ -5249,15 +5256,20 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
 void Executor::scheduleThreads(ExecutionState &state) {
   // The first thing we have to test is, if we can actually try
   // to schedule a thread now; (test if scheduling enabled)
-  if (!state.threadSchedulingEnabled && !state.porNode->needs_catch_up()) {
+  if (!state.threadSchedulingEnabled && !state.needsCatchUp()) {
     // So now we have to check if the current thread may be scheduled
     // or if we have a deadlock
 
     Thread &curThread = state.currentThread();
     if (curThread.state == ThreadState::Waiting) {
-      terminateStateOnDeadlock(state);
-      return;
-    } else if (curThread.state != ThreadState::Exited) {
+      bool cutoffPresent = std::any_of(state.threads.begin(), state.threads.end(), [](auto &it) {
+        return it.second.state == ThreadState::Cutoff;
+      });
+      if (!cutoffPresent) {
+        terminateStateOnDeadlock(state);
+        return;
+      }
+    } else if (curThread.state != ThreadState::Exited && curThread.state != ThreadState::Cutoff) {
       assert(curThread.state == ThreadState::Runnable);
       state.scheduleNextThread(curThread.getThreadId());
       return;
@@ -5265,7 +5277,11 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
     // So how do we proceed here? For now just let everything continue normally
     // this will schedule another thread
-    klee_warning("An exited thread caused a thread scheduling. Resetting the thread scheduling to a safe state.\n");
+    if (curThread.state == ThreadState::Exited) {
+      klee_warning("An exited thread caused a thread scheduling. Resetting the thread scheduling to a safe state.\n");
+    } else if (curThread.state == ThreadState::Cutoff) {
+      klee_warning("A thread was cut off while thread scheduling was disabled. Reenabling thread scheduling.\n");
+    }
     state.threadSchedulingEnabled = true;
   }
 
@@ -5319,15 +5335,17 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
 
     bool allExited = true;
+    bool cutoffPresent = false;
 
     for (auto& threadIt : state.threads) {
-      if (threadIt.second.state != ThreadState::Exited) {
+      if (threadIt.second.state != ThreadState::Exited && threadIt.second.state != ThreadState::Cutoff) {
         allExited = false;
-        break;
+      } else if (threadIt.second.state == ThreadState::Cutoff) {
+        cutoffPresent = true;
       }
     }
 
-    if (allExited) {
+    if (allExited || cutoffPresent) {
       terminateStateOnExit(state);
     } else {
       terminateStateOnDeadlock(state);
@@ -5374,6 +5392,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
   }
 
+  assert(state.getThreadById(tid)->get().state == ThreadState::Runnable);
   state.scheduleNextThread(tid);
   auto thread = state.getThreadById(tid);
   assert(thread.has_value());

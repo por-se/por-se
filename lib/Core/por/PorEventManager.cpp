@@ -10,6 +10,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "klee/Internal/Support/ErrorHandling.h"
+
 #include <string>
 #include <utility>
 
@@ -40,15 +42,6 @@ namespace {
           "Record standby states for all events (default).")
         KLEE_LLVM_CL_VAL_END),
     llvm::cl::init(StandbyStatePolicy::All));
-
-  void extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
-    if(state.porNode->needs_catch_up()) {
-      state.porNode->catch_up(std::move(callback));
-      return;
-    }
-
-    state.porNode = state.porNode->make_left_child(std::move(callback));
-  }
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -75,6 +68,16 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
 
     default: return "undefined";
   }
+}
+
+void PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
+  if (state.porNode->needs_catch_up()) {
+    state.porNode->catch_up(std::move(callback));
+    return;
+  }
+
+  state.porNode = state.porNode->make_left_child(std::move(callback));
+  findNewCutoff(state);
 }
 
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_event_t kind) {
@@ -160,6 +163,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     }
     return std::make_pair(e, nullptr);
   });
+  findNewCutoff(state);
 
   assert(state.porNode->parent() == n);
 
@@ -529,4 +533,66 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   }
 
   event._fingerprint = fingerprint.getFingerprint(expressions);
+}
+
+
+void PorEventManager::findNewCutoff(ExecutionState &state) {
+  if (!state.porNode || !PruneStates) {
+    return;
+  }
+
+  assert(!state.porNode->has_event() && state.porNode->parent()->has_event());
+  const por::event::event &event = *state.porNode->parent()->event();
+
+  if (event.is_cutoff()) {
+    return;
+  }
+
+  auto it = fingerprints.find(event._fingerprint);
+  if (it == fingerprints.end()) {
+    fingerprints.emplace(event._fingerprint, &event);
+    return;
+  }
+
+  const por::event::event &other = *it->second;
+
+  std::size_t eventSize = event.local_configuration_size();
+  std::size_t otherSize = other.local_configuration_size();
+
+  const por::event::event *cutoff;
+  const por::event::event *corresponding;
+
+  const MemoryFingerprintValue *cutoffFPV;
+  const MemoryFingerprintValue *correspondingFPV;
+
+  ExecutionState *cutoffState = nullptr;
+
+  if (eventSize > otherSize) {
+    // state is at cutoff event
+    cutoff = &event;
+    cutoffFPV = &event._fingerprint;
+    corresponding = &other;
+    correspondingFPV = &it->first;
+    cutoffState = &state;
+  } else if (eventSize < otherSize) {
+    // state is a corresponding event
+    cutoff = &other;
+    cutoffFPV = &it->first;
+    corresponding = &event;
+    correspondingFPV = &event._fingerprint;
+    fingerprints.emplace(event._fingerprint, &event);
+  } else {
+    // cannot decide
+    return;
+  }
+
+std::stringstream os;
+os << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "] corresponding: " << corresponding->to_string(true)
+   << " with fingerprint: " << MemoryFingerprint::toString(*correspondingFPV) << "\n";
+os << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "]        cutoff: " << cutoff->to_string(true) << "\n"
+   << " with fingerprint: " << MemoryFingerprint::toString(*cutoffFPV) << "\n";
+
+klee_warning(os.str().c_str());
+
+  cutoff->mark_as_cutoff();
 }

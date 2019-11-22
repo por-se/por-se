@@ -49,7 +49,8 @@ namespace klee {
   enum class ThreadState {
     Waiting,
     Runnable,
-    Exited
+    Exited,
+    Cutoff
   };
 
   // Threads do only store their own stack

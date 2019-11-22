@@ -4,6 +4,8 @@
 #include "klee/Thread.h"
 #include "klee/por/events.h"
 
+#include "por/node.h"
+
 namespace por {
   class node;
   namespace event {
@@ -15,6 +17,8 @@ namespace klee {
   class ExecutionState;
 
   class PorEventManager {
+    std::map<klee::MemoryFingerprintValue, const por::event::event *> fingerprints;
+
     public:
       bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
 
@@ -23,6 +27,7 @@ namespace klee {
       bool shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind);
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por_event_t kind);
       void logEventThreadAndKind(const ExecutionState &state, por_event_t kind);
+      void extendPorNode(ExecutionState&, std::function<por::node::registration_t(por::configuration&)>&&);
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
@@ -43,6 +48,7 @@ namespace klee {
       bool registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
 
       void attachFingerprintToEvent(ExecutionState &state, const por::event::event &event);
+      void findNewCutoff(ExecutionState &state);
   };
 };
 
