@@ -5180,15 +5180,38 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
       auto safeState = statePair.first;
       auto unsafeState = statePair.second;
 
-      assert(safeState != nullptr && unsafeState != nullptr && "Solver returned different results the second time");
+      // So whenever we are in a catch-up mode, then it actually can happen, that we get different results
+      // -> the constraints are only added after the fork call
+      // FIXME: either assert here that we are actually in a catch-up or add the constraints earlier
+      //        so that the data race detection is not fooled
+      // assert(safeState != nullptr && unsafeState != nullptr && "Solver returned different results the second time");
 
-      terminateStateOnUnsafeMemAccess(*unsafeState, mo, result->racingThread, result->racingInstruction);
+      if (safeState == nullptr) {
+        assert(unsafeState != nullptr);
+        assert(unsafeState == &state);
 
-      if (!state.onlyOneThreadRunnableSinceEpochStart) {
-        safeState->raceDetection.trackAccess(*state.porNode, operation);
+        terminateStateOnUnsafeMemAccess(state, mo, result->racingThread, result->racingInstruction);
+        return false;
+      } else if (unsafeState == nullptr) {
+        assert(safeState != nullptr);
+        assert(safeState == &state);
+        // So a constraint was added during fork that made the race only safe -> fake this correctly
+        if (!state.onlyOneThreadRunnableSinceEpochStart) {
+          state.raceDetection.trackAccess(*state.porNode, operation);
+        }
+
+        // No need to add the safe constraints as it was added during fork
+        // TODO: maybe we actuall want to add it? Just to be sure?
+        return true;
+      } else {
+        terminateStateOnUnsafeMemAccess(*unsafeState, mo, result->racingThread, result->racingInstruction);
+
+        if (!state.onlyOneThreadRunnableSinceEpochStart) {
+          safeState->raceDetection.trackAccess(*state.porNode, operation);
+        }
+
+        return safeState == &state;
       }
-
-      return safeState == &state;
     } else {
       // Now the racing part
       terminateStateOnUnsafeMemAccess(state, mo, result->racingThread, result->racingInstruction);
@@ -5403,7 +5426,10 @@ void Executor::scheduleThreads(ExecutionState &state) {
     auto peekThread = state.getThreadById(peekTid);
 
     if (!peekThread) {
-      klee_warning("Thread to catch up to not found. Terminating State.");
+      auto* evt = state.peekCatchUp();
+      klee_error("Thread (tid = %s) to catch up to not found. Corresponding event=%s. Terminating State.",
+                 peekTid.to_string().c_str(),
+                 evt->to_string().c_str());
       terminateState(state);
       return;
     }
