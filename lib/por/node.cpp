@@ -48,72 +48,60 @@ node* node::make_right_child() {
 	return _right.get();
 }
 
-void node::catch_up(std::function<node::registration_t(por::configuration&)> func) {
-	assert(_C->needs_catch_up());
-	[[maybe_unused]] auto next = _C->peek();
-	auto [event, standby_state] = func(*_C);
+node* node::catch_up(std::function<node::registration_t(por::configuration&)> func, por::event::event const* next) {
+	por::configuration copy = *_C;
+
+	auto [event, standby_state] = func(copy);
+
 	assert(next == event);
 
-	libpor_check(std::find(_D.begin(), _D.end(), event) == _D.end());
-
-	if(standby_state) {
-		_standby_state = standby_state;
-	}
-
-	if(_C->_catch_up.size() == 0) {
-		_catch_up_ptr = nullptr;
-	}
-
-	if(!_catch_up_ptr || !standby_state) {
-		// cannot update any other nodes
-		return;
-	}
-
-	// update configurations and standby states of previous nodes from the same branch
-	std::shared_ptr<por::configuration> new_C = _C;
 	node* n = this;
-	do {
-		n = n->parent();
-		assert(n != nullptr);
-		auto& cu = n->_C->_catch_up;
-		if(std::find(cu.begin(), cu.end(), event) == cu.end()) {
-			break;
-		}
-		new_C = std::make_shared<por::configuration>(*new_C);
-		new_C->_catch_up.pop_back();
-		n->_C = new_C;
-		n->_standby_state = standby_state;
-	} while(n != _catch_up_ptr && new_C->_catch_up.size() > 0);
-	if(!n->_C->needs_catch_up() || n->_C->peek() != _C->peek()) {
-		_catch_up_ptr = n->left_child();
-		_catch_up_ptr->_catch_up_ptr = nullptr;
-		for(node* c = parent(); c != _catch_up_ptr && c; c = c->parent()) {
-			n->_catch_up_ptr = _catch_up_ptr;
-		}
+	while(n->_event != event && n->_event != nullptr) {
+		n = n->right_child();
 	}
+	assert(n->_event == event);
+	assert(n->_left);
+	n = n->left_child();
+
+	if(!n->_C) {
+		n->_C = std::make_shared<por::configuration>(std::move(copy));
+	} else {
+		assert(copy.size() == n->_C->size());
+
+		libpor_check(copy.thread_heads() == n->_C->thread_heads());
+		libpor_check(copy.lock_heads() == n->_C->lock_heads());
+		libpor_check(copy.cond_heads() == n->_C->cond_heads());
+	}
+	libpor_check(std::find(n->_D.begin(), n->_D.end(), event) == n->_D.end());
+
+	if(standby_state && !n->_standby_state) {
+		n->_standby_state = standby_state;
+	}
+
+	return n;
 }
 
-node* node::make_right_branch(por::comb A) {
+por::leaf node::make_right_branch(por::comb A) {
 	assert(_event && "no event attached to node");
 
 	// FIXME: root node includes configuration with both program_init and thread_init event
 	assert(parent() && "cannot be called on root node");
 
 	node* n = make_right_child();
-	node* catch_up_ptr = nullptr;
+	std::deque<por::event::event const*> catch_up;
 
-	if(!n->_standby_state) {
-		// search for closest node with standby state in current branch
-		node const* s = this;
-		std::deque<por::event::event const*> catch_up_to_standby;
-		while(!s->_standby_state && s->parent()) {
-			s = s->parent();
-			catch_up_to_standby.push_front(s->_event);
+	node* s = this;
+	// search for closest node with standby state in current branch
+	while(!s->_standby_state && s->parent()) {
+		s = s->parent();
+	}
+	assert(s != nullptr);
+
+	for(auto& r : rschedule()) {
+		if (r == s->parent()->event()) {
+			break;
 		}
-		n->_standby_state = s->_standby_state;
-		n->_C = std::make_shared<por::configuration>(*s->_C);
-		n->_C->_catch_up.insert(n->_C->_catch_up.end(), catch_up_to_standby.begin(), catch_up_to_standby.end());
-		catch_up_ptr = n;
+		catch_up.push_front(r);
 	}
 
 	while(!A.empty()) {
@@ -122,24 +110,26 @@ node* node::make_right_branch(por::comb A) {
 
 		for(por::event::event const* a : min) {
 			n = n->make_left_child([&a, &n](por::configuration&) {
-				return std::make_pair(a, n->_standby_state);
+				return std::make_pair(a, nullptr);
 			});
 			assert(n->parent()->_event == a);
-			n->_C->_catch_up.push_back(a);
-			n->_catch_up_ptr = catch_up_ptr;
-			if(!catch_up_ptr) {
-				catch_up_ptr = n;
-			}
+			n->_C.reset();
+			catch_up.push_back(a);
 		}
 
 		A.remove(min.begin(), min.end());
 	}
 
-	return n;
+	return {s, std::move(catch_up)};
 }
 
-std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
-	std::vector<por::node*> leaves;
+std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
+	std::vector<por::leaf> leaves;
+
+	if(!B.empty() && B.size() != (B.front()->configuration().size() - 1)) {
+		return leaves;
+	}
+
 	for(auto n : B) {
 		if(n->right_child()) {
 			continue;
@@ -168,17 +158,10 @@ std::vector<por::node*> node::create_right_branches(std::vector<por::node*> B) {
 		por::cone J(*j);
 		por::cone C(cfg);
 		por::comb A = J.setminus(C);
-
-		if(n->needs_catch_up()) {
-			for(auto& u : n->_C->_catch_up) {
-				A.remove(*u);
-			}
-		}
 		libpor_check(A.is_sorted());
 
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
-
 	assert(B.empty() || B.size() == (B.front()->configuration().size() - 1));
 
 	return leaves;
@@ -218,19 +201,6 @@ void node::backtrack() {
 	n->update_sweep_bit();
 }
 
-bool node::needs_catch_up() const noexcept {
-	assert(_C);
-	return _C->needs_catch_up();
-}
-
-por::event::event const* node::peek() const noexcept {
-	assert(_C);
-	if(!needs_catch_up()) {
-		return nullptr;
-	}
-	return _C->peek();
-}
-
 std::string node::to_string(bool with_schedule) const noexcept {
 	std::ostringstream result;
 	result << "node " << this << "\n";
@@ -263,21 +233,8 @@ std::string node::to_string(bool with_schedule) const noexcept {
 		} else {
 			result << n->_standby_state << "\n";
 		}
-		result << "    catch_up_ptr: ";
-		if(!n->_catch_up_ptr) {
-			result << "nullptr\n";
-		} else {
-			result << n->_catch_up_ptr << "\n";
-		}
 		result << "    is_sweep_node: " << n->_is_sweep_node << "\n";
-		result << "    |C| = " << std::to_string(n->configuration().size());
-		if(n->configuration().needs_catch_up()) {
-			result << " (+ " << n->configuration()._catch_up.size() << " catch-up)";
-			for(auto x : n->configuration()._catch_up) {
-				result << "\n      catch-up: " <<  x->to_string(true) << " @ " << x;
-			}
-		}
-		result << "\n";
+		result << "    |C| = " << std::to_string(n->configuration().size()) << "\n";
 		result << "    |D| = " << std::to_string(n->_D.size()) << "\n";
 		for(auto& d : n->_D) {
 			result << "      " << d->to_string(true) << " @ " << d << "\n";

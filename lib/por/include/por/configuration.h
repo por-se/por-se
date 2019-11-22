@@ -120,9 +120,6 @@ namespace por {
 		// contains all previously used lock ids
 		std::set<por::event::lock_id_t> _used_lock_ids;
 
-		// sequence of events that need to be caught up
-		std::deque<por::event::event const*> _catch_up;
-
 		// number of events in this configuration (excl. catch-up events)
 		std::size_t _size;
 
@@ -180,15 +177,6 @@ namespace por {
 		std::size_t size() const noexcept { return _size; }
 		bool empty() const noexcept { return _size == 0; }
 
-		bool needs_catch_up() const noexcept { return !_catch_up.empty(); }
-
-		por::event::event const* peek() const noexcept {
-			if(!needs_catch_up()) {
-				return nullptr;
-			}
-			return _catch_up.front();
-		}
-
 		std::size_t active_threads() const noexcept {
 			if(_thread_heads.empty())
 				return 0;
@@ -205,17 +193,6 @@ namespace por {
 		void to_dotgraph(std::ostream& os) const noexcept;
 
 		por::event::event const* create_thread(event::thread_id_t thread, event::thread_id_t new_tid) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::thread_create);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_thread_create.emplace(new_tid, _catch_up.front());
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -234,17 +211,6 @@ namespace por {
 		}
 
 		por::event::event const* init_thread(event::thread_id_t thread) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::thread_init);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_catch_up.pop_front();
-				_thread_create.erase(thread);
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto create_it = _thread_create.find(thread);
 			assert(create_it != _thread_create.end() && "Thread must have been created");
 			auto& thread_create = create_it->second;
@@ -262,16 +228,6 @@ namespace por {
 		}
 
 		por::event::event const* join_thread(event::thread_id_t thread, event::thread_id_t joined) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::thread_join);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -290,16 +246,6 @@ namespace por {
 		}
 
 		por::event::event const* exit_thread(event::thread_id_t thread) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::thread_exit);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -315,19 +261,6 @@ namespace por {
 		}
 
 		por::event::event const* create_lock(event::thread_id_t thread, event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::lock_create);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				assert(_used_lock_ids.count(lock) == 0 && "Lock id cannot be reused");
-				_lock_heads.emplace(lock, _catch_up.front());
-				_used_lock_ids.insert(lock);
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -348,20 +281,6 @@ namespace por {
 		}
 
 		por::event::event const* destroy_lock(event::thread_id_t thread, event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::lock_destroy);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_lock_heads.erase(lock);
-				if constexpr(optional_creation_events) {
-					_used_lock_ids.insert(lock);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -390,20 +309,6 @@ namespace por {
 		}
 
 		por::event::event const* acquire_lock(event::thread_id_t thread, event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::lock_acquire);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_lock_heads[lock] = _catch_up.front();
-				if constexpr(optional_creation_events) {
-					_used_lock_ids.insert(lock);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -433,17 +338,6 @@ namespace por {
 		}
 
 		por::event::event const* release_lock(event::thread_id_t thread, event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::lock_release);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_lock_heads[lock] = _catch_up.front();
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -461,20 +355,6 @@ namespace por {
 		}
 
 		por::event::event const* create_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::condition_variable_create);
-				assert(peek()->tid() == thread);
-				assert(peek()->cid() == cond);
-				_thread_heads[thread] = _catch_up.front();
-				assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
-				_cond_heads.emplace(cond, std::vector{_catch_up.front()});
-				_used_cond_ids.insert(cond);
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -494,20 +374,6 @@ namespace por {
 		}
 
 		por::event::event const* destroy_cond(por::event::thread_id_t thread, por::event::cond_id_t cond) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::condition_variable_destroy);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_cond_heads.erase(cond);
-				if constexpr(optional_creation_events) {
-					_used_cond_ids.insert(cond);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -574,22 +440,6 @@ namespace por {
 	public:
 		por::event::event const*
 		wait1(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::wait1);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_lock_heads[lock] = _catch_up.front();
-				_cond_heads[cond].push_back(_catch_up.front());
-				if constexpr(optional_creation_events) {
-					_used_lock_ids.insert(lock);
-					_used_cond_ids.insert(cond);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -655,17 +505,6 @@ namespace por {
 	public:
 		por::event::event const*
 		wait2(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::lock_id_t lock) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::wait2);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				_lock_heads[lock] = _catch_up.front();
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -739,24 +578,6 @@ namespace por {
 	public:
 		por::event::event const*
 		signal_thread(por::event::thread_id_t thread, por::event::cond_id_t cond, por::event::thread_id_t notified_thread) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::signal);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				if(!notified_thread) { // lost signal
-					_cond_heads[cond].push_back(_catch_up.front());
-				} else {
-					*notified_wait1_predecessor(notified_thread, _cond_heads[cond]) = _catch_up.front();
-				}
-				if constexpr(optional_creation_events) {
-					_used_cond_ids.insert(cond);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -807,25 +628,6 @@ namespace por {
 	public:
 		por::event::event const*
 		broadcast_threads(por::event::thread_id_t thread, por::event::cond_id_t cond, std::vector<por::event::thread_id_t> notified_threads) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::broadcast);
-				assert(peek()->tid() == thread);
-				_thread_heads[thread] = _catch_up.front();
-				if(!notified_threads.empty()) {
-					for(auto& nid : notified_threads) {
-						_cond_heads[cond].erase(notified_wait1_predecessor(nid, _cond_heads[cond]));
-					}
-				}
-				_cond_heads[cond].push_back(_catch_up.front());
-				if constexpr(optional_creation_events) {
-					_used_cond_ids.insert(cond);
-				}
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
-
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -913,16 +715,6 @@ namespace por {
 		}
 
 		por::event::event const* local(event::thread_id_t thread, event::path_t local_path) {
-			if(needs_catch_up()) {
-				assert(peek()->kind() == por::event::event_kind::local);
-				assert(peek()->tid() == thread);
-				assert(static_cast<por::event::local const*>(peek())->path() == local_path);
-				_thread_heads[thread] = _catch_up.front();
-				_catch_up.pop_front();
-
-				++_size;
-				return _thread_heads[thread];
-			}
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;

@@ -3,6 +3,7 @@
 #include "por/configuration.h"
 
 #include <cassert>
+#include <deque>
 #include <memory>
 #include <stack>
 #include <string>
@@ -16,6 +17,7 @@ namespace klee {
 
 namespace por {
 	class configuration;
+	class node;
 	class unfolding;
 
 	namespace event {
@@ -23,6 +25,11 @@ namespace por {
 	}
 
 	using event_set_t = std::vector<por::event::event const*>;
+
+	struct leaf {
+		node* start;
+		std::deque<por::event::event const*> catch_up;
+	};
 
 	template<typename V>
 	class node_branch_iterator {
@@ -87,14 +94,17 @@ namespace por {
 		// IMPORTANT: configuration and standby state always need to correspond to each other
 		std::shared_ptr<por::configuration> _C; // right node has same configuration
 		std::shared_ptr<klee::ExecutionState const> _standby_state;
-		node* _catch_up_ptr = nullptr; // pointer to earliest node in current branch that needs catch-up
 
 		event_set_t _D;
 		std::unique_ptr<node> _left, _right;
 		bool _is_sweep_node = false;
 
 		std::unique_ptr<node> allocate_left_child() {
-			return std::make_unique<node>(passkey{}, this, std::make_shared<por::configuration>(*_C), _D);
+			if(_C) {
+				return std::make_unique<node>(passkey{}, this, std::make_shared<por::configuration>(*_C), _D);
+			} else {
+				return std::make_unique<node>(passkey{}, this, _D);
+			}
 		}
 
 		std::unique_ptr<node> allocate_right_child(event_set_t D) {
@@ -104,6 +114,9 @@ namespace por {
 	public:
 		node(passkey, node* parent, std::shared_ptr<por::configuration> C, event_set_t D)
 		: _parent(parent), _C(std::move(C)), _D(D) { }
+
+		node(passkey, node* parent, event_set_t D)
+		: _parent(parent), _D(D) { }
 
 		// root constructor
 		explicit node() : _C(std::make_shared<por::configuration>()), _D({}), _is_sweep_node(true) { }
@@ -203,15 +216,11 @@ namespace por {
 
 		node* make_right_local_child(std::function<registration_t(por::configuration&)>);
 
-		static std::vector<por::node*> create_right_branches(std::vector<por::node*>);
+		static std::vector<leaf> create_right_branches(std::vector<node*>);
 
-		void catch_up(std::function<registration_t(por::configuration&)>);
+		node* catch_up(std::function<registration_t(por::configuration&)>, por::event::event const*);
 
 		void backtrack();
-
-		bool needs_catch_up() const noexcept;
-
-		por::event::event const* peek() const noexcept;
 
 		auto branch_begin() const noexcept { return node_branch_iterator<node const*>(*this); }
 		auto branch_end() const noexcept { return node_branch_iterator<node const*>(*this, true); }
@@ -228,7 +237,6 @@ namespace por {
 
 		std::vector<por::event::event const*> rschedule() const noexcept {
 			std::vector<por::event::event const*> sched;
-			sched.reserve(_C->size() + _C->_catch_up.size());
 			auto it = branch_begin();
 			auto ie = branch_end();
 			if(it != ie) {
@@ -241,7 +249,6 @@ namespace por {
 				}
 			}
 			sched.push_back(&_C->unfolding()->root());
-			assert(sched.size() == _C->size() + _C->_catch_up.size());
 			return sched;
 		}
 		std::vector<por::event::event const*> schedule() const noexcept {
@@ -265,7 +272,7 @@ namespace por {
 	private:
 		node* make_right_child();
 
-		node* make_right_branch(por::comb);
+		leaf make_right_branch(por::comb);
 
 		void update_sweep_bit();
 	};
