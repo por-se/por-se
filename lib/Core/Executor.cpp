@@ -5330,14 +5330,21 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   if (!state.needsCatchUp() && !state.porNode->D().empty()) {
     const por::configuration &C = state.porNode->configuration();
-    por::comb D(state.porNode->D().begin(), state.porNode->D().end());
-    D.sort();
+    std::map<ThreadId, std::deque<const por::event::event *>> D;
+    for(auto &event : state.porNode->D()) {
+      auto it = D.find(event->tid());
+      if(it != D.end()) {
+        it->second.push_back(event);
+      } else {
+        D.emplace(event->tid(), std::deque<const por::event::event *>{event});
+      }
+    }
 
-    for (auto &[tid, tooth] : D.threads()) {
+    for (auto &[tid, events] : D) {
       if (!C.thread_heads().count(tid)) {
         continue; // go to next thread
       }
-      for (auto &d : tooth) {
+      for (auto &d : events) {
         if (d->depth() <= C.thread_heads().at(tid)->depth()) {
           // d is justified, no need to exclude it anymore
           continue; // go to next event
