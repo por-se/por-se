@@ -467,6 +467,11 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
         KLEE_LLVM_CL_VAL_END),
     cl::init(ThreadSchedulingPolicy::Random));
 
+cl::opt<std::size_t> MaxContextSwitchDegree(
+      "max-csd",
+      cl::desc("Only explore alternatives with context switch degree up to this limit (default=50)"),
+      cl::init(50));
+
 } // namespace
 
 namespace klee {
@@ -3566,9 +3571,8 @@ void Executor::exploreSchedules(ExecutionState &state) {
   for(auto cex : cfg.conflicting_extensions()) {
     por::event::event const& x = cex.extension();
     if (!x.has_successors()) {
-      // TODO: make configurable, improve output!
-      if (x.is_cutoff() || por::is_above_csd_limit(x, 50)) {
-        llvm::errs() << "CSD of event " << x.to_string(true) << " above limit\n";
+      if (x.is_cutoff() || por::is_above_csd_limit(x, MaxContextSwitchDegree)) {
+        klee_warning("Context Switch Degree of conflicting extension above limit.");
         cfg.unfolding()->remove_event(x);
       }
     }
