@@ -1380,9 +1380,8 @@ namespace por {
 						N.push_back(m);
 					}
 
-					// FIXME: causes are incorrect!
-					// result.emplace_back(e, por::event::broadcast::alloc(e->tid(), cid, *et, N.data(), N.data() + N.size()));
-					// _unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
+					result.emplace_back(e, por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, N));
+					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 					return false; // result of concurrent_combinations not needed
 				});
 			}
