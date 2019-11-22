@@ -460,14 +460,14 @@ namespace por::event {
 					continue;
 				}
 
-				if(is_independent_of(succ)) {
-					if(auto pre = succ->predecessors(); std::any_of(pre.begin(), pre.end(), [this, &red](auto& e) {
-						// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
-						return e->_imm_cfl_color != red;
-					})) {
-						continue;
-					}
+				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
+					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
+					return e->_imm_cfl_color != red;
+				})) {
+					continue;
+				}
 
+				if(is_independent_of(succ)) {
 					libpor_check(succ->is_independent_of(this));
 					succ->_imm_cfl_color = red;
 					W.push_back(succ);
