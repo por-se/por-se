@@ -551,6 +551,19 @@ int settimeofday(const struct timeval *tv, const struct timezone *tz) {
   return -1;
 }
 
+int gettimeofday(struct timeval *restrict tv, struct timezone *restrict tz) __attribute__((weak));
+int gettimeofday(struct timeval *restrict tv, struct timezone *restrict tz) {
+  if(tz) {
+    klee_warning("Behavior is UB if tz is not NULL: ignoring tz");
+    tz->tz_minuteswest = 0;
+    tz->tz_dsttime = 0;
+  }
+  tv->tv_sec = 549836400;
+  tv->tv_usec = 314159;
+  return 0;
+}
+
+
 int setuid(uid_t uid) __attribute__((weak));
 int setuid(uid_t uid) {
   klee_warning("silently ignoring (returning 0)");
