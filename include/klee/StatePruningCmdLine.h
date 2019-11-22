@@ -7,7 +7,7 @@ namespace klee {
 
 inline llvm::cl::opt<bool> PruneStates("state-pruning",
                                        llvm::cl::desc("Enable pruning of states (default=off)"),
-                                       llvm::cl::init(false));
+                                       llvm::cl::init(true));
 
 inline llvm::cl::opt<bool> DebugStatePruning("debug-state-pruning",
                                              llvm::cl::desc("Log state pruning debug info to stderr (default=off)"),
