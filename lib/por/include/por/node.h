@@ -167,10 +167,12 @@ namespace por {
 		}
 
 		node* parent() noexcept {
+			libpor_check(!_parent || _parent->_left.get() == this || _parent->_right.get() == this);
 			return _parent;
 		}
 
 		node const* parent() const noexcept {
+			libpor_check(!_parent || _parent->_left.get() == this || _parent->_right.get() == this);
 			return _parent;
 		}
 
@@ -179,18 +181,22 @@ namespace por {
 		}
 
 		node* left_child() noexcept {
+			libpor_check(!_left || _left->_parent == this);
 			return _left.get();
 		}
 
 		node const* left_child() const noexcept {
+			libpor_check(!_left || _left->_parent == this);
 			return _left.get();
 		}
 
 		node* right_child() noexcept {
+			libpor_check(!_right || _right->_parent == this);
 			return _right.get();
 		}
 
 		node const* right_child() const noexcept {
+			libpor_check(!_right || _right->_parent == this);
 			return _right.get();
 		}
 
