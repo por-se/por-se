@@ -12,7 +12,6 @@
 #include "../Expr/ArrayExprOptimizer.h"
 #include "Context.h"
 #include "CoreStats.h"
-#include "ExecutorTimerInfo.h"
 #include "ExternalDispatcher.h"
 #include "ImpliedValue.h"
 #include "Memory.h"
@@ -114,6 +113,13 @@ cl::OptionCategory
 
 cl::OptionCategory TestGenCat("Test generation options",
                               "These options impact test generation.");
+
+cl::opt<std::string> MaxTime(
+    "max-time",
+    cl::desc("Halt execution after the specified duration.  "
+             "Set to 0s to disable (default=0s)"),
+    cl::init("0s"),
+    cl::cat(TerminationCat));
 } // namespace klee
 
 namespace {
@@ -343,12 +349,6 @@ cl::opt<unsigned> RuntimeMaxStackFrames(
     cl::init(8192),
     cl::cat(TerminationCat));
 
-cl::opt<std::string> MaxInstructionTime(
-    "max-instruction-time",
-    cl::desc("Allow a single instruction to take only this much time.  Enables "
-             "--use-forked-solver.  Set to 0s to disable (default=0s)"),
-    cl::cat(TerminationCat));
-
 cl::opt<double> MaxStaticForkPct(
     "max-static-fork-pct", cl::init(1.),
     cl::desc("Maximum percentage spent by an instruction forking out of the "
@@ -374,6 +374,13 @@ cl::opt<double> MaxStaticCPSolvePct(
     cl::desc("Maximum percentage of solving time that can be spent by a single "
              "instruction of a call path over total solving time for all "
              "instructions (default=1.0 (always))"),
+    cl::cat(TerminationCat));
+
+cl::opt<std::string> TimerInterval(
+    "timer-interval",
+    cl::desc("Minimum interval to check timers. "
+             "Affects -max-time, -istats-write-interval, -stats-write-interval, and -uncovered-update-interval (default=1s)"),
+    cl::init("1s"),
     cl::cat(TerminationCat));
 
 
@@ -500,22 +507,25 @@ const char *Executor::TerminateReasonNames[] = {
   [ Unhandled ] = "xxx",
 };
 
+
 Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
                    InterpreterHandler *ih)
     : Interpreter(opts), interpreterHandler(ih), searcher(0),
       externalDispatcher(new ExternalDispatcher(ctx)), statsTracker(0),
-      pathWriter(0), symPathWriter(0), specialFunctionHandler(0),
+      pathWriter(0), symPathWriter(0), specialFunctionHandler(0), timers{time::Span(TimerInterval)},
       replayKTest(0), replayPath(0), usingSeeds(0),
       atMemoryLimit(false), inhibitForking(false), haltExecution(false),
       ivcEnabled(false), debugLogBuffer(debugBufferString),
       executorStartTime(std::chrono::steady_clock::now()) {
 
-  const time::Span maxCoreSolverTime(MaxCoreSolverTime);
-  maxInstructionTime = time::Span(MaxInstructionTime);
-  coreSolverTimeout = maxCoreSolverTime && maxInstructionTime ?
-                      std::min(maxCoreSolverTime, maxInstructionTime)
-                    : std::max(maxCoreSolverTime, maxInstructionTime);
+  const time::Span maxTime{MaxTime};
+  if (maxTime) timers.add(
+      std::move(std::make_unique<Timer>(maxTime, [&]{
+        klee_message("HaltTimer invoked");
+        setHaltExecution(true);
+      })));
 
+  coreSolverTimeout = time::Span{MaxCoreSolverTime};
   if (coreSolverTimeout) UseForkedCoreSolver = true;
   Solver *coreSolver = klee::createCoreSolver(CoreSolverToUse);
   if (!coreSolver) {
@@ -692,10 +702,6 @@ Executor::~Executor() {
   delete specialFunctionHandler;
   delete statsTracker;
   delete solver;
-  while(!timers.empty()) {
-    delete timers.back();
-    timers.pop_back();
-  }
   if (statesJSONFile) {
     (*statesJSONFile) << "\n]\n";
   }
@@ -965,6 +971,9 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
 
   // once all objects are allocated, do the actual initialization
+  // remember constant objects to initialise their counter part for external
+  // calls
+  std::vector<ObjectState *> constantObjects;
   for (Module::const_global_iterator i = m->global_begin(),
          e = m->global_end();
        i != e; ++i) {
@@ -977,8 +986,19 @@ void Executor::initializeGlobals(ExecutionState &state) {
       assert(os);
       ObjectState *wos = state.addressSpace.getWriteable(mo, os);
       initializeGlobalObject(state, wos, i->getInitializer(), 0, state.currentThreadId());
-      // if(i->isConstant()) os->setReadOnly(true);
+      if (i->isConstant())
+        constantObjects.emplace_back(wos);
     }
+  }
+
+  // initialise constant memory that is potentially used with external calls
+  if (!constantObjects.empty()) {
+    // initialise the actual memory with constant values
+    state.addressSpace.copyOutConcretes();
+
+    // mark constant objects as read-only
+    for (auto obj : constantObjects)
+      obj->setReadOnly(true);
   }
 }
 
@@ -2218,10 +2238,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // Handle possible different branch targets
 
       // We have the following assumptions:
-      // - each case value is mutual exclusive to all other values including the
-      //   default value
+      // - each case value is mutual exclusive to all other values
       // - order of case branches is based on the order of the expressions of
-      //   the scase values, still default is handled last
+      //   the case values, still default is handled last
       std::vector<BasicBlock *> bbOrder;
       std::map<BasicBlock *, ref<Expr> > branchTargets;
 
@@ -2244,6 +2263,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
                itE = expressionOrder.end();
            it != itE; ++it) {
         ref<Expr> match = EqExpr::create(cond, it->first);
+
+        // skip if case has same successor basic block as default case
+        // (should work even with phi nodes as a switch is a single terminating instruction)
+        if (it->second == si->getDefaultDest()) continue;
 
         // Make sure that the default value does not contain this target's value
         defaultValue = AndExpr::create(defaultValue, Expr::createIsZero(match));
@@ -2332,10 +2355,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     unsigned numArgs = cs.arg_size();
     Value *fp = cs.getCalledValue();
     Function *f = getTargetFunction(fp, state);
-
-    // Skip debug intrinsics, we can't evaluate their metadata arguments.
-    if (isa<DbgInfoIntrinsic>(i))
-      break;
 
     if (isa<InlineAsm>(fp)) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
@@ -3302,12 +3321,6 @@ void Executor::updateStates(ExecutionState *current) {
     delete es;
   }
   removedStates.clear();
-
-  if (searcher) {
-    searcher->update(nullptr, continuedStates, pausedStates);
-    pausedStates.clear();
-    continuedStates.clear();
-  }
 }
 
 template <typename TypeIt>
@@ -3437,9 +3450,8 @@ void Executor::doDumpStates() {
 void Executor::run(ExecutionState &initialState) {
   bindModuleConstants();
 
-  // Delay init till now so that ticks don't accrue during
-  // optimization and such.
-  initTimers();
+  // Delay init till now so that ticks don't accrue during optimization and such.
+  timers.reset();
 
   states.insert(&initialState);
 
@@ -3464,14 +3476,13 @@ void Executor::run(ExecutionState &initialState) {
       if (it == seedMap.end())
         it = seedMap.begin();
       lastState = it->first;
-      unsigned numSeeds = it->second.size();
       ExecutionState &state = *lastState;
       Thread &thread = state.currentThread();
       KInstruction *ki = thread.pc;
       stepInstruction(state);
 
       executeInstruction(state, ki);
-      processTimers(&state, maxInstructionTime * numSeeds);
+      timers.invoke();
       if (::dumpStates) dumpStates();
       if (::dumpPTree) dumpPTree();
       updateStates(&state);
@@ -3532,7 +3543,7 @@ void Executor::run(ExecutionState &initialState) {
     stepInstruction(state);
 
     executeInstruction(state, ki);
-    processTimers(&state, maxInstructionTime);
+    timers.invoke();
     if (firstInstruction && statesJSONFile) {
       (*statesJSONFile) << "    \"functionlists_length\": "
                         << state.memoryState.getFunctionListsLength() << ",\n";
@@ -3719,29 +3730,6 @@ std::string Executor::getAddressInfo(ExecutionState &state,
   return info.str();
 }
 
-void Executor::pauseState(ExecutionState &state){
-  auto it = std::find(continuedStates.begin(), continuedStates.end(), &state);
-  // If the state was to be continued, but now gets paused again
-  if (it != continuedStates.end()){
-    // ...just don't continue it
-    std::swap(*it, continuedStates.back());
-    continuedStates.pop_back();
-  } else {
-    pausedStates.push_back(&state);
-  }
-}
-
-void Executor::continueState(ExecutionState &state){
-  auto it = std::find(pausedStates.begin(), pausedStates.end(), &state);
-  // If the state was to be paused, but now gets continued again
-  if (it != pausedStates.end()){
-    // ...don't pause it
-    std::swap(*it, pausedStates.back());
-    pausedStates.pop_back();
-  } else {
-    continuedStates.push_back(&state);
-  }
-}
 
 void Executor::terminateStateSilently(ExecutionState &state) {
   auto it = std::find(addedStates.begin(), addedStates.end(), &state);

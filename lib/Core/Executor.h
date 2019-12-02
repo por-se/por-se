@@ -93,19 +93,9 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
-  friend class MergingSearcher;
   friend class PorEventManager;
 
 public:
-  class Timer {
-  public:
-    Timer();
-    virtual ~Timer();
-
-    /// The event callback.
-    virtual void run() = 0;
-  };
-
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
   typedef std::pair<const MemoryObject*, ref<Expr>> MemoryLocation;
 
@@ -130,8 +120,6 @@ public:
 private:
   static const char *TerminateReasonNames[];
 
-  class TimerInfo;
-
   std::unique_ptr<KModule> kmodule;
   InterpreterHandler *interpreterHandler;
   Searcher *searcher;
@@ -143,11 +131,10 @@ private:
   StatsTracker *statsTracker;
   TreeStreamWriter *pathWriter, *symPathWriter;
   SpecialFunctionHandler *specialFunctionHandler;
-  std::vector<TimerInfo*> timers;
+  TimerGroup timers;
   std::unique_ptr<PTree> processTree;
 
   PorEventManager porEventManager;
-
   /// Used to track states that have been added during the current
   /// instructions step. 
   /// \invariant \ref addedStates is a subset of \ref states. 
@@ -158,13 +145,6 @@ private:
   /// \invariant \ref removedStates is a subset of \ref states. 
   /// \invariant \ref addedStates and \ref removedStates are disjoint.
   std::vector<ExecutionState *> removedStates;
-
-  /// Used to track states that are not terminated, but should not
-  /// be scheduled by the searcher.
-  std::vector<ExecutionState *> pausedStates;
-  /// States that were 'paused' from scheduling, that now may be
-  /// scheduled again
-  std::vector<ExecutionState *> continuedStates;
 
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order
@@ -445,10 +425,6 @@ private:
 
   bool shouldExitOn(enum TerminateReason termReason);
 
-  // remove state from searcher only
-  void pauseState(ExecutionState& state);
-  // add state to searcher only
-  void continueState(ExecutionState& state);
   // remove state from queue and delete it without registering anything
   void terminateStateSilently(ExecutionState &state);
   // remove state from queue and delete
@@ -486,14 +462,6 @@ private:
                                     ref<Expr> e,
                                     ref<ConstantExpr> value);
 
-  /// Add a timer to be executed periodically.
-  ///
-  /// \param timer The timer object to run on firings.
-  /// \param rate The approximate delay (in seconds) between firings.
-  void addTimer(Timer *timer, time::Span rate);
-
-  void initTimers();
-  void processTimers(ExecutionState *current, time::Span maxInstTime);
   void checkMemoryUsage();
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();

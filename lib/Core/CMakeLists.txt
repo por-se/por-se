@@ -13,7 +13,6 @@ set(CORE_COMPONENTS
   CoreStats.cpp
   ExecutionState.cpp
   Executor.cpp
-  ExecutorTimers.cpp
   ExecutorUtil.cpp
   ExternalDispatcher.cpp
   GlobalObjectsMap.cpp
