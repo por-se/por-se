@@ -1162,7 +1162,7 @@ void SpecialFunctionHandler::handlePorThreadExit(ExecutionState &state,
 void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
                                           klee::KInstruction *target,
                                           std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 2 && "invalid number of arguments to puts - expected 2");
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_output - expected 2");
 
   auto outputTargetExpr = executor.toUnique(state, arguments[0]);
   if (!isa<ConstantExpr>(outputTargetExpr)) {
