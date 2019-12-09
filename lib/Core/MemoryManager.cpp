@@ -51,8 +51,14 @@ llvm::cl::opt<unsigned> ThreadStackSize(
 llvm::cl::opt<unsigned> GlobalSegmentSize(
       "allocate-global-segment-size",
       llvm::cl::desc(
-              "Reserved memory for globals in GB (default=20)"),
-      llvm::cl::init(20), llvm::cl::cat(MemoryCat));
+              "Reserved memory for globals in GB (default=10)"),
+      llvm::cl::init(10), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<unsigned> GlobalROSegmentSize(
+      "allocate-global-read-only-segment-size",
+      llvm::cl::desc(
+              "Reserved memory for read-only globals in GB (default=10)"),
+      llvm::cl::init(10), llvm::cl::cat(MemoryCat));
 
 llvm::cl::opt<std::string> ThreadSegmentsFile(
       "allocate-thread-segments-file",
@@ -74,6 +80,7 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
   threadHeapSize = static_cast<std::size_t>(ThreadHeapSize.getValue()) * 1024 * 1024 * 1024;
   threadStackSize = static_cast<std::size_t>(ThreadStackSize.getValue()) * 1024 * 1024 * 1024;
   globalSegmentSize = static_cast<std::size_t>(GlobalSegmentSize.getValue()) * 1024 * 1024 * 1024;
+  globalROSegmentSize = static_cast<std::size_t>(GlobalSegmentSize.getValue()) * 1024 * 1024 * 1024;
 
   // this assumes that the pagesize is a power of 2
   if ((threadHeapSize & (pageSize - 1)) != 0) {
@@ -92,7 +99,13 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
+  if (!globalROMemorySegment || globalROMemorySegment->begin() == nullptr) {
+    globalROMemorySegment = createMapping(globalROSegmentSize, 0);
+  }
+
   globalAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalMemorySegment, QuarantineSize);
+
+  globalROAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalROMemorySegment, QuarantineSize);
 }
 
 MemoryManager::~MemoryManager() {
@@ -104,6 +117,7 @@ MemoryManager::~MemoryManager() {
   }
 
   markMemoryRegionsAsUnneeded();
+  globalROMemorySegment->clear();
 }
 
 void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
@@ -153,7 +167,10 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
     if (tidAsString == "global") {
       globalMemorySegment = createMapping(globalSegmentSize, address);
-      klee_message("Created thread memory mapping for globals at %p", globalMemorySegment->begin());
+      klee_message("Created memory mapping for globals at %p", globalMemorySegment->begin());
+    } else if (tidAsString == "globalRO") {
+      globalROMemorySegment = createMapping(globalROSegmentSize, address);
+      klee_message("Created memory mapping for read-only globals at %p", globalROMemorySegment->begin());
     } else {
       auto forTid = ThreadId::from_string(tidAsString);
       if (!forTid) {
@@ -298,7 +315,8 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
 MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
                                             const llvm::Value *allocSite,
                                             const ThreadId& byTid,
-                                            std::size_t alignment) {
+                                            std::size_t alignment,
+                                            bool readOnly) {
   // Return NULL if size is zero, this is equal to error during allocation
   if (NullOnZeroMalloc && size == 0)
     return nullptr;
@@ -308,7 +326,12 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
     return nullptr;
   }
 
-  void* allocAddress = globalAllocator->allocate(std::max(size, alignment));
+  void* allocAddress;
+  if (readOnly) {
+    allocAddress = globalROAllocator->allocate(std::max(size, alignment));
+  } else {
+    allocAddress = globalAllocator->allocate(std::max(size, alignment));
+  }
   auto address = reinterpret_cast<std::uint64_t>(allocAddress);
 
   if (!address)
@@ -317,11 +340,20 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
 #ifndef NDEBUG
   {
     // Test that the address that we got is actually inside the mapping
-    const auto& seg = globalMemorySegment;
-    auto base = reinterpret_cast<std::uint64_t>(seg->begin());
+    std::uint64_t base;
+    std::size_t size;
+    if (readOnly) {
+      const auto& seg = globalROMemorySegment;
+      base = reinterpret_cast<std::uint64_t>(seg->begin());
+      size = seg->size();
+    } else {
+      const auto& seg = globalMemorySegment;
+      base = reinterpret_cast<std::uint64_t>(seg->begin());
+      size = seg->size();
+    }
 
-    if (address < base || address > base + seg->size()) {
-      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg->size());
+    if (address < base || address > base + size) {
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, size);
     }
   }
 #endif // NDEBUG

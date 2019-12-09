@@ -50,9 +50,13 @@ private:
   std::size_t threadHeapSize;
   std::size_t threadStackSize;
   std::size_t globalSegmentSize;
+  std::size_t globalROSegmentSize;
 
   std::shared_ptr<pseudoalloc::mapping_t> globalMemorySegment;
   std::unique_ptr<pseudoalloc::allocator_t> globalAllocator;
+
+  std::shared_ptr<pseudoalloc::mapping_t> globalROMemorySegment;
+  std::unique_ptr<pseudoalloc::allocator_t> globalROAllocator;
 
   /**
    * Requested a memory mapping for `tid`.
@@ -66,6 +70,9 @@ private:
   void loadRequestedThreadMemoryMappingsFromFile();
 
   ThreadMemorySegments& getThreadSegments(const ThreadId& tid);
+
+  MemoryObject *allocateGlobal(std::uint64_t size, const llvm::Value *allocSite,
+                               const ThreadId& byTid, std::size_t alignment, bool readOnly);
 
 public:
   MemoryManager(ArrayCache *arrayCache);
@@ -84,8 +91,14 @@ public:
                               const Thread &thread,
                               std::size_t stackframeIndex);
 
-  MemoryObject *allocateGlobal(std::uint64_t size, const llvm::Value *allocSite,
-                               const ThreadId& byTid, std::size_t alignment);
+  MemoryObject *allocateGlobal(std::uint64_t size, const llvm::Value *v, const ThreadId& tid, std::size_t alignment) {
+    return allocateGlobal(size, v, tid, alignment, false);
+  }
+
+  MemoryObject *allocateGlobal(std::uint64_t size, const llvm::GlobalVariable *gv, const ThreadId& tid,
+                               std::size_t alignment) {
+    return allocateGlobal(size, gv, tid, alignment, gv->isConstant());
+  }
 
   /**
    * Deallocates the memory at address `mo->address` in the allocator.

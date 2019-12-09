@@ -4993,6 +4993,7 @@ ThreadId Executor::createThread(ExecutionState &state,
   // Now all the other TLS objects have to be initialized (e.g. the globals)
   // once all objects are allocated, do the actual initialization
   auto m = kmodule->module.get();
+  std::vector<ObjectState *> constantObjects;
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
     const GlobalVariable *v = &*i;
 
@@ -5002,10 +5003,24 @@ ThreadId Executor::createThread(ExecutionState &state,
       ObjectState *os = bindObjectInState(state, mo, false);
       initializeGlobalObject(state, os, i->getInitializer(), 0, thread.getThreadId());
 
+      if (i->isConstant()) {
+        constantObjects.emplace_back(os);
+      }
+
       if (PruneStates) {
         state.memoryState.registerWrite(*mo, *os);
       }
     }
+  }
+
+  // initialize constant memory that is potentially used with external calls
+  if (!constantObjects.empty()) {
+    // initialize the actual memory with constant values
+    state.addressSpace.copyOutConcretes();
+
+    // mark constant objects as read-only
+    for (auto obj : constantObjects)
+      obj->setReadOnly(true);
   }
 
   if (statsTracker)
