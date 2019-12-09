@@ -19,7 +19,7 @@ GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
     : type(ReferencedType::Alias), value(a), address(addr), size(0) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
-    const llvm::GlobalValue *v, std::size_t size)
+    const llvm::GlobalVariable *v, std::size_t size)
     : type(ReferencedType::Data), value(v), address(0), size(size) {}
 
 GlobalObjectsMap::GlobalObjectReference::~GlobalObjectReference() {
@@ -46,10 +46,10 @@ const llvm::GlobalAlias *GlobalObjectsMap::GlobalObjectReference::getAlias() {
   return static_cast<const llvm::GlobalAlias *>(value);
 }
 
-const llvm::GlobalValue *
-GlobalObjectsMap::GlobalObjectReference::getGlobalValue() {
+const llvm::GlobalVariable *
+GlobalObjectsMap::GlobalObjectReference::getGlobalVariable() {
   assert(type == ReferencedType::Data && "Calling on invalid type");
-  return static_cast<const llvm::GlobalValue *>(value);
+  return static_cast<const llvm::GlobalVariable *>(value);
 }
 
 MemoryObject *
@@ -84,7 +84,7 @@ void GlobalObjectsMap::registerAlias(const llvm::GlobalAlias *alias,
 
 const MemoryObject *
 GlobalObjectsMap::registerGlobalData(MemoryManager *manager,
-                                     const llvm::GlobalValue *gv,
+                                     const llvm::GlobalVariable *gv,
                                      std::size_t size, std::size_t alignment) {
   assert(findObject(gv) == nullptr);
 
@@ -107,7 +107,7 @@ GlobalObjectsMap::registerGlobalData(MemoryManager *manager,
 
 const MemoryObject *
 GlobalObjectsMap::lookupGlobalMemoryObject(MemoryManager *manager,
-                                           const llvm::GlobalValue *gv,
+                                           const llvm::GlobalVariable *gv,
                                            const ThreadId &byTid) {
   auto globalObject = findObject(gv);
 
@@ -151,7 +151,8 @@ ref<ConstantExpr> GlobalObjectsMap::lookupGlobal(MemoryManager *manager,
     return globalObject->address;
   }
 
-  return lookupGlobalMemoryObject(manager, gv, byTid)->getBaseExpr();
+  assert(isa<llvm::GlobalVariable>(gv));
+  return lookupGlobalMemoryObject(manager, cast<llvm::GlobalVariable>(gv), byTid)->getBaseExpr();
 }
 
 GlobalObjectsMap::GlobalObjectReference *

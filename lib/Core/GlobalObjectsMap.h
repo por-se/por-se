@@ -5,6 +5,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalAlias.h"
 #include "llvm/IR/GlobalValue.h"
+#include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/GlobalObject.h"
 
 #include "klee/Expr/Expr.h"
@@ -32,7 +33,7 @@ namespace klee {
 
         GlobalObjectReference(const llvm::Function* f, ref<ConstantExpr> addr);
         GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr);
-        GlobalObjectReference(const llvm::GlobalValue* v, std::size_t size);
+        GlobalObjectReference(const llvm::GlobalVariable* v, std::size_t size);
 
         GlobalObjectReference(GlobalObjectReference const&) = delete;
         GlobalObjectReference& operator=(GlobalObjectReference const&) = delete;
@@ -42,7 +43,7 @@ namespace klee {
 
         const llvm::Function* getFunction();
         const llvm::GlobalAlias* getAlias();
-        const llvm::GlobalValue* getGlobalValue();
+        const llvm::GlobalVariable* getGlobalVariable();
         MemoryObject* getMemoryObject(const ThreadId& tid);
       };
 
@@ -51,9 +52,12 @@ namespace klee {
     public:
       void registerFunction(const llvm::Function* func, ref<ConstantExpr> addr);
       void registerAlias(const llvm::GlobalAlias* alias, ref<ConstantExpr> addr);
-      const MemoryObject *registerGlobalData(MemoryManager* manager, const llvm::GlobalValue *gv, std::size_t size, std::size_t alignment);
+      const MemoryObject *registerGlobalData(MemoryManager* manager, const llvm::GlobalVariable *gv, std::size_t size,
+                                             std::size_t alignment);
 
-      const MemoryObject* lookupGlobalMemoryObject(MemoryManager* manager, const llvm::GlobalValue* gv, const ThreadId& byTid);
+      const MemoryObject* lookupGlobalMemoryObject(MemoryManager* manager,
+                                                   const llvm::GlobalVariable* gv,
+                                                   const ThreadId& byTid);
       ref<ConstantExpr> lookupGlobal(MemoryManager* manager, const llvm::GlobalValue* gv, const ThreadId& byTid);
 
       void clear() noexcept;
