@@ -7,33 +7,6 @@ static_assert(0, "DO NOT include this file directly!");
 namespace klee {
 
 template <typename hashT>
-class VerifiedMemoryFingerprintValue {
-  friend class VerifiedMemoryFingerprint<hashT>;
-  friend struct std::hash<VerifiedMemoryFingerprintValue<hashT>>;
-
-  MemoryFingerprint_StringSet::value_t stringSet;
-  typename hashT::value_t hash;
-
-public:
-  bool operator<(const VerifiedMemoryFingerprintValue<hashT> &other) const {
-    return std::tie(hash, stringSet) < std::tie(other.hash, other.stringSet);
-  }
-
-  bool operator==(const VerifiedMemoryFingerprintValue<hashT> &other) const {
-    if (hash == other.hash)
-      assert(stringSet == other.stringSet);
-    return hash == other.hash && stringSet == other.stringSet;
-  }
-
-  VerifiedMemoryFingerprintValue() = default;
-  VerifiedMemoryFingerprintValue(const VerifiedMemoryFingerprintValue &) = default;
-  VerifiedMemoryFingerprintValue(VerifiedMemoryFingerprintValue &&) = default;
-  VerifiedMemoryFingerprintValue& operator=(const VerifiedMemoryFingerprintValue &) = default;
-  VerifiedMemoryFingerprintValue& operator=(VerifiedMemoryFingerprintValue &&) = default;
-  ~VerifiedMemoryFingerprintValue() = default;
-};
-
-template <typename hashT>
 class VerifiedMemoryFingerprintOstream : public llvm::raw_ostream {
 private:
   MemoryFingerprint_StringSet &stringSetFingerprint;

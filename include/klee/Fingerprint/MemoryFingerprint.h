@@ -1,11 +1,14 @@
 #ifndef KLEE_MEMORYFINGERPRINT_H
 #define KLEE_MEMORYFINGERPRINT_H
 
+#include "MemoryFingerprintDelta.h"
+#include "MemoryFingerprintValue.h"
+
 #include "klee/Config/config.h"
+
 #include "klee/Expr/Expr.h"
 #include "klee/Expr/ExprHashMap.h"
 #include "klee/Expr/ExprPPrinter.h"
-
 #include "klee/ThreadId.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -28,7 +31,6 @@ template <typename T> const std::type_info &FakeTypeID(void) {
 #include <set>
 #include <sstream>
 #include <string>
-#include <tuple>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -178,18 +180,16 @@ public:
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
 #include "bits/MemoryFingerprint_StringSet.h"
 #include "bits/MemoryFingerprint_Verified.h"
+static_assert(std::is_same_v<klee::MemoryFingerprintValue_StringSet,
+                             klee::MemoryFingerprint_StringSet::value_t>);
+static_assert(std::is_same_v<klee::MemoryFingerprintValue_CryptoPP_BLAKE2b,
+                             klee::MemoryFingerprint_CryptoPP_BLAKE2b::value_t>);
 #endif // ENABLE_VERIFIED_FINGERPRINTS
 
-// NOTE: MemoryFingerprint needs to be a complete type
-#include "bits/MemoryFingerprintDelta.h"
-
-// NOTE: MemoryFingerprintDelta needs to be a complete type
 #include "bits/MemoryFingerprint_Base.h"
 
 #undef INCLUDE_FROM_MEMORYFINGERPRINT_H
 
-namespace klee {
-  using MemoryFingerprintValue = MemoryFingerprint::value_t;
-}
+static_assert(std::is_same_v<klee::MemoryFingerprintValue, klee::MemoryFingerprint::value_t>);
 
 #endif
