@@ -101,17 +101,9 @@ public:
   MemoryState() = delete;
   MemoryState& operator=(const MemoryState&) = delete;
 
-  MemoryState(ExecutionState *state) : executionState(state) {
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
-    fingerprint.state = state;
-#endif
-  }
-  MemoryState(const MemoryState &from, ExecutionState *state)
-    : MemoryState(from) {
+  MemoryState(ExecutionState *state) : executionState(state) { }
+  MemoryState(const MemoryState &from, ExecutionState *state) : MemoryState(from) {
     executionState = state;
-#ifdef ENABLE_VERIFIED_FINGERPRINTS
-    fingerprint.state = state;
-#endif
   }
 
   void disable() {
