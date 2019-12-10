@@ -42,6 +42,8 @@ namespace pseudoalloc {
 		std::size_t _size = 0;
 
 	public:
+		mapping_t() = default;
+
 		mapping_t(std::size_t size)
 		  : mapping_t(0, size) {}
 
@@ -74,20 +76,41 @@ namespace pseudoalloc {
 
 		mapping_t(mapping_t const&) = delete;
 		mapping_t& operator=(mapping_t const&) = delete;
-		mapping_t(mapping_t&&) = delete;
-		mapping_t& operator=(mapping_t&&) = delete;
+		mapping_t(mapping_t&& other) : _begin(other._begin), _size(other._size) {
+			other._begin = MAP_FAILED;
+			other._size = 0;
+		}
+		mapping_t& operator=(mapping_t&& other) {
+			if(&other != this) {
+				using std::swap;
+				swap(other._begin, _begin);
+				swap(other._size, _size);
+			}
+			return *this;
+		}
 
-		[[nodiscard]] void* begin() const noexcept { return _begin; }
+		[[nodiscard]] void* begin() const noexcept {
+			assert(*this && "Invalid mapping");
+			return _begin;
+		}
+
 		[[nodiscard]] std::size_t size() const noexcept { return _size; }
 
 		void clear() {
+			assert(*this && "Invalid mapping");
 			[[maybe_unused]] int rc = ::madvise(_begin, _size, MADV_DONTNEED);
 			assert(rc == 0 && "madvise failed");
 		}
 
+		explicit operator bool() const noexcept {
+			return _begin != MAP_FAILED;
+		}
+
 		~mapping_t() {
-			[[maybe_unused]] int rc = ::munmap(_begin, _size);
-			assert(rc == 0 && "munmap failed");
+			if(*this) {
+				[[maybe_unused]] int rc = ::munmap(_begin, _size);
+				assert(rc == 0 && "munmap failed");
+			}
 		}
 	};
 
@@ -567,7 +590,7 @@ namespace pseudoalloc {
 	/// | 4 | 8 | 16 | ... | 2048 | 4096 | large object bin |
 	/// +---------------------------------------------------+
 	class allocator_t {
-		mapping_t* _mapping;
+		mapping_t* _mapping = nullptr;
 		std::array<suballocators::sized_heap_t, 11> _sized_bins;
 		suballocators::large_object_heap_t _loh;
 
@@ -584,8 +607,11 @@ namespace pseudoalloc {
 		}
 
 	public:
+		allocator_t() = default;
+
 		allocator_t(mapping_t& mapping, std::uint32_t const quarantine_size)
 		  : _mapping(&mapping) {
+			assert(mapping && "Invalid mapping");
 			assert(mapping.size() > (_sized_bins.size() + 1) && "Mapping is *far* to small");
 
 			auto bin_size = static_cast<std::size_t>(1) << (std::numeric_limits<std::size_t>::digits - 1 -
@@ -611,7 +637,12 @@ namespace pseudoalloc {
 		allocator_t(allocator_t&&) = default;
 		allocator_t& operator=(allocator_t&&) = default;
 
+		explicit operator bool() const noexcept {
+			return _mapping != nullptr;
+		}
+
 		[[nodiscard]] void* allocate(std::size_t size) {
+			assert(*this && "Invalid allocator");
 			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
 				return _sized_bins[bin].allocate();
 			} else {
@@ -620,6 +651,7 @@ namespace pseudoalloc {
 		}
 
 		void free(void* ptr, std::size_t size) {
+			assert(*this && "Invalid allocator");
 			assert(ptr && "Freeing nullptrs is not supported"); // we are not ::free!
 
 			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
