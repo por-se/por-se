@@ -191,6 +191,24 @@ pseudoalloc::mapping_t MemoryManager::createMapping(std::size_t size, std::uintp
   if (requestedAddress != 0) {
     auto end = requestedAddress + threadHeapSize + threadStackSize;
 
+    if (globalMemorySegment) {
+      auto begin = reinterpret_cast<std::uintptr_t>(globalMemorySegment.begin());
+
+      if (!(end < begin || requestedAddress > begin + globalMemorySegment.size())) {
+        klee_error("Overlapping mapping requested=%p and other=%p (global read-write) - Exiting.",
+                reqAddressAsPointer, globalMemorySegment.begin());
+      }
+    }
+
+    if (globalROMemorySegment) {
+      auto begin = reinterpret_cast<std::uintptr_t>(globalROMemorySegment.begin());
+
+      if (!(end < begin || requestedAddress > begin + globalROMemorySegment.size())) {
+        klee_error("Overlapping mapping requested=%p and other=%p (global read-only) - Exiting.",
+                reqAddressAsPointer, globalROMemorySegment.begin());
+      }
+    }
+
     for (const auto &[tid, seg] : threadMemoryMappings) {
       auto heapBegin = reinterpret_cast<std::uintptr_t>(seg.heap.begin());
       auto stackBegin = reinterpret_cast<std::uintptr_t>(seg.stack.begin());
