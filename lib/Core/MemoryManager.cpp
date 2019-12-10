@@ -95,17 +95,16 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     loadRequestedThreadMemoryMappingsFromFile();
   }
 
-  if (!globalMemorySegment || globalMemorySegment->begin() == nullptr) {
+  if (!globalMemorySegment) {
     globalMemorySegment = createMapping(globalSegmentSize, 0);
   }
 
-  if (!globalROMemorySegment || globalROMemorySegment->begin() == nullptr) {
+  if (!globalROMemorySegment) {
     globalROMemorySegment = createMapping(globalROSegmentSize, 0);
   }
 
-  globalAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalMemorySegment, QuarantineSize);
-
-  globalROAllocator = std::make_unique<pseudoalloc::allocator_t>(*globalROMemorySegment, QuarantineSize);
+  globalAllocator = pseudoalloc::allocator_t(globalMemorySegment, QuarantineSize);
+  globalROAllocator = pseudoalloc::allocator_t(globalROMemorySegment, QuarantineSize);
 }
 
 MemoryManager::~MemoryManager() {
@@ -117,7 +116,7 @@ MemoryManager::~MemoryManager() {
   }
 
   markMemoryRegionsAsUnneeded();
-  globalROMemorySegment->clear();
+  globalROMemorySegment.clear();
 }
 
 void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
@@ -167,10 +166,10 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
     if (tidAsString == "global") {
       globalMemorySegment = createMapping(globalSegmentSize, address);
-      klee_message("Created memory mapping for globals at %p", globalMemorySegment->begin());
+      klee_message("Created memory mapping for read-write globals at %p", globalMemorySegment.begin());
     } else if (tidAsString == "globalRO") {
       globalROMemorySegment = createMapping(globalROSegmentSize, address);
-      klee_message("Created memory mapping for read-only globals at %p", globalROMemorySegment->begin());
+      klee_message("Created memory mapping for read-only globals at %p", globalROMemorySegment.begin());
     } else {
       auto forTid = ThreadId::from_string(tidAsString);
       if (!forTid) {
@@ -184,7 +183,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
   }
 }
 
-std::shared_ptr<pseudoalloc::mapping_t> MemoryManager::createMapping(std::size_t size, std::uintptr_t requestedAddress) {
+pseudoalloc::mapping_t MemoryManager::createMapping(std::size_t size, std::uintptr_t requestedAddress) {
   auto reqAddressAsPointer = reinterpret_cast<void*>(requestedAddress);
 
   // Test that we do not place overlapping mappings by checking the requestedAddress
@@ -192,42 +191,42 @@ std::shared_ptr<pseudoalloc::mapping_t> MemoryManager::createMapping(std::size_t
   if (requestedAddress != 0) {
     auto end = requestedAddress + threadHeapSize + threadStackSize;
 
-    for (const auto &seg : threadMemoryMappings) {
-      auto heapStart = reinterpret_cast<std::uintptr_t>(seg.second.heap->begin());
-      auto stackStart = reinterpret_cast<std::uintptr_t>(seg.second.stack->begin());
+    for (const auto &[tid, seg] : threadMemoryMappings) {
+      auto heapBegin = reinterpret_cast<std::uintptr_t>(seg.heap.begin());
+      auto stackBegin = reinterpret_cast<std::uintptr_t>(seg.stack.begin());
 
-      if (!(end < heapStart || requestedAddress > heapStart + seg.second.heap->size())) {
+      if (!(end < heapBegin || requestedAddress > heapBegin + seg.heap.size())) {
         klee_error("Overlapping mapping requested=%p and other=%p (heap) - Exiting.",
-                reqAddressAsPointer, seg.second.heap->begin());
+                reqAddressAsPointer, seg.heap.begin());
       }
 
-      if (!(end < stackStart || requestedAddress > stackStart + seg.second.stack->size())) {
+      if (!(end < stackBegin || requestedAddress > stackBegin + seg.stack.size())) {
         klee_error("Overlapping mapping requested=%p and other=%p (stack) - Exiting.",
-                   reqAddressAsPointer, seg.second.stack->begin());
+                   reqAddressAsPointer, seg.stack.begin());
       }
     }
   }
 
-  std::shared_ptr<pseudoalloc::mapping_t> mapping;
+  pseudoalloc::mapping_t mapping;
   if (requestedAddress != 0) {
-    mapping = std::make_shared<pseudoalloc::mapping_t>(requestedAddress, size);
+    mapping = pseudoalloc::mapping_t(requestedAddress, size);
   } else {
-    mapping = std::make_shared<pseudoalloc::mapping_t>(size);
+    mapping = pseudoalloc::mapping_t(size);
   }
 
-  if (mapping->begin() == nullptr) {
+  if (!mapping) {
     klee_error("Could not allocate a mapping at %p - error: %s", reqAddressAsPointer, strerror(errno));
   }
 
   // Now check that the address is correct and that our mappings are of the correct size
-  if (requestedAddress && mapping->begin() != reqAddressAsPointer) {
-    klee_error("Could not allocate a mapping at %p - received %p", reqAddressAsPointer, mapping->begin());
+  if (requestedAddress && mapping.begin() != reqAddressAsPointer) {
+    klee_error("Could not allocate a mapping at %p - received %p", reqAddressAsPointer, mapping.begin());
   }
 
-  if (mapping->size() != size) {
+  if (mapping.size() != size) {
     klee_error(
             "Allocator failed to create a mapping with the requested size: requested size=%lu, returned size=%lu",
-            size, mapping->size());
+            size, mapping.size());
   }
 
   return mapping;
@@ -236,21 +235,21 @@ std::shared_ptr<pseudoalloc::mapping_t> MemoryManager::createMapping(std::size_t
 void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t requestedAddress) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
-  ThreadMemorySegments segment{};
-  segment.heap = createMapping(threadHeapSize, requestedAddress);
-
   std::uintptr_t stackAddress = 0;
   if (requestedAddress != 0) {
     // If we did not specify an address, then we can place the stack at any place
     stackAddress = requestedAddress + threadHeapSize;
   }
 
-  segment.stack = createMapping(threadStackSize, stackAddress);
+  ThreadMemorySegments segment{
+    .heap = createMapping(threadHeapSize, requestedAddress),
+    .stack = createMapping(threadStackSize, stackAddress)
+  };
 
-  auto insertOpRes = threadMemoryMappings.insert(std::make_pair(tid, segment));
-  assert(insertOpRes.second && "Mapping should always be able to be registered");
+  auto [it, res] = threadMemoryMappings.emplace(tid, std::move(segment));
+  assert(res && "Mapping should always be able to be registered");
 
-  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), segment.heap->begin());
+  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), it->second.heap.begin());
 }
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,
@@ -295,10 +294,10 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
     assert(segmentIt != threadMemoryMappings.end() && "Thread has no known memory mapping");
 
     const auto& seg = isLocal ? segmentIt->second.stack : segmentIt->second.heap;
-    auto base = reinterpret_cast<std::uint64_t>(seg->begin());
+    auto base = reinterpret_cast<std::uint64_t>(seg.begin());
 
-    if (address < base || address > base + seg->size()) {
-      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg->size());
+    if (address < base || address > base + seg.size()) {
+      klee_error("Allocator returned an invalid address: address=0x%" PRIx64 ", start address of segment=0x%" PRIx64 ", length of segment=%" PRIu64, address, base, seg.size());
     }
   }
 #endif // NDEBUG
@@ -328,9 +327,9 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
 
   void* allocAddress;
   if (readOnly) {
-    allocAddress = globalROAllocator->allocate(std::max(size, alignment));
+    allocAddress = globalROAllocator.allocate(std::max(size, alignment));
   } else {
-    allocAddress = globalAllocator->allocate(std::max(size, alignment));
+    allocAddress = globalAllocator.allocate(std::max(size, alignment));
   }
   auto address = reinterpret_cast<std::uint64_t>(allocAddress);
 
@@ -344,12 +343,12 @@ MemoryObject *MemoryManager::allocateGlobal(std::uint64_t size,
     std::size_t size;
     if (readOnly) {
       const auto& seg = globalROMemorySegment;
-      base = reinterpret_cast<std::uint64_t>(seg->begin());
-      size = seg->size();
+      base = reinterpret_cast<std::uint64_t>(seg.begin());
+      size = seg.size();
     } else {
       const auto& seg = globalMemorySegment;
-      base = reinterpret_cast<std::uint64_t>(seg->begin());
-      size = seg->size();
+      base = reinterpret_cast<std::uint64_t>(seg.begin());
+      size = seg.size();
     }
 
     if (address < base || address > base + size) {
@@ -420,19 +419,19 @@ MemoryManager::ThreadMemorySegments& MemoryManager::getThreadSegments(const Thre
 
 std::unique_ptr<pseudoalloc::allocator_t> MemoryManager::createThreadHeapAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::allocator_t>(*seg.heap, QuarantineSize);
+  return std::make_unique<pseudoalloc::allocator_t>(seg.heap, QuarantineSize);
 }
 
 std::unique_ptr<pseudoalloc::stack_allocator_t> MemoryManager::createThreadStackAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::stack_allocator_t>(*seg.stack, QuarantineSize);
+  return std::make_unique<pseudoalloc::stack_allocator_t>(seg.stack, QuarantineSize);
 }
 
 void MemoryManager::markMemoryRegionsAsUnneeded() {
   for (auto& it : threadMemoryMappings) {
-    it.second.heap->clear();
-    it.second.stack->clear();
+    it.second.heap.clear();
+    it.second.stack.clear();
   }
 
-  globalMemorySegment->clear();
+  globalMemorySegment.clear();
 }

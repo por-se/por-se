@@ -34,8 +34,8 @@ private:
   typedef std::set<MemoryObject *> objects_ty;
 
   struct ThreadMemorySegments {
-    std::shared_ptr<pseudoalloc::mapping_t> heap;
-    std::shared_ptr<pseudoalloc::mapping_t> stack;
+    pseudoalloc::mapping_t heap;
+    pseudoalloc::mapping_t stack;
   };
 
   objects_ty objects;
@@ -52,11 +52,11 @@ private:
   std::size_t globalSegmentSize;
   std::size_t globalROSegmentSize;
 
-  std::shared_ptr<pseudoalloc::mapping_t> globalMemorySegment;
-  std::unique_ptr<pseudoalloc::allocator_t> globalAllocator;
+  pseudoalloc::mapping_t globalMemorySegment;
+  pseudoalloc::allocator_t globalAllocator;
 
-  std::shared_ptr<pseudoalloc::mapping_t> globalROMemorySegment;
-  std::unique_ptr<pseudoalloc::allocator_t> globalROAllocator;
+  pseudoalloc::mapping_t globalROMemorySegment;
+  pseudoalloc::allocator_t globalROAllocator;
 
   /**
    * Requested a memory mapping for `tid`.
@@ -65,7 +65,7 @@ private:
    */
   void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
 
-  std::shared_ptr<pseudoalloc::mapping_t> createMapping(std::size_t size, std::uintptr_t requestedAddress);
+  pseudoalloc::mapping_t createMapping(std::size_t size, std::uintptr_t requestedAddress);
 
   void loadRequestedThreadMemoryMappingsFromFile();
 
