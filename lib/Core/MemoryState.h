@@ -48,8 +48,6 @@ class MemoryState {
     std::size_t bytes = 0;
   } memoryFunction;
 
-  static std::size_t externalFunctionCallCounter;
-
   static KModule *kmodule;
   static std::vector<llvm::Function *> outputFunctionsWhitelist;
   static std::vector<llvm::Function *> libraryFunctionsList;
@@ -161,8 +159,6 @@ public:
                         std::size_t sfIndex,
                         const KFunction *kf,
                         unsigned index, ref<Expr> value);
-
-  void registerExternalFunctionCall();
 
   void registerPushFrame(const ThreadId &threadID, std::size_t sfIndex,
                          const KFunction *callee, const KInstruction *caller);

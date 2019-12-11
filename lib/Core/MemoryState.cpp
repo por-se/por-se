@@ -26,7 +26,6 @@
 
 namespace klee {
 
-std::size_t MemoryState::externalFunctionCallCounter = 0;
 KModule *MemoryState::kmodule = nullptr;
 std::vector<llvm::Function *> MemoryState::outputFunctionsWhitelist;
 std::vector<llvm::Function *> MemoryState::libraryFunctionsList;
@@ -252,27 +251,6 @@ void MemoryState::registerFunctionRet(llvm::Function *f) {
     leaveLibraryFunction();
   } else if (isInMemoryFunction(f)) {
     leaveMemoryFunction();
-  }
-}
-
-
-void MemoryState::registerExternalFunctionCall() {
-  if (listedFunction.entered) {
-    return;
-  }
-
-  if (DebugStatePruning) {
-    llvm::errs() << "MemoryState: external function call\n";
-  }
-
-  // it is unknown whether control flow is changed by an external function, so
-  // we cannot make any assumptions about the state after this call
-
-  // mask fingerprint with global counter
-  for (auto &thread : executionState->threads) {
-    auto &fingerprint = thread.second.fingerprint;
-    fingerprint.updateExternalCallFragment(externalFunctionCallCounter++);
-    fingerprint.addToFingerprint();
   }
 }
 

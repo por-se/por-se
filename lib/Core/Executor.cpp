@@ -3937,10 +3937,6 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  if (PruneStates) {
-    state.memoryState.registerExternalFunctionCall();
-  }
-
   // normal external function handling path
   // allocate 128 bits for each argument (+return value) to support fp80's;
   // we could iterate through all the arguments first and determine the exact
