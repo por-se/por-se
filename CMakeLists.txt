@@ -337,7 +337,7 @@ if ((NOT ${ENABLE_Z3}) AND (NOT ${ENABLE_STP}) AND (NOT ${ENABLE_METASMT}))
 endif()
 
 ################################################################################
-# Support for Blake2b (via CryptoPP)
+# Support for fingerprints (requires CryptoPP)
 ################################################################################
 find_package(CryptoPP)
 if (CRYPTOPP_FOUND)
@@ -376,7 +376,6 @@ endif()
 if (POR_SIMULATOR_DIR)
   include("${POR_SIMULATOR_DIR}/libpor-targets.cmake")
   set(TARGET_LIBS ${TARGET_LIBS} libpor)
-  list(APPEND KLEE_COMPONENT_CXX_DEFINES -DLIBPOR_IN_KLEE)
   message(STATUS "Partial Order Reduction Library included: ${POR_SIMULATOR_DIR}")
 else()
   message(FATAL_ERROR "POR_SIMULATOR_DIR not set!")
