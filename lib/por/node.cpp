@@ -16,7 +16,7 @@ node* node::make_left_child(std::function<registration_t(por::configuration&)> f
 	assert(!_event && "node must not have an event yet");
 
 	_left = allocate_left_child();
-	std::shared_ptr<klee::ExecutionState const> standby_state;
+	std::shared_ptr<state const> standby_state;
 	std::tie(_event, standby_state) = func(*_left->_C);
 
 	if(standby_state) {

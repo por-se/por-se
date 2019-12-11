@@ -12,3 +12,5 @@ target_sources(libpor PRIVATE
 	"${CMAKE_CURRENT_LIST_DIR}/node.cpp"
 	"${CMAKE_CURRENT_LIST_DIR}/unfolding.cpp"
 )
+
+add_klee_target_options(libpor)

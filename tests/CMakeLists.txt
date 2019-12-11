@@ -12,4 +12,6 @@ foreach(file ${test_files})
 
 	add_test(NAME ${fileRelative} COMMAND ${fileName})
 	add_dependencies(check ${fileName})
+
+	add_klee_target_options(${fileName})
 endforeach()

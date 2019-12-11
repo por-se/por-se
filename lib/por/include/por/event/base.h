@@ -13,17 +13,9 @@
 #include <string>
 #include <vector>
 
-#ifdef LIBPOR_IN_KLEE
-#include "klee/Fingerprint/MemoryFingerprint.h"
-#else
-// FIXME: create standalone header in KLEE (this has to match *exactly* for shared lib)
-namespace klee {
-	using MemoryFingerprintValue = std::array<std::uint8_t, 32>;
-	class MemoryFingerprintDelta {
-		MemoryFingerprintValue fingerprintValue = {};
-		std::unordered_map<const void *, std::uint64_t> symbolicReferences;
-	};
-}
+#ifdef LIBPOR_KLEE
+#include "klee/Fingerprint/MemoryFingerprintDelta.h"
+#include "klee/Fingerprint/MemoryFingerprintValue.h"
 #endif
 
 namespace por {
@@ -55,6 +47,14 @@ namespace por::event {
 		signal,
 		broadcast,
 	};
+
+#ifdef LIBPOR_KLEE
+	using fingerprint_delta_t = klee::MemoryFingerprintDelta;
+	using fingerprint_value_t = klee::MemoryFingerprintValue;
+#else
+	using fingerprint_delta_t = std::uint64_t;
+	using fingerprint_value_t = std::uint64_t;
+#endif
 
 	class event;
 
@@ -138,8 +138,8 @@ namespace por::event {
 		}
 
 	public:
-		mutable klee::MemoryFingerprintValue _fingerprint;
-		mutable klee::MemoryFingerprintDelta _thread_delta;
+		mutable fingerprint_value_t _fingerprint;
+		mutable fingerprint_delta_t _thread_delta;
 		mutable bool _is_cutoff = false;
 
 		bool is_cutoff() const noexcept { return _is_cutoff; }

@@ -3,6 +3,7 @@
 #include "por/configuration.h"
 
 #include <cassert>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <stack>
@@ -11,14 +12,22 @@
 #include <utility>
 #include <vector>
 
+#ifdef LIBPOR_KLEE
 namespace klee {
 	class ExecutionState;
 }
+#endif
 
 namespace por {
 	class configuration;
 	class node;
 	class unfolding;
+
+#ifdef LIBPOR_KLEE
+	using state = klee::ExecutionState;
+#else
+	struct state {};
+#endif
 
 	namespace event {
 		class event;
@@ -93,7 +102,7 @@ namespace por {
 
 		// IMPORTANT: configuration and standby state always need to correspond to each other
 		std::shared_ptr<por::configuration> _C; // right node has same configuration
-		std::shared_ptr<klee::ExecutionState const> _standby_state;
+		std::shared_ptr<state const> _standby_state;
 
 		event_set_t _D;
 		std::unique_ptr<node> _left, _right;
@@ -212,11 +221,11 @@ namespace por {
 			return _event != nullptr;
 		}
 
-		klee::ExecutionState const* standby_state() const noexcept {
+		state const* standby_state() const noexcept {
 			return _standby_state.get();
 		}
 
-		using registration_t = std::pair<por::event::event const*, std::shared_ptr<klee::ExecutionState const>>;
+		using registration_t = std::pair<por::event::event const*, std::shared_ptr<por::state const>>;
 
 		node* make_left_child(std::function<registration_t(por::configuration&)>);
 

@@ -22,6 +22,25 @@ set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address,undefined"
 	CACHE STRING "Flags used by the shared libraries linker during ASan builds."
 	FORCE)
 
+option(KLEE_VERIFIED_FINGERPRINTS "Enable verified fingerprints (only with KLEE_INCLUDE_DIR)" OFF)
+
+find_path(KLEE_INCLUDE_DIR klee/klee.h)
+
+if(NOT KLEE_INCLUDE_DIR AND KLEE_VERIFIED_FINGERPRINTS)
+	message(FATAL_ERROR "KLEE_VERIFIED_FINGERPRINTS can only be used with KLEE_INCLUDE_DIR!")
+endif()
+
+function(ADD_KLEE_TARGET_OPTIONS TARGET)
+	if(KLEE_INCLUDE_DIR)
+		target_compile_definitions(${TARGET} PUBLIC "LIBPOR_KLEE")
+		target_include_directories(${TARGET} PRIVATE ${KLEE_INCLUDE_DIR})
+		target_compile_definitions(${TARGET} PRIVATE "KLEE_OUTSIDE_BUILD_TREE")
+		if(KLEE_VERIFIED_FINGERPRINTS)
+			target_compile_definitions(${TARGET} PUBLIC "ENABLE_VERIFIED_FINGERPRINTS")
+		endif()
+	endif()
+endfunction()
+
 add_subdirectory(lib)
 add_subdirectory(bin)
 
