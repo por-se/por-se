@@ -64,7 +64,7 @@ private:
   llvm::raw_ostream &os;
   unsigned counter;
   unsigned updateCounter;
-  bool hasScan;
+  bool hasScan = false;
   bool forceNoLineBreaks;
   std::string newline;
 
@@ -152,31 +152,30 @@ private:
     unsigned outerIndent = PC.pos;
     unsigned middleIndent = 0;
 
-    // We only have to print the most recent update
+    // We only have to print the most recent update for each index
     std::vector<ref<Expr>> prevUpdate;
 
-    for (const UpdateNode *un = head; un; un = un->next) {      
-      // We are done if we hit the cache.
-      std::map<const UpdateNode*, unsigned>::iterator it = 
-        updateBindings.find(un);
-      if (it!=updateBindings.end()) {
-        if (openedList)
-          PC << "] @ ";
-        PC << "U" << it->second;
-        return;
-      } else if (!hasScan || shouldPrintUpdates.count(un)) {
-        if (openedList)
-          PC << "] @";
-        if (un != head)
-          PC.breakLine(outerIndent);
-        PC << "U" << updateCounter << ":"; 
-        updateBindings.insert(std::make_pair(un, updateCounter++));
-        openedList = nextShouldBreak = false;
-     }
-    
+    for (const UpdateNode *un = head; un; un = un->next) {
       if (std::count(prevUpdate.begin(), prevUpdate.end(), un->index) == 0) {
+        // We are done if we hit the cache.
+        auto it = updateBindings.find(un);
+        if (it != updateBindings.end()) {
+          if (openedList)
+            PC << "] @ ";
+          PC << "U" << it->second;
+          return;
+        } else if (!hasScan || shouldPrintUpdates.count(un)) {
+          if (openedList)
+            PC << "] @";
+          if (un != head)
+            PC.breakLine(outerIndent);
+          PC << "U" << updateCounter << ":";
+          updateBindings.insert(std::make_pair(un, updateCounter++));
+          openedList = nextShouldBreak = false;
+        }
+
         if (!openedList) {
-          openedList = 1;
+          openedList = true;
           PC << '[';
           middleIndent = PC.pos;
         } else {
