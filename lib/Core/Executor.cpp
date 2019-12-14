@@ -3174,7 +3174,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     auto memLoc = extractMemoryObject(state, pointer, memValWidth);
     if (!memLoc.has_value()) {
-      return;
+      break;
     }
 
     if (!state.currentThread().pathSincePorLocal.empty()) {
@@ -3266,7 +3266,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     auto src = extractMemoryObject(state, pointer, std::max(readWidth, writeWidth));
     if (!src.has_value()) {
-      return;
+      break;
     }
 
     porEventManager.registerLockAcquire(state, src->first->getId(), false);
