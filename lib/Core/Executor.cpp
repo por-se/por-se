@@ -1642,7 +1642,6 @@ void Executor::stepInstruction(ExecutionState &state) {
 
   ++stats::instructions;
   ++state.steppedInstructions;
-  thread.liveSetPc = thread.pc;
   thread.prevPc = thread.pc;
   ++thread.pc;
 
@@ -1831,7 +1830,7 @@ void Executor::executeCall(ExecutionState &state,
     KFunction *kf = kmodule->functionMap[f];
     thread.pushFrame(thread.prevPc, kf);
     thread.pc = kf->instructions;
-    thread.liveSetPc = kf->instructions;
+    thread.liveSet = kf->getLiveLocals(&kf->function->front());
     if (PruneStates) {
       state.memoryState.registerPushFrame(thread.tid, thread.stack.size() - 1,
                                           kf, thread.prevPc);
@@ -1977,9 +1976,9 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   if (thread.pc->inst->getOpcode() == Instruction::PHI) {
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
     thread.incomingBBIndex = first->getBasicBlockIndex(src);
+    thread.liveSet = &thread.prevPc->info->getLiveLocals();
   } else {
-    // liveSetPc == pc: first instruction has not yet been executed
-    thread.liveSetPc = thread.pc;
+    thread.liveSet = kf->getLiveLocals(dst);
   }
 }
 
@@ -2094,8 +2093,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         transferToBasicBlock(ii->getNormalDest(), caller->getParent(), state);
       } else {
         thread.pc = kcaller;
-        thread.liveSetPc = kcaller;
         ++thread.pc;
+        thread.liveSet = &kcaller->info->getLiveLocals();
       }
 
       if (!isVoidReturn) {
@@ -3297,6 +3296,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   default:
     terminateStateOnExecError(state, "illegal instruction");
     break;
+  }
+
+  if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
+    thread.liveSet = &thread.prevPc->info->getLiveLocals();
   }
 }
 

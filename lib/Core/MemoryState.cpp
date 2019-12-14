@@ -465,41 +465,15 @@ void MemoryState::registerPopFrame(const StackFrame &sf) {
 MemoryFingerprintDelta MemoryState::getThreadDelta(const Thread &thread) const {
   MemoryFingerprint copy = thread.fingerprint;
 
-  // include live locals in current stack frame
-  bool isFirstOfEntryBB = false;
-  llvm::Instruction *liveInst = nullptr;
-  if (thread.liveSetPc) {
-    liveInst = thread.liveSetPc->inst;
-
-    // first instruction of function (on call)
-    auto &entryBasicBlockInst = liveInst->getFunction()->front().front();
-    isFirstOfEntryBB = (&entryBasicBlockInst == liveInst);
-  }
-
   if (thread.state != ThreadState::Exited) {
     copy.updateProgramCounterFragment(thread.getThreadId(),
                                       thread.stack.size() - 1,
                                       thread.pc->inst);
     copy.addToFingerprint();
 
-    if (thread.liveSetPc && !isFirstOfEntryBB) {
-      const std::vector<const KInstruction *> *liveSet = nullptr;
-      if (liveInst == thread.pc->inst) {
-        // liveInst is yet to be executed: excution is at start of BasicBlock
-        assert(&liveInst->getParent()->front() == liveInst);
-        assert(!isa<llvm::PHINode>(liveInst));
-
-        llvm::BasicBlock *parentBB = liveInst->getParent();
-        const KFunction *parentKF = kmodule->functionMap[parentBB->getParent()];
-        liveSet = parentKF->getLiveLocals(parentBB);
-      } else {
-        assert(liveInst == thread.prevPc->inst);
-
-        liveSet = &thread.liveSetPc->info->getLiveLocals();
-      }
-
-      assert(liveSet != nullptr);
-      for (const KInstruction *ki : *liveSet) {
+    // include live locals in current stack frame
+    if (thread.liveSet != nullptr) {
+      for (const KInstruction *ki : *thread.liveSet) {
         ref<Expr> value = thread.stack.back().locals[ki->dest].value;
         if (value.isNull())
           continue;

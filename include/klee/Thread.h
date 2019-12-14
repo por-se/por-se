@@ -79,8 +79,8 @@ namespace klee {
       /// @brief Pointer to instruction which is currently executed
       KInstIterator prevPc;
 
-      /// @brief Pointer to instruction which was last executed
-      KInstIterator liveSetPc;
+      /// @brief Set of live locals at current stage of execution
+      const std::vector<const KInstruction *> *liveSet = nullptr;
 
       /// @brief Stack representing the current instruction stream
       stack_ty stack;

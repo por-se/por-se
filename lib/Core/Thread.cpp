@@ -61,7 +61,7 @@ Thread::Thread(ThreadId tid, KFunction *entry) : pc(entry->instructions), prevPc
 Thread::Thread(const Thread &t)
         : pc(t.pc),
           prevPc(t.prevPc),
-          liveSetPc(t.liveSetPc),
+          liveSet(t.liveSet),
           stack(t.stack),
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
