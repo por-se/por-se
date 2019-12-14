@@ -280,9 +280,9 @@ void LiveRegisterPass::generateInstructionInfo(const Function &F) {
         }
       } else if (i->getNumOperands() != 0) {
         // iterate over all operands (uses) of the current instruction
-        for (auto use = i->op_begin(), ie = i->op_end(); use != ie; ++use) {
-          if (const Instruction *op = dyn_cast<Instruction>(use->get())) {
-            ii.gen.insert(op);
+        for (auto &use : i->operands()) {
+          if (isa<Instruction>(use.get()) || isa<Argument>(use.get())) {
+            ii.gen.insert(use.get());
           }
         }
       }

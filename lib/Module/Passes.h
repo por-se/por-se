@@ -171,19 +171,18 @@ public:
   bool checkPassed() const { return instructionOperandsConform; }
 };
 
-/// LiveRegisterPass - Pass specifically for Infinite Loop Detection in KLEE!
-/// Determines which registers are live w.r.t. the detection of infinite loops,
-/// it might therefore not be useful for any other use case!
-/// Attaches analysis information as metatdata to be processed by KLEE (outside
-/// of another pass).
-///
-/// NOTE: This pass only considers registers (or locals), not arguments.
+/// LiveRegisterPass - Determines which registers (locals) or arguments are
+/// live after the execution of an instruction, or before the execution of a
+/// basic block. PHI nodes are handled s.t. only the last PHI node is attached
+/// with correct liveness information. In case a basic block contains PHI
+/// nodes, this serves as the live set before the execution of the basic block.
 class LiveRegisterPass : public llvm::FunctionPass {
   friend class LiveRegisterPassTest_GetLastPHI_Test;
   friend class LiveRegisterPassTest_GetLiveSet_Test;
 
-  typedef std::pair<const llvm::Instruction *, const llvm::Instruction *> edge_t;
-  typedef std::unordered_set<const llvm::Value *> valueset_t;
+  using edge_t = std::pair<const llvm::Instruction *,
+                           const llvm::Instruction *>;
+  using valueset_t = std::unordered_set<const llvm::Value *>;
 
   struct InstructionInfo {
     std::vector<edge_t> predecessorEdges;
