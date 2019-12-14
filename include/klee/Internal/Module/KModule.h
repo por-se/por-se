@@ -50,8 +50,8 @@ namespace klee {
     unsigned numInstructions;
     KInstruction **instructions;
 
-    std::map<llvm::BasicBlock*, unsigned> basicBlockEntry;
-    std::map<llvm::BasicBlock*, std::vector<const KInstruction *>> basicBlockLiveSet;
+    std::map<const llvm::BasicBlock *, unsigned> basicBlockEntry;
+    std::map<const llvm::BasicBlock *, std::vector<const KInstruction *>> basicBlockLiveSet;
 
     /// Whether instructions in this function should count as
     /// "coverable" for statistics and search heuristics.
@@ -72,7 +72,7 @@ namespace klee {
     }
 
     /// @brief Get set of locals live *before* executing bb.
-    const std::vector<const KInstruction *> *getLiveLocals(llvm::BasicBlock* bb) const {
+    const std::vector<const KInstruction *> *getLiveLocals(const llvm::BasicBlock *bb) const {
       if (basicBlockLiveSet.count(bb) == 0)
         return nullptr;
       return &basicBlockLiveSet.at(bb);
