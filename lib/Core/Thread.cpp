@@ -49,15 +49,11 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const ThreadId &tid) 
 
 /***/
 
-Thread::Thread(ThreadId tid, KFunction* threadStartRoutine) : tid(std::move(tid)) {
-  assert(threadStartRoutine && "A thread has to start somewhere");
+Thread::Thread(ThreadId tid, KFunction *entry) : pc(entry->instructions), prevPc(pc), tid(std::move(tid)) {
+  assert(entry && "A thread has to start somewhere");
 
   // in case of main thread, this is the program's entry point, e.g. main()
-  this->stack.emplace_back(nullptr, threadStartRoutine);
-
-  // initialize program counters
-  this->prevPc = threadStartRoutine->instructions;
-  this->pc = this->prevPc;
+  this->stack.emplace_back(nullptr, entry);
 
   this->runtimeStructPtr = ConstantExpr::createPointer(0);
 }

@@ -1,13 +1,15 @@
 #ifndef KLEE_THREAD_H
 #define KLEE_THREAD_H
 
+#include "ThreadId.h"
+
 #include "klee/Expr/Expr.h"
 #include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstIterator.h"
 #include "klee/Internal/Module/KModule.h"
+
 #include "pseudoalloc/pseudoalloc.h"
-#include "ThreadId.h"
 
 #include <vector>
 #include <unordered_map>
@@ -121,10 +123,9 @@ namespace klee {
     public:
       Thread() = delete;
       Thread(const Thread &thread);
-      Thread(ThreadId tid, KFunction* threadStartRoutine);
+      Thread(ThreadId tid, KFunction *entry);
 
       ThreadId getThreadId() const;
-      ref<Expr> getRuntimeStructPtr() const;
 
     private:
       void popStackFrame();
