@@ -371,14 +371,14 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
           continue;
 
         std::vector<const KInstruction *> liveKInstSet;
-        liveKInstSet.reserve(set->size());
 
         for (const Value *liveValue : *set) {
-          // convert Value* to KInstruction*
-          const auto *liveInst = cast<llvm::Instruction>(liveValue);
-          const InstructionInfo &ii = infos->getInfo(*liveInst);
-          const KInstruction *liveKInst = ii.getKInstruction();
-          liveKInstSet.push_back(liveKInst);
+          if (const auto *liveInst = dyn_cast<llvm::Instruction>(liveValue)) {
+            // convert Value* to KInstruction*
+            const InstructionInfo &ii = infos->getInfo(*liveInst);
+            const KInstruction *liveKInst = ii.getKInstruction();
+            liveKInstSet.push_back(liveKInst);
+          }
         }
 
         InstructionInfo *ii = const_cast<InstructionInfo *>(ki->info);
@@ -392,14 +392,14 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
           assert(set != nullptr);
 
           std::vector<const KInstruction *> liveKInstSet;
-          liveKInstSet.reserve(set->size());
 
           for (const Value *liveValue : *set) {
-            // convert Value* to KInstruction*
-            const auto *liveInst = cast<llvm::Instruction>(liveValue);
-            const InstructionInfo &ii = infos->getInfo(*liveInst);
-            const KInstruction *liveKInst = ii.getKInstruction();
-            liveKInstSet.push_back(liveKInst);
+            if (const auto *liveInst = dyn_cast<llvm::Instruction>(liveValue)) {
+              // convert Value* to KInstruction*
+              const InstructionInfo &ii = infos->getInfo(*liveInst);
+              const KInstruction *liveKInst = ii.getKInstruction();
+              liveKInstSet.push_back(liveKInst);
+            }
           }
 
           kf->setLiveLocals(&bb, std::move(liveKInstSet));
