@@ -874,14 +874,8 @@ static const char *dontCareExternals[] = {
 #endif
 
   // static information, pretty ok to return
-  "getegid",
-  "geteuid",
-  "getgid",
-  "getuid",
-  "getpid",
   "gethostname",
   "getpgrp",
-  "getppid",
   "getpagesize",
   "getpriority",
   "getgroups",
