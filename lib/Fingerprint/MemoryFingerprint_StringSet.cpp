@@ -98,6 +98,18 @@ bool MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src
   return true;
 }
 
+std::string MemoryFingerprint_StringSet::decodeTid(std::istringstream &stream) {
+  std::stringstream result;
+  std::uint64_t size;
+  stream >> size;
+  for (std::size_t i = 0; i < size; i++) {
+    std::uint16_t lid;
+    stream >> lid;
+    result << lid << ((i == size - 1) ? "" : ",");
+  }
+  return result.str();
+}
+
 MemoryFingerprint_StringSet::DecodedFragment
 MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
                                                     std::string fragment,
@@ -138,11 +150,10 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
     result.containsSymbolicValue = true;
     // fallthrough
   case 3: {
-    std::uint64_t tid;
     std::uint64_t sfid;
     std::uintptr_t ptr;
 
-    item >> tid;
+    std::string tid = decodeTid(item);
     item >> sfid;
     item >> ptr;
     llvm::Instruction *inst = reinterpret_cast<llvm::Instruction *>(ptr);
@@ -183,12 +194,11 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
     result.containsSymbolicValue = true;
     // fallthrough
   case 5: {
-    std::uint64_t tid;
     std::uint64_t sfid;
     std::uintptr_t ptr;
     std::size_t argumentIndex;
 
-    item >> tid;
+    std::string tid = decodeTid(item);
     item >> sfid;
     item >> ptr;
     KFunction *kf = reinterpret_cast<KFunction *>(ptr);
@@ -215,11 +225,10 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
     break;
   }
   case 7: {
-    std::uint64_t tid;
     std::uint64_t sfid;
     std::uintptr_t ptr;
 
-    item >> tid;
+    std::string tid = decodeTid(item);
     item >> sfid;
     item >> ptr;
     llvm::Instruction *i = reinterpret_cast<llvm::Instruction *>(ptr);
@@ -234,12 +243,11 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
     break;
   }
   case 8: {
-    std::uint64_t tid;
     std::uint64_t sfid;
     std::uintptr_t callerPtr;
     std::uintptr_t calleePtr;
 
-    item >> tid;
+    std::string tid = decodeTid(item);
     item >> sfid;
     item >> callerPtr;
     item >> calleePtr;

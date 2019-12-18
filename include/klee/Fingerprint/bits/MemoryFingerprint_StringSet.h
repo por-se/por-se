@@ -36,6 +36,7 @@ public:
   MemoryFingerprint_StringSet& operator=(MemoryFingerprint_StringSet &&) = delete;
   ~MemoryFingerprint_StringSet() = default;
 
+  static std::string decodeTid(std::istringstream &stream);
   struct DecodedFragment {
     std::size_t writes = 0;
     bool containsSymbolicValue = false;
