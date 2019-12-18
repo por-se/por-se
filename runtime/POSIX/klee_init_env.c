@@ -291,7 +291,7 @@ usage: (klee_init_env) [options] [program arguments]\n\
 int __klee_posix_wrapped_main(int argc, char **argv, char **envp);
 
 /* This wrapper gets called instead of main if POSIX setup is used */
-int __klee_posix_wrapper(int argcPtr, char **argvPtr, char** envp) {
+__attribute__ ((__noreturn__)) void __klee_posix_wrapper(int argcPtr, char **argvPtr, char** envp) {
   klee_init_env(&argcPtr, &argvPtr);
-  return __klee_posix_wrapped_main(argcPtr, argvPtr, envp);
+  exit(__klee_posix_wrapped_main(argcPtr, argvPtr, envp));
 }

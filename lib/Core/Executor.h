@@ -559,7 +559,7 @@ public:
   void threadWaitOn(ExecutionState &state, std::uint64_t lid);
   void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent);
   void preemptThread(ExecutionState &state);
-  void exitThread(ExecutionState &state);
+  void exitCurrentThread(ExecutionState &state, bool calledExit = false);
   void toggleThreadScheduling(ExecutionState &state, bool enabled);
 };
 } // End klee namespace

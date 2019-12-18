@@ -99,6 +99,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     raceDetection(state.raceDetection),
     threads(state.threads),
     needsThreadScheduling(state.needsThreadScheduling),
+    calledExit(state.calledExit),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
     threadSchedulingEnabled(state.threadSchedulingEnabled),

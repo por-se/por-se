@@ -98,7 +98,10 @@ public:
   /// @brief True if scheduleThreads() should be run after current instruction
   bool needsThreadScheduling = false;
 
-    /// @brief the history of scheduling up until now
+  /// @brief True if some thread has called exit() or equivalent
+  bool calledExit = false;
+
+  /// @brief the history of scheduling up until now
   std::vector<ThreadId> schedulingHistory;
 
   /// @brief set of all threads that could in theory be executed

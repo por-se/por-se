@@ -2070,7 +2070,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     
     if (thread.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      exitThread(state);
+      // only happens without uClibC or POSIX runtime;
+      // hence exit() is called implicitly return from main
+      assert(kmodule->module->getFunction("__klee_posix_wrapped_main") == nullptr
+             && kmodule->module->getFunction("__uClibc_main") == nullptr);
+      exitCurrentThread(state, true);
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
@@ -5108,17 +5112,20 @@ void Executor::preemptThread(ExecutionState &state) {
   state.needsThreadScheduling = true;
 }
 
-void Executor::exitThread(ExecutionState &state) {
-  static std::vector<ExecutionState *> emptyVec;
+void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
+  if (calledExit) {
+    state.calledExit = calledExit;
+  }
   // needs to come before thread_exit event
   if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
+    static std::vector<ExecutionState *> emptyVec;
     porEventManager.registerLocal(state, emptyVec, false);
   }
 
   const ThreadId& tid = state.currentThreadId();
   state.exitThread(tid);
   state.needsThreadScheduling = true;
-  if (state.isOnMainThread()) {
+  if (calledExit && state.currentThread().state == ThreadState::Runnable) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
     porEventManager.registerThreadExit(state, tid, false);
@@ -5402,7 +5409,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       }
     }
 
-    if (allExited || cutoffPresent) {
+    if (allExited || cutoffPresent || state.calledExit) {
       terminateStateOnExit(state);
     } else {
       terminateStateOnDeadlock(state);
