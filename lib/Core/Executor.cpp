@@ -5015,10 +5015,6 @@ ThreadId Executor::createThread(ExecutionState &state,
       if (i->isConstant()) {
         constantObjects.emplace_back(os);
       }
-
-      if (PruneStates) {
-        state.memoryState.registerWrite(*mo, *os);
-      }
     }
   }
 
