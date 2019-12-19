@@ -5125,7 +5125,7 @@ void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
   const ThreadId& tid = state.currentThreadId();
   state.exitThread(tid);
   state.needsThreadScheduling = true;
-  if (calledExit && state.currentThread().state == ThreadState::Runnable) {
+  if (calledExit) {
     // Special handling since the main thread does not fire the thread_exit
     // por event in the runtime
     porEventManager.registerThreadExit(state, tid, false);

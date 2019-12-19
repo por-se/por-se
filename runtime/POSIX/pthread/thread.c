@@ -63,8 +63,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
 
   pthread_cond_init(&thread->cond, NULL);
 
-// kpr_list_create(&thread->cleanUpStack);
-
   if (attr != NULL) {
     int ds = 0;
     pthread_attr_getdetachstate(attr, &ds);
@@ -87,7 +85,7 @@ int pthread_detach(pthread_t pthread) {
   klee_toggle_thread_scheduling(0);
   kpr_thread* thread = pthread;
 
-  if (thread->mode == KPR_THREAD_MODE_DETACH || thread->state == KPR_THREAD_STATE_EXITED) {
+  if (thread->mode == KPR_THREAD_MODE_DETACH) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
@@ -97,13 +95,14 @@ int pthread_detach(pthread_t pthread) {
     return EINVAL;
   }
 
-  // Last check: it can also be the case that this thread is detached after it already
-  //             terminated. In that case we want to ensure that we wake the thread again
-  if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
-    klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
-  }
-
   thread->mode = KPR_THREAD_MODE_DETACH;
+
+  // Last check: it can also be the case that this thread is detached after it already
+  //             terminated. In that case we want to ensure that we do the thread
+  //             destruction now
+  if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
+    thread->joinState = KPR_THREAD_JSTATE_JOINED;
+  }
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -118,9 +117,6 @@ void pthread_exit(void* arg) {
   klee_toggle_thread_scheduling(0);
 
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
-  thread->state = KPR_THREAD_STATE_DEAD;
-
-  klee_por_thread_exit();
 
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
     thread->returnValue = arg;
@@ -133,10 +129,10 @@ void pthread_exit(void* arg) {
     // We have to wait on another thread that will wake us up
     if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
       thread->joinState = KPR_THREAD_JSTATE_WAIT_FOR_JOIN;
-      klee_wait_on(thread, 0);
     }
   }
 
+  klee_por_thread_exit();
   thread->state = KPR_THREAD_STATE_EXITED;
 
   klee_toggle_thread_scheduling(1);
@@ -146,6 +142,7 @@ void pthread_exit(void* arg) {
   }
 
   kpr_key_clear_data_of_thread(thread);
+
   klee_exit_thread();
 }
 
@@ -167,16 +164,15 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_report_error(__FILE__, __LINE__, "Multiple calls to pthread_join to the same target are undefined", "undef");
   }
 
-  int alreadyPreemptedByWaiting = 0;
+  bool alreadyPreemptedByWaiting = false;
 
   if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
-    alreadyPreemptedByWaiting = 1;
+    alreadyPreemptedByWaiting = true;
     thread->joinState = KPR_THREAD_JSTATE_JOINED;
 
     klee_wait_on(thread, 0);
   } else if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
     thread->joinState = KPR_THREAD_JSTATE_JOINED;
-    klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
   }
 
   klee_por_thread_join(thread);
@@ -191,7 +187,8 @@ int pthread_join(pthread_t pthread, void **ret) {
   }
 
   klee_toggle_thread_scheduling(1);
-  if (alreadyPreemptedByWaiting != 0) {
+
+  if (!alreadyPreemptedByWaiting) {
     klee_preempt_thread();
   }
 

@@ -6,8 +6,7 @@
 // RUN: rm -rf %t-exit.klee-out
 // RUN: %klee --output-dir=%t.klee-out --posix-runtime --exit-on-error %t.bc
 // RUN: %klee --output-dir=%t-lock.klee-out --posix-runtime --exit-on-error %t-lock.bc 2>&1 | FileCheck --check-prefix=CHECK-LOCK %s
-// RUN: %klee --output-dir=%t-exit.klee-out --posix-runtime --exit-on-error-type=Deadlock %t-exit.bc
-// RUN: test -f %t.klee-out/test000001.deadlock.err
+// RUN: %klee --output-dir=%t-exit.klee-out --posix-runtime --exit-on-error %t-exit.bc
 
 #include <pthread.h>
 #include <stdio.h>
