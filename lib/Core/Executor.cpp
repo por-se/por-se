@@ -155,6 +155,11 @@ cl::opt<bool> EmitAllErrors(
              "(default=true, i.e. one per (error,instruction) pair)"),
     cl::cat(TestGenCat));
 
+cl::opt<bool> DumpThreadSegmentsConfiguration(
+    "dump-thread-segments",
+    cl::init(true),
+    cl::desc("Ouput the heap and stack memory regions of each created thread (default=true)"),
+    cl::cat(TestGenCat));
 
 /* Constraint solving options */
 
@@ -541,6 +546,13 @@ Executor::Executor(LLVMContext &ctx, const InterpreterOptions &opts,
 
   this->solver = new TimingSolver(solver, EqualitySubstitution);
   memory = new MemoryManager(&arrayCache);
+
+  if (DumpThreadSegmentsConfiguration) {
+    auto thSegmentsFile = interpreterHandler->openOutputFile("thread-segments.conf");
+    if (thSegmentsFile) {
+      memory->outputConfig(std::move(thSegmentsFile));
+    }
+  }
 
   initializeSearchOptions();
 

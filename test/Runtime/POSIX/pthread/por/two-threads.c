@@ -11,10 +11,10 @@ static void* noop(void* arg) {
 int main(void) {
   pthread_t thread;
 
-  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
+  // CHECK: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
   // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
   // This next check is not check-next, since there is a malloc line in between
-  // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:tid<[0-9,]+>]]
+  // CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:[0-9,]+]]
   pthread_create(&thread, NULL, noop, NULL);
 
 

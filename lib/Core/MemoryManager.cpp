@@ -119,6 +119,27 @@ MemoryManager::~MemoryManager() {
   globalROMemorySegment.clear();
 }
 
+void MemoryManager::outputConfig(std::unique_ptr<llvm::raw_fd_ostream>&& out) {
+  configOut = std::move(out);
+
+  // Also directly write the already present info
+  auto& os = *configOut;
+
+  os
+    << "global = " << globalMemorySegment.begin() << '\n'
+    << "globalRO = " << globalROMemorySegment.begin() << '\n';
+
+  for (const auto& [ tid, seg ] : threadMemoryMappings) {
+    void* heap_ptr = seg.heap.begin();
+    void* stack_ptr = seg.stack.begin();
+
+    os << tid << " : heap = " << heap_ptr << '\n';
+    os << tid << " : stack = " << stack_ptr << '\n';
+  }
+
+  os.flush();
+}
+
 void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
   std::ifstream segmentsFile(ThreadSegmentsFile);
   if (!segmentsFile.is_open()) {
@@ -127,10 +148,14 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
   // Example content of the file: ```
   // # This line is a comment
-  // 1 = 0x7ff30000000
-  // 1.1 = 0x87c30000000 # all addresses have to be formatted as hex string
+  // global = 0x7ff30000000
+  // globalRO = 0x82c30000000 # all addresses have to be formatted as hex string
+  // 1 : stack = 0x90c30000000
+  // 1,1 : heap = 0x98c30000000 
   //
   // ```
+
+  std::map<ThreadId, std::pair<std::uint64_t, std::uint64_t>> threadAddresses;
 
   auto lineNumber = 0;
   std::string line;
@@ -153,7 +178,7 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
       klee_error("Line %d in -allocate-thread-segments-file malformed. Expected '='. Exiting.", lineNumber);
     }
 
-    auto tidAsString = line.substr(0, delimiterPos);
+    auto entryName = line.substr(0, delimiterPos);
     auto addressAsString = line.substr(delimiterPos + 1);
 
     // So this method below simply throws an exception if the string is not a formatted number.
@@ -164,13 +189,31 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
                  lineNumber);
     }
 
-    if (tidAsString == "global") {
+    if (entryName == "global") {
       globalMemorySegment = createMapping(globalSegmentSize, address);
       klee_message("Created memory mapping for read-write globals at %p", globalMemorySegment.begin());
-    } else if (tidAsString == "globalRO") {
+    } else if (entryName == "globalRO") {
       globalROMemorySegment = createMapping(globalROSegmentSize, address);
       klee_message("Created memory mapping for read-only globals at %p", globalROMemorySegment.begin());
     } else {
+      auto tidDelimiter = entryName.find(':');
+      if (tidDelimiter == std::string::npos) {
+        klee_error("Line %d in -allocate-thread-segments-file malformed. Expected ':' for a thread mappings line. Exiting.", lineNumber);
+      }
+
+      auto tidAsString = entryName.substr(0, tidDelimiter);
+      auto type = entryName.substr(tidDelimiter + 1);
+
+      bool isHeap = true;
+
+      if (type == "stack") {
+        isHeap = false;
+      } else if (type == "heap") {
+        isHeap = true;
+      } else {
+        klee_error("Line %d in -allocate-thread-segments-file malformed. Expected either stack or thread. Exiting.", lineNumber);
+      }
+
       auto forTid = ThreadId::from_string(tidAsString);
       if (!forTid) {
         klee_error("ThreadId in -allocate-thread-segments-file in line %d malformed. Exiting.", lineNumber);
@@ -178,8 +221,18 @@ void MemoryManager::loadRequestedThreadMemoryMappingsFromFile() {
 
       assert(forTid->to_string() == tidAsString && "Parsed tid should be identical to the input one");
 
-      initThreadMemoryMapping(*forTid, address);
+      auto& entry = threadAddresses[forTid.value()];
+      
+      if (isHeap) {
+        entry.first = address;
+      } else {
+        entry.second = address;
+      }
     }
+  }
+
+  for (const auto& [ tid, addresses ] : threadAddresses) {
+    initThreadMemoryMapping(tid, addresses.first, addresses.second);
   }
 }
 
@@ -189,23 +242,23 @@ pseudoalloc::mapping_t MemoryManager::createMapping(std::size_t size, std::uintp
   // Test that we do not place overlapping mappings by checking the requestedAddress
   // against the already existing mappings
   if (requestedAddress != 0) {
-    auto end = requestedAddress + threadHeapSize + threadStackSize;
+    auto reqEnd = requestedAddress + size;
 
     if (globalMemorySegment) {
       auto begin = reinterpret_cast<std::uintptr_t>(globalMemorySegment.begin());
 
-      if (!(end < begin || requestedAddress > begin + globalMemorySegment.size())) {
-        klee_error("Overlapping mapping requested=%p and other=%p (global read-write) - Exiting.",
-                reqAddressAsPointer, globalMemorySegment.begin());
+      if (!(reqEnd <= begin || requestedAddress > begin + globalMemorySegment.size())) {
+        klee_error("Overlapping mapping requested=%p size=0x%zx and other=%p (global read-write) - Exiting.",
+                reqAddressAsPointer, size, globalMemorySegment.begin());
       }
     }
 
     if (globalROMemorySegment) {
       auto begin = reinterpret_cast<std::uintptr_t>(globalROMemorySegment.begin());
 
-      if (!(end < begin || requestedAddress > begin + globalROMemorySegment.size())) {
-        klee_error("Overlapping mapping requested=%p and other=%p (global read-only) - Exiting.",
-                reqAddressAsPointer, globalROMemorySegment.begin());
+      if (!(reqEnd <= begin || requestedAddress > begin + globalROMemorySegment.size())) {
+        klee_error("Overlapping mapping requested=%p size=0x%zx and other=%p (global read-only) - Exiting.",
+                reqAddressAsPointer, size, globalROMemorySegment.begin());
       }
     }
 
@@ -213,14 +266,14 @@ pseudoalloc::mapping_t MemoryManager::createMapping(std::size_t size, std::uintp
       auto heapBegin = reinterpret_cast<std::uintptr_t>(seg.heap.begin());
       auto stackBegin = reinterpret_cast<std::uintptr_t>(seg.stack.begin());
 
-      if (!(end < heapBegin || requestedAddress > heapBegin + seg.heap.size())) {
-        klee_error("Overlapping mapping requested=%p and other=%p (heap) - Exiting.",
-                reqAddressAsPointer, seg.heap.begin());
+      if (!(reqEnd <= heapBegin || requestedAddress > heapBegin + seg.heap.size())) {
+        klee_error("Overlapping mapping requested=%p size=0x%zx and other=%p (heap) - Exiting.",
+                reqAddressAsPointer, size, seg.heap.begin());
       }
 
-      if (!(end < stackBegin || requestedAddress > stackBegin + seg.stack.size())) {
-        klee_error("Overlapping mapping requested=%p and other=%p (stack) - Exiting.",
-                   reqAddressAsPointer, seg.stack.begin());
+      if (!(reqEnd <= stackBegin || requestedAddress > stackBegin + seg.stack.size())) {
+        klee_error("Overlapping mapping requested=%p size=0x%zx and other=%p (stack) - Exiting.",
+                   reqAddressAsPointer, size, seg.stack.begin());
       }
     }
   }
@@ -250,24 +303,31 @@ pseudoalloc::mapping_t MemoryManager::createMapping(std::size_t size, std::uintp
   return mapping;
 }
 
-void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t requestedAddress) {
+void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t reqHeap, std::uintptr_t reqStack) {
   assert(threadMemoryMappings.find(tid) == threadMemoryMappings.end() && "Do not reinit a threads memory mapping");
 
-  std::uintptr_t stackAddress = 0;
-  if (requestedAddress != 0) {
-    // If we did not specify an address, then we can place the stack at any place
-    stackAddress = requestedAddress + threadHeapSize;
-  }
-
   ThreadMemorySegments segment{
-    .heap = createMapping(threadHeapSize, requestedAddress),
-    .stack = createMapping(threadStackSize, stackAddress)
+    .heap = createMapping(threadHeapSize, reqHeap),
+    .stack = createMapping(threadStackSize, reqStack)
   };
 
   auto [it, res] = threadMemoryMappings.emplace(tid, std::move(segment));
   assert(res && "Mapping should always be able to be registered");
 
-  klee_message("Created thread memory mapping for tid<%s> at %p", tid.to_string().c_str(), it->second.heap.begin());
+  klee_message(
+    "Created thread memory mapping for thread %s at heap=%p stack=%p",
+    tid.to_string().c_str(),
+    it->second.heap.begin(),
+    it->second.stack.begin()
+  );
+
+  if (configOut) {
+    auto& os = *configOut;
+
+    os << tid << " : heap = " << it->second.heap.begin() << '\n';
+    os << tid << " : stack = " << it->second.stack.begin() << '\n';
+    os.flush();
+  }
 }
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,
@@ -426,7 +486,7 @@ MemoryManager::ThreadMemorySegments& MemoryManager::getThreadSegments(const Thre
   auto it = threadMemoryMappings.find(tid);
 
   if (it == threadMemoryMappings.end()) {
-    initThreadMemoryMapping(tid, 0);
+    initThreadMemoryMapping(tid, 0, 0);
 
     it = threadMemoryMappings.find(tid);
     assert(it != threadMemoryMappings.end() && "Threads memory mapping should be initialized");

@@ -58,12 +58,14 @@ private:
   pseudoalloc::mapping_t globalROMemorySegment;
   pseudoalloc::allocator_t globalROAllocator;
 
+  std::unique_ptr<llvm::raw_fd_ostream> configOut;
+
   /**
    * Requested a memory mapping for `tid`.
-   * If `requestedAddress` is unequal to `nullptr`, then the memory mapping is requested at
-   * that address, otherwise the mapping at a random location
+   * If `reqHeap` or `reqStack` is unequal to `nullptr`, then the memory mapping is requested at
+   * that address, otherwise the mapping is placed at a random location
    */
-  void initThreadMemoryMapping(const ThreadId& tid, std::size_t requestedAddress);
+  void initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t reqHeap, std::uintptr_t reqStack);
 
   pseudoalloc::mapping_t createMapping(std::size_t size, std::uintptr_t requestedAddress);
 
@@ -77,6 +79,8 @@ private:
 public:
   MemoryManager(ArrayCache *arrayCache);
   ~MemoryManager();
+
+  void outputConfig(std::unique_ptr<llvm::raw_fd_ostream>&& out);
 
   /**
    * Returns memory object which contains a handle to real virtual process

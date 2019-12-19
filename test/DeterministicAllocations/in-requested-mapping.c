@@ -22,8 +22,8 @@ void* thread(void* arg) {
 }
 
 int main(int argc, char **argv) {
-  // CHECK: KLEE: Created thread memory mapping for tid<1> at 0x7ff30000000
-  // CHECK: KLEE: Created thread memory mapping for tid<1,1> at 0x87c30000000
+  // CHECK: KLEE: Created thread memory mapping for thread 1 at heap=0x7ff30000000
+  // CHECK: KLEE: Created thread memory mapping for thread 1,1 at heap=0x87c30000000
 
   void* obj = malloc(10);
   uint64_t address = (uint64_t) obj;

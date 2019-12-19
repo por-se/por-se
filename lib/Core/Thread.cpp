@@ -36,7 +36,6 @@ StackFrame::~StackFrame() {
 /***/
 
 llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const ThreadId &tid) {
-  os << "tid<";
   for (std::size_t i = 0; i < tid.size(); i++) {
     if (i > 0) {
       os << ",";
@@ -45,7 +44,6 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const ThreadId &tid) 
     const std::uint16_t val = tid[i];
     os << val;
   }
-  os << ">";
   return os;
 }
 

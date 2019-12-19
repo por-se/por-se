@@ -5,14 +5,14 @@
 #include <pthread.h>
 
 int main(void) {
-  // CHECK: POR event: thread_init with current thread [[M_TID:tid<[0-9,]+>]] and initialized thread [[M_TID]]
+  // CHECK: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
   // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
   pthread_cond_t cond;
 
   // CHECK-DAG: POR event: condition_variable_create with current thread [[M_TID]] on cond. var [[COND:[0-9]+]]
   pthread_cond_init(&cond, NULL);
 
-  // CHECK-NEXT: POR event: signal with current thread [[M_TID]] on cond. var [[COND]] and signalled thread tid<>
+  // CHECK-NEXT: POR event: signal with current thread [[M_TID]] on cond. var [[COND]] and signalled thread
   pthread_cond_signal(&cond);
 
   // CHECK-NEXT: POR event: condition_variable_destroy with current thread [[M_TID]] on cond. var [[COND]]
