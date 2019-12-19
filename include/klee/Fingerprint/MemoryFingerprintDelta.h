@@ -16,7 +16,7 @@ class MemoryFingerprintDelta {
   friend class MemoryFingerprintT;
 
   MemoryFingerprintValue fingerprintValue = {};
-  std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
+  std::unordered_map<const Array *, std::int64_t> symbolicReferences;
 };
 
 } // namespace klee

@@ -61,7 +61,6 @@ void MemoryFingerprintT<D, S, V>::removeFromFingerprint() {
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
-      assert(symbolicReferences[s.first] >= s.second);
       symbolicReferences[s.first] -= s.second;
     }
     resetBufferRefCount();
@@ -93,8 +92,6 @@ void MemoryFingerprintT<D, S, V>::removeFromFingerprintAndDelta(MemoryFingerprin
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
-      assert(symbolicReferences[s.first] >= s.second);
-      assert(delta.symbolicReferences[s.first] >= s.second);
       symbolicReferences[s.first] -= s.second;
       delta.symbolicReferences[s.first] -= s.second;
     }
@@ -124,7 +121,6 @@ void MemoryFingerprintT<D, S, V>::removeFromDeltaOnly(MemoryFingerprintDelta &de
 
   if (bufferContainsSymbolic) {
     for (auto s : bufferSymbolicReferences) {
-      assert(delta.symbolicReferences[s.first] >= s.second);
       delta.symbolicReferences[s.first] -= s.second;
     }
     resetBufferRefCount();
@@ -145,7 +141,6 @@ void MemoryFingerprintT<D, S, V>::removeDelta(const MemoryFingerprintDelta &delt
   executeRemove(fingerprintValue, delta.fingerprintValue);
 
   for (auto s : delta.symbolicReferences) {
-    assert(symbolicReferences[s.first] >= s.second);
     symbolicReferences[s.first] -= s.second;
   }
 }
@@ -162,6 +157,7 @@ template <typename D, std::size_t S, typename valueT>
 valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   std::set<const Array *> arraysReferenced;
   for (auto s : symbolicReferences) {
+    assert(s.second >= 0);
     if (s.second > 0)
       arraysReferenced.insert(s.first);
   }

@@ -59,7 +59,7 @@ class MemoryFingerprintT {
   Derived &getDerived() { return *(static_cast<Derived *>(this)); }
 
   valueT fingerprintValue = {};
-  std::unordered_map<const Array *, std::uint64_t> symbolicReferences;
+  std::unordered_map<const Array *, std::int64_t> symbolicReferences;
 
   template <typename T>
   static void executeXOR(T &dst, const T &src) {
