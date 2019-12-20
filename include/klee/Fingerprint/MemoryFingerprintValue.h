@@ -9,7 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <cassert>
-#include <set>
+#include <map>
 #include <tuple>
 
 namespace klee {
@@ -23,7 +23,7 @@ class MemoryFingerprint_StringSet;
 class MemoryFingerprint_CryptoPP_BLAKE2b;
 template <typename hashT> class VerifiedMemoryFingerprint;
 
-using MemoryFingerprintValue_StringSet = std::set<std::string>;
+using MemoryFingerprintValue_StringSet = std::map<std::string, std::int64_t>;
 using MemoryFingerprintValue_CryptoPP_BLAKE2b = std::array<std::uint8_t, 32>;
 
 template <typename hashT>

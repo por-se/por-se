@@ -80,14 +80,12 @@ class VerifiedMemoryFingerprint
   }
 
   static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {
-    [[maybe_unused]] bool success = MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
-    assert(success && "fragment already in fingerprint");
+    MemoryFingerprint_StringSet::executeAdd(dst.stringSet, src.stringSet);
     hashT::executeAdd(dst.hash, src.hash);
   }
 
   static void executeRemove(typename Base::value_t &dst, const typename Base::value_t &src) {
-    [[maybe_unused]] bool success = MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
-    assert(success && "fragment not in fingerprint");
+    MemoryFingerprint_StringSet::executeRemove(dst.stringSet, src.stringSet);
     hashT::executeRemove(dst.hash, src.hash);
   }
 

@@ -28,7 +28,6 @@ template <typename T> const std::type_info &FakeTypeID(void) {
 #include <array>
 #include <cstddef>
 #include <iomanip>
-#include <set>
 #include <sstream>
 #include <string>
 #include <type_traits>

@@ -53,7 +53,7 @@ llvm::raw_ostream &MemoryFingerprint_StringSet::updateOstream() {
   return ostream;
 }
 
-void MemoryFingerprint_StringSet::generateHash() { buffer.insert(current); }
+void MemoryFingerprint_StringSet::generateHash() { buffer.emplace(current, 1); }
 
 void MemoryFingerprint_StringSet::clearHash() {
   current = "";
@@ -61,41 +61,36 @@ void MemoryFingerprint_StringSet::clearHash() {
   first = true;
 }
 
-bool MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
-  for (auto &elem : src) {
-    if (elem.empty())
-      continue;
-
-    if (dst.find(elem) != dst.end()) {
-      std::string debugStr;
-      llvm::raw_string_ostream debug(debugStr);
-      llvm::errs() << "FAILED: \n";
-      decodeAndPrintFragment(debug, elem, true);
-      llvm::errs() << debug.str() << "\n";
-      return false;
-    }
-    dst.insert(elem);
-  }
-  return true;
-}
-
-bool MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src) {
-  for (auto &elem : src) {
-    if (elem.empty())
-      continue;
+void MemoryFingerprint_StringSet::executeAdd(value_t &dst, const value_t &src) {
+  for (auto &[elem, num] : src) {
+    assert(!elem.empty());
 
     auto pos = dst.find(elem);
-    if (pos == dst.end()) {
-      std::string debugStr;
-      llvm::raw_string_ostream debug(debugStr);
-      llvm::errs() << "FAILED: \n";
-      decodeAndPrintFragment(debug, elem, true);
-      llvm::errs() << debug.str() << "\n";
-      return false;
+    if (pos != dst.end()) {
+      pos->second += num;
+      if (pos->second == 0) {
+        dst.erase(pos);
+      }
+    } else {
+      dst.emplace(elem, num);
     }
-    dst.erase(pos);
   }
-  return true;
+}
+
+void MemoryFingerprint_StringSet::executeRemove(value_t &dst, const value_t &src) {
+  for (auto &[elem, num] : src) {
+    assert(!elem.empty());
+
+    auto pos = dst.find(elem);
+    if (pos != dst.end()) {
+      pos->second -= num;
+      if (pos->second == 0) {
+        dst.erase(pos);
+      }
+    } else {
+      dst.emplace(elem, -num);
+    }
+  }
 }
 
 std::string MemoryFingerprint_StringSet::decodeTid(std::istringstream &stream) {
@@ -306,7 +301,10 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
   result << "{";
 
   for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
-    auto res = decodeAndPrintFragment(result, *it, ShowMemoryOperations);
+    if (it->second != 1) {
+      result << it->second << "x ";
+    }
+    auto res = decodeAndPrintFragment(result, it->first, ShowMemoryOperations);
     writes += res.writes;
 
     if (res.containsSymbolicValue)

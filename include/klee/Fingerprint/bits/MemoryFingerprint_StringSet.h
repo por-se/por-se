@@ -7,9 +7,9 @@ static_assert(0, "DO NOT include this file directly!");
 namespace klee {
 
 class MemoryFingerprint_StringSet
-    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>> {
-  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
-  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::set<std::string>>;
+    : public MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::map<std::string, std::int64_t>> {
+  friend class MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::map<std::string, std::int64_t>>;
+  using Base = MemoryFingerprintT<MemoryFingerprint_StringSet, 0, std::map<std::string, std::int64_t>>;
   template <typename hashT> friend class VerifiedMemoryFingerprint;
   template <typename hashT> friend class VerifiedMemoryFingerprintOstream;
 
@@ -24,8 +24,8 @@ class MemoryFingerprint_StringSet
   void updateUint64(const std::uint64_t value);
   llvm::raw_ostream &updateOstream();
 
-  static bool executeAdd(value_t &dst, const value_t &src);
-  static bool executeRemove(value_t &dst, const value_t &src);
+  static void executeAdd(value_t &dst, const value_t &src);
+  static void executeRemove(value_t &dst, const value_t &src);
 
   static std::string toString_impl(const value_t &fingerprintValue);
 
