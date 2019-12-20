@@ -110,12 +110,11 @@ ref<Expr> ExprOptimizer::optimizeExpr(const ref<Expr> &e, bool valueOnly) {
   if (OptimizeArray == NONE)
     return e;
 
-  unsigned hash = e->hash();
-  if (cacheExprUnapplicable.find(hash) != cacheExprUnapplicable.end())
+  if (cacheExprUnapplicable.count(e) > 0)
     return e;
 
   // Find cached expressions
-  auto cached = cacheExprOptimized.find(hash);
+  auto cached = cacheExprOptimized.find(e);
   if (cached != cacheExprOptimized.end())
     return cached->second;
 
@@ -132,7 +131,7 @@ ref<Expr> ExprOptimizer::optimizeExpr(const ref<Expr> &e, bool valueOnly) {
       // If we cannot optimize the expression, we return a failure only
       // when we are not combining the optimizations
       if (OptimizeArray == INDEX) {
-        cacheExprUnapplicable.insert(hash);
+        cacheExprUnapplicable.insert(e);
         return e;
       }
     } else {
@@ -150,13 +149,13 @@ ref<Expr> ExprOptimizer::optimizeExpr(const ref<Expr> &e, bool valueOnly) {
         // Add new expression to cache
         if (result.get()) {
           klee_warning("OPT_I: successful");
-          cacheExprOptimized[hash] = result;
+          cacheExprOptimized[e] = result;
         } else {
           klee_warning("OPT_I: unsuccessful");
         }
       } else {
         klee_warning("OPT_I: unsuccessful");
-        cacheExprUnapplicable.insert(hash);
+        cacheExprUnapplicable.insert(e);
       }
     }
   }
@@ -164,13 +163,13 @@ ref<Expr> ExprOptimizer::optimizeExpr(const ref<Expr> &e, bool valueOnly) {
   if (OptimizeArray == VALUE ||
       (OptimizeArray == ALL && (!result.get() || valueOnly))) {
     std::vector<const ReadExpr *> reads;
-    std::map<const ReadExpr *, std::pair<unsigned, Expr::Width>> readInfo;
+    std::map<const ReadExpr *, std::pair<ref<Expr>, Expr::Width>> readInfo;
     ArrayReadExprVisitor are(reads, readInfo);
     are.visit(e);
     std::reverse(reads.begin(), reads.end());
 
     if (reads.empty() || are.isIncompatible()) {
-      cacheExprUnapplicable.insert(hash);
+      cacheExprUnapplicable.insert(e);
       return e;
     }
 
@@ -179,10 +178,10 @@ ref<Expr> ExprOptimizer::optimizeExpr(const ref<Expr> &e, bool valueOnly) {
     if (selectOpt.get()) {
       klee_warning("OPT_V: successful");
       result = selectOpt;
-      cacheExprOptimized[hash] = result;
+      cacheExprOptimized[e] = result;
     } else {
       klee_warning("OPT_V: unsuccessful");
-      cacheExprUnapplicable.insert(hash);
+      cacheExprUnapplicable.insert(e);
     }
   }
   if (result.isNull())
@@ -253,17 +252,17 @@ bool ExprOptimizer::computeIndexes(array2idx_ty &arrays, const ref<Expr> &e,
 
 ref<Expr> ExprOptimizer::getSelectOptExpr(
     const ref<Expr> &e, std::vector<const ReadExpr *> &reads,
-    std::map<const ReadExpr *, std::pair<unsigned, Expr::Width>> &readInfo,
+    std::map<const ReadExpr *, std::pair<ref<Expr>, Expr::Width>> &readInfo,
     bool isSymbolic) {
   ref<Expr> notFound;
   ref<Expr> toReturn;
 
   // Array is concrete
   if (!isSymbolic) {
-    std::map<unsigned, ref<Expr>> optimized;
+    ExprHashMap<ref<Expr>> optimized;
     for (auto &read : reads) {
       auto info = readInfo[read];
-      auto cached = cacheReadExprOptimized.find(read->hash());
+      auto cached = cacheReadExprOptimized.find(const_cast<ReadExpr *>(read));
       if (cached != cacheReadExprOptimized.end()) {
         optimized.insert(std::make_pair(info.first, (*cached).second));
         continue;
@@ -280,8 +279,17 @@ ref<Expr> ExprOptimizer::getSelectOptExpr(
       // assume that the UpdateNodes contain ConstantExpr indexes and values
       assert(read->updates.root->isConstantArray() &&
              "Expected concrete array, found symbolic array");
+
+      // We need to read updates from lest recent to most recent, therefore
+      // reverse the list
+      std::vector<const UpdateNode *> us;
+      us.reserve(read->updates.getSize());
+      for (const UpdateNode *un = read->updates.head; un; un = un->next)
+        us.push_back(un);
+
       auto arrayConstValues = read->updates.root->constantValues;
-      for (const UpdateNode *un = read->updates.head; un; un = un->next) {
+      for (auto it = us.rbegin(); it != us.rend(); it++) {
+        const UpdateNode *un = *it;
         auto ce = dyn_cast<ConstantExpr>(un->index);
         assert(ce && "Not a constant expression");
         uint64_t index = ce->getAPValue().getZExtValue();
@@ -305,17 +313,14 @@ ref<Expr> ExprOptimizer::getSelectOptExpr(
         arrayValues.push_back(val);
       }
 
-      ref<Expr> index = read->index;
-      IndexCleanerVisitor ice;
-      ice.visit(index);
-      if (ice.getIndex().get()) {
-        index = ice.getIndex();
-      }
+      ref<Expr> index = UDivExpr::create(
+          read->index,
+          ConstantExpr::create(bytesPerElement, read->index->getWidth()));
 
       ref<Expr> opt =
           buildConstantSelectExpr(index, arrayValues, width, elementsInArray);
       if (opt.get()) {
-        cacheReadExprOptimized[read->hash()] = opt;
+        cacheReadExprOptimized[const_cast<ReadExpr *>(read)] = opt;
         optimized.insert(std::make_pair(info.first, opt));
       }
     }
@@ -328,10 +333,10 @@ ref<Expr> ExprOptimizer::getSelectOptExpr(
   // OR
   //       array is symbolic && updatelist contains at least one concrete value
   else {
-    std::map<unsigned, ref<Expr>> optimized;
+    ExprHashMap<ref<Expr>> optimized;
     for (auto &read : reads) {
       auto info = readInfo[read];
-      auto cached = cacheReadExprOptimized.find(read->hash());
+      auto cached = cacheReadExprOptimized.find(const_cast<ReadExpr *>(read));
       if (cached != cacheReadExprOptimized.end()) {
         optimized.insert(std::make_pair(info.first, (*cached).second));
         continue;
@@ -356,7 +361,16 @@ ref<Expr> ExprOptimizer::getSelectOptExpr(
           arrayConstValues.push_back(ConstantExpr::create(0, Expr::Int8));
         }
       }
-      for (const UpdateNode *un = read->updates.head; un; un = un->next) {
+
+      // We need to read updates from lest recent to most recent, therefore
+      // reverse the list
+      std::vector<const UpdateNode *> us;
+      us.reserve(read->updates.getSize());
+      for (const UpdateNode *un = read->updates.head; un; un = un->next)
+        us.push_back(un);
+
+      for (auto it = us.rbegin(); it != us.rend(); it++) {
+        const UpdateNode *un = *it;
         auto ce = dyn_cast<ConstantExpr>(un->index);
         assert(ce && "Not a constant expression");
         uint64_t index = ce->getAPValue().getLimitedValue();
@@ -404,7 +418,7 @@ ref<Expr> ExprOptimizer::getSelectOptExpr(
         ref<Expr> opt =
             buildMixedSelectExpr(read, arrayValues, width, elementsInArray);
         if (opt.get()) {
-          cacheReadExprOptimized[read->hash()] = opt;
+          cacheReadExprOptimized[const_cast<ReadExpr *>(read)] = opt;
           optimized.insert(std::make_pair(info.first, opt));
         }
       }
@@ -626,20 +640,15 @@ ref<Expr> ExprOptimizer::buildMixedSelectExpr(
         ref<Expr> temp_idx = MulExpr::create(
             ConstantExpr::create(holes[i], re->index->getWidth()),
             ConstantExpr::create(width / 8, re->index->getWidth()));
-        ref<Expr> cond = EqExpr::create(
-            re->index, ConstantExpr::create(holes[i], re->index->getWidth()));
+        ref<Expr> cond = EqExpr::create(re->index, temp_idx);
         ref<Expr> temp = SelectExpr::create(
             cond, extendRead(re->updates, temp_idx, width), result);
         result = temp;
       }
     }
 
-    ref<Expr> new_index = re->index;
-    IndexCleanerVisitor ice;
-    ice.visit(new_index);
-    if (ice.getIndex().get()) {
-      new_index = ice.getIndex();
-    }
+    ref<Expr> new_index = UDivExpr::create(
+        re->index, ConstantExpr::create(width / 8, re->index->getWidth()));
 
     int new_index_width = new_index->getWidth();
     // Iterate through all the ranges
