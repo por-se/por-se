@@ -165,9 +165,8 @@ extern "C" {
 
   void klee_por_register_event(por_event_t evt, ...);
 
-  // These two should only be used internally to find the correct threads
+  // Should only be used internally to find the correct thread
   void klee_por_thread_join(void *runtime_struct);
-  void klee_por_thread_exit(void);
 
 #define KLEE_RELEASE_SINGLE (1 << 0)
 #define KLEE_RELEASE_ALL (0 << 0)

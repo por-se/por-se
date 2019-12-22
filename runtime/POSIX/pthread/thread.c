@@ -13,7 +13,6 @@
 static kpr_thread mainThread = {
   .state = KPR_THREAD_STATE_LIVE,
   .mode = KPR_THREAD_MODE_DETACH,
-  .joinState = 0,
 
   .startArg = NULL,
   .startRoutine = NULL,
@@ -59,7 +58,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
 
   thread->state = KPR_THREAD_STATE_LIVE;
   thread->mode = KPR_THREAD_MODE_JOIN;
-  thread->joinState = KPR_THREAD_JSTATE_JOINABLE;
 
   pthread_cond_init(&thread->cond, NULL);
 
@@ -74,7 +72,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
 
   kpr_list_create(&thread->cleanupStack);
 
-  // assignment happens after the new thread (that can also write to thread) has been created
   klee_create_thread(kpr_wrapper, thread);
   klee_preempt_thread();
 
@@ -90,19 +87,18 @@ int pthread_detach(pthread_t pthread) {
     return EINVAL;
   }
 
-  if (thread->joinState == KPR_THREAD_JSTATE_JOINED) {
+  if (thread->mode == KPR_THREAD_MODE_JOINED) {
     klee_toggle_thread_scheduling(1);
     return EINVAL;
   }
 
-  thread->mode = KPR_THREAD_MODE_DETACH;
+  // One case that we do not have to check is
+  // KPR_THREAD_MODE_WAIT_FOR_JOIN
+  // -> basically this only happens if the thread
+  //    already exited before the detach call
+  //    actually happened
 
-  // Last check: it can also be the case that this thread is detached after it already
-  //             terminated. In that case we want to ensure that we do the thread
-  //             destruction now
-  if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
-    thread->joinState = KPR_THREAD_JSTATE_JOINED;
-  }
+  thread->mode = KPR_THREAD_MODE_DETACH;
 
   klee_toggle_thread_scheduling(1);
   klee_preempt_thread();
@@ -118,21 +114,21 @@ void pthread_exit(void* arg) {
 
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
 
-  if (thread->mode == KPR_THREAD_MODE_JOIN) {
+  if (thread->mode != KPR_THREAD_MODE_DETACH) {
     thread->returnValue = arg;
 
-    // Another thread has joined with us, but is still waiting
-    if (thread->joinState == KPR_THREAD_JSTATE_JOINED) {
+    if (thread->mode == KPR_THREAD_MODE_JOINED) {
+      // Another thread has joined with us, but is still waiting
+      // for the result, as we now have registered the result, we
+      // can wake the waiting thread up
       klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
     }
 
-    // We have to wait on another thread that will wake us up
-    if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
-      thread->joinState = KPR_THREAD_JSTATE_WAIT_FOR_JOIN;
+    if (thread->mode == KPR_THREAD_MODE_JOIN) {
+      thread->mode = KPR_THREAD_MODE_WAIT_FOR_JOIN;
     }
   }
 
-  klee_por_thread_exit();
   thread->state = KPR_THREAD_STATE_EXITED;
 
   klee_toggle_thread_scheduling(1);
@@ -160,19 +156,22 @@ int pthread_join(pthread_t pthread, void **ret) {
     return EDEADLK;
   }
 
-  if (thread->joinState == KPR_THREAD_JSTATE_JOINED) {
+  if (thread->mode == KPR_THREAD_MODE_JOINED) {
     klee_report_error(__FILE__, __LINE__, "Multiple calls to pthread_join to the same target are undefined", "undef");
   }
 
   bool alreadyPreemptedByWaiting = false;
 
-  if (thread->joinState == KPR_THREAD_JSTATE_JOINABLE) {
+  if (thread->mode == KPR_THREAD_MODE_JOIN) {
     alreadyPreemptedByWaiting = true;
-    thread->joinState = KPR_THREAD_JSTATE_JOINED;
+    thread->mode = KPR_THREAD_MODE_JOINED;
 
     klee_wait_on(thread, 0);
-  } else if (thread->joinState == KPR_THREAD_JSTATE_WAIT_FOR_JOIN) {
-    thread->joinState = KPR_THREAD_JSTATE_JOINED;
+
+    // The thread should now be exited
+    assert(thread->state == KPR_THREAD_STATE_EXITED);
+  } else if (thread->mode == KPR_THREAD_MODE_WAIT_FOR_JOIN) {
+    thread->mode = KPR_THREAD_MODE_JOINED;
   }
 
   klee_por_thread_join(thread);

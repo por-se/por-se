@@ -161,7 +161,6 @@ namespace klee {
     HANDLER(handlePorRegisterEvent);
 
     HANDLER(handlePorThreadJoin);
-    HANDLER(handlePorThreadExit);
 #undef HANDLER
   };
 } // End klee namespace

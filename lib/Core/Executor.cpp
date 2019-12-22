@@ -5125,11 +5125,6 @@ void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
   const ThreadId& tid = state.currentThreadId();
   state.exitThread(tid);
   state.needsThreadScheduling = true;
-  if (calledExit) {
-    // Special handling since the main thread does not fire the thread_exit
-    // por event in the runtime
-    porEventManager.registerThreadExit(state, tid, false);
-  }
 
   auto m = kmodule->module.get();
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
@@ -5148,6 +5143,10 @@ void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
       state.addressSpace.unbindObject(mo);
     }
   }
+
+  // Also register the corresponding por event and since this is the last instruction
+  // during this KInstruction -> snapshots can now be done
+  porEventManager.registerThreadExit(state, tid, true);
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {

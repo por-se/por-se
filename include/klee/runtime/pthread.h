@@ -112,7 +112,6 @@ typedef struct kpr_cond {
 typedef struct {
   uint8_t state;
   uint8_t mode;
-  uint8_t joinState;
 
   void* startArg;
   void* (*startRoutine) (void* arg);

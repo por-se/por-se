@@ -122,7 +122,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_release_waiting", handleWakeUpWaiting, false),
   add("klee_por_register_event", handlePorRegisterEvent, false),
   add("klee_por_thread_join", handlePorThreadJoin, false),
-  add("klee_por_thread_exit", handlePorThreadExit, false),
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
@@ -1123,16 +1122,6 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
 
   if (!executor.porEventManager.registerThreadJoin(state, tid)) {
     executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
-  }
-}
-
-void SpecialFunctionHandler::handlePorThreadExit(ExecutionState &state,
-                                                 KInstruction *target,
-                                                 std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_por_thread_exit");
-
-  if (!executor.porEventManager.registerThreadExit(state, state.currentThreadId())) {
-    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
   }
 }
 
