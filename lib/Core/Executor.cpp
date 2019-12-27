@@ -2074,7 +2074,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // hence exit() is called implicitly return from main
       assert(kmodule->module->getFunction("__klee_posix_wrapped_main") == nullptr
              && kmodule->module->getFunction("__uClibc_main") == nullptr);
-      exitCurrentThread(state, true);
+      state.calledExit = true;
+      exitCurrentThread(state);
+      porEventManager.registerThreadExit(state, state.currentThreadId(), true);
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
@@ -5112,10 +5114,7 @@ void Executor::preemptThread(ExecutionState &state) {
   state.needsThreadScheduling = true;
 }
 
-void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
-  if (calledExit) {
-    state.calledExit = calledExit;
-  }
+void Executor::exitCurrentThread(ExecutionState &state) {
   // needs to come before thread_exit event
   if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
     static std::vector<ExecutionState *> emptyVec;
@@ -5143,10 +5142,6 @@ void Executor::exitCurrentThread(ExecutionState &state, bool calledExit) {
       state.addressSpace.unbindObject(mo);
     }
   }
-
-  // Also register the corresponding por event and since this is the last instruction
-  // during this KInstruction -> snapshots can now be done
-  porEventManager.registerThreadExit(state, tid, true);
 }
 
 void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {

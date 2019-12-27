@@ -311,7 +311,10 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
 
-  executor.exitCurrentThread(state, true);
+  state.calledExit = true;
+  executor.exitCurrentThread(state);
+
+  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), true);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
@@ -935,6 +938,8 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
                                               std::vector<klee::ref<klee::Expr>> &arguments) {
   assert(arguments.empty() && "invalid number of arguments to klee_exit_thread");
   executor.exitCurrentThread(state);
+
+  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), true);
 }
 
 void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &state,
