@@ -275,7 +275,9 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
 
 void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                                   const ObjectState &os, std::size_t bytes) {
- if (disableMemoryState) {
+ if (disableMemoryState && !libraryFunction.entered) {
+    // in case of library functions, we need to record changes to global memory
+    // and previous allocas
     return;
   }
 
