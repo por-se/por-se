@@ -300,12 +300,22 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
 
   result << "{";
 
-  for (auto it = fingerprintValue.begin(); it != fingerprintValue.end(); ++it) {
-    if (it->second != 1) {
-      result << it->second << "x ";
+  bool commaNeeded = false;
+
+  for (auto &[fragment, count] : fingerprintValue) {
+    if (commaNeeded) {
+      result << ", ";
     }
-    auto res = decodeAndPrintFragment(result, it->first, ShowMemoryOperations);
-    writes += res.writes;
+
+    bool showWrite = ShowMemoryOperations;
+    if (count != 1) {
+      result << count << "x ";
+      showWrite = true;
+    }
+    auto res = decodeAndPrintFragment(result, fragment, showWrite);
+    if (!showWrite) {
+      writes += res.writes;
+    }
 
     if (res.containsSymbolicValue)
       containsSymbolicValue = true;
@@ -313,9 +323,7 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
     if (res.hasPathConstraint)
       hasPathConstraint = true;
 
-    if (std::next(it) != fingerprintValue.end() && res.output) {
-      result << ", ";
-    }
+    commaNeeded = res.output;
   }
 
   if (!ShowMemoryOperations) {
