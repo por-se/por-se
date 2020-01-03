@@ -82,7 +82,7 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
-		event const* thread_predecessor() const override {
+		event const* thread_predecessor() const noexcept override {
 			return _predecessors[0];
 		}
 

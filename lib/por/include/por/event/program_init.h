@@ -25,7 +25,7 @@ namespace por::event {
 			return "program_init";
 		}
 
-		event const* thread_predecessor() const override {
+		event const* thread_predecessor() const noexcept override {
 			return nullptr;
 		}
 

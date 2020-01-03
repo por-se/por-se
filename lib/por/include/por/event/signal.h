@@ -192,7 +192,7 @@ namespace por::event {
 			}
 		}
 
-		event const* thread_predecessor() const override {
+		event const* thread_predecessor() const noexcept override {
 			return _predecessors[0];
 		}
 

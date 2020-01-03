@@ -268,7 +268,7 @@ namespace por::event {
 			return _successors;
 		}
 
-		virtual event const* thread_predecessor() const = 0;
+		virtual event const* thread_predecessor() const noexcept = 0;
 
 		virtual event const* lock_predecessor() const noexcept {
 			return nullptr;
