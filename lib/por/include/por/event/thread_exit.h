@@ -57,7 +57,7 @@ namespace por::event {
 		thread_exit& operator=(const thread_exit&) = delete;
 		thread_exit& operator=(thread_exit&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit]";
 			return "thread_exit";

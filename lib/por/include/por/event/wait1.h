@@ -119,7 +119,7 @@ namespace por::event {
 		wait1& operator=(const wait1&) = delete;
 		wait1& operator=(wait1&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: wait1 cid: " + std::to_string(cid()) + " lid: " + std::to_string(lid()) + "]";
 			return "wait1";

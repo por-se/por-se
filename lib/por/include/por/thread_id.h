@@ -180,7 +180,7 @@ namespace por {
 			return os;
 		}
 
-		std::string to_string() const {
+		std::string to_string() const noexcept {
 			std::ostringstream buffer;
 			buffer << *this;
 			return buffer.str();

@@ -60,7 +60,7 @@ namespace por::event {
 		thread_init& operator=(const thread_init&) = delete;
 		thread_init& operator=(thread_init&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_init]";
 			return "thread_init";

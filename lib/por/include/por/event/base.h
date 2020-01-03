@@ -257,7 +257,7 @@ namespace por::event {
 			return !_successors.empty();
 		}
 
-		virtual std::string to_string(bool details = false) const = 0;
+		virtual std::string to_string(bool details = false) const noexcept = 0;
 
 		virtual util::iterator_range<event const* const*> predecessors() const noexcept {
 			assert(_kind == event_kind::program_init);

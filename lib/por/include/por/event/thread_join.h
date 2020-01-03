@@ -66,7 +66,7 @@ namespace por::event {
 		thread_join& operator=(const thread_join&) = delete;
 		thread_join& operator=(thread_join&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_join with: " + joined_thread().to_string() + "]";
 			return "thread_join";

@@ -64,7 +64,7 @@ namespace por::event {
 		local& operator=(const local&) = delete;
 		local& operator=(local&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details) {
 				std::string res = "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: local";
 				if(!path().empty())

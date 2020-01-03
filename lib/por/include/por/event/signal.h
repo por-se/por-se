@@ -169,7 +169,7 @@ namespace por::event {
 		signal& operator=(const signal&) = delete;
 		signal& operator=(signal&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details) {
 				std::string result = "tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: signal cid: " + std::to_string(cid()) + " ";
 				if(is_lost()) {

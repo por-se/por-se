@@ -106,7 +106,7 @@ namespace por::event {
 		condition_variable_destroy& operator=(const condition_variable_destroy&) = delete;
 		condition_variable_destroy& operator=(condition_variable_destroy&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: condition_variable_destroy cid: " + std::to_string(cid()) + "]";
 			return "condition_variable_destroy";

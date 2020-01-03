@@ -65,7 +65,7 @@ namespace por::event {
 		thread_create& operator=(const thread_create&) = delete;
 		thread_create& operator=(thread_create&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_create created: " + created_tid().to_string() + "]";
 			return "thread_create";

@@ -19,7 +19,7 @@ namespace por::event {
 		program_init& operator=(program_init&&) = delete;
 		~program_init() = default;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: program_init]";
 			return "program_init";

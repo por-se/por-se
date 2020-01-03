@@ -79,7 +79,7 @@ namespace por::event {
 		lock_acquire& operator=(const lock_acquire&) = delete;
 		lock_acquire& operator=(lock_acquire&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_acquire lid: " + std::to_string(lid()) + "]";
 			return "lock_acquire";

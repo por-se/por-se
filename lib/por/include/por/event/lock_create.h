@@ -64,7 +64,7 @@ namespace por::event {
 		lock_create& operator=(const lock_create&) = delete;
 		lock_create& operator=(lock_create&&) = delete;
 
-		std::string to_string(bool details) const override {
+		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_create lid: " + std::to_string(lid()) + "]";
 			return "lock_create";
