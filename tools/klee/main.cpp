@@ -127,7 +127,8 @@ namespace {
   cl::opt<bool>
   WriteDotConfigurations("write-dot-configurations",
                          cl::init(false),
-                         cl::desc("Write .configuration.dot files for each test case (default=false)"));
+                         cl::desc("Write .configuration.dot files for each test case (default=false)"),
+                         cl::cat(TestCaseCat));
 
   /*** Startup options ***/
 
