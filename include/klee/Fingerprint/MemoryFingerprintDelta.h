@@ -17,6 +17,14 @@ class MemoryFingerprintDelta {
 
   MemoryFingerprintValue fingerprintValue = {};
   std::unordered_map<const Array *, std::int64_t> symbolicReferences;
+
+  friend bool operator==(const MemoryFingerprintDelta &lhs, const MemoryFingerprintDelta &rhs) {
+    return lhs.fingerprintValue == rhs.fingerprintValue && lhs.symbolicReferences == rhs.symbolicReferences;
+  }
+
+  friend bool operator!=(const MemoryFingerprintDelta &lhs, const MemoryFingerprintDelta &rhs) {
+    return !(lhs == rhs);
+  }
 };
 
 } // namespace klee
