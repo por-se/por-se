@@ -147,9 +147,6 @@ namespace {
 }
 
 namespace por::event {
-	por::event::event::color_t event::_next_color = 1;
-	por::event::event::color_t event::_imm_cfl_next_color = 1;
-
 	event_iterator::event_iterator(event const& event, bool with_root, bool with_event, bool end)
 	: _lc(&event), _with_root(with_root) {
 		if(event.kind() == por::event::event_kind::program_init) {
@@ -439,8 +436,9 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::compute_immediate_conflicts_sup(event const* find) const noexcept {
-		color_t blue = _imm_cfl_next_color++;
-		color_t red = _imm_cfl_next_color++;
+		static color_t imm_cfl_next_color;
+		color_t blue = ++imm_cfl_next_color;
+		color_t red = ++imm_cfl_next_color;
 
 		std::vector<event const*> W(causes_begin(), causes_end());
 		for(auto& w : W) {

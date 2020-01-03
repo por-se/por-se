@@ -113,11 +113,9 @@ namespace por::event {
 		event_kind _kind;
 
 		mutable color_t _color = 0;
-		static color_t _next_color;
 
 		// distinct color for compute_immediate_conflicts_sup()
 		mutable color_t _imm_cfl_color = 0;
-		static color_t _imm_cfl_next_color;
 
 		mutable std::set<event const*> _successors;
 
@@ -350,7 +348,10 @@ namespace por::event {
 		}
 
 		color_t color() const noexcept { return _color; }
-		[[nodiscard]] static color_t new_color() noexcept { return _next_color++; }
+		[[nodiscard]] static color_t new_color() noexcept {
+			static color_t next_color;
+			return ++next_color;
+		}
 		color_t colorize(color_t color) const noexcept { return _color = color; }
 		[[nodiscard]] color_t colorize() const noexcept { return colorize(new_color()); }
 
