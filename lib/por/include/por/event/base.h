@@ -257,6 +257,10 @@ namespace por::event {
 			return !_successors.empty();
 		}
 
+		virtual std::string path_string() const noexcept {
+			return "";
+		}
+
 		virtual std::string to_string(bool details = false) const noexcept = 0;
 
 		virtual util::iterator_range<event const* const*> predecessors() const noexcept {
@@ -277,6 +281,7 @@ namespace por::event {
 		virtual util::iterator_range<event const* const*> condition_variable_predecessors() const noexcept {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
+
 
 		event_iterator local_configuration_begin(bool include_program_init=true) const noexcept {
 			return event_iterator(*this, include_program_init, true);

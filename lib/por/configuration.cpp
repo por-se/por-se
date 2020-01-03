@@ -155,12 +155,8 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 			os << " depth=" << e->depth();
 
 			if(e->kind() == por::event::event_kind::local) {
-				auto l = static_cast<por::event::local const*>(e);
-				if(!l->path().empty()) {
-					os << " path=";
-					for(auto b : l->path()) {
-						os << std::to_string(b);
-					}
+				if(!e->path_string().empty()) {
+					os << " path=" << e->path_string();
 				}
 			}
 

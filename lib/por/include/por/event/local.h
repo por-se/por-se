@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <array>
+#include <sstream>
 
 namespace por::event {
 	class local final : public event {
@@ -64,13 +65,20 @@ namespace por::event {
 		local& operator=(const local&) = delete;
 		local& operator=(local&&) = delete;
 
+		std::string path_string() const noexcept override {
+			std::stringstream ss;
+			for (auto &p : path()) {
+				ss << std::to_string(p);
+			}
+			return ss.str();
+		}
+
 		std::string to_string(bool details) const noexcept override {
 			if(details) {
 				std::string res = "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: local";
-				if(!path().empty())
-					res += " PATH:";
-				for(auto d: path())
-					res += " " + std::to_string(static_cast<unsigned>(d));
+				if(!path().empty()) {
+					res += " PATH: " + path_string();
+				}
 				res += "]";
 				return res;
 			} else {
