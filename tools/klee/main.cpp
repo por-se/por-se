@@ -546,6 +546,7 @@ std::string KleeHandler::processTestCase(const ExecutionState &state,
       auto fConfiguration = openTestFile("configuration.dot", id);
       {
         std::stringstream conf;
+        conf << "// state id: " << state.id << "\n";
         state.porNode->configuration().to_dotgraph(conf);
         *fConfiguration << conf.str();
       }
