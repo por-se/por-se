@@ -198,10 +198,15 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
 
   do {
     std::set<const Array *> tmp;
-    std::swap(newReferences, tmp);
+    using std::swap;
+    swap(newReferences, tmp);
     assert(newReferences.empty());
     for (auto *a : tmp) {
-      for (const ref<Expr> &c : constraintsMap[a]) {
+      auto it = constraintsMap.find(a);
+      if (it == constraintsMap.end()) {
+        continue;
+      }
+      for (const ref<Expr> &c : it->second) {
         for (auto *b : exprToArray[c]) {
           if (!arraysReferenced.count(b)) {
             newReferences.insert(b);
@@ -217,7 +222,11 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
   if (!arraysReferenced.empty()) {
     getDerived().updateUint8(10);
     for (auto v : arraysReferenced) {
-      for (const ref<Expr> &expr : constraintsMap[v]) {
+      auto it = constraintsMap.find(v);
+      if (it == constraintsMap.end()) {
+        continue;
+      }
+      for (const ref<Expr> &expr : it->second) {
         llvm::raw_ostream &os = getDerived().updateOstream();
         ExprPPrinter::printSingleExpr(os, expr);
         os.flush();
