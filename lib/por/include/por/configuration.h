@@ -114,6 +114,9 @@ namespace por {
 		// contains all previous sig, bro events of ACTIVE condition variables for each thread
 		std::map<por::event::cond_id_t, std::vector<por::event::event const*>> _cond_heads;
 
+		// contains all previous w2 events of ACTIVE condition variables
+		std::map<por::event::cond_id_t, std::vector<por::event::event const*>> _w2_heads;
+
 		// contains all previously used condition variable ids
 		std::set<por::event::cond_id_t> _used_cond_ids;
 
@@ -395,7 +398,13 @@ namespace por {
 			auto& cond_preds = cond_head_it->second;
 			assert(cond_preds.size() > 0);
 
-			thread_event = &por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, cond_preds);
+			auto preds = cond_preds;
+			if(auto it = _w2_heads.find(cond); it != _w2_heads.end()) {
+				preds.insert(preds.end(), it->second.begin(), it->second.end());
+				_w2_heads.erase(it);
+			}
+
+			thread_event = &por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, preds);
 			_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 			_cond_heads.erase(cond_head_it);
 
@@ -521,6 +530,7 @@ namespace por {
 			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, cond_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
+			_w2_heads[cond].emplace_back(thread_event);
 
 			++_size;
 			return thread_event;
