@@ -94,6 +94,10 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
+		bool has_same_local_path(event const& rhs) const noexcept override {
+			return path() == static_cast<local const&>(rhs).path();
+		}
+
 		path_t const& path() const noexcept { return _path; }
 	};
 }

@@ -26,11 +26,9 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 		return false;
 
 	if(a.kind() == por::event::event_kind::local) {
-		auto& alocal = static_cast<por::event::local const&>(a);
-		auto& blocal = static_cast<por::event::local const&>(b);
-
-		if(alocal.path() != blocal.path())
+		if(!a.has_same_local_path(b)) {
 			return false;
+		}
 	}
 
 	auto a_preds = a.predecessors();

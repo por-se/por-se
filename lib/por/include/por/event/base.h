@@ -282,6 +282,9 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
 
+		virtual bool has_same_local_path(event const&) const noexcept {
+			return true;
+		}
 
 		event_iterator local_configuration_begin(bool include_program_init=true) const noexcept {
 			return event_iterator(*this, include_program_init, true);
