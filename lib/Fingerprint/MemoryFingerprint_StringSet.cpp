@@ -317,8 +317,13 @@ std::string MemoryFingerprint_StringSet::toString_impl(const value_t &fingerprin
       writes += res.writes;
     }
 
-    if (res.containsSymbolicValue)
+    if (res.containsSymbolicValue) {
       containsSymbolicValue = true;
+      if (!showWrite) {
+        auto res = decodeAndPrintFragment(result, fragment, true);
+        writes -= res.writes;
+      }
+    }
 
     if (res.hasPathConstraint)
       hasPathConstraint = true;
