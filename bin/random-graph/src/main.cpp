@@ -9,6 +9,7 @@
 #include <iostream>
 #include <iomanip>
 #include <set>
+#include <sstream>
 
 #include <util/sso_array.h>
 
@@ -128,6 +129,15 @@ namespace {
 		}
 		return 0;
 	}
+}
+
+template<>
+std::string por::event::local<std::uint64_t>::path_string() const noexcept {
+	std::stringstream ss;
+	for(auto& p : path()) {
+		ss << std::to_string(p);
+	}
+	return ss.str();
 }
 
 int main(int argc, char** argv){
@@ -351,7 +361,7 @@ int main(int argc, char** argv){
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
-			configuration.local(tid, {});
+			configuration.local<std::uint64_t>(tid, {});
 			std::cout << " . (" << tid << ")\n";
 		} else {
 			assert(false && "Unexpected random choice for event to introduce");

@@ -753,13 +753,14 @@ namespace por {
 			return thread_event;
 		}
 
-		por::event::event const* local(event::thread_id_t thread, event::path_t local_path) {
+		template<typename D>
+		por::event::event const* local(event::thread_id_t thread, std::vector<D> local_path) {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			thread_event = &event::local::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
+			thread_event = &event::local<D>::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
 			_unfolding->stats_inc_event_created(por::event::event_kind::local);
 
 			++_size;

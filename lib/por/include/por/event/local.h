@@ -6,13 +6,15 @@
 
 #include <cassert>
 #include <array>
-#include <sstream>
 
 namespace por::event {
+	template<typename D>
 	class local final : public event {
 		// predecessors:
 		// 1. same-thread predecessor
 		std::array<event const*, 1> _predecessors;
+
+		using path_t = std::vector<D>;
 
 		// decisions taken along path since last local event
 		path_t _path;
@@ -65,13 +67,7 @@ namespace por::event {
 		local& operator=(const local&) = delete;
 		local& operator=(local&&) = delete;
 
-		std::string path_string() const noexcept override {
-			std::stringstream ss;
-			for(auto& p : path()) {
-				ss << std::to_string(p);
-			}
-			return ss.str();
-		}
+		std::string path_string() const noexcept override;
 
 		std::string to_string(bool details) const noexcept override {
 			if(details) {
@@ -95,7 +91,8 @@ namespace por::event {
 		}
 
 		bool has_same_local_path(event const& rhs) const noexcept override {
-			return path() == static_cast<local const&>(rhs).path();
+			// FIXME: add check whether this and rhs use same value for D
+			return path() == static_cast<local<D> const&>(rhs).path();
 		}
 
 		path_t const& path() const noexcept { return _path; }
