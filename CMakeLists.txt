@@ -352,7 +352,10 @@ endif()
 option(VERIFIED_FINGERPRINTS "Enable use of verified fingerprints (hash + set of strings)" Off)
 if (VERIFIED_FINGERPRINTS)
   set(ENABLE_VERIFIED_FINGERPRINTS 1) # For config.h
+  set(HAS_VERIFIED_FINGERPRINTS_ENABLED 1) # For lit.site.cfg.in only!
   message(STATUS "Verified fingerprints enabled")
+else()
+  set(HAS_VERIFIED_FINGERPRINTS_ENABLED 0) # For lit.site.cfg.in only!
 endif()
 
 ################################################################################
