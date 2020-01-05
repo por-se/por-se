@@ -328,8 +328,13 @@ cl::opt<unsigned> MaxDepth(
 
 cl::opt<unsigned> MaxMemory("max-memory",
                             cl::desc("Refuse to fork when above this amount of "
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+                                     "memory (in MB) (default=50000)"),
+                            cl::init(50000),
+#else
                                      "memory (in MB) (default=2000)"),
                             cl::init(2000),
+#endif
                             cl::cat(TerminationCat));
 
 cl::opt<bool> MaxMemoryInhibit(
