@@ -227,7 +227,7 @@ private:
 
   void run(ExecutionState &initialState);
 
-  void exploreSchedules(ExecutionState &state);
+  void exploreSchedules(ExecutionState &state, bool maximalConfiguration = false);
 
   void updateStatesJSON(KInstruction *ki, const ExecutionState &state,
                         std::string ktest = "", std::string error = "");

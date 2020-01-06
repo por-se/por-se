@@ -3578,7 +3578,7 @@ void Executor::run(ExecutionState &initialState) {
 
     updateStates(&state);
 
-    if (ExploreSchedules && stats::instructions % 10000 == 0) {
+    if (stats::instructions % 10000 == 0) {
       exploreSchedules(state);
     }
 
@@ -3591,7 +3591,7 @@ void Executor::run(ExecutionState &initialState) {
   doDumpStates();
 }
 
-void Executor::exploreSchedules(ExecutionState &state) {
+void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration) {
   if (!ExploreSchedules || !state.porNode || !state.porNode->parent()) {
     return;
   }
@@ -3629,6 +3629,10 @@ void Executor::exploreSchedules(ExecutionState &state) {
     scheduleThreads(*toExecute);
 
 //    llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l.start->to_string() << "\n";
+  }
+
+  if (maximalConfiguration && !state.porNode->has_children()) {
+    state.porNode->backtrack();
   }
 }
 
@@ -3786,12 +3790,7 @@ void Executor::terminateState(ExecutionState &state) {
 
   interpreterHandler->incPathsExplored();
 
-
-  exploreSchedules(state);
-
-  if (ExploreSchedules && state.porNode && !state.porNode->has_children()) {
-    state.porNode->backtrack();
-  }
+  exploreSchedules(state, true);
 
   terminateStateSilently(state);
 }
