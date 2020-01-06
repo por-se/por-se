@@ -362,8 +362,12 @@ int main(int argc, char** argv){
 	auto cex = configuration.conflicting_extensions();
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& entry : cex) {
-		std::cerr << "for " << entry.event().to_string(true) << " @ " << &entry.event() << ": "
-		          << entry.extension().to_string(true) << " @ " << &entry.extension() << "\n";
+		if(entry.event() != nullptr) {
+			std::cerr << "for " << entry.event()->to_string(true) << " @ " << entry.event() << ": ";
+		} else {
+			std::cerr << "for deadlock: ";
+		}
+		std::cerr << entry.extension().to_string(true) << " @ " << &entry.extension() << "\n";
 		std::cerr << "with immediate predecessor(s):\n";
 		for(auto e : entry.extension().immediate_predecessors()) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";

@@ -19,14 +19,16 @@ namespace por {
 	class configuration;
 
 	class conflicting_extension {
-		por::event::event const& _event;
+		por::event::event const* _event;
 		por::event::event const& _extension;
 
 	public:
-		conflicting_extension(por::event::event const& event, por::event::event const& extension)
-		: _event(event), _extension(extension) { }
+		conflicting_extension(por::event::event const& extension) : _event(nullptr), _extension(extension) { }
 
-		por::event::event const& event() const noexcept { return _event; }
+		conflicting_extension(por::event::event const& event, por::event::event const& extension)
+		: _event(&event), _extension(extension) { }
+
+		por::event::event const* event() const noexcept { return _event; }
 		por::event::event const& extension() const noexcept { return _extension; }
 	};
 
@@ -1192,6 +1194,80 @@ namespace por {
 		}
 
 	public:
+		std::vector<conflicting_extension>
+		conflicting_extensions_deadlock(por::thread_id tid,
+		                                por::event::lock_id_t lid,
+		                                por::event::event_kind kind) const noexcept {
+			por::event::event const* et = last_of_tid(tid);
+			por::event::event const* em = et->lock_predecessor();
+			por::event::event const* es = nullptr;
+
+			assert(em);
+
+			// P = [et]
+			por::cone P(*et);
+
+			if(kind == por::event::event_kind::wait2) {
+				assert(et->kind() == por::event::event_kind::wait1);
+				assert(et->has_successors());
+
+				auto cond_it = _cond_heads.find(et->cid());
+				assert(cond_it != _cond_heads.end());
+				auto& cond_preds = cond_it->second;
+				for(auto& p : cond_preds) {
+					if(p->kind() == por::event::event_kind::broadcast) {
+						auto bro = static_cast<por::event::broadcast const*>(p);
+						for(auto& w1 : bro->wait_predecessors()) {
+							if(w1 == et) {
+								es = p;
+								break;
+							}
+						}
+						if(es) {
+							break;
+						}
+					} else if(p->kind() == por::event::event_kind::signal) {
+						auto sig = static_cast<por::event::signal const*>(p);
+						if(sig->wait_predecessor() == et) {
+							es = sig->wait_predecessor();
+							break;
+						}
+					}
+				}
+
+				if(es == nullptr) {
+					return {};
+				}
+
+				// P = [et] \cup [es]
+				P.insert(*es);
+			} else {
+				assert(kind == por::event::event_kind::lock_acquire);
+			}
+
+			por::cone C(*this);
+			por::comb A = C.setminus(P);
+			A.insert(*em);
+			por::comb X(A, [](por::event::event const& e) {
+				return e.kind() == por::event::event_kind::lock_release
+				       || e.kind() == por::event::event_kind::wait1
+				       || e.kind() == por::event::event_kind::lock_create;
+			});
+
+			std::vector<conflicting_extension> result;
+			for(auto& em : X) {
+				if(kind == por::event::event_kind::lock_acquire) {
+					result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, tid, lid, *et, em));
+					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
+				} else {
+					assert(kind == por::event::event_kind::wait2);
+					assert(em->kind() != por::event::event_kind::lock_create);
+					result.emplace_back(por::event::wait2::alloc(*_unfolding, tid, es->cid(), lid, *et, *em, *es));
+					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
+				}
+			}
+		}
+
 		std::vector<conflicting_extension> conflicting_extensions() const noexcept {
 			_unfolding->stats_inc_configuration();
 			std::vector<conflicting_extension> S;
