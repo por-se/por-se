@@ -486,8 +486,8 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
 
 cl::opt<std::size_t> MaxContextSwitchDegree(
       "max-csd",
-      cl::desc("Only explore alternatives with context switch degree up to this limit (default=50)"),
-      cl::init(50));
+      cl::desc("Only explore alternatives with context switch degree up to this limit.  Set to 0 to disable (default=0)"),
+      cl::init(0));
 
 } // namespace
 
@@ -3600,8 +3600,15 @@ void Executor::exploreSchedules(ExecutionState &state) {
   for(auto cex : cfg.conflicting_extensions()) {
     por::event::event const& x = cex.extension();
     if (!x.has_successors()) {
-      if (x.is_cutoff() || por::is_above_csd_limit(x, MaxContextSwitchDegree)) {
+      bool remove = false;
+
+      if (x.is_cutoff()) {
+        remove = true;
+      } else if (MaxContextSwitchDegree && por::is_above_csd_limit(x, MaxContextSwitchDegree)) {
         klee_warning("Context Switch Degree of conflicting extension above limit.");
+      }
+
+      if (remove) {
         cfg.unfolding()->remove_event(x);
       }
     }
