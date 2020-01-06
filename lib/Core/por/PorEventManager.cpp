@@ -1,7 +1,9 @@
 #include "PorEventManager.h"
 #include "../CoreStats.h"
 
+#include "klee/Config/config.h"
 #include "klee/ExecutionState.h"
+#include "klee/Internal/Support/ErrorHandling.h"
 
 #include "por/configuration.h"
 #include "por/event/event.h"
@@ -10,8 +12,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "klee/Internal/Support/ErrorHandling.h"
-
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -42,6 +43,15 @@ namespace {
           "Record standby states for all events (default).")
         KLEE_LLVM_CL_VAL_END),
     llvm::cl::init(StandbyStatePolicy::All));
+}
+
+template<>
+std::string por::event::local<decltype(klee::Thread::pathSincePorLocal)::value_type>::path_string() const noexcept {
+  std::stringstream os;
+  for (auto &[branch, expr] : path()) {
+    os << branch;
+  }
+  return os.str();
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -119,7 +129,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     logEventThreadAndKind(state, por_local);
 
     llvm::errs() << " and path ";
-    for(auto b : state.currentThread().pathSincePorLocal) {
+    for(auto &[b, _] : state.currentThread().pathSincePorLocal) {
       llvm::errs() << b << " ";
     }
 
@@ -136,7 +146,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     state.porNode = state.porNode->catch_up(
     [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
       auto& thread = state.currentThread();
-      std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
+      auto path = std::move(thread.pathSincePorLocal);
       thread.pathSincePorLocal = {};
       por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
       if (snapshotsAllowed) {
@@ -155,7 +165,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   state.porNode = state.porNode->make_left_child(
       [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     auto& thread = state.currentThread();
-    std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
+    auto path = std::move(thread.pathSincePorLocal);
     thread.pathSincePorLocal = {};
     por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
     if (snapshotsAllowed) {
@@ -170,11 +180,11 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   assert(state.porNode->parent() == n);
 
   for(auto& s : addedStates) {
-    if(!s->currentThread().pathSincePorLocal.empty()) {
+    if (!s->currentThread().pathSincePorLocal.empty()) {
       s->porNode = n->make_right_local_child(
           [this, &s, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
         auto& thread = s->currentThread();
-        std::vector<std::uint64_t> path = std::move(thread.pathSincePorLocal);
+        auto path = std::move(thread.pathSincePorLocal);
         thread.pathSincePorLocal = {};
         por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
         if (snapshotsAllowed) {
@@ -546,22 +556,29 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   auto thread = state.getThreadById(event.tid());
   assert(thread && "no thread with given id found");
 
-  event._thread_delta = state.memoryState.getThreadDelta(*thread);
-
   MemoryFingerprint fingerprint;
-  fingerprint.addDelta(event._thread_delta);
+  auto delta = state.memoryState.getThreadDelta(*thread);
+  fingerprint.addDelta(delta);
+
   for (auto &[tid, c] : event.cone()) {
     if (tid != event.tid()) {
-      fingerprint.addDelta(c->_thread_delta);
+      fingerprint.addDelta(c->thread_delta());
     }
   }
 
   std::vector<ref<Expr>> expressions;
-  for (auto expr : state.constraints) {
-    expressions.push_back(expr);
+  for (auto &e : event.local_configuration()) {
+    if (e->kind() != por::event::event_kind::local) {
+      continue;
+    }
+
+    auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(e);
+    for (auto &[branch, expr] : local->path()) {
+      expressions.push_back(expr);
+    }
   }
 
-  event._fingerprint = fingerprint.getFingerprint(expressions);
+  event.set_fingerprint(fingerprint.getFingerprint(expressions), delta);
 }
 
 
@@ -577,9 +594,13 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     return;
   }
 
-  auto it = fingerprints.find(event._fingerprint);
+  if (!event.has_fingerprint()) {
+    return;
+  }
+
+  auto it = fingerprints.find(event.fingerprint());
   if (it == fingerprints.end()) {
-    fingerprints.emplace(event._fingerprint, &event);
+    fingerprints.emplace(event.fingerprint(), &event);
     return;
   }
 
@@ -599,7 +620,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   if (eventSize > otherSize) {
     // state is at cutoff event
     cutoff = &event;
-    cutoffFPV = &event._fingerprint;
+    cutoffFPV = &event.fingerprint();
     corresponding = &other;
     correspondingFPV = &it->first;
     cutoffState = &state;
@@ -608,8 +629,8 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     cutoff = &other;
     cutoffFPV = &it->first;
     corresponding = &event;
-    correspondingFPV = &event._fingerprint;
-    fingerprints.emplace(event._fingerprint, &event);
+    correspondingFPV = &event.fingerprint();
+    fingerprints.emplace(event.fingerprint(), &event);
   } else {
     // cannot decide
     return;

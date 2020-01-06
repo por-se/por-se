@@ -16,6 +16,13 @@
 #include <vector>
 #include <unordered_map>
 
+namespace por {
+  namespace event {
+    template<typename D>
+    class local;
+  }
+}
+
 namespace klee {
   class Array;
   class CallPathNode;
@@ -114,7 +121,7 @@ namespace klee {
       const MemoryObject* errnoMo;
 
       /// @brief Contains true / false for each decision since last por_local registration
-      std::vector<std::uint64_t> pathSincePorLocal;
+      std::vector<std::pair<std::uint64_t, ref<Expr>>> pathSincePorLocal;
 
       /// @brief counts how many threads this thread already created
       std::uint16_t spawnedThreads = 0;
@@ -136,6 +143,8 @@ namespace klee {
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
+
+    friend class por::event::local<decltype(pathSincePorLocal)::value_type>;
   };
 }
 

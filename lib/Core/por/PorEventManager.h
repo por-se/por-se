@@ -5,13 +5,7 @@
 #include "klee/por/events.h"
 
 #include "por/node.h"
-
-namespace por {
-  class node;
-  namespace event {
-    class event;
-  }
-}
+#include "por/event/event.h"
 
 namespace klee {
   class ExecutionState;

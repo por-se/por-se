@@ -1029,11 +1029,11 @@ void Executor::branch(ExecutionState &state,
   if (state.needsCatchUp()) {
     const por::event::event* event = state.peekCatchUp();
     assert(event->kind() == por::event::event_kind::local);
-    auto local = static_cast<const por::event::local*>(event);
+    auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
 
     std::size_t nextIndex = state.currentThread().pathSincePorLocal.size();
     assert(local->path().size() > nextIndex);
-    std::uint64_t branch = local->path()[nextIndex];
+    std::uint64_t branch = local->path()[nextIndex].first;
 
     for (unsigned i=0; i<N; ++i) {
       if (i == branch) {
@@ -1043,8 +1043,8 @@ void Executor::branch(ExecutionState &state,
       }
     }
 
-    addConstraint(state, conditions[branch]);
-    state.currentThread().pathSincePorLocal.push_back(branch);
+    state.addConstraint(conditions[branch]);
+    state.currentThread().pathSincePorLocal.emplace_back(branch, conditions[branch]);
 
     return;
 
@@ -1121,8 +1121,8 @@ void Executor::branch(ExecutionState &state,
 
   for (unsigned i=0; i<N; ++i) {
     if (result[i]) {
-      addConstraint(*result[i], conditions[i]);
-      result[i]->currentThread().pathSincePorLocal.push_back(i);
+      addConstraint(*result[i], conditions[i], true);
+      result[i]->currentThread().pathSincePorLocal.emplace_back(i, conditions[i]);
     }
   }
 }
@@ -1287,20 +1287,21 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     if (current.needsCatchUp()) {
       const por::event::event* event = current.peekCatchUp();
       assert(event->kind() == por::event::event_kind::local);
-      auto local = static_cast<const por::event::local*>(event);
+      auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
 
       std::size_t nextIndex = current.currentThread().pathSincePorLocal.size();
       assert(local->path().size() > nextIndex);
-      std::uint64_t branch = local->path()[nextIndex];
+      std::uint64_t branch = local->path()[nextIndex].first;
 
       // add constraints
       if (branch) {
-        addConstraint(current, condition);
-        current.currentThread().pathSincePorLocal.push_back(1);
+        current.addConstraint(condition);
+        current.currentThread().pathSincePorLocal.emplace_back(1, condition);
         return StatePair(&current, nullptr);
       } else {
-        addConstraint(current, Expr::createIsZero(condition));
-        current.currentThread().pathSincePorLocal.push_back(0);
+        auto invCond = Expr::createIsZero(condition);
+        current.addConstraint(invCond);
+        current.currentThread().pathSincePorLocal.emplace_back(0, invCond);
         return StatePair(nullptr, &current);
       }
     }
@@ -1367,12 +1368,14 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         falseState->symPathOS << "0";
       }
     }
-    trueState->currentThread().pathSincePorLocal.push_back(1);
-    falseState->currentThread().pathSincePorLocal.push_back(0);
 
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
-    addConstraint(*trueState, condition);
-    addConstraint(*falseState, invertedCondition);
+
+    trueState->currentThread().pathSincePorLocal.emplace_back(1, condition);
+    falseState->currentThread().pathSincePorLocal.emplace_back(0, invertedCondition);
+
+    addConstraint(*trueState, condition, true);
+    addConstraint(*falseState, invertedCondition, true);
 
     // Kinda gross, do we even really still want this option?
     if (MaxDepth && MaxDepth<=trueState->depth) {
@@ -1385,7 +1388,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   }
 }
 
-void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
+void Executor::addConstraint(ExecutionState &state, ref<Expr> condition, bool alreadyInPath) {
   if (ConstantExpr *CE = dyn_cast<ConstantExpr>(condition)) {
     if (!CE->isTrue())
       llvm::report_fatal_error("attempt to add invalid constraint");
@@ -1414,6 +1417,21 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition) {
   }
 
   state.addConstraint(condition);
+
+  if (!alreadyInPath) {
+    if (state.needsCatchUp()) {
+      const por::event::event* event = state.peekCatchUp();
+      assert(event->kind() == por::event::event_kind::local);
+      auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
+
+      std::size_t nextIndex = state.currentThread().pathSincePorLocal.size();
+      assert(local->path().size() > nextIndex);
+      assert(local->path()[nextIndex].first == 0);
+      assert(local->path()[nextIndex].second == condition);
+    }
+    state.currentThread().pathSincePorLocal.emplace_back(0, condition);
+  }
+
   if (ivcEnabled)
     doImpliedValueConcretization(state, condition, 
                                  ConstantExpr::alloc(1, Expr::Bool));
