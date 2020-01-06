@@ -133,9 +133,34 @@ namespace por::event {
 			_immediate_conflicts.erase(it);
 		}
 
-	public:
+		mutable bool _fingerprint_set = false;
 		mutable fingerprint_value_t _fingerprint;
 		mutable fingerprint_delta_t _thread_delta;
+
+	public:
+		bool has_fingerprint() const noexcept { return _fingerprint_set; }
+
+		fingerprint_value_t const& fingerprint() const noexcept {
+			assert(has_fingerprint());
+			return _fingerprint;
+		}
+
+		fingerprint_delta_t const& thread_delta() const noexcept {
+			assert(has_fingerprint());
+			return _thread_delta;
+		}
+
+		void set_fingerprint(fingerprint_value_t fingerprint, fingerprint_delta_t thread_delta) const noexcept {
+			if(has_fingerprint()) {
+				assert(thread_delta == _thread_delta);
+				assert(fingerprint == _fingerprint);
+			} else {
+				_fingerprint_set = true;
+				_thread_delta = thread_delta;
+				_fingerprint = fingerprint;
+			}
+		}
+
 		mutable bool _is_cutoff = false;
 
 		bool is_cutoff() const noexcept { return _is_cutoff; }
