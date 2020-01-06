@@ -579,6 +579,10 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   }
 
   event.set_fingerprint(fingerprint.getFingerprint(expressions), delta);
+
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+  assert(MemoryFingerprint::validateFingerprint(event.fingerprint()));
+#endif
 }
 
 

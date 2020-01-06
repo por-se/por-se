@@ -95,6 +95,19 @@ public:
   VerifiedMemoryFingerprint(VerifiedMemoryFingerprint &&) = delete;
   VerifiedMemoryFingerprint& operator=(VerifiedMemoryFingerprint &&) = delete;
   ~VerifiedMemoryFingerprint() = default;
+
+  static bool validateFingerprint(const typename Base::value_t &fingerprintValue) {
+    bool result = true;
+    for (auto &[fragment, count] : fingerprintValue.stringSet) {
+      if (count != 1) {
+        llvm::errs() << "count: " << count << " != 1 for ";
+        MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::errs(), fragment, true);
+        llvm::errs() << "\n";
+        result = false;
+      }
+    }
+    return result;
+  }
 };
 
 } // namespace klee
