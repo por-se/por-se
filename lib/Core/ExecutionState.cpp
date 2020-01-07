@@ -49,7 +49,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     id(next_id++),
     currentSchedulingIndex(0),
     onlyOneThreadRunnableSinceEpochStart(true),
-    threadSchedulingEnabled(true),
     atomicPhase(false),
     depth(0),
     instsSinceCovNew(0),
@@ -102,7 +101,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     calledExit(state.calledExit),
     schedulingHistory(state.schedulingHistory),
     runnableThreads(state.runnableThreads),
-    threadSchedulingEnabled(state.threadSchedulingEnabled),
     atomicPhase(state.atomicPhase),
 
     addressSpace(state.addressSpace),
@@ -204,13 +202,6 @@ void ExecutionState::scheduleNextThread(const ThreadId &tid) {
     ptreeNode->schedulingDecision.epochNumber = schedulingHistory.size();
   }
 
-  // So it can happen that this is the first execution of the thread since it was waiting
-  // so we might have to disable thread scheduling again
-  if (thread.threadSchedulingWasDisabled) {
-    thread.threadSchedulingWasDisabled = false;
-    threadSchedulingEnabled = false;
-  }
-
   currentSchedulingIndex = schedulingHistory.size() - 1;
   onlyOneThreadRunnableSinceEpochStart = runnableThreads.size() == 1;
 }
@@ -220,12 +211,6 @@ void ExecutionState::threadWaitOn(std::uint64_t lid) {
   assert(thread.waitingHandle == 0 && "Thread should not be waiting on another resource");
 
   thread.state = ThreadState::Waiting;
-
-  // If a thread goes into the waiting state when it had deactivated thread scheduling,
-  // then we will safe this and will reenable thread scheduling for as long as this thread
-  // is not running again
-  thread.threadSchedulingWasDisabled = !threadSchedulingEnabled;
-  threadSchedulingEnabled = true;
 
   runnableThreads.erase(thread.getThreadId());
 
@@ -274,7 +259,6 @@ void ExecutionState::cutoffThread(const ThreadId &tid) {
 
   thread->get().state = ThreadState::Cutoff;
   runnableThreads.erase(tid);
-  threadSchedulingEnabled = true; // TODO: is this really safe?
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 

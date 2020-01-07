@@ -107,9 +107,6 @@ public:
   /// @brief set of all threads that could in theory be executed
   std::set<ThreadId> runnableThreads;
 
-  /// @brief if thread scheduling is enabled at the current time
-  bool threadSchedulingEnabled;
-
   /// @brief if the current state is in an temporary atomic phase
   bool atomicPhase;
 

@@ -106,9 +106,6 @@ namespace klee {
       /// @brief the errno of the thread
       const MemoryObject* errnoMo;
 
-      /// @brief if the thread scheduling was disabled when this thread was going into the waiting state
-      bool threadSchedulingWasDisabled = false;
-
       /// @brief Contains true / false for each decision since last por_local registration
       std::vector<std::uint64_t> pathSincePorLocal;
 

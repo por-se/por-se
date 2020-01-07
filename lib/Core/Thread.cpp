@@ -70,7 +70,6 @@ Thread::Thread(const Thread &t)
           waitingHandle(t.waitingHandle),
           runtimeStructPtr(t.runtimeStructPtr),
           errnoMo(t.errnoMo),
-          threadSchedulingWasDisabled(t.threadSchedulingWasDisabled),
           pathSincePorLocal(t.pathSincePorLocal),
           spawnedThreads(t.spawnedThreads),
           fingerprint(t.fingerprint) {

@@ -5154,14 +5154,10 @@ void Executor::exitCurrentThread(ExecutionState &state) {
   }
 }
 
-void Executor::toggleThreadScheduling(ExecutionState &state, bool enabled) {
-  state.threadSchedulingEnabled = enabled;
-}
-
 bool
 Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref<Expr> &offset,
                               std::size_t numBytes, MemoryOperation::Type type) {
-  if (!state.threadSchedulingEnabled || !EnableDataRaceDetection) {
+  if (!EnableDataRaceDetection) {
     // These accesses are always safe and do not need to be tracked
     return true;
   }
@@ -5293,7 +5289,6 @@ void Executor::terminateStateOnDeadlock(ExecutionState &state) {
   llvm::raw_string_ostream os(TmpStr);
   os << "Deadlock in scheduling with ";
   state.dumpSchedulingInfo(os);
-  os << "\n Thread scheduling enabled? " << (state.threadSchedulingEnabled ? "Yes" : "No") << "\n";
   os << "Traces:\n";
   state.dumpAllThreadStacks(os);
 
@@ -5314,37 +5309,6 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
-  // The first thing we have to test is, if we can actually try
-  // to schedule a thread now; (test if scheduling enabled)
-  if (!state.threadSchedulingEnabled && !state.needsCatchUp()) {
-    // So now we have to check if the current thread may be scheduled
-    // or if we have a deadlock
-
-    Thread &curThread = state.currentThread();
-    if (curThread.state == ThreadState::Waiting) {
-      bool cutoffPresent = std::any_of(state.threads.begin(), state.threads.end(), [](auto &it) {
-        return it.second.state == ThreadState::Cutoff;
-      });
-      if (!cutoffPresent) {
-        terminateStateOnDeadlock(state);
-        return;
-      }
-    } else if (curThread.state != ThreadState::Exited && curThread.state != ThreadState::Cutoff) {
-      assert(curThread.state == ThreadState::Runnable);
-      state.scheduleNextThread(curThread.getThreadId());
-      return;
-    }
-
-    // So how do we proceed here? For now just let everything continue normally
-    // this will schedule another thread
-    if (curThread.state == ThreadState::Exited) {
-      klee_warning("An exited thread caused a thread scheduling. Resetting the thread scheduling to a safe state.\n");
-    } else if (curThread.state == ThreadState::Cutoff) {
-      klee_warning("A thread was cut off while thread scheduling was disabled. Reenabling thread scheduling.\n");
-    }
-    state.threadSchedulingEnabled = true;
-  }
-
   std::set<ThreadId> runnable = state.runnableThreads;
 
   bool disabledThread = false;
@@ -5472,11 +5436,6 @@ void Executor::scheduleThreads(ExecutionState &state) {
         peekThread.value().get().state = ThreadState::Runnable;
         klee_warning("Catch up on cutoff event");
       }
-    }
-
-    if (!state.threadSchedulingEnabled) {
-      state.threadSchedulingEnabled = true;
-      state.currentThread().threadSchedulingWasDisabled = true;
     }
 
     if (state.peekCatchUp()->kind() == por::event::event_kind::thread_join) {

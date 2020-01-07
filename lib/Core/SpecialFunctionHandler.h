@@ -155,7 +155,6 @@ namespace klee {
     HANDLER(handleCreateThread);
     HANDLER(handlePreemptThread);
     HANDLER(handleExitThread);
-    HANDLER(handleToggleThreadScheduling);
     HANDLER(handleWaitOn);
     HANDLER(handleWakeUpWaiting);
     HANDLER(handlePorRegisterEvent);

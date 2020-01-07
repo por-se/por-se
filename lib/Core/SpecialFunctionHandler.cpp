@@ -116,7 +116,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_create_thread", handleCreateThread, false),
   add("klee_preempt_thread", handlePreemptThread, false),
-  add("klee_toggle_thread_scheduling", handleToggleThreadScheduling, false),
   addDNR("klee_exit_thread", handleExitThread),
   add("klee_wait_on", handleWaitOn, false),
   add("klee_release_waiting", handleWakeUpWaiting, false),
@@ -940,20 +939,6 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   executor.exitCurrentThread(state);
 
   executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
-}
-
-void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &state,
-                                                          klee::KInstruction *target,
-                                                          std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 1 && "invalid number of arguments to klee_toggle_thread_scheduling");
-  ref<Expr> tid = executor.toUnique(state, arguments[0]);
-
-  if (!isa<ConstantExpr>(tid)) {
-    executor.terminateStateOnError(state, "klee_toggle_thread_scheduling", Executor::User);
-    return;
-  }
-
-  executor.toggleThreadScheduling(state, cast<ConstantExpr>(tid)->getZExtValue() != 0);
 }
 
 void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
