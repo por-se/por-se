@@ -110,9 +110,30 @@ por::leaf node::make_right_branch(por::comb A) {
 		catch_up.push_front(r);
 	}
 
+	std::map<por::event::event const*, por::event::event const*> unlock_exit;
+	auto max = A.max();
+	for(por::event::event const* a : max) {
+		if(a->kind() == por::event::event_kind::thread_exit) {
+			assert(a->thread_predecessor()->kind() == por::event::event_kind::lock_release);
+			unlock_exit.emplace(a->thread_predecessor(), a);
+			A.remove(*a);
+		}
+	}
+
 	while(!A.empty()) {
 		A.sort();
 		auto min = A.min();
+
+		for(auto it = min.begin(); it != min.end();) {
+			auto exit_pred = unlock_exit.find(*it);
+			if(exit_pred != unlock_exit.end()) {
+				++it;
+				it = min.insert(it, exit_pred->second);
+				unlock_exit.erase(exit_pred);
+			} else {
+				++it;
+			}
+		}
 
 		for(por::event::event const* a : min) {
 			n = n->make_left_child([&a, &n](por::configuration&) {
@@ -149,6 +170,10 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 			// there is no (unique) alternative to be found here
 			continue;
 		}
+		if(n->_event->kind() == por::event::event_kind::thread_exit) {
+			// thread_exit always has to immediately succeed the preceding lock_release on the same thread
+			// there is no (unique) alternative to be found here
+		}
 
 		assert(n->_event != nullptr);
 		por::configuration const& cfg = n->configuration();
@@ -165,6 +190,22 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 		por::cone C(cfg);
 		por::comb A = J.setminus(C);
 		libpor_check(A.is_sorted());
+
+		// make sure to include thread_exit if immediately preceding lock_release is in A
+		std::vector<por::event::event const*> exit_events;
+		for(auto& l : A) {
+			if(l->kind() == por::event::event_kind::lock_release) {
+				auto exit = std::find_if(l->successors().begin(), l->successors().end(), [&l](auto& succ) {
+					return succ->kind() == por::event::event_kind::thread_exit;
+				});
+				if(exit != l->successors().end()) {
+					exit_events.push_back(*exit);
+				}
+			}
+		}
+		for(auto& e : exit_events) {
+			A.insert(*e);
+		}
 
 		leaves.push_back(n->make_right_branch(std::move(A)));
 	}
