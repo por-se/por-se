@@ -117,8 +117,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_create_thread", handleCreateThread, false),
   add("klee_preempt_thread", handlePreemptThread, false),
   addDNR("klee_exit_thread", handleExitThread),
-  add("klee_wait_on", handleWaitOn, false),
-  add("klee_release_waiting", handleWakeUpWaiting, false),
   add("klee_por_register_event", handlePorRegisterEvent, false),
   add("klee_por_thread_join", handlePorThreadJoin, false),
   add("malloc", handleMalloc, true),
@@ -939,74 +937,6 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   executor.exitCurrentThread(state);
 
   executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
-}
-
-void SpecialFunctionHandler::handleWaitOn(ExecutionState &state,
-                                          KInstruction *target,
-                                          std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.size() == 2 && "invalid number of arguments to klee_wait_on");
-  ref<Expr> handleExpr = executor.toUnique(state, arguments[0]);
-  ref<Expr> wait1LockExpr = executor.toUnique(state, arguments[1]);
-
-  if (!isa<ConstantExpr>(handleExpr)) {
-    executor.terminateStateOnError(state, "klee_wait_on", Executor::User);
-    return;
-  }
-
-  if (!isa<ConstantExpr>(wait1LockExpr)) {
-    executor.terminateStateOnError(state, "klee_wait_on", Executor::User);
-    return;
-  }
-
-  std::uint64_t handle_id = cast<ConstantExpr>(handleExpr)->getZExtValue();
-  std::uint64_t wait1Lock = cast<ConstantExpr>(wait1LockExpr)->getZExtValue();
-  executor.threadWaitOn(state, handle_id);
-  if (wait1Lock > 0) {
-    executor.porEventManager.registerCondVarWait1(state, handle_id, wait1Lock);
-  }
-}
-
-void SpecialFunctionHandler::handleWakeUpWaiting(ExecutionState &state,
-                                                 KInstruction *target,
-                                                 std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert((arguments.size() == 2 || arguments.size() == 3) && "invalid number of arguments to klee_release_waiting");
-  ref<Expr> lidExpr = executor.toUnique(state, arguments[0]);
-  ref<Expr> modeExpr = executor.toUnique(state, arguments[1]);
-
-  if (!isa<ConstantExpr>(lidExpr) || !isa<ConstantExpr>(modeExpr)) {
-    executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
-    return;
-  }
-
-  std::uint64_t lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
-
-  // mode == 0 -> KLEE_RELEASE_ALL
-  // mode == 1 -> KLEE_RELEASE_SINGLE
-  auto mode = cast<ConstantExpr>(modeExpr)->getZExtValue();
-  assert((mode == 0 || mode == 1) && "invalid mode given to klee_release_waiting");
-  bool releaseSingle = (mode == 1);
-
-  bool registerAsNotificationEvent = false;
-  if (arguments.size() > 2) {
-    ref<Expr> asEventExpr = executor.toUnique(state, arguments[2]);
-
-    if (!isa<ConstantExpr>(asEventExpr)) {
-      executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
-      return;
-    }
-
-    auto asEvent = static_cast<por_event_t>(cast<ConstantExpr>(asEventExpr)->getZExtValue());
-
-    // only allow por_broadcast and por_signal with corresponding mode
-    bool legitimateRegistration = (asEvent == por_broadcast && !releaseSingle) || (asEvent == por_signal && releaseSingle);
-    if (!legitimateRegistration) {
-      executor.terminateStateOnError(state, "klee_release_waiting", Executor::User);
-      return;
-    }
-    registerAsNotificationEvent = true;
-  }
-
-  executor.threadWakeUpWaiting(state, lid, releaseSingle, registerAsNotificationEvent);
 }
 
 void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,

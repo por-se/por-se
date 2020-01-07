@@ -819,8 +819,6 @@ static const char *modelledExternals[] = {
   "klee_warning_once",
   "klee_stack_trace",
   "klee_create_thread",
-  "klee_wait_on",
-  "klee_release_waiting",
   "klee_preempt_thread",
   "klee_exit_thread",
   "klee_por_register_event",

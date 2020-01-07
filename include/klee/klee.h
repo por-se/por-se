@@ -159,16 +159,10 @@ extern "C" {
 
   void klee_exit_thread(void) __attribute__ ((__noreturn__));
 
-  void klee_wait_on(void* handle, void* wait1_mutex);
-
   void klee_por_register_event(por_event_t evt, ...);
 
   // Should only be used internally to find the correct thread
   void klee_por_thread_join(void *runtime_struct);
-
-#define KLEE_RELEASE_SINGLE (1 << 0)
-#define KLEE_RELEASE_ALL (0 << 0)
-  void klee_release_waiting(void* address, uint64_t mode, ...);
 
   int klee_output(int target, const char* out);
 #ifdef __cplusplus
