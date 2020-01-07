@@ -6,6 +6,8 @@
 #include "klee/StatePruningCmdLine.h"
 #include "klee/Thread.h"
 
+#include "por/event/event.h"
+
 #include <cstdint>
 #include <vector>
 
@@ -163,6 +165,9 @@ public:
   void registerPushFrame(const ThreadId &threadID, std::size_t sfIndex,
                          const KFunction *callee, const KInstruction *caller);
   void registerPopFrame(const StackFrame &sf);
+
+  void registerAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid);
+  void unregisterAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid);
 
   MemoryFingerprintDelta getThreadDelta(const Thread &thread) const;
 };

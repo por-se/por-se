@@ -361,4 +361,13 @@ bool MemoryFingerprintT<D, S, V>::updateExternalCallFragment(std::uint64_t exter
   return false;
 }
 
+template <typename D, std::size_t S, typename V>
+bool MemoryFingerprintT<D, S, V>::updateAcquiredLockFragment(std::uint64_t lockId,
+                                                             const ThreadId &holdingThread) {
+  getDerived().updateUint8(11);
+  getDerived().updateUint64(lockId);
+  updateThreadId(holdingThread);
+  return false;
+}
+
 } // namespace klee

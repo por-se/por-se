@@ -157,6 +157,7 @@ public:
                               const KFunction *callee,
                               const KInstruction *caller);
   bool updateExternalCallFragment(std::uint64_t externalCallCounter);
+  bool updateAcquiredLockFragment(std::uint64_t lockId, const ThreadId &holdingThread);
 };
 
 template <typename T>

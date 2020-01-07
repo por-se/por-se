@@ -275,7 +275,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
 
 void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
                                   const ObjectState &os, std::size_t bytes) {
- if (disableMemoryState && !libraryFunction.entered) {
+  if (disableMemoryState && !libraryFunction.entered) {
     // in case of library functions, we need to record changes to global memory
     // and previous allocas
     return;
@@ -290,6 +290,46 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
   }
 
   applyWriteFragment(address, mo, os, bytes, true);
+}
+
+void MemoryState::registerAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid) {
+  if (disableMemoryState) {
+    return;
+  }
+
+  if (DebugStatePruning) {
+    llvm::errs() << "MemoryState: registering acquired lock (" << lock_id <<  ")"
+                 << " by thread " << tid << "\n";
+  }
+
+  auto& thread = executionState->currentThread();
+
+  assert(tid && lock_id > 0 && "Must be set");
+  assert(thread.getThreadId() == tid);
+
+  auto &fingerprint = thread.fingerprint;
+  fingerprint.updateAcquiredLockFragment(lock_id, tid);
+  fingerprint.addToFingerprint();
+}
+
+void MemoryState::unregisterAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid) {
+  if (disableMemoryState) {
+    return;
+  }
+
+  if (DebugStatePruning) {
+    llvm::errs() << "MemoryState: unregistering acquired lock (" << lock_id <<  ")"
+                 << " by thread " << tid << "\n";
+  }
+
+  auto& thread = executionState->currentThread();
+
+  assert(tid && lock_id > 0 && "Must be set");
+  assert(thread.getThreadId() == tid);
+
+  auto &fingerprint = thread.fingerprint;
+  fingerprint.updateAcquiredLockFragment(lock_id, tid);
+  fingerprint.removeFromFingerprint();
 }
 
 void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
