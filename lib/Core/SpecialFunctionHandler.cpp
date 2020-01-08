@@ -239,6 +239,8 @@ bool SpecialFunctionHandler::handle(ExecutionState &state,
                                          "expected return value from void special function");
     } else {
       (this->*h)(state, target, arguments);
+
+      assert((!hasReturnValue || executor.getDestCell(state, target).value.get() != nullptr) && "Function with return value had no value set");
     }
     return true;
   } else {
