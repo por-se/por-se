@@ -177,6 +177,34 @@ namespace por {
 			return it->second;
 		}
 
+		bool can_acquire_lock(por::event::lock_id_t const& lock) const noexcept {
+			assert(lock > 0 && "Lock id must not be zero");
+			por::event::event const* lock_event = last_of_lid(lock);
+			if constexpr(optional_creation_events) {
+				if(!lock_event && _used_lock_ids.count(lock) == 0) {
+					return true;
+				}
+			}
+
+			switch(lock_event->kind()) {
+				case por::event::event_kind::lock_create:
+				case por::event::event_kind::lock_release:
+				case por::event::event_kind::wait1:
+					return true;
+				default:
+					return false;
+			}
+		}
+
+		bool was_notified(por::thread_id const& thread, por::event::cond_id_t const& cond) {
+			por::event::event const* wait1 = last_of_tid(thread);
+			assert(wait1 != nullptr);
+			if (wait1->kind() != por::event::event_kind::wait1) {
+				return false;
+			}
+			return wait2_predecessor_cond(*wait1, last_of_cid(cond)) != nullptr;
+		}
+
 		auto const& unfolding() const noexcept { return _unfolding; }
 
 		std::size_t size() const noexcept { return _size; }
@@ -468,7 +496,6 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
-					_used_lock_ids.insert(lock);
 					_used_cond_ids.insert(cond);
 
 					++_size;
@@ -492,25 +519,24 @@ namespace por {
 		}
 
 	private:
-		por::event::event const& wait2_predecessor_cond(
-			por::event::event const& thread_event,
+		por::event::event const* wait2_predecessor_cond(
+			por::event::event const& wait1,
 			std::vector<por::event::event const*> const& cond_preds
 		) {
 			for(auto& e : cond_preds) {
 				if(e->kind() == por::event::event_kind::broadcast) {
 					auto bro = static_cast<por::event::broadcast const*>(e);
 					for(auto& w1 : bro->wait_predecessors()) {
-						if(w1 == &thread_event)
-							return *e;
+						if(w1 == &wait1)
+							return e;
 					}
 				} else if(e->kind() == por::event::event_kind::signal) {
 					auto sig = static_cast<por::event::signal const*>(e);
-					if(sig->wait_predecessor() == &thread_event)
-						return *e;
+					if(sig->wait_predecessor() == &wait1)
+						return e;
 				}
 			}
-			assert(0 && "There has to be a notifying event before a wait2");
-			std::abort();
+			return nullptr;
 		}
 
 	public:
@@ -528,8 +554,9 @@ namespace por {
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
 
-			auto& cond_event = wait2_predecessor_cond(*thread_event, cond_preds);
-			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, cond_event);
+			auto cond_event = wait2_predecessor_cond(*thread_event, cond_preds);
+			assert(cond_event && "There has to be a notifying event before a wait2");
+			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, *cond_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
 			_w2_heads[cond].emplace_back(thread_event);
