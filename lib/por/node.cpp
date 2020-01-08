@@ -111,12 +111,12 @@ por::leaf node::make_right_branch(por::comb A) {
 	}
 
 	std::map<por::event::event const*, por::event::event const*> unlock_exit;
-	auto max = A.max();
-	for(por::event::event const* a : max) {
-		if(a->kind() == por::event::event_kind::thread_exit) {
-			assert(a->thread_predecessor()->kind() == por::event::event_kind::lock_release);
-			unlock_exit.emplace(a->thread_predecessor(), a);
-			A.remove(*a);
+	for(auto &[tid, thread] : A.threads()) {
+		auto max = thread.max();
+		if(max->kind() == por::event::event_kind::thread_exit) {
+			assert(max->thread_predecessor()->kind() == por::event::event_kind::lock_release);
+			unlock_exit.emplace(max->thread_predecessor(), max);
+			A.remove(*max);
 		}
 	}
 
