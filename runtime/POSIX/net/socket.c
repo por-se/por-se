@@ -4,6 +4,7 @@
 
 #include "../fd.h"
 #include "../fd-poll.h"
+#include "../runtime-lock.h"
 
 #include "socket.h"
 #include "socket-internal.h"
@@ -168,7 +169,7 @@ int socket(int domain, int typeAndFlags, int protocol) {
     return -1;
   }
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_socket_t* socket;
   int fd = create_socket(&socket);
@@ -184,28 +185,28 @@ int socket(int domain, int typeAndFlags, int protocol) {
   socket->type = type;
   socket->domain = domain;
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return fd;
 }
 
 int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_file_t* f = __get_file(sockfd);
   if (!f->socket) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EBADF;
     return -1;
   }
 
   if (f->socket->state != EXE_SOCKET_INIT) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EINVAL;
     return -1;
   }
 
   int domain = f->socket->domain;
   if (addr->sa_family != domain) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EINVAL;
     return -1;
   }
@@ -215,7 +216,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     : sizeof(struct sockaddr_un);
 
   if (req_size > addrlen) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EINVAL;
     return -1;
   }
@@ -236,7 +237,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   f->socket->state = EXE_SOCKET_BOUND;
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return 0;
 }
 
@@ -309,32 +310,32 @@ static bool open_to_local_env(exe_socket_t* socket) {
 }
 
 int listen(int sockfd, int backlog) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_file_t* f = __get_file(sockfd);
 
   exe_socket_t* s = f->socket;
 
   if (!s) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = ENOTSOCK;
     return -1;
   }
 
   if (s->state != EXE_SOCKET_BOUND) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EOPNOTSUPP;
     return -1;
   }
 
   if (s->domain == AF_INET && get_socket_by_port(s->requested.port) != NULL) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EADDRINUSE;
     return -1;
   }
 
   // TODO: how to properly handle 'anonymous paths'
   if (s->domain == AF_UNIX && get_socket_by_unix(s->requested.path) != NULL) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EADDRINUSE;
     return -1;
   }
@@ -345,7 +346,7 @@ int listen(int sockfd, int backlog) {
 
   check_for_fake_packets(s);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return 0;
 }
 
@@ -404,17 +405,17 @@ static int establish(exe_socket_t* passive, exe_socket_t* connecting) {
 }
 
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_file_t* f = __get_file(sockfd);
 
   if (!f->socket) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = ENOTSOCK;
     return -1;
   }
 
   if (f->socket->state != EXE_SOCKET_PASSIVE) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = ENOTSOCK;
     return -1;
   }
@@ -446,13 +447,13 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     }
 
     if (f->flags & eNonBlock) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       errno = EWOULDBLOCK;
       return -1;
     }
 
     kpr_list_push(&f->socket->blocked_threads, pthread_self());
-    kpr_wait_thread_self(klee_fs_lock());
+    kpr_wait_thread_self(kpr_runtime_lock());
   }
 
   // Now we have to create yet another socket that is used for the actual communication
@@ -460,7 +461,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   int newSocketFd = create_socket(&newSocket);
   if (newSocketFd < 0) {
     kpr_list_push(&f->socket->queued_peers, peer);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -471,7 +472,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     kpr_list_push(&f->socket->queued_peers, peer);
 
     klee_warning("Internal failure - leaked socket");
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -510,12 +511,12 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return newSocketFd;
 }
 
 int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   int ret = accept(sockfd, addr, addrlen);
   if (ret >= 0) {
@@ -530,34 +531,34 @@ int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags) {
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* f = __get_file(sockfd);
   if (!f->socket) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EBADF;
     return -1;
   }
 
   if (f->socket->state != EXE_SOCKET_INIT) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EISCONN;
     return -1;
   }
 
   if (addrlen < sizeof(struct sockaddr_in)) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EINVAL;
     return -1;
   }
 
   if (f->socket->type != SOCK_STREAM) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     errno = EINVAL;
     return -1;
   }
@@ -598,7 +599,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
           kpr_list_remove(&waiting_sockets, f->socket);
         }
 
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         errno = ECONNREFUSED;
         return -1;
       } else {
@@ -616,7 +617,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     }
 
     kpr_list_push(&f->socket->blocked_threads, pthread_self());
-    kpr_wait_thread_self(klee_fs_lock());
+    kpr_wait_thread_self(kpr_runtime_lock());
   }
 
   assert(socket != NULL);
@@ -640,17 +641,17 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     kpr_handle_fd_changed(socket->own_fd);
 
     if (f->flags & eNonBlock) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
 
       errno = EINPROGRESS;
       return -1;
     } else {
       kpr_list_push(&f->socket->blocked_threads, pthread_self());
-      kpr_wait_thread_self(klee_fs_lock());
+      kpr_wait_thread_self(kpr_runtime_lock());
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return 0;
 }
 
@@ -711,7 +712,7 @@ int shutdown(int sockfd, int how) {
 
   int ret;
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* file = __get_file(sockfd);
   if (!file) {
@@ -745,7 +746,7 @@ int shutdown(int sockfd, int how) {
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return ret;
 }
@@ -807,7 +808,7 @@ ssize_t kpr_write_socket(exe_file_t* f, int flags, const void *buf, size_t count
 
       // Wait until something is read, the reader needs to signal
       kpr_list_push(&tcp->peer->blocked_threads, pthread_self());
-      kpr_wait_thread_self(klee_fs_lock());
+      kpr_wait_thread_self(kpr_runtime_lock());
     }
 
     bool initial_empty = kpr_ringbuffer_empty(&p_tcp->buffer);
@@ -874,7 +875,7 @@ ssize_t kpr_read_socket(exe_file_t* f, int flags, void *buf, size_t count) {
 
       // Wait until something is written, the reader needs to signal
       kpr_list_push(&f->socket->blocked_threads, pthread_self());
-      kpr_wait_thread_self(klee_fs_lock());
+      kpr_wait_thread_self(kpr_runtime_lock());
     }
 
     bool initial_full = kpr_ringbuffer_full(&tcp->buffer);
@@ -907,7 +908,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
     klee_warning("Ignoring flags for send()");
   }
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* file = __get_file(sockfd);
   if (!file) {
@@ -920,7 +921,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
     ret = write(sockfd, buf, len);
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return ret;
 }
@@ -932,7 +933,7 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
     klee_warning("Ignoring flags for recv()");
   }
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* file = __get_file(sockfd);
   if (!file) {
@@ -945,29 +946,29 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
     ret = read(sockfd, buf, len);
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return ret;
 }
 
 int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* f = __get_file(sockfd);
   if (f == NULL) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket) {
     errno = ENOTSOCK;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (level != SOL_SOCKET || optname != SO_SNDBUF) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     klee_warning("Called getsockopt with unsupported arguments - faked EINTR");
     errno = EINTR;
     return -1;
@@ -976,7 +977,7 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
   if (optval != NULL) {
     int bufSize = PIPE_BUFFER_SIZE;
     if (sizeof(bufSize) != *optlen) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       klee_warning("Called getsockopt with too small optval");
       errno = EINVAL;
       return -1;
@@ -985,95 +986,95 @@ int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optl
     *((int*) optval) = bufSize;
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return 0;
 }
 
 int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* f = __get_file(sockfd);
   if (f == NULL) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket) {
     errno = ENOTSOCK;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (level == SOL_SOCKET) {
     if (optname == SO_SNDBUF || optname == SO_BROADCAST || optname == SO_KEEPALIVE || optname == SO_REUSEADDR || optname == SO_LINGER) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       klee_warning("Called setsockopt with not yet implemented options - ignoring");
       return 0;
     }
   } else if (level == IPPROTO_TCP) {
     if (optname == TCP_NODELAY) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       klee_warning("Called setsockopt with not yet implemented options - ignoring");
       return 0;
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   klee_warning("Called setsockopt with unsupported arguments - EINVAL");
   errno = EINVAL;
   return -1;
 }
 
 int getsockname(int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* f = __get_file(sockfd);
   if (f == NULL) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket) {
     errno = ENOTSOCK;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket->saddress) {
     errno = EINVAL; // TODO: find correct one
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   copy_socket_addr_into(f->socket, addr, addrlen);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return 0;
 }
 
 int getpeername(int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t* f = __get_file(sockfd);
   if (f == NULL) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket) {
     errno = ENOTSOCK;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->socket->type != SOCK_STREAM) {
     errno = ENOTCONN;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1081,13 +1082,13 @@ int getpeername(int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
 
   if (!tcp->peer) {
     errno = ENOTCONN;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   copy_socket_addr_into(tcp->peer, addr, addrlen);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   
   return 0;
 }
@@ -1123,18 +1124,18 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
     return -1;
   }
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   
   exe_file_t* f = __get_file(sockfd);
   if (f == NULL) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (!f->socket) {
     errno = ENOTSOCK;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1145,14 +1146,14 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
 
     ssize_t bytes = write(sockfd, iov->iov_base, iov->iov_len);
     if (bytes < 0) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
     writtenTotal += bytes;
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return writtenTotal;
 }
 
@@ -1170,18 +1171,18 @@ ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags) {
 }
 
 int socketpair(int domain, int type, int protocol, int sv[2]) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   int fd1 = socket(domain, type, protocol);
   if (fd1 < 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   int fd2 = socket(domain, type, protocol);
   if (fd2 < 0) {
     close(fd1);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1193,6 +1194,6 @@ int socketpair(int domain, int type, int protocol, int sv[2]) {
   sv[0] = fd1;
   sv[1] = fd2;
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return 0;
 }

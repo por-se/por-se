@@ -21,6 +21,8 @@
 #define _LARGEFILE64_SOURCE
 #include "fd.h"
 
+#include "runtime-lock.h"
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,7 +67,7 @@ static void __stat64_to_stat(struct stat64 *a, struct stat *b) {
 /***/
 
 int open(const char *pathname, int flags, ...) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   mode_t mode = 0;
 
   if (flags & O_CREAT) {
@@ -77,12 +79,12 @@ int open(const char *pathname, int flags, ...) {
   }
 
   int ret = __fd_open(pathname, flags, mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int openat(int fd, const char *pathname, int flags, ...) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   mode_t mode = 0;
 
   if (flags & O_CREAT) {
@@ -94,85 +96,85 @@ int openat(int fd, const char *pathname, int flags, ...) {
   }
 
   int ret = __fd_openat(fd, pathname, flags, mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 off_t lseek(int fd, off_t off, int whence) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   int ret = (off_t) __fd_lseek(fd, off, whence);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int __xstat(int vers, const char *path, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_stat(path, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int stat(const char *path, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_stat(path, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int __lxstat(int vers, const char *path, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_lstat(path, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int lstat(const char *path, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_lstat(path, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int __fxstat(int vers, int fd, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_fstat(fd, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int fstat(int fd, struct stat *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   struct stat64 tmp;
   int res = __fd_fstat(fd, &tmp);
   __stat64_to_stat(&tmp, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 
 int ftruncate(int fd, off_t length) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   int ret = __fd_ftruncate(fd, length);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int statfs(const char *path, struct statfs *buf32) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 #if 0
     struct statfs64 buf;
 
     if (__fd_statfs(path, &buf) < 0) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
 	    return -1;
     }
 
@@ -186,11 +188,11 @@ int statfs(const char *path, struct statfs *buf32) {
     buf32->f_fsid = buf.f_fsid;
     buf32->f_namelen = buf.f_namelen;
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
 #else
     int ret = __fd_statfs(path, buf32);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
 #endif
 }
@@ -206,7 +208,7 @@ ssize_t getdents(int fd, char *dirp, size_t nbytes) {
 int getdents(int fd, char *dirp, int nbytes) {
 #endif
 #endif
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   struct dirent64 *dp64 = (struct dirent64*) dirp;
   ssize_t res = __fd_getdents(fd, dp64, nbytes);
@@ -228,7 +230,7 @@ int getdents(int fd, char *dirp, int nbytes) {
     }
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return res;
 }
 int __getdents(unsigned int fd, struct dirent *dirp, unsigned int count)
@@ -237,7 +239,7 @@ int __getdents(unsigned int fd, struct dirent *dirp, unsigned int count)
 /* Forward to 64 versions (uclibc expects versions w/o asm specifier) */
 
 __attribute__((weak)) int open64(const char *pathname, int flags, ...) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   mode_t mode = 0;
 
   if (flags & O_CREAT) {
@@ -249,6 +251,6 @@ __attribute__((weak)) int open64(const char *pathname, int flags, ...) {
   }
 
   int ret = __fd_open(pathname, flags, mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }

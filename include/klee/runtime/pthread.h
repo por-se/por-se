@@ -124,7 +124,10 @@ typedef struct {
 
   kpr_list cleanupStack;
 
-  pthread_cond_t cond;
+  void* joinLock;
+  void* joinCond;
+
+  void* cond;
 } kpr_thread;
 typedef kpr_thread* pthread_t;
 
@@ -161,6 +164,7 @@ typedef struct {
   int called;
   pthread_mutex_t mutex;
 } pthread_once_t;
+#define PTHREAD_ONCE_INIT { 0, PTHREAD_MUTEX_INITIALIZER }
 
 // Primitives that need other primitives
 
@@ -200,20 +204,14 @@ typedef struct {
 } pthread_rwlockattr_t;
 
 typedef struct {
-  pthread_t thread;
-  void* value;
-} kpr_key_data;
-
-typedef struct {
-  void (*destructor)(void*);
-  kpr_list values;
+  int index;
+  int generation;
 } kpr_key;
 
 typedef kpr_key* pthread_key_t;
 
-#define PTHREAD_ONCE_INIT { 0, PTHREAD_MUTEX_INITIALIZER }
-
 #define PTHREAD_DESTRUCTOR_ITERATIONS (16)
+#define PTHREAD_KEYS_MAX (256)
 
 // Main threading api
 int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(void*), void *arg);

@@ -11,7 +11,7 @@
 #define KPR_ZERO_INIT (2)
 #define KPR_INVALID (3)
 
-void kpr_key_clear_data_of_thread(pthread_t th);
+void kpr_key_clear_data_of_thread(void);
 
 int kpr_mutex_unlock(pthread_mutex_t *mutex, bool force);
 

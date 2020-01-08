@@ -11,6 +11,7 @@
 #include "fd.h"
 #include "fd-poll.h"
 #include "net/socket.h"
+#include "runtime-lock.h"
 
 #include "klee/klee.h"
 #include "klee/runtime/kpr/list.h"
@@ -38,11 +39,6 @@
 #include <unistd.h>
 
 #define SENDFILE_BUFFER_SIZE 64
-
-static pthread_mutex_t fs_lock = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-pthread_mutex_t* klee_fs_lock(void) {
-  return &fs_lock;
-}
 
 /* Returns pointer to the symbolic file structure fs the pathname is symbolic */
 static exe_disk_file_t *__get_sym_file(const char *pathname) {
@@ -92,26 +88,26 @@ exe_file_t* __get_file(int fd) {
 }
 
 int access(const char *pathname, int mode) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_disk_file_t *dfile = __get_sym_file(pathname);
   
   if (dfile) {
     /* XXX we should check against stat values but we also need to
        enforce in open and friends then. */
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
   }
 
   int ret = syscall(__NR_access, __concretize_string(pathname), mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 mode_t umask(mode_t mask) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   mode_t r = __exe_env.umask;
   __exe_env.umask = mask & 0777;
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return r;
 }
 
@@ -283,7 +279,7 @@ int __fd_openat(int basefd, const char *pathname, int flags, mode_t mode) {
 
 
 int utimes(const char *path, const struct timeval times[2]) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_disk_file_t *dfile = __get_sym_file(path);
 
   if (dfile) {
@@ -303,47 +299,47 @@ int utimes(const char *path, const struct timeval times[2]) {
     dfile->stat->st_mtim.tv_nsec = 1000000000ll * times[1].tv_sec;
 #endif
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
   }
 
   int ret = syscall(__NR_utimes, __concretize_string(path), times);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 
 int futimesat(int fd, const char* path, const struct timeval times[2]) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   if (fd != AT_FDCWD) {
     exe_file_t *f = __get_file(fd);
 
     if (!f) {
       errno = EBADF;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     } else if (f->dfile) {
       klee_warning("symbolic file descriptor, ignoring (ENOENT)");
       errno = ENOENT;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
     fd = f->fd;
   }
   if (__get_sym_file(path)) {
     int ret = utimes(path, times);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_futimesat, (long)fd,
                  (path ? __concretize_string(path) : NULL), times);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
  
 int close(int fd) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   static int n_calls = 0;
   exe_file_t *f;
   int r = 0;
@@ -353,14 +349,14 @@ int close(int fd) {
   f = __get_file(fd);
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   } 
 
   if (__exe_fs.max_failures && *__exe_fs.close_fail == n_calls) {
     __exe_fs.max_failures--;
     errno = EIO;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -399,7 +395,7 @@ int close(int fd) {
   //       may have to consider the files waiting on changes
   memset(f, 0, sizeof *f);
   
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return r;
 }
 
@@ -420,18 +416,18 @@ ssize_t read(int fd, void *buf, size_t count) {
   static int n_calls = 0;
   exe_file_t *f;
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   n_calls++;
 
   if (count == 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
   }
 
   if (buf == NULL) {
     errno = EFAULT;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
   
@@ -439,26 +435,26 @@ ssize_t read(int fd, void *buf, size_t count) {
 
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (__exe_fs.max_failures && *__exe_fs.read_fail == n_calls) {
     __exe_fs.max_failures--;
     errno = EIO;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->socket) {
     ssize_t ret = kpr_read_socket(f, f->flags, buf, count);
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   } else if (f->pipe) {
     if ((f->flags & eReadable) == 0) {
       errno = EBADF;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
@@ -474,19 +470,19 @@ ssize_t read(int fd, void *buf, size_t count) {
         // So we now know that the reader will no longer send any
         // data
         errno = EPIPE;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
 
       if ((f->flags & eNonBlock) != 0) {
         errno = EWOULDBLOCK;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
 
       // Wait until something is written, the writer needs to signal
       kpr_list_push(&pipe_obj->blocked_threads, pthread_self());
-      kpr_wait_thread_self(klee_fs_lock());
+      kpr_wait_thread_self(kpr_runtime_lock());
     }
 
     bool wasFull = kpr_ringbuffer_full(&pipe_obj->buffer);
@@ -501,7 +497,7 @@ ssize_t read(int fd, void *buf, size_t count) {
       }
     }
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return i;
   } else if (!f->dfile) {
     /* concrete file */
@@ -518,21 +514,21 @@ ssize_t read(int fd, void *buf, size_t count) {
       r = syscall(__NR_pread64, f->fd, buf, count, (off64_t) f->off);
 
     if (r == -1) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
     if (f->fd != 0)
       f->off += r;
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return r;
   }
   else {
     assert(f->off >= 0);
     if (((off64_t)f->dfile->size) < f->off) {
       kpr_handle_fd_changed(fd);
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     }
 
@@ -545,13 +541,13 @@ ssize_t read(int fd, void *buf, size_t count) {
     f->off += count;
 
     kpr_handle_fd_changed(fd);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return count;
   }
 }
 
 ssize_t write(int fd, const void *buf, size_t count) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   static int n_calls = 0;
   exe_file_t *f;
@@ -562,26 +558,26 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (__exe_fs.max_failures && *__exe_fs.write_fail == n_calls) {
     __exe_fs.max_failures--;
     errno = EIO;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->socket) {
     ssize_t ret = kpr_write_socket(f, f->flags, buf, count);
     
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   } else if (f->pipe) {
     if ((f->flags & eWriteable) == 0) {
       errno = EBADF;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
@@ -597,19 +593,19 @@ ssize_t write(int fd, const void *buf, size_t count) {
         // So we now know that the reader will no longer send any
         // data
         errno = EPIPE;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
 
       if ((f->flags & eNonBlock) != 0) {
         errno = EWOULDBLOCK;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
 
       // Wait until something is read, the reader needs to signal
       kpr_list_push(&pipe_obj->blocked_threads, pthread_self());
-      kpr_wait_thread_self(klee_fs_lock());
+      kpr_wait_thread_self(kpr_runtime_lock());
     }
 
     bool wasEmpty = kpr_ringbuffer_empty(&pipe_obj->buffer);
@@ -624,7 +620,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
       kpr_handle_fd_changed(pipe_obj->readFd);
     }
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return i;
   } else if (!f->dfile) {
     int r;
@@ -640,7 +636,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
     else r = syscall(__NR_pwrite64, f->fd, buf, count, (off64_t) f->off);
 
     if (r == -1) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
@@ -648,7 +644,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
     if (f->fd != 1 && f->fd != 2)
       f->off += r;
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return r;
   } else {
     /* symbolic file */
@@ -677,7 +673,7 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
     kpr_handle_fd_changed(fd);
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return count;
   }
 }
@@ -755,7 +751,7 @@ int __fd_stat(const char *path, struct stat64 *buf) {
 }
 
 int fstatat(int fd, const char *path, struct stat *buf, int flags) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   if (fd != AT_FDCWD) {
     exe_file_t *f = __get_file(fd);
@@ -763,13 +759,13 @@ int fstatat(int fd, const char *path, struct stat *buf, int flags) {
     if (!f || f->pipe) {
       errno = EBADF;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     } else if (f->dfile) {
       klee_warning("symbolic file descriptor, ignoring (ENOENT)");
       errno = ENOENT;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
     fd = f->fd;
@@ -778,7 +774,7 @@ int fstatat(int fd, const char *path, struct stat *buf, int flags) {
   if (dfile) {
     memcpy(buf, dfile->stat, sizeof(*dfile->stat));
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
   } 
 
@@ -791,7 +787,7 @@ int fstatat(int fd, const char *path, struct stat *buf, int flags) {
                  (path ? __concretize_string(path) : NULL), buf, (long)flags);
 #endif
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
@@ -813,41 +809,41 @@ int __fd_lstat(const char *path, struct stat64 *buf) {
 }
 
 int chdir(const char *path) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_disk_file_t *dfile = __get_sym_file(path);
 
   if (dfile) {
     /* XXX incorrect */
     klee_warning("symbolic file, ignoring (ENOENT)");
     errno = ENOENT;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   int ret = syscall(__NR_chdir, __concretize_string(path));
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int fchdir(int fd) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_file_t *f = __get_file(fd);
   
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->dfile) {
     klee_warning("symbolic file, ignoring (ENOENT)");
     errno = ENOENT;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   int ret = syscall(__NR_fchdir, f->fd);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
@@ -866,7 +862,7 @@ static int __df_chmod(exe_disk_file_t *df, mode_t mode) {
 }
 
 int chmod(const char *path, mode_t mode) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   static int n_calls = 0;
 
   exe_disk_file_t *dfile = __get_sym_file(path);
@@ -876,30 +872,30 @@ int chmod(const char *path, mode_t mode) {
     __exe_fs.max_failures--;
     errno = EIO;
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (dfile) {
     int ret = __df_chmod(dfile, mode);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_chmod, __concretize_string(path), mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int fchmod(int fd, mode_t mode) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   static int n_calls = 0;
 
   exe_file_t *f = __get_file(fd);
 
   if (!f || f->pipe) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -907,18 +903,18 @@ int fchmod(int fd, mode_t mode) {
   if (__exe_fs.max_failures && *__exe_fs.fchmod_fail == n_calls) {
     __exe_fs.max_failures--;
     errno = EIO;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->dfile) {
     int ret = __df_chmod(f->dfile, mode);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_fchmod, f->fd, mode);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
@@ -929,55 +925,55 @@ static int __df_chown(exe_disk_file_t *df, uid_t owner, gid_t group) {
 }
 
 int chown(const char *path, uid_t owner, gid_t group) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_disk_file_t *df = __get_sym_file(path);
 
   if (df) {
     int ret = __df_chown(df, owner, group);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_chown, __concretize_string(path), owner, group);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int fchown(int fd, uid_t owner, gid_t group) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
   exe_file_t *f = __get_file(fd);
 
   if (!f || f->pipe) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (f->dfile) {
     int ret = __df_chown(f->dfile, owner, group);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_fchown, fd, owner, group);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int lchown(const char *path, uid_t owner, gid_t group) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   /* XXX Ignores 'l' part */
   exe_disk_file_t *df = __get_sym_file(path);
 
   if (df) {
     int ret = __df_chown(df, owner, group);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
   int ret = syscall(__NR_chown, __concretize_string(path), owner, group);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
@@ -1130,7 +1126,7 @@ int ioctl(int fd, unsigned long request, ...) {
   va_list ap;
   void *buf;
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
 #if 0
   printf("In ioctl(%d, ...)\n", fd);
@@ -1138,7 +1134,7 @@ int ioctl(int fd, unsigned long request, ...) {
 
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
   
@@ -1185,11 +1181,11 @@ int ioctl(int fd, unsigned long request, ...) {
         ts->c_cc[17] = '\x0';
         ts->c_cc[18] = '\x0';
 
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1197,11 +1193,11 @@ int ioctl(int fd, unsigned long request, ...) {
       /* const struct termios *ts = buf; */
       klee_warning_once("(TCSETS) symbolic file, silently ignoring");
       if (S_ISCHR(stat->st_mode)) {
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1209,11 +1205,11 @@ int ioctl(int fd, unsigned long request, ...) {
       /* const struct termios *ts = buf; */
       klee_warning_once("(TCSETSW) symbolic file, silently ignoring");
       if (fd==0) {
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1221,11 +1217,11 @@ int ioctl(int fd, unsigned long request, ...) {
       /* const struct termios *ts = buf; */
       klee_warning_once("(TCSETSF) symbolic file, silently ignoring");
       if (S_ISCHR(stat->st_mode)) {
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1235,11 +1231,11 @@ int ioctl(int fd, unsigned long request, ...) {
       ws->ws_col = 80;
       klee_warning_once("(TIOCGWINSZ) symbolic file, incomplete model");
       if (S_ISCHR(stat->st_mode)) {
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1248,11 +1244,11 @@ int ioctl(int fd, unsigned long request, ...) {
       klee_warning_once("(TIOCSWINSZ) symbolic file, ignoring (EINVAL)");
       if (S_ISCHR(stat->st_mode)) {
         errno = EINVAL;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
@@ -1266,34 +1262,34 @@ int ioctl(int fd, unsigned long request, ...) {
           *res = 0;
         }
 
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       } else {
         errno = ENOTTY;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
       }
     }
     case MTIOCGET: {
       klee_warning("(MTIOCGET) symbolic file, ignoring (EINVAL)");
       errno = EINVAL;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
     default:
       klee_warning("symbolic file, ignoring (EINVAL)");
       errno = EINVAL;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
   int ret = syscall(__NR_ioctl, f->fd, request, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int fcntl(int fd, int cmd, ...) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *f = __get_file(fd);
   va_list ap;
@@ -1301,7 +1297,7 @@ int fcntl(int fd, int cmd, ...) {
 
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 #ifdef F_GETSIG
@@ -1324,7 +1320,7 @@ int fcntl(int fd, int cmd, ...) {
       if (f->flags & eCloseOnExec)
         flags |= FD_CLOEXEC;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return flags;
     } 
     case F_SETFD: {
@@ -1332,7 +1328,7 @@ int fcntl(int fd, int cmd, ...) {
       if (arg & FD_CLOEXEC)
         f->flags |= eCloseOnExec;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     }
     case F_GETFL: {
@@ -1343,11 +1339,11 @@ int fcntl(int fd, int cmd, ...) {
 	 which we could also handle properly. 
         */
         if ((f->pipe || f->socket) && (f->flags & eNonBlock) != 0) {
-          pthread_mutex_unlock(klee_fs_lock());
+          kpr_release_runtime_lock();
           return O_NONBLOCK;
         }
 
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return 0;
       }
       case F_SETFL: {
@@ -1363,12 +1359,12 @@ int fcntl(int fd, int cmd, ...) {
       default:
         klee_warning("symbolic file, ignoring (EINVAL)");
         errno = EINVAL;
-        pthread_mutex_unlock(klee_fs_lock());
+        kpr_release_runtime_lock();
         return -1;
     }
   }
   int ret = syscall(__NR_fcntl, f->fd, cmd, arg);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
@@ -1385,57 +1381,57 @@ int __fd_statfs(const char *path, struct statfs *buf) {
 }
 
 int fstatfs(int fd, struct statfs *buf) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *f = __get_file(fd);
 
   if (!f || f->pipe) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
   
   if (f->dfile) {
     klee_warning("symbolic file, ignoring (EBADF)");
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
   int ret = syscall(__NR_fstatfs, f->fd, buf);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int fsync(int fd) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *f = __get_file(fd);
 
   if (!f) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   } else if (f->pipe || f->socket) {
     errno = EINVAL;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   } else if (f->dfile) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return 0;
   }
   int ret = syscall(__NR_fsync, f->fd);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 int dup2(int oldfd, int newfd) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *f = __get_file(oldfd);
 
   if (!f || !(newfd>=0 && newfd<MAX_FDS) || f->pipe) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   } else {
     exe_file_t *f2 = &__exe_env.fds[newfd];
@@ -1452,18 +1448,18 @@ int dup2(int oldfd, int newfd) {
        sharing of the open file (and the process should never have
        access to it). */
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return newfd;
   }
 }
 
 int dup(int oldfd) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *f = __get_file(oldfd);
   if (!f || f->pipe) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   } else {
     int fd;
@@ -1472,68 +1468,68 @@ int dup(int oldfd) {
         break;
     if (fd == MAX_FDS) {
       errno = EMFILE;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     } else {
       int ret = dup2(oldfd, fd);
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return ret;
     }
   }
 }
 
 int rmdir(const char *pathname) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_disk_file_t *dfile = __get_sym_file(pathname);
   if (dfile) {
     /* XXX check access */ 
     if (S_ISDIR(dfile->stat->st_mode)) {
       dfile->stat->st_ino = 0;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     } else {
       errno = ENOTDIR;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
 
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return -1;
 }
 
 int unlink(const char *pathname) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_disk_file_t *dfile = __get_sym_file(pathname);
   if (dfile) {
     /* XXX check access */ 
     if (S_ISREG(dfile->stat->st_mode)) {
       dfile->stat->st_ino = 0;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     } else if (S_ISDIR(dfile->stat->st_mode)) {
       errno = EISDIR;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     } else {
       errno = EPERM;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
 
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return -1;
 }
 
 int unlinkat(int dirfd, const char *pathname, int flags) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   /* similar to unlink. keep them separated though to avoid
      problems if unlink changes to actually delete files */
@@ -1542,27 +1538,27 @@ int unlinkat(int dirfd, const char *pathname, int flags) {
     /* XXX check access */ 
     if (S_ISREG(dfile->stat->st_mode)) {
       dfile->stat->st_ino = 0;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     } else if (S_ISDIR(dfile->stat->st_mode)) {
       errno = EISDIR;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     } else {
       errno = EPERM;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
 
   klee_warning("ignoring (EPERM)");
   errno = EPERM;
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return -1;
 }
 
 ssize_t readlink(const char *path, char *buf, size_t bufsize) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_disk_file_t *dfile = __get_sym_file(path);
   if (dfile) {
@@ -1575,24 +1571,24 @@ ssize_t readlink(const char *path, char *buf, size_t bufsize) {
       if (bufsize>3) buf[3] = 'n';
       if (bufsize>4) buf[4] = 'k';
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return (bufsize>5) ? 5 : bufsize;
     } else {
       errno = EINVAL;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
   int ret = syscall(__NR_readlink, path, buf, bufsize);
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return ret;
 }
 
 /*** Library functions ***/
 
 char *getcwd(char *buf, size_t size) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   static int n_calls = 0;
   int r;
@@ -1602,7 +1598,7 @@ char *getcwd(char *buf, size_t size) {
   if (__exe_fs.max_failures && *__exe_fs.getcwd_fail == n_calls) {
     __exe_fs.max_failures--;
     errno = ERANGE;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return NULL;
   }
 
@@ -1620,11 +1616,11 @@ char *getcwd(char *buf, size_t size) {
   klee_check_memory_access(buf, size);
   r = syscall(__NR_getcwd, buf, size);
   if (r == -1) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return NULL;
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return buf;
 }
 
@@ -1696,7 +1692,7 @@ int chroot(const char *path) {
 /* Used by many io stuff */
 
 ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   exe_file_t *fOut;
   exe_file_t *fIn;
@@ -1706,7 +1702,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 
   if (!fOut || !fIn) {
     errno = EBADF;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1714,12 +1710,12 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
     if (fIn->pipe) {
       errno = ESPIPE;
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
     if (lseek(in_fd, *offset, SEEK_SET) < 0) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
   }
@@ -1771,7 +1767,7 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
     lseek(in_fd, origpos, SEEK_SET);
 
     errno = _errno;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1780,55 +1776,55 @@ ssize_t sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
   else
     lseek(in_fd, origpos, SEEK_SET);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return wtotal;
 }
 
 ssize_t pread64(int fd, void *buf, size_t count, off_t offset) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   off_t cur = lseek(fd, 0, SEEK_CUR);
   if (cur < 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (lseek(fd, offset, SEEK_SET) < 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   ssize_t retRead = read(fd, buf, count);
   int retLastSeek = lseek(fd, cur, SEEK_SET);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return retLastSeek < 0 ? -1 : retRead;
 }
 
 ssize_t pwrite64(int fd, const void *buf, size_t count, off_t offset) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   off_t cur = lseek(fd, 0, SEEK_CUR);
   if (cur < 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if (lseek(fd, offset, SEEK_SET) < 0) {
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   size_t retWrite = write(fd, buf, count);
   int retLastSeek = lseek(fd, cur, SEEK_SET);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return retLastSeek < 0 ? -1 : retWrite;
 }
 
 ssize_t readv(int fd, const struct iovec *iov, int iovcnt) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   ssize_t total = 0;
 
@@ -1838,19 +1834,19 @@ ssize_t readv(int fd, const struct iovec *iov, int iovcnt) {
 
     ssize_t ret = read(fd, cur->iov_base, cur->iov_len);
     if (ret < 0) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
     total += ret;
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return total;
 }
 
 ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   ssize_t total = 0;
 
@@ -1860,36 +1856,36 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
 
     ssize_t ret = write(fd, cur->iov_base, cur->iov_len);
     if (ret < 0) {
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
     total += ret;
   }
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return total;
 }
 
 int pipe2(int pipefd[2], int flags) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   if (pipefd == NULL) {
     errno = EFAULT;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   if ((flags & ~(O_CLOEXEC | O_DIRECT | O_NONBLOCK)) != 0) {
     errno = EINVAL;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
   int fdRead = __get_unused_fd();
   if (fdRead < 0) {
     errno = ENFILE;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1902,7 +1898,7 @@ int pipe2(int pipefd[2], int flags) {
     // Reset flags since we do not use the read-fd
     fReadEnd->flags = 0;
     errno = ENFILE;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1921,7 +1917,7 @@ int pipe2(int pipefd[2], int flags) {
     fWriteEnd = 0;
 
     errno = ENOMEM;
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return -1;
   }
 
@@ -1946,7 +1942,7 @@ int pipe2(int pipefd[2], int flags) {
   assert(__get_file(pipefd[0])->flags & eReadable);
   assert(__get_file(pipefd[1])->flags & eWriteable);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return 0;
 }
 

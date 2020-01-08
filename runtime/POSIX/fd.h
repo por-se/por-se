@@ -186,7 +186,6 @@ void klee_init_env(int *argcPtr, char ***argvPtr);
 
 /* *** */
 
-pthread_mutex_t* klee_fs_lock(void);
 exe_file_t *__get_file(int fd);
 exe_file_t *__get_file_ignore_flags(int fd);
 int __get_unused_fd(void);

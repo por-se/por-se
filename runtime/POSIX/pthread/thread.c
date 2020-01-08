@@ -21,7 +21,7 @@ static kpr_thread mainThread = {
 
   .cleanupStack = KPR_LIST_INITIALIZER,
 
-  .cond = PTHREAD_COND_INITIALIZER
+  .cond = NULL
 };
 
 static _Thread_local kpr_thread* ownThread = NULL;
@@ -59,8 +59,6 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   thread->state = KPR_THREAD_STATE_LIVE;
   thread->mode = KPR_THREAD_MODE_JOIN;
 
-  pthread_cond_init(&thread->cond, NULL);
-
   if (attr != NULL) {
     int ds = 0;
     pthread_attr_getdetachstate(attr, &ds);
@@ -73,22 +71,21 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   kpr_list_create(&thread->cleanupStack);
 
   klee_create_thread(kpr_wrapper, thread);
-  klee_preempt_thread();
 
   return 0;
 }
 
 int pthread_detach(pthread_t pthread) {
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&pthread->joinLock);
   kpr_thread* thread = pthread;
 
   if (thread->mode == KPR_THREAD_MODE_DETACH) {
-    klee_toggle_thread_scheduling(1);
+    klee_lock_release(&pthread->joinLock);
     return EINVAL;
   }
 
   if (thread->mode == KPR_THREAD_MODE_JOINED) {
-    klee_toggle_thread_scheduling(1);
+    klee_lock_release(&pthread->joinLock);
     return EINVAL;
   }
 
@@ -100,17 +97,15 @@ int pthread_detach(pthread_t pthread) {
 
   thread->mode = KPR_THREAD_MODE_DETACH;
 
-  klee_toggle_thread_scheduling(1);
-  klee_preempt_thread();
+  klee_lock_release(&pthread->joinLock);
 
   return 0;
 }
 
 void pthread_exit(void* arg) {
   kpr_thread* thread = pthread_self();
-  pthread_cond_destroy(&thread->cond);
 
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&thread->joinLock);
 
   assert(thread->state == KPR_THREAD_STATE_LIVE && "Thread cannot have called exit twice");
 
@@ -121,7 +116,7 @@ void pthread_exit(void* arg) {
       // Another thread has joined with us, but is still waiting
       // for the result, as we now have registered the result, we
       // can wake the waiting thread up
-      klee_release_waiting(thread, KLEE_RELEASE_SINGLE);
+      klee_cond_signal(&thread->joinCond);
     }
 
     if (thread->mode == KPR_THREAD_MODE_JOIN) {
@@ -131,28 +126,29 @@ void pthread_exit(void* arg) {
 
   thread->state = KPR_THREAD_STATE_EXITED;
 
-  klee_toggle_thread_scheduling(1);
-
   while (kpr_list_size(&thread->cleanupStack) > 0) {
     pthread_cleanup_pop(1);
   }
 
-  kpr_key_clear_data_of_thread(thread);
+  kpr_key_clear_data_of_thread();
 
+  // Must happen together (!)
+  klee_lock_release(&thread->joinLock);
   klee_exit_thread();
 }
 
 int pthread_join(pthread_t pthread, void **ret) {
-  klee_toggle_thread_scheduling(0);
   kpr_thread* thread = pthread;
 
+  klee_lock_acquire(&thread->joinLock);
+
   if (thread->mode == KPR_THREAD_MODE_DETACH) { // detached state
-    klee_toggle_thread_scheduling(1);
+    klee_lock_release(&thread->joinLock);
     return EINVAL;
   }
 
   if (pthread_self() == pthread) { // We refer to our own thread
-    klee_toggle_thread_scheduling(1);
+    klee_lock_release(&thread->joinLock);
     return EDEADLK;
   }
 
@@ -160,13 +156,10 @@ int pthread_join(pthread_t pthread, void **ret) {
     klee_report_error(__FILE__, __LINE__, "Multiple calls to pthread_join to the same target are undefined", "undef");
   }
 
-  bool alreadyPreemptedByWaiting = false;
-
   if (thread->mode == KPR_THREAD_MODE_JOIN) {
-    alreadyPreemptedByWaiting = true;
     thread->mode = KPR_THREAD_MODE_JOINED;
 
-    klee_wait_on(thread, 0);
+    klee_cond_wait(&thread->joinCond, &thread->joinLock);
 
     // The thread should now be exited
     assert(thread->state == KPR_THREAD_STATE_EXITED);
@@ -185,11 +178,7 @@ int pthread_join(pthread_t pthread, void **ret) {
     // }
   }
 
-  klee_toggle_thread_scheduling(1);
-
-  if (!alreadyPreemptedByWaiting) {
-    klee_preempt_thread();
-  }
+  klee_lock_release(&thread->joinLock);
 
   return 0;
 }
@@ -222,6 +211,7 @@ int kpr_signal_thread(pthread_t th) {
   return 0;
 }
 
-int kpr_wait_thread_self(pthread_mutex_t* mutex) {
-  return pthread_cond_wait(&pthread_self()->cond, mutex);
+int kpr_wait_thread_self(klee_sync_primitive_t* lock) {
+  klee_cond_wait(&pthread_self()->cond, lock);
+  return 0;
 }

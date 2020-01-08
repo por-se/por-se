@@ -43,15 +43,14 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
   // before we actually can acquire the mutex.
   // If the object is invalid the state is terminated in any case.
   // But in the case of a correct object the call to `pthread_mutex_lock` will reenable thread scheduling
-  klee_toggle_thread_scheduling(0);
-
-  if (barrier->count == 0) {
-    klee_report_error(__FILE__, __LINE__, "Use of uninitialized/destroyed barrier", "user");
-  }
 
   kpr_check_if_valid(pthread_barrier_t, barrier);
 
   pthread_mutex_lock(&barrier->mutex);
+
+  if (barrier->count == 0) {
+    klee_report_error(__FILE__, __LINE__, "Use of uninitialized/destroyed barrier", "user");
+  }
 
   barrier->currentCount++;
 

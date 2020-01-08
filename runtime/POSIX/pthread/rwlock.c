@@ -61,7 +61,6 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
   kpr_check_if_valid(pthread_rwlock_t, lock);
 
   if (lock->acquiredReaderCount != 0 || lock->acquiredWriter != NULL) {
-    klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 

@@ -1,6 +1,7 @@
 #define _LARGEFILE64_SOURCE
 #include "fd.h"
 #include "fd-poll.h"
+#include "runtime-lock.h"
 
 #include "klee/klee.h"
 #include "klee/runtime/kpr/list.h"
@@ -233,7 +234,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
   req.entries = calloc(sizeof(kpr_poll_request_entry), nfds);
   req.has_event = false;
 
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   size_t changes = 0;
 
@@ -286,7 +287,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
   if (changes > 0) {
     free(req.entries);
 
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
 
     return changes;
   }
@@ -341,7 +342,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
     if (timeout == 0) {
       free(req.entries);
 
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return 0;
     }
 
@@ -362,7 +363,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
     }
 
     req.blocked_thread = pthread_self();
-    kpr_wait_thread_self(klee_fs_lock());
+    kpr_wait_thread_self(kpr_runtime_lock());
     req.blocked_thread = NULL;
   }
 
@@ -380,7 +381,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
 
   free(req.entries);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
 
   return changes;
 }
@@ -395,7 +396,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) {
 #define FD_ZERO(p)	memset((char *)(p), '\0', sizeof(*(p)))
 int select(int nfds, fd_set *read, fd_set *write,
            fd_set *except, struct timeval *timeout) {
-  pthread_mutex_lock(klee_fs_lock());
+  kpr_acquire_runtime_lock();
 
   fd_set in_read, in_write, in_except;
 
@@ -434,7 +435,7 @@ int select(int nfds, fd_set *read, fd_set *write,
     if (!f) {
       free(poll_fds);
       errno = EBADF;
-      pthread_mutex_unlock(klee_fs_lock());
+      kpr_release_runtime_lock();
       return -1;
     }
 
@@ -464,7 +465,7 @@ int select(int nfds, fd_set *read, fd_set *write,
 
   if (ret <= 0) {
     free(poll_fds);
-    pthread_mutex_unlock(klee_fs_lock());
+    kpr_release_runtime_lock();
     return ret;
   }
 
@@ -496,6 +497,6 @@ int select(int nfds, fd_set *read, fd_set *write,
 
   free(poll_fds);
 
-  pthread_mutex_unlock(klee_fs_lock());
+  kpr_release_runtime_lock();
   return count_fds;
 }
