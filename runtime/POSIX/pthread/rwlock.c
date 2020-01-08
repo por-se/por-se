@@ -54,6 +54,8 @@ int pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr
   pthread_mutex_init(&lock->mutex, NULL);
   pthread_cond_init(&lock->cond, NULL);
 
+  kpr_ensure_valid(lock);
+
   return 0;
 }
 
