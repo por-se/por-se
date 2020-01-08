@@ -370,7 +370,7 @@ namespace por {
 			return thread_event;
 		}
 
-		por::event::event const* release_lock(event::thread_id_t thread, event::lock_id_t lock) {
+		por::event::event const* release_lock(event::thread_id_t thread, event::lock_id_t lock, bool atomic = false) {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -379,7 +379,7 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_release::alloc(*_unfolding, thread, lock, *thread_event, *lock_event);
+			thread_event = &event::lock_release::alloc(*_unfolding, thread, lock, *thread_event, *lock_event, atomic);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_release);
 			lock_event = thread_event;
 

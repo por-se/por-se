@@ -16,11 +16,20 @@ namespace por::event {
 
 		lock_id_t _lid;
 
+		bool _atomic;
+
 	protected:
-		lock_release(thread_id_t tid, lock_id_t lid, event const& thread_predecessor, event const& lock_predecessor)
+		lock_release(
+			thread_id_t tid,
+			lock_id_t lid,
+			event const& thread_predecessor,
+			event const& lock_predecessor,
+			bool atomic
+		)
 			: event(event_kind::lock_release, tid, thread_predecessor, &lock_predecessor)
 			, _predecessors{&thread_predecessor, &lock_predecessor}
 			, _lid(lid)
+			, _atomic(atomic)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
@@ -35,6 +44,11 @@ namespace por::event {
 			assert(this->lock_predecessor()->tid() == this->tid());
 			assert(this->lock_predecessor()->lid() == this->lid());
 			assert(this->lid());
+
+			if(this->is_atomic()) {
+				assert(this->lock_predecessor()->kind() == event_kind::lock_acquire);
+				assert(this->lock_predecessor() == this->thread_predecessor());
+			}
 		}
 
 	public:
@@ -43,20 +57,23 @@ namespace por::event {
 			thread_id_t tid,
 			lock_id_t lid,
 			event const& thread_predecessor,
-			event const& lock_predecessor
+			event const& lock_predecessor,
+			bool atomic = false
 		) {
 			return unfolding.deduplicate(lock_release{
 				tid,
 				lid,
 				thread_predecessor,
-				lock_predecessor
+				lock_predecessor,
+				atomic
 			});
 		}
 
 		lock_release(lock_release&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _lid(std::move(that._lid)) {
+		, _lid(std::move(that._lid))
+		, _atomic(that._atomic) {
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -78,7 +95,8 @@ namespace por::event {
 
 		std::string to_string(bool details) const noexcept override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_release lid: " + std::to_string(lid()) + "]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_release"
+					+ (is_atomic() ? " (atomic)" : "") + " lid: " + std::to_string(lid()) + "]";
 			return "lock_release";
 		}
 
@@ -93,5 +111,7 @@ namespace por::event {
 		event const* lock_predecessor() const noexcept override { return _predecessors[1]; }
 
 		lock_id_t lid() const noexcept override { return _lid; }
+
+		bool is_atomic() const noexcept { return _atomic; }
 	};
 }
