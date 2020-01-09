@@ -3274,6 +3274,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
 
+    if (!state.currentThread().pathSincePorLocal.empty()) {
+      porEventManager.registerLocal(state, addedStates, false);
+    }
+
     porEventManager.registerLockAcquire(state, src->first->getId(), false);
 
     auto oldValue = executeMemoryRead(state, src.value(), readWidth);
