@@ -1,7 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --posix-runtime %t.bc 2>&1 | FileCheck %s
-// RUN: test -f %t.klee-out/test000001.xxx.err
+// RUN: %klee --output-dir=%t.klee-out --posix-runtime -exit-on-error %t.bc
 
 #include <pthread.h>
 #include <assert.h>
@@ -46,7 +45,6 @@ int main(int argc, char **argv) {
   // After joining the thread is exited and should no longer be active
   pthread_join(thread, NULL);
 
-  // CHECK: Reacquiring of robust mutex with owner being dead (unsupported)
   rc = pthread_mutex_lock(&mutex1);
   assert(rc == EOWNERDEAD);
 

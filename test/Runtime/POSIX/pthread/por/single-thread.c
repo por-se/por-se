@@ -5,8 +5,6 @@
 int main(void) {
   return 0;
 
-
   // CHECK: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
-  // CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
   // CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 }

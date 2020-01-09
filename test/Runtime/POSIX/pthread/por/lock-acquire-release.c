@@ -4,7 +4,7 @@
 
 #include "klee/klee.h"
 
-klee_sync_primitive_t cond;
+klee_sync_primitive_t lock;
 
 int main(void) {
   // CHECK: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
@@ -12,8 +12,12 @@ int main(void) {
   // CHECK: Starting test
   puts("Starting test");
 
-  // CHECK-NEXT: POR event: signal with current thread [[M_TID]] on cond. var [[COND:[0-9]+]] and signalled thread
-  klee_cond_signal(&cond);
+  // CHECK-NEXT: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
+  klee_lock_acquire(&lock);
 
+  // CHECK-NEXT: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
+  klee_lock_release(&lock);
+
+  // CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
   return 0;
 }

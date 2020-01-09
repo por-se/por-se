@@ -1,55 +1,56 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
-// RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --posix-runtime --exit-on-error --thread-scheduling=first --log-por-events %t.bc 2>&1 | FileCheck %s
+// RUN: rm -rf %t-main.klee-out
+// RUN: rm -rf %t-child.klee-out
+// RUN: %klee --output-dir=%t-main.klee-out --exit-on-error --thread-scheduling=first --log-por-events %t.bc 2>&1 | FileCheck --check-prefix=CHECK-MAIN %s
+// RUN: %klee --output-dir=%t-child.klee-out --exit-on-error --thread-scheduling=first --log-por-events %t.bc 2>&1 | FileCheck --check-prefix=CHECK-CHILD %s
 
-#include <pthread.h>
+#include "klee/klee.h"
 
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+#include <stdio.h>
 
-static pthread_t thread;
+static klee_sync_primitive_t lock;
+static klee_sync_primitive_t cond;
 
-static void* threadFunc(void* arg) {
-  pthread_mutex_lock(&mutex);
+static void thread(void* arg) {
+  // CHECK-CHILD: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
 
-  pthread_cond_broadcast(&cond);
+  // CHECK-CHILD-DAG: Starting test
 
-  pthread_mutex_unlock(&mutex);
+  // CHECK-CHILD-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:[0-9,]+]]
+  // CHECK-CHILD-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
 
-  return NULL;
+  // CHECK-CHILD-DAG: POR event: lock_acquire with current thread [[SEC_TID]] on mutex [[LID:[0-9]+]]
+  klee_lock_acquire(&lock);
+
+  // CHECK-CHILD-DAG: POR event: broadcast with current thread [[SEC_TID]] on cond. var [[COND:[0-9]+]] and broadcasted threads: [[M_TID]]
+  klee_cond_broadcast(&cond);
+
+  // CHECK-CHILD-DAG: POR event: lock_release with current thread [[SEC_TID]] on mutex [[LID]]
+  klee_lock_release(&lock);
+
+  // CHECK-CHILD-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 }
 
 int main(void) {
-  pthread_mutex_lock(&mutex);
+  // CHECK-MAIN: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
 
-  pthread_create(&thread, NULL, threadFunc, NULL);
+  // CHECK-MAIN-DAG: Starting test
+  puts("Starting test");
 
-  pthread_cond_wait(&cond, &mutex);
+  // CHECK-MAIN-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
+  klee_lock_acquire(&lock);
 
-  pthread_mutex_unlock(&mutex);
+  // CHECK-MAIN-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:[0-9,]+]]
+  klee_create_thread(&thread, NULL);
 
-  pthread_join(thread, NULL);
+  // CHECK-MAIN-DAG: POR event: wait1 with current thread [[M_TID]] on cond. var [[COND:[0-9]+]] and mutex [[LID]]
+  klee_cond_wait(&cond, &lock);
+  // CHECK-MAIN-DAG: POR event: broadcast with current thread [[SEC_TID]] on cond. var [[COND]] and broadcasted threads: [[M_TID]]
+  // CHECK-MAIN-DAG: POR event: wait2 with current thread [[M_TID]] on cond. var [[COND]] and mutex [[LID]]
 
+  // CHECK-MAIN-DAG: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]] 
+  klee_lock_release(&lock);
+
+  // CHECK-MAIN-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
   return 0;
 }
-
-// FIXME: this only tests with "first" thread scheduling as these checks rely on specific order of events
-
-// CHECK: POR event: thread_init with current thread [[M_TID:[0-9,]+]] and initialized thread [[M_TID]]
-// CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[FS_LID:[0-9]+]]
-// CHECK-DAG: POR event: lock_acquire with current thread [[M_TID]] on mutex [[LID:[0-9]+]]
-// CHECK-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:[0-9,]+]]
-// CHECK-DAG: POR event: wait1 with current thread [[M_TID]] on cond. var [[COND:[0-9]+]] and mutex [[LID]]
-
-// CHECK-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
-// CHECK-DAG: POR event: lock_acquire with current thread [[SEC_TID]] on mutex [[LID]]
-// CHECK-DAG: POR event: broadcast with current thread [[SEC_TID]] on cond. var [[COND]] and broadcasted threads: [[M_TID]]
-// CHECK-DAG: POR event: lock_release with current thread [[SEC_TID]] on mutex [[LID]]
-
-// CHECK-DAG: POR event: wait2 with current thread [[M_TID]] on cond. var [[COND]] and mutex [[LID]]
-// CHECK-DAG: POR event: lock_release with current thread [[M_TID]] on mutex [[LID]]
-
-// CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
-
-// CHECK-DAG: POR event: thread_join with current thread [[M_TID]] and joined thread [[SEC_TID]]
-// CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
