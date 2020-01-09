@@ -157,7 +157,7 @@ extern "C" {
 
   void klee_preempt_thread(void);
 
-  void klee_exit_thread(void) __attribute__ ((__noreturn__));
+  void klee_exit_thread(void* lock_to_release) __attribute__ ((__noreturn__));
 
   void klee_por_register_event(por_event_t evt, ...);
 

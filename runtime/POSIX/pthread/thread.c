@@ -132,9 +132,8 @@ void pthread_exit(void* arg) {
 
   kpr_key_clear_data_of_thread();
 
-  // Must happen together (!)
-  klee_lock_release(&thread->joinLock);
-  klee_exit_thread();
+  // Lock will be released just before the thread actually exits
+  klee_exit_thread(&thread->joinLock);
 }
 
 int pthread_join(pthread_t pthread, void **ret) {
