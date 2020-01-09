@@ -153,11 +153,16 @@ namespace klee {
     HANDLER(handleGetEGid);
 
     HANDLER(handleCreateThread);
-    HANDLER(handlePreemptThread);
     HANDLER(handleExitThread);
     HANDLER(handlePorRegisterEvent);
 
     HANDLER(handlePorThreadJoin);
+
+    HANDLER(handleLockAcquire);
+    HANDLER(handleLockRelease);
+    HANDLER(handleCondWait);
+    HANDLER(handleCondSignal);
+    HANDLER(handleCondBroadcast);
 #undef HANDLER
   };
 } // End klee namespace

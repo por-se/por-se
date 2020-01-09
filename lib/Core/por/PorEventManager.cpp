@@ -368,7 +368,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
   return true;
 }
 
-bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool atomic) {
+bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool snapshot, bool atomic) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_lock_release);
 
@@ -388,11 +388,15 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId, &atomic](por::configuration& cfg) {
+  extendPorNode(state, [this, &state, &mId, &snapshot, &atomic](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId, atomic);
-    auto standby = createStandbyState(state, por_lock_release);
-    attachFingerprintToEvent(state, *e);
-    return std::make_pair(e, std::move(standby));
+
+    if (snapshot) {
+      auto standby = createStandbyState(state, por_lock_release);
+      attachFingerprintToEvent(state, *e);
+      return std::make_pair(e, std::move(standby));
+    }
+    return std::make_pair(e, nullptr);
   });
 
   if (atomic) {

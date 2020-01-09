@@ -10,7 +10,9 @@
 #include "klee/Internal/Module/KModule.h"
 
 #include "pseudoalloc/pseudoalloc.h"
+#include "por/event/event.h"
 
+#include <variant>
 #include <vector>
 #include <unordered_map>
 
@@ -71,6 +73,13 @@ namespace klee {
     public:
       typedef std::vector<StackFrame> stack_ty;
 
+      struct wait_none_t { };
+      struct wait_init_t { };
+      struct wait_lock_t { por::event::lock_id_t lock; };
+      struct wait_cv_1_t { por::event::cond_id_t cond; por::event::lock_id_t lock; };
+      struct wait_cv_2_t { por::event::cond_id_t cond; por::event::lock_id_t lock; };
+      struct wait_join_t { ThreadId thread; };
+
     private:
       /// @brief Pointer to instruction to be executed after the current
       /// instruction
@@ -92,13 +101,11 @@ namespace klee {
       /// (i.e. to select the right phi values)
       unsigned incomingBBIndex;
 
-      /// @brief life cycle state of this thread, Runnable by default
-      ThreadState state = ThreadState::Runnable;
+      /// @brief life cycle state of this thread
+      ThreadState state = ThreadState::Waiting;
 
-      // FIXME: use ThreadState for this in the future?
-      bool porHasBeenInitialized = false;
-
-      std::uint64_t waitingHandle = 0;
+      /// @brief the resource the thread is currently waiting for
+      std::variant<wait_none_t,wait_init_t,wait_lock_t,wait_cv_1_t,wait_cv_2_t,wait_join_t> waiting = wait_init_t{};
 
       /// @brief value of the pthread_t pointer the thread was created with
       ref<Expr> runtimeStructPtr;
@@ -123,6 +130,8 @@ namespace klee {
       Thread(ThreadId tid, KFunction *entry);
 
       ThreadId getThreadId() const;
+
+      bool isRunnable(const por::configuration &configuration) const noexcept;
 
     private:
       void popStackFrame();

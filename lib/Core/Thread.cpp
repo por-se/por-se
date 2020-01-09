@@ -1,7 +1,9 @@
 #include "klee/Thread.h"
-#include "Memory.h"
 
 #include "CallPathManager.h"
+#include "Memory.h"
+
+#include "por/configuration.h"
 
 using namespace llvm;
 using namespace klee;
@@ -66,8 +68,7 @@ Thread::Thread(const Thread &t)
           tid(t.tid),
           incomingBBIndex(t.incomingBBIndex),
           state(t.state),
-          porHasBeenInitialized(t.porHasBeenInitialized),
-          waitingHandle(t.waitingHandle),
+          waiting(t.waiting),
           runtimeStructPtr(t.runtimeStructPtr),
           errnoMo(t.errnoMo),
           pathSincePorLocal(t.pathSincePorLocal),
@@ -80,6 +81,25 @@ Thread::Thread(const Thread &t)
 
 ThreadId Thread::getThreadId() const {
   return tid;
+}
+
+bool Thread::isRunnable(const por::configuration &configuration) const noexcept {
+  if (state == ThreadState::Waiting) {
+    return std::visit([&configuration](auto&& w) -> bool {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, wait_none_t> || std::is_same_v<T, wait_init_t>) {
+        return true;
+      } else if constexpr (std::is_same_v<T, wait_lock_t> || std::is_same_v<T, wait_cv_2_t>) {
+        return configuration.can_acquire_lock(w.lock);
+      } else if constexpr (std::is_same_v<T, wait_join_t>) {
+        return configuration.last_of_tid(w.thread)->kind() == por::event::event_kind::thread_exit;
+      } else {
+        return false;
+      }
+    }, waiting);
+  } else {
+    return state == ThreadState::Runnable;
+  }
 }
 
 void Thread::popStackFrame() {

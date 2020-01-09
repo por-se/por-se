@@ -62,9 +62,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
                                   std::forward_as_tuple(mainThreadId),
                                   std::forward_as_tuple(mainThreadId, kf));
     assert(result.second);
-    currentThread(result.first->second);
-    runnableThreads.insert(mainThreadId);
-    scheduleNextThread(mainThreadId);
 }
 
 
@@ -100,7 +97,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     needsThreadScheduling(state.needsThreadScheduling),
     calledExit(state.calledExit),
     schedulingHistory(state.schedulingHistory),
-    runnableThreads(state.runnableThreads),
     atomicPhase(state.atomicPhase),
 
     addressSpace(state.addressSpace),
@@ -184,60 +180,7 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
   Thread &newThread = result.first->second;
   newThread.runtimeStructPtr = runtimeStructPtr;
 
-  // New threads are by default directly runnable
-  runnableThreads.insert(tid);
-
   return newThread;
-}
-
-void ExecutionState::scheduleNextThread(const ThreadId &tid) {
-  Thread &thread = currentThread(tid);
-
-  assert(thread.state == ThreadState::Runnable && "Cannot schedule non-runnable thread");
-  assert(thread.waitingHandle == 0 && "Thread may not be waiting on a resource");
-
-  schedulingHistory.push_back(tid);
-  if (ptreeNode) {
-    ptreeNode->schedulingDecision.scheduledThread = tid;
-    ptreeNode->schedulingDecision.epochNumber = schedulingHistory.size();
-  }
-
-  currentSchedulingIndex = schedulingHistory.size() - 1;
-  onlyOneThreadRunnableSinceEpochStart = runnableThreads.size() == 1;
-}
-
-void ExecutionState::threadWaitOn(std::uint64_t lid) {
-  Thread &thread = currentThread();
-  assert(thread.waitingHandle == 0 && "Thread should not be waiting on another resource");
-
-  thread.state = ThreadState::Waiting;
-
-  runnableThreads.erase(thread.getThreadId());
-
-  thread.waitingHandle = lid;
-}
-
-void ExecutionState::preemptThread(const ThreadId &tid) {
-  auto thread = getThreadById(tid);
-  assert(thread && "Could not find thread with given id");
-
-  thread->get().state = ThreadState::Runnable;
-  runnableThreads.insert(tid);
-}
-
-void ExecutionState::wakeUpThread(const ThreadId &tid) {
-  auto thread = getThreadById(tid);
-  assert(thread && "Could not find thread with given id");
-
-
-  // We should only wake up threads that are actually waiting
-  if (thread->get().state == ThreadState::Waiting) {
-    thread->get().state = ThreadState::Runnable;
-
-    thread->get().waitingHandle = 0;
-
-    runnableThreads.insert(tid);
-  }
 }
 
 void ExecutionState::exitThread(const ThreadId &tid) {
@@ -245,7 +188,6 @@ void ExecutionState::exitThread(const ThreadId &tid) {
   assert(thread && "Could not find thread with given id");
 
   thread->get().state = ThreadState::Exited;
-  runnableThreads.erase(tid);
 
    // Now remove all stack frames
    while (!thread->get().stack.empty()) {
@@ -258,7 +200,6 @@ void ExecutionState::cutoffThread(const ThreadId &tid) {
   assert(thread && "Could not find thread with given id");
 
   thread->get().state = ThreadState::Cutoff;
-  runnableThreads.erase(tid);
 }
 
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 

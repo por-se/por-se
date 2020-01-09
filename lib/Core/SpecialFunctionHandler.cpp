@@ -115,10 +115,16 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning", handleWarning, false),
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_create_thread", handleCreateThread, false),
-  add("klee_preempt_thread", handlePreemptThread, false),
   addDNR("klee_exit_thread", handleExitThread),
   add("klee_por_register_event", handlePorRegisterEvent, false),
   add("klee_por_thread_join", handlePorThreadJoin, false),
+
+  add("klee_lock_acquire", handleLockAcquire, false),
+  add("klee_lock_release", handleLockRelease, false),
+  add("klee_cond_wait", handleCondWait, false),
+  add("klee_cond_signal", handleCondSignal, false),
+  add("klee_cond_broadcast", handleCondBroadcast, false),
+
   add("malloc", handleMalloc, true),
   add("memalign", handleMemalign, true),
   add("realloc", handleRealloc, true),
@@ -925,20 +931,27 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
   const ThreadId& tid = executor.createThread(state, kfuncPair->second, arguments[1]);
 }
 
-void SpecialFunctionHandler::handlePreemptThread(klee::ExecutionState &state,
-                                                klee::KInstruction *target,
-                                                std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_preempt_thread");
-  executor.preemptThread(state);
-}
-
 void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
                                               klee::KInstruction *target,
                                               std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(arguments.empty() && "invalid number of arguments to klee_exit_thread");
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_exit_thread - expected 1");
+
+  ref<Expr> lidExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(lidExpr)) {
+    executor.terminateStateOnError(state, "klee_exit_thread", Executor::User);
+    return;
+  }
+
+  auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
+  const auto& ownTid = state.currentThreadId();
+
+  state.memoryState.unregisterAcquiredLock(lid, ownTid);
+  executor.porEventManager.registerLockRelease(state, lid, false, false);
+
   executor.exitCurrentThread(state);
 
-  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
+  executor.porEventManager.registerThreadExit(state, ownTid, true);
 }
 
 void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
@@ -979,7 +992,7 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
       break;
 
     case por_lock_release:
-      successful = executor.porEventManager.registerLockRelease(state, args[0]);
+      successful = executor.porEventManager.registerLockRelease(state, args[0], true, false);
       break;
 
     case por_lock_acquire:
@@ -1045,6 +1058,234 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
   if (!executor.porEventManager.registerThreadJoin(state, tid)) {
     executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
   }
+}
+
+void SpecialFunctionHandler::handleLockAcquire(ExecutionState &state,
+                                               KInstruction *target,
+                                               std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_lock_acquire - expected 1");
+
+  ref<Expr> lidExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(lidExpr)) {
+    executor.terminateStateOnError(state, "klee_lock_acquire", Executor::User);
+    return;
+  }
+
+  auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
+
+  state.currentThread().state = ThreadState::Waiting;
+  state.currentThread().waiting = Thread::wait_lock_t{lid};
+
+  state.needsThreadScheduling = true;
+}
+
+void SpecialFunctionHandler::handleLockRelease(ExecutionState &state,
+                                               KInstruction *target,
+                                               std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_lock_release - expected 1");
+
+  ref<Expr> lidExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(lidExpr)) {
+    executor.terminateStateOnError(state, "klee_lock_release", Executor::User);
+    return;
+  }
+
+  auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
+  const auto& ownTid = state.currentThreadId();
+
+  // Test if the lock is acquired and whether we are the one that has the lock
+  const auto& lockHeads = state.porNode->configuration().lock_heads();
+
+  auto it = lockHeads.find(lid);
+  if (it == lockHeads.end()) {
+    executor.terminateStateOnError(
+      state,
+      "Unlock of a non-existing lock is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  const auto* e = it->second;
+
+  if (e->kind() != por::event::event_kind::lock_acquire && e->kind() != por::event::event_kind::wait2) {
+    // The last action on this lock was not an acquire -> we cannot release anything and this
+    // is undefined behavior
+    executor.terminateStateOnError(
+      state,
+      "Unlock of an unacquired lock is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  if (e->tid() != ownTid) {
+    executor.terminateStateOnError(
+      state,
+      "Unlock of a lock that is acquired by another thread is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  state.memoryState.unregisterAcquiredLock(lid, ownTid);
+  executor.porEventManager.registerLockRelease(state, lid, true, false);
+}
+
+void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
+                                             KInstruction *target,
+                                             std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 2 && "invalid number of arguments to klee_cond_wait - expected 2");
+
+  ref<Expr> cidExpr = executor.toUnique(state, arguments[0]);
+  ref<Expr> lidExpr = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(cidExpr) || !isa<ConstantExpr>(lidExpr)) {
+    executor.terminateStateOnError(state, "klee_cond_wait", Executor::User);
+    return;
+  }
+
+  auto cid = cast<ConstantExpr>(cidExpr)->getZExtValue();
+  auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
+
+  const auto& ownTid = state.currentThreadId();
+
+  // Test if the lock is acquired and whether we are the one that has the lock
+  const auto& lockHeads = state.porNode->configuration().lock_heads();
+  auto it = lockHeads.find(lid);
+
+  // block until be receive a signal / broadcast
+
+  // but first we have to release the mutex
+  if (it == lockHeads.end()) {
+    // Maybe these should be an exit error
+    executor.terminateStateOnError(
+      state,
+      "Unlock of a non-existing lock is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  const auto* e = it->second;
+
+  if (e->kind() != por::event::event_kind::lock_acquire && e->kind() != por::event::event_kind::wait2) {
+    // The last action on this lock was not an acquire -> we cannot release anything and this
+    // is undefined behavior
+    executor.terminateStateOnError(
+      state,
+      "Unlock of an unacquired lock is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  if (e->tid() != ownTid) {
+    executor.terminateStateOnError(
+      state,
+      "Unlock of a lock that is acquired by another thread is undefined behavior",
+      Executor::User
+    );
+    return;
+  }
+
+  state.currentThread().state = ThreadState::Waiting;
+  state.currentThread().waiting = Thread::wait_cv_1_t{cid, lid};
+  state.memoryState.unregisterAcquiredLock(lid, ownTid);
+  executor.porEventManager.registerCondVarWait1(state, cid, lid);
+}
+
+void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
+                                              KInstruction *target,
+                                              std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_cond_signal - expected 1");
+
+  ref<Expr> cidExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(cidExpr)) {
+    executor.terminateStateOnError(state, "klee_cond_signal", Executor::User);
+    return;
+  }
+
+  auto cid = cast<ConstantExpr>(cidExpr)->getZExtValue();
+
+  std::optional<ThreadId> choice;
+  if (state.needsCatchUp()) {
+    const por::event::event* event = state.peekCatchUp();
+    assert(event->kind() == por::event::event_kind::signal);
+    auto signal = static_cast<const por::event::signal*>(event);
+    if (!signal->is_lost()) {
+      assert(state.getThreadById(signal->notified_thread()));
+      auto &thread = state.getThreadById(signal->notified_thread()).value().get();
+      assert(thread.state == ThreadState::Waiting);
+      thread.waiting = Thread::wait_cv_2_t{signal->cid(), signal->wait_predecessor()->lid()};
+      choice = signal->notified_thread();
+    }
+  } else {
+    for (auto &[tid, thread] : state.threads) {
+      auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
+      if (w && w->cond == cid) {
+        assert(thread.state == ThreadState::Waiting);
+        thread.waiting = Thread::wait_cv_2_t{w->cond, w->lock};
+        choice = tid;
+        break; // always take first possible choice
+      }
+    }
+  }
+
+  if (choice) {
+    executor.porEventManager.registerCondVarSignal(state, cid, choice.value());
+  } else {
+    ++state.lostNotifications;
+    executor.porEventManager.registerCondVarSignal(state, cid, {});
+  }
+}
+
+void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
+                                                 KInstruction *target,
+                                                 std::vector<ref<Expr>> &arguments) {
+  assert(arguments.size() == 1 && "invalid number of arguments to klee_cond_broadcast - expected 1");
+
+  ref<Expr> cidExpr = executor.toUnique(state, arguments[0]);
+
+  if (!isa<ConstantExpr>(cidExpr)) {
+    executor.terminateStateOnError(state, "klee_cond_broadcast", Executor::User);
+    return;
+  }
+
+  auto cid = cast<ConstantExpr>(cidExpr)->getZExtValue();
+
+  std::vector<ThreadId> notifiedThreads;
+
+  if (state.needsCatchUp()) {
+    const por::event::event* event = state.peekCatchUp();
+    assert(event->kind() == por::event::event_kind::broadcast);
+    auto broadcast = static_cast<const por::event::broadcast*>(event);
+    for (const auto &wait1 : broadcast->wait_predecessors()) {
+      assert(state.getThreadById(wait1->tid()));
+      auto &thread = state.getThreadById(wait1->tid()).value().get();
+      assert(thread.state == ThreadState::Waiting);
+      thread.waiting = Thread::wait_cv_2_t{wait1->cid(), wait1->lid()};
+      notifiedThreads.push_back(wait1->tid());
+    }
+  } else {
+    for (auto &[tid, thread] : state.threads) {
+      auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
+      if (w && w->cond == cid) {
+        assert(thread.state == ThreadState::Waiting);
+        thread.waiting = Thread::wait_cv_2_t{w->cond, w->lock};
+        notifiedThreads.push_back(tid);
+      }
+    }
+  }
+
+  if (notifiedThreads.empty()) {
+    ++state.lostNotifications;
+  }
+
+  executor.porEventManager.registerCondVarBroadcast(state, cid, notifiedThreads);
 }
 
 void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,

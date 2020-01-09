@@ -2021,6 +2021,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
   Thread &thread = state.currentThread();
 
+  assert(thread.state == ThreadState::Runnable);
+
   switch (i->getOpcode()) {
     // Control flow
   case Instruction::Ret: {
@@ -3249,7 +3251,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     state.atomicPhase = wasAtomicPhase;
 
-    porEventManager.registerLockRelease(state, memLoc->first->getId(), true);
+    porEventManager.registerLockRelease(state, memLoc->first->getId(), true, true);
     break;
   }
 
@@ -3296,7 +3298,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     state.atomicPhase = wasAtomicPhase;
 
-    porEventManager.registerLockRelease(state, src->first->getId(), true);
+    porEventManager.registerLockRelease(state, src->first->getId(), true, true);
     break;
   }
 
@@ -3313,20 +3315,26 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::updateStates(ExecutionState *current) {
-  if (current && !current->currentThread().pathSincePorLocal.empty()) {
-    porEventManager.registerLocal(*current, addedStates);
-  }
-
-  if (current && current->needsThreadScheduling) {
-    const por::configuration &cfg = current->porNode->configuration();
-    auto tid = current->currentThreadId();
-    const por::event::event *lastEvent = cfg.last_of_tid(tid);
-
-    if (lastEvent && lastEvent->is_cutoff()) {
-        current->cutoffThread(tid);
+  if (current) {
+    if (!current->currentThread().pathSincePorLocal.empty()) {
+      porEventManager.registerLocal(*current, addedStates);
     }
-    scheduleThreads(*current);
-    current->needsThreadScheduling = false;
+
+    const por::configuration &cfg = current->porNode->configuration();
+    if (current->needsThreadScheduling) {
+      auto tid = current->currentThreadId();
+      const por::event::event *lastEvent = cfg.last_of_tid(tid);
+
+      if (lastEvent && lastEvent->is_cutoff()) {
+          current->cutoffThread(tid);
+      }
+      scheduleThreads(*current);
+    } else {
+      // If we do not need thread scheduling, then the current thread
+      // must still be runnable -> we will try to execute the next instruction
+      // in the current thread
+      assert(current->currentThread().isRunnable(cfg));
+    }
   }
 
   if (searcher) {
@@ -4636,11 +4644,14 @@ void Executor::runFunctionAsMain(Function *f,
   // we cannot correctly initialize / allocate the needed memory regions
   auto *state = new ExecutionState(kmodule->functionMap[f]);
 
-  // By default the state should create the main thread
-  Thread &thread = state->currentThread();
+  // FIXME: refactor!
+  // By default the state creates the main thread
+  Thread &thread = state->getThreadById(ExecutionState::mainThreadId).value().get();
   thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
   thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
-  thread.porHasBeenInitialized = true;
+  thread.state = ThreadState::Runnable;
+  thread.waiting = Thread::wait_none_t{};
+  scheduleNextThread(*state, ExecutionState::mainThreadId);
   
   MemoryObject *argvMO = nullptr;
 
@@ -5051,79 +5062,6 @@ ThreadId Executor::createThread(ExecutionState &state,
   return thread.getThreadId();
 }
 
-void Executor::threadWaitOn(ExecutionState &state, std::uint64_t lid) {
-  state.threadWaitOn(lid);
-  state.needsThreadScheduling = true;
-}
-
-void Executor::threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent) {
-  if (!onlyOne) {
-    std::vector<ThreadId> notifiedThreads;
-
-    if (registerAsNotificationEvent && state.needsCatchUp()) {
-      const por::event::event* event = state.peekCatchUp();
-      assert(event->kind() == por::event::event_kind::broadcast);
-      auto broadcast = static_cast<const por::event::broadcast*>(event);
-      for (const auto &wait1 : broadcast->wait_predecessors()) {
-        state.wakeUpThread(wait1->tid());
-        notifiedThreads.push_back(wait1->tid());
-      }
-    } else {
-      for (const auto &th : state.threads) {
-        if (th.second.waitingHandle == lid) {
-          state.wakeUpThread(th.first);
-          notifiedThreads.push_back(th.first);
-        }
-      }
-    }
-
-    if (registerAsNotificationEvent) {
-      if (notifiedThreads.size() == 1)
-        ++state.lostNotifications;
-      porEventManager.registerCondVarBroadcast(state, lid, notifiedThreads);
-    }
-
-    return;
-  }
-
-  std::vector<ThreadId> choices;
-  if (registerAsNotificationEvent && state.needsCatchUp()) {
-      const por::event::event* event = state.peekCatchUp();
-      assert(event->kind() == por::event::event_kind::signal);
-      auto signal = static_cast<const por::event::signal*>(event);
-      if (!signal->is_lost())
-        choices.push_back(signal->notified_thread());
-  } else {
-    for (const auto &th : state.threads) {
-      if (th.second.waitingHandle == lid) {
-        choices.push_back(th.first);
-      }
-    }
-  }
-
-  if (choices.empty()) {
-    // So if we have no choices, but this should be a signal, then
-    // this is a lost signal (signalled thread id == 0)
-    if (registerAsNotificationEvent) {
-      ++state.lostNotifications;
-      porEventManager.registerCondVarSignal(state, lid, {});
-    }
-
-    return;
-  }
-
-  // always take first possible choice
-  state.wakeUpThread(choices[0]);
-  if (registerAsNotificationEvent) {
-    porEventManager.registerCondVarSignal(state, lid, choices[0]);
-  }
-}
-
-void Executor::preemptThread(ExecutionState &state) {
-  state.preemptThread(state.currentThreadId());
-  state.needsThreadScheduling = true;
-}
-
 void Executor::exitCurrentThread(ExecutionState &state) {
   // needs to come before thread_exit event
   if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
@@ -5309,10 +5247,20 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
-  std::set<ThreadId> runnable = state.runnableThreads;
+  std::set<ThreadId> runnable;
+
+  assert(state.porNode);
+
+  for (auto &[tid, thread] : state.threads) {
+    if (thread.isRunnable(state.porNode->configuration())) {
+      runnable.insert(tid);
+    }
+  }
 
   bool disabledThread = false;
   bool wasEmpty = runnable.empty();
+
+  state.onlyOneThreadRunnableSinceEpochStart = runnable.size() == 1;
 
   if (!state.needsCatchUp() && !state.porNode->D().empty()) {
     const por::configuration &C = state.porNode->configuration();
@@ -5389,29 +5337,19 @@ void Executor::scheduleThreads(ExecutionState &state) {
   // pick thread according to policy by default
   ThreadId tid;
   switch (ThreadScheduling) {
-      case ThreadSchedulingPolicy::First:
-          tid = *runnable.begin();
-          break;
-      case ThreadSchedulingPolicy::Last:
-          tid = *std::prev(runnable.end());
-          break;
-      case ThreadSchedulingPolicy::Random:
-          tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
-          break;
-      case ThreadSchedulingPolicy::RoundRobin: {
-        tid = *std::next(runnable.begin(), state.porNode->configuration().size() % runnable.size());
-        break;
-      }
-  }
-
-  // or (if possible) pick thread that needs to catch up
-  while (state.needsCatchUp() && state.peekCatchUp()->kind() == por::event::event_kind::thread_init) {
-    auto peekTid = state.peekCatchUp()->tid();
-    state.scheduleNextThread(peekTid);
-    auto thread = state.getThreadById(peekTid);
-    assert(!thread.value().get().porHasBeenInitialized);
-    thread.value().get().porHasBeenInitialized = true;
-    porEventManager.registerThreadInit(state, peekTid);
+    case ThreadSchedulingPolicy::First:
+      tid = *runnable.begin();
+      break;
+    case ThreadSchedulingPolicy::Last:
+      tid = *std::prev(runnable.end());
+      break;
+    case ThreadSchedulingPolicy::Random:
+      tid = *std::next(runnable.begin(), theRNG.getInt32() % runnable.size());
+      break;
+    case ThreadSchedulingPolicy::RoundRobin: {
+      tid = *std::next(runnable.begin(), state.porNode->configuration().size() % runnable.size());
+      break;
+    }
   }
 
   if (state.needsCatchUp()) {
@@ -5433,28 +5371,49 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (peekThread.has_value()) {
       tid = peekTid;
       if (peekThread.value().get().state == ThreadState::Cutoff) {
-        peekThread.value().get().state = ThreadState::Runnable;
+        peekThread.value().get().state = ThreadState::Runnable; // FIXME: is that right?
         klee_warning("Catch up on cutoff event");
-      }
-    }
-
-    if (state.peekCatchUp()->kind() == por::event::event_kind::thread_join) {
-      auto *join = static_cast<por::event::thread_join const*>(state.peekCatchUp());
-      auto jid = join->joined_thread();
-      auto it = state.threads.find(jid);
-      if (it != state.threads.end() && it->second.state == ThreadState::Runnable) {
-        // thread that is to be joined has to catch-up first
-        tid = jid;
       }
     }
   }
 
-  state.scheduleNextThread(tid);
-  auto thread = state.getThreadById(tid);
-  assert(thread.has_value());
-  if(!thread.value().get().porHasBeenInitialized) {
-    thread.value().get().porHasBeenInitialized = true;
-    porEventManager.registerThreadInit(state, tid);
+  state.needsThreadScheduling = false;
+  scheduleNextThread(state, tid);
+}
+
+void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
+  Thread &thread = state.currentThread(tid);
+
+  state.schedulingHistory.push_back(tid);
+  state.currentSchedulingIndex = state.schedulingHistory.size() - 1;
+  if (state.ptreeNode) {
+    state.ptreeNode->schedulingDecision.scheduledThread = tid;
+    state.ptreeNode->schedulingDecision.epochNumber = state.schedulingHistory.size();
+  }
+
+  // NOTE: event registration has to come last for consistent standby state
+  if (thread.state == ThreadState::Waiting) {
+    thread.state = ThreadState::Runnable;
+    auto resource = thread.waiting;
+    thread.waiting = Thread::wait_none_t{};
+    std::visit([this,&state](auto&& w) {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, Thread::wait_init_t>) {
+        porEventManager.registerThreadInit(state, state.currentThreadId());
+      } else if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+        state.memoryState.registerAcquiredLock(w.lock, state.currentThreadId());
+        porEventManager.registerLockAcquire(state, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+        state.memoryState.registerAcquiredLock(w.lock, state.currentThreadId());
+        porEventManager.registerCondVarWait2(state, w.cond, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
+        porEventManager.registerThreadJoin(state, w.thread);
+      } else {
+        assert(0);
+      }
+    }, resource);
+  } else if (thread.state != ThreadState::Runnable) {
+    assert(0);
   }
 }
 

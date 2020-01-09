@@ -229,6 +229,8 @@ private:
 
   void exploreSchedules(ExecutionState &state, bool maximalConfiguration = false);
 
+  void scheduleNextThread(ExecutionState &state, const ThreadId &tid);
+
   void updateStatesJSON(KInstruction *ki, const ExecutionState &state,
                         std::string ktest = "", std::string error = "");
   void updateForkJSON(const ExecutionState &current,
@@ -556,9 +558,6 @@ public:
   ThreadId createThread(ExecutionState &state,
                                 KFunction *startRoutine,
                                 ref<Expr> runtimeStructPtr);
-  void threadWaitOn(ExecutionState &state, std::uint64_t lid);
-  void threadWakeUpWaiting(ExecutionState &state, std::uint64_t lid, bool onlyOne, bool registerAsNotificationEvent);
-  void preemptThread(ExecutionState &state);
   void exitCurrentThread(ExecutionState &state);
 };
 } // End klee namespace

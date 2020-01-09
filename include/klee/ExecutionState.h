@@ -104,9 +104,6 @@ public:
   /// @brief the history of scheduling up until now
   std::vector<ThreadId> schedulingHistory;
 
-  /// @brief set of all threads that could in theory be executed
-  std::set<ThreadId> runnableThreads;
-
   /// @brief if the current state is in an temporary atomic phase
   bool atomicPhase;
 
@@ -226,23 +223,11 @@ public:
   /// @brief will create a new thread
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
-  //// @brief
-  void threadWaitOn(std::uint64_t lid);
-
-  /// @brief wakes a specific thread up
-  void wakeUpThread(const ThreadId &tid);
-
-  /// @brief will preempt the current thread for the current sync phase
-  void preemptThread(const ThreadId &tid);
-
   /// @brief will exit the referenced thread
   void exitThread(const ThreadId &tid);
 
   /// @brief will mark the referenced thread as cutoff
   void cutoffThread(const ThreadId &tid);
-
-  /// @brief update the current scheduled thread
-  void scheduleNextThread(const ThreadId &tid);
 
   void popFrameOfCurrentThread();
 
