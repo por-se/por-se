@@ -358,23 +358,36 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
   return true;
 }
 
-bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId) {
+bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool atomic) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_lock_release);
 
+    if (atomic) {
+      llvm::errs() << " (atomic)";
+    }
+
     llvm::errs() << " on mutex " << mId << "\n";
+  }
+
+  [[maybe_unused]] auto pred = state.porNode->last_included_event();
+  if (atomic) {
+    assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
-    por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId);
+  extendPorNode(state, [this, &state, &mId, &atomic](por::configuration& cfg) {
+    por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId, atomic);
     auto standby = createStandbyState(state, por_lock_release);
     attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
+
+  if (atomic) {
+    assert(pred == state.porNode->last_included_event()->thread_predecessor());
+  }
 
   return true;
 }

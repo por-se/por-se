@@ -3249,7 +3249,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     state.atomicPhase = wasAtomicPhase;
 
-    porEventManager.registerLockRelease(state, memLoc->first->getId());
+    porEventManager.registerLockRelease(state, memLoc->first->getId(), true);
     break;
   }
 
@@ -3296,7 +3296,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     state.atomicPhase = wasAtomicPhase;
 
-    porEventManager.registerLockRelease(state, src->first->getId());
+    porEventManager.registerLockRelease(state, src->first->getId(), true);
     break;
   }
 
