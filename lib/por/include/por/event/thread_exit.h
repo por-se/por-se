@@ -27,8 +27,12 @@ namespace por::event {
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
 
-			if(this->is_atomic()) {
-				assert(this->thread_predecessor()->kind() == event_kind::lock_release);
+			if(this->ends_atomic_operation()) {
+				assert(this->atomic_predecessor());
+				assert(this->atomic_predecessor() == this->thread_predecessor());
+				assert(this->atomic_predecessor()->kind() == event_kind::lock_release);
+			} else {
+				assert(this->atomic_predecessor() == nullptr);
 			}
 		}
 
@@ -70,7 +74,7 @@ namespace por::event {
 		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit"
-					+ (is_atomic() ? " (atomic)" : "") + "]";
+					+ (ends_atomic_operation() ? " (atomic)" : "") + "]";
 			return "thread_exit";
 		}
 
@@ -82,6 +86,13 @@ namespace por::event {
 			return _predecessors[0];
 		}
 
-		bool is_atomic() const noexcept { return _atomic; }
+		bool ends_atomic_operation() const noexcept override { return _atomic; }
+
+		event const* atomic_predecessor() const noexcept override {
+			if(ends_atomic_operation()) {
+				return thread_predecessor();
+			}
+			return nullptr;
+		}
 	};
 }

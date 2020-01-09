@@ -318,6 +318,9 @@ namespace por::event {
 		virtual lock_id_t lid() const noexcept { return 0; }
 		virtual cond_id_t cid() const noexcept { return 0; }
 
+		virtual bool ends_atomic_operation() const noexcept { return false; }
+		virtual event const* atomic_predecessor() const noexcept { return nullptr; }
+
 		bool is_independent_of(event const* other) const noexcept;
 
 		// IMPORTANT: assumes no conflict between this and rhs

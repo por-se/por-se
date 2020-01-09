@@ -45,9 +45,13 @@ namespace por::event {
 			assert(this->lock_predecessor()->lid() == this->lid());
 			assert(this->lid());
 
-			if(this->is_atomic()) {
-				assert(this->lock_predecessor()->kind() == event_kind::lock_acquire);
-				assert(this->lock_predecessor() == this->thread_predecessor());
+			if(this->ends_atomic_operation()) {
+				assert(this->atomic_predecessor());
+				assert(this->atomic_predecessor() == this->lock_predecessor());
+				assert(this->atomic_predecessor() == this->thread_predecessor());
+				assert(this->atomic_predecessor()->kind() == event_kind::lock_acquire);
+			} else {
+				assert(this->atomic_predecessor() == nullptr);
 			}
 		}
 
@@ -96,7 +100,7 @@ namespace por::event {
 		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_release"
-					+ (is_atomic() ? " (atomic)" : "") + " lid: " + std::to_string(lid()) + "]";
+					+ (ends_atomic_operation() ? " (atomic)" : "") + " lid: " + std::to_string(lid()) + "]";
 			return "lock_release";
 		}
 
@@ -112,6 +116,13 @@ namespace por::event {
 
 		lock_id_t lid() const noexcept override { return _lid; }
 
-		bool is_atomic() const noexcept { return _atomic; }
+		bool ends_atomic_operation() const noexcept override { return _atomic; }
+
+		event const* atomic_predecessor() const noexcept override {
+			if(ends_atomic_operation()) {
+				return lock_predecessor();
+			}
+			return nullptr;
+		}
 	};
 }

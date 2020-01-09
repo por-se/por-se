@@ -14,42 +14,23 @@ using namespace por;
 namespace {
 	using atomic_pair_map_t = std::map<por::event::event const*, por::event::event const*>;
 
-	static void extract_unlock_exit_pairs(por::comb& comb, atomic_pair_map_t& map) {
-		for(auto &[tid, thread] : comb.threads()) {
-			auto max = thread.max();
-			if(max->kind() == por::event::event_kind::thread_exit) {
-				auto exit = static_cast<por::event::thread_exit const*>(max);
-				if(exit->is_atomic()) {
-					auto pred = max->thread_predecessor();
-					assert(pred->kind() == por::event::event_kind::lock_release);
+	static void extract_atomic_pairs(por::comb& comb, atomic_pair_map_t& map) {
+		for(auto& [tid, thread] : comb.threads()) {
+			for(auto& event : thread) {
+				if(event->ends_atomic_operation()) {
+					auto pred = event->atomic_predecessor();
 					libpor_check(std::find(thread.begin(), thread.end(), pred) != thread.end());
-					map.emplace(pred, max);
+					map.emplace(pred, event);
 				}
 			}
 		}
 		// beware of iterator invalidation in comb
-		for(auto &[k, v] : map) {
+		for(auto& [k, v] : map) {
 			comb.remove(*v);
 		}
-	}
-
-	static void extract_atomic_lock_pairs(por::comb& comb, atomic_pair_map_t& map) {
-		for(auto &[tid, thread] : comb.threads()) {
-			for(auto &event : thread) {
-				if(event->kind() == por::event::event_kind::lock_release) {
-					auto release = static_cast<por::event::lock_release const*>(event);
-					if(release->is_atomic()) {
-						auto pred = release->lock_predecessor();
-						libpor_check(std::find(thread.begin(), thread.end(), pred) != thread.end());
-						map.emplace(pred, event);
-					}
-				}
-			}
-		}
-		// beware of iterator invalidation in comb
-		for(auto &[k, v] : map) {
-			comb.remove(*v);
-		}
+		libpor_check(std::all_of(map.begin(), map.end(), [&comb](auto& entry) {
+			return std::find(comb.begin(), comb.end(), entry.first) != comb.end();
+		}));
 	}
 }
 
@@ -153,8 +134,7 @@ por::leaf node::make_right_branch(por::comb A) {
 	}
 
 	atomic_pair_map_t atomic_pairs;
-	extract_unlock_exit_pairs(A, atomic_pairs);
-	extract_atomic_lock_pairs(A, atomic_pairs);
+	extract_atomic_pairs(A, atomic_pairs);
 
 	while(!A.empty()) {
 		A.sort();
