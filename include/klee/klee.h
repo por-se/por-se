@@ -165,6 +165,23 @@ extern "C" {
   void klee_por_thread_join(void *runtime_struct);
 
   int klee_output(int target, const char* out);
+
+  // ---
+  // KLEE thread synchronization framework
+  // ---
+
+  // 'Pointer' to ensure that klee is theoretically
+  // able to write to the specified locations an arbitrary value
+  // that has the width of a pointer
+  typedef void* klee_sync_primitive_t;
+
+  void klee_lock_acquire(klee_sync_primitive_t* lock);
+  void klee_lock_release(klee_sync_primitive_t* lock);
+
+  void klee_cond_wait(klee_sync_primitive_t* cond, klee_sync_primitive_t* lock);
+  void klee_cond_signal(klee_sync_primitive_t* cond);
+  void klee_cond_broadcast(klee_sync_primitive_t* cond);
+
 #ifdef __cplusplus
 }
 #endif

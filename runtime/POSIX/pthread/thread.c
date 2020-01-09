@@ -218,7 +218,8 @@ void pthread_cleanup_push(void (*routine)(void*), void *arg) {
 }
 
 int kpr_signal_thread(pthread_t th) {
-  return pthread_cond_signal(&th->cond);
+  klee_cond_signal(&th->cond);
+  return 0;
 }
 
 int kpr_wait_thread_self(pthread_mutex_t* mutex) {

@@ -14,11 +14,15 @@
 #define SEM_VALUE_MAX (32767)
 
 typedef struct {
+  pthread_internal_t magic;
+
   int value;
   const char* name;
 
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
+  size_t waitingCount;
+
+  void* mutex;
+  void* cond;
 } sem_t;
 
 int sem_init(sem_t *sem, int f, unsigned v);

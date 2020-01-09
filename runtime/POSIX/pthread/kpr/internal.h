@@ -13,9 +13,7 @@
 
 void kpr_key_clear_data_of_thread(pthread_t th);
 
-int kpr_mutex_unlock_internal(pthread_mutex_t *m, bool forceUnlock);
-
-int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept);
+int kpr_mutex_unlock(pthread_mutex_t *mutex, bool force);
 
 void kpr_check_init_pattern(pthread_internal_t* data, size_t size);
 

@@ -104,10 +104,14 @@ struct kpr_mutex;
 
 typedef struct kpr_cond {
   pthread_internal_t magic;
+
+  void* internalCond;
+  void* lock;
+
   struct kpr_mutex* waitingMutex;
   uint64_t waitingCount;
 } pthread_cond_t;
-#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, 0 }
+#define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, NULL, NULL, 0 }
 
 typedef struct {
   uint8_t state;
@@ -126,15 +130,20 @@ typedef kpr_thread* pthread_t;
 
 typedef struct kpr_mutex {
   pthread_internal_t magic;
+
+  void* lock;
+  void* cond;
+
+  int type; // normal, errorcheck, recursive
+  int robust; // stalled, robust
+
   int acquired;
-  int type;
-  int robust;
+  pthread_t holdingThread;
 
   int robustState;
-  pthread_t holdingThread;
 } pthread_mutex_t;
-#define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, 0, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL }
-#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { PTHREAD_INTERNAL_MAGIC, 0, PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_STALLED, 0, NULL }
+#define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL, 0 }
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_STALLED, 0, NULL, 0 }
 
 typedef struct {
   pthread_internal_t magic;

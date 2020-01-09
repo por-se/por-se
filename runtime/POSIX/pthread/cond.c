@@ -5,6 +5,8 @@
 
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
+#include <assert.h>
 
 int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
   kpr_check_for_double_init(lock);
@@ -13,7 +15,10 @@ int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
   lock->waitingMutex = NULL;
   lock->waitingCount = 0;
 
-  klee_por_register_event(por_condition_variable_create, lock);
+  // We cannot register this create event as this might introduce a scheduling
+  // point that we do not want to have.
+  // klee_por_register_event(por_lock_create, &lock->lock);
+  klee_por_register_event(por_condition_variable_create, &lock->internalCond);
 
   kpr_ensure_valid(lock);
 
@@ -24,11 +29,13 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
   kpr_check_if_valid(pthread_cond_t, lock);
 
   if (lock->waitingCount != 0) {
-    klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
-  klee_por_register_event(por_condition_variable_destroy, lock);
+  memset(lock, 0xAB, sizeof(pthread_cond_t));
+
+  klee_por_register_event(por_condition_variable_destroy, &lock->internalCond);
+  // klee_por_register_event(por_lock_destroy, &lock->lock);
 
   return 0;
 }
@@ -37,14 +44,16 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   kpr_check_if_valid(pthread_mutex_t, m);
   kpr_check_if_valid(pthread_cond_t, lock);
 
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&lock->lock);
 
   int acquiredCount = m->acquired;
-  int result = kpr_mutex_unlock_internal(m, true);
+  int result = kpr_mutex_unlock(m, true /* force unlock */);
   if (result != 0) {
-    klee_toggle_thread_scheduling(1);
+    klee_lock_release(&lock->lock);
     return EINVAL;
   }
+
+  assert(acquiredCount >= 1);
 
   if (m != lock->waitingMutex) {
     if (lock->waitingMutex == NULL) {
@@ -57,14 +66,25 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
   }
 
   lock->waitingCount++;
-  klee_wait_on(lock, m); // registers wait1 event
+  klee_cond_wait(&lock->internalCond, &lock->lock);
 
-  result = kpr_mutex_lock_internal(m, NULL);
-  m->acquired = acquiredCount;
+  klee_lock_release(&lock->lock);
 
-  klee_por_register_event(por_wait2, lock, m);
+  result = pthread_mutex_lock(m);
 
-  klee_toggle_thread_scheduling(1);
+  // TODO: how to handle a robust mutex which owner is now dead (?)
+  if (result == 0) {
+    // Subtract one since we already did one `pthread_mutex_lock`
+    acquiredCount--;
+
+    // If the mutex was a recursive one, then the `acquiredCount` is still greater
+    // than zero -> we want to return the mutex in the same state as it was before
+    // entering pthread_cond_wait -> Now we have to do mutex_lock calls until we reach
+    // the same acquiredCount as before
+    for (; acquiredCount > 0; acquiredCount--) {
+      pthread_mutex_lock(m);
+    }
+  }
 
   return result;
 }
@@ -72,28 +92,40 @@ int pthread_cond_wait(pthread_cond_t *lock, pthread_mutex_t *m) {
 int pthread_cond_broadcast(pthread_cond_t *lock) {
   kpr_check_if_valid(pthread_cond_t, lock);
 
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&lock->lock);
 
-  // We can actually just use the transfer as we know that all wait on the
-  // same mutex again
-  klee_release_waiting(lock, KLEE_RELEASE_ALL, por_broadcast);
+  // if (lock->waitingMutex != NULL) {
+  //   if (lock->waitingMutex->holdingThread != pthread_self()) {
+  //     // TODO: warn about other thread that is currently holding the mutex
+  //   }
+  // } else {
+  //   // TODO: warn about mutex not locked
+  // }
+
+  klee_cond_broadcast(&lock->internalCond);
 
   lock->waitingCount = 0;
   lock->waitingMutex = NULL;
 
-  klee_toggle_thread_scheduling(1);
-  klee_preempt_thread();
+  klee_lock_release(&lock->lock);
+
   return 0;
 }
 
 int pthread_cond_signal(pthread_cond_t *lock) {
   kpr_check_if_valid(pthread_cond_t, lock);
 
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&lock->lock);
 
-  // We can actually just use the transfer as we know that all wait on the
-  // same mutex again
-  klee_release_waiting(lock, KLEE_RELEASE_SINGLE, por_signal);
+  // if (lock->waitingMutex != NULL) {
+  //   if (lock->waitingMutex->holdingThread != pthread_self()) {
+  //     // TODO: warn about other thread that is currently holding the mutex
+  //   }
+  // } else {
+  //   // TODO: warn about mutex not locked
+  // }
+
+  klee_cond_signal(&lock->internalCond);
   if (lock->waitingCount > 0) {
     lock->waitingCount--;
   }
@@ -102,8 +134,7 @@ int pthread_cond_signal(pthread_cond_t *lock) {
     lock->waitingMutex = NULL;
   }
 
-  klee_toggle_thread_scheduling(1);
-  klee_preempt_thread();
+  klee_lock_release(&lock->lock);
 
   return 0;
 }

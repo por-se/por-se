@@ -6,6 +6,10 @@
 
 #include <errno.h>
 #include <assert.h>
+#include <stdbool.h>
+#include <string.h>
+
+#define kpr_mutex_default(mutex) ((mutex)->type == PTHREAD_MUTEX_NORMAL && (mutex)->robust == PTHREAD_MUTEX_STALLED)
 
 int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
   kpr_check_for_double_init(mutex);
@@ -13,6 +17,10 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
 
   mutex->acquired = 0;
   mutex->holdingThread = NULL;
+
+  mutex->type = PTHREAD_MUTEX_DEFAULT;
+  mutex->robust = PTHREAD_MUTEX_STALLED;
+
   mutex->robustState = KPR_MUTEX_NORMAL;
 
   if (attr != NULL) {
@@ -20,175 +28,174 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
     pthread_mutexattr_getrobust(attr, &mutex->robust);
   }
 
-  klee_por_register_event(por_lock_create, mutex);
+  klee_por_register_event(por_lock_create, &mutex->lock);
+  if (!kpr_mutex_default(mutex)) {
+    klee_por_register_event(por_condition_variable_create, &mutex->cond);
+  }
+
   kpr_ensure_valid(mutex);
 
   return 0;
 }
 
-static int kpr_mutex_trylock_internal(pthread_mutex_t* mutex) {
-  pthread_t pthread = pthread_self();
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+  kpr_check_if_valid(pthread_mutex_t, mutex);
 
-  if (mutex->robustState == KPR_MUTEX_UNUSABLE) {
+  klee_lock_acquire(&mutex->lock);
+
+  if (kpr_mutex_default(mutex)) {
+    mutex->acquired = 1;
+    mutex->holdingThread = pthread_self();
+    return 0;
+  }
+
+  if (mutex->robust == PTHREAD_MUTEX_ROBUST && mutex->robustState == KPR_MUTEX_UNUSABLE) {
+    klee_lock_release(&mutex->lock);
     return EINVAL;
   }
 
   if (mutex->acquired == 0) {
+    // Not yet acquired by anyone
     mutex->acquired = 1;
-    mutex->holdingThread = pthread;
+    mutex->holdingThread = pthread_self();
+
+    klee_lock_release(&mutex->lock);
     return 0;
   }
 
-  if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
-    if (mutex->holdingThread == pthread) {
+  assert(mutex->holdingThread != NULL);
+
+  // So the lock is currently acquired by someone else
+  if (mutex->holdingThread == pthread_self()) {
+    if (mutex->type == PTHREAD_MUTEX_NORMAL) {
+      // Report a double locking -> short circuit by locking `&mutex->lock` again
+      // ugly but works
+      klee_lock_acquire(&mutex->lock);
+      assert(0);
+      return -1;
+    }
+
+    if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
+      // type is recursive
       mutex->acquired++;
-
-      // TODO: need to check overflows -> EAGAIN
-
+      klee_lock_release(&mutex->lock);
       return 0;
     }
+
+    assert(mutex->type == PTHREAD_MUTEX_ERRORCHECK);
+    klee_lock_release(&mutex->lock);
+    return EDEADLOCK;
   }
 
-  if (mutex->type == PTHREAD_MUTEX_ERRORCHECK) {
-    if (mutex->holdingThread == pthread) {
-      return EDEADLK;
-    }
-  }
+  while(1) {
+    // The mutex is currently acquired and it is not acquired by ourself
 
-  return EBUSY;
-}
+    if (mutex->robust == PTHREAD_MUTEX_ROBUST) {
+      if (mutex->robustState == KPR_MUTEX_UNUSABLE) {
+        klee_lock_release(&mutex->lock);
+        return EINVAL;
+      }
 
-int kpr_mutex_lock_internal(pthread_mutex_t *mutex, int* hasSlept) {
-  int result;
+      // We have to test if the owner is dead -> then we can get the mutex
+      assert(mutex->holdingThread != NULL);
 
-  for (;;) {
-    result = kpr_mutex_trylock_internal(mutex);
-
-    if (result == 0 || result == EINVAL) {
-      break;
-    }
-
-    // In the error check case, we have to prevent the deadlock
-    if (mutex->type == PTHREAD_MUTEX_ERRORCHECK && result == EDEADLK) {
-      break;
-    }
-
-    if (mutex->robust == PTHREAD_MUTEX_ROBUST && result == EBUSY) {
-      // Now we have to test if the owner is "dead"
-      if (mutex->holdingThread != NULL && mutex->holdingThread->state != KPR_THREAD_STATE_LIVE) {
+      if (mutex->holdingThread->state != KPR_THREAD_STATE_LIVE) {
         mutex->robustState = KPR_MUTEX_INCONSISTENT;
         mutex->acquired = 1;
         mutex->holdingThread = pthread_self();
 
-        result = EOWNERDEAD;
-        break;
+        klee_lock_release(&mutex->lock);
+        return EOWNERDEAD;
       }
     }
 
-    if (hasSlept != NULL) {
-      *hasSlept = 1;
+    // Wait until someone will release the mutex
+    klee_cond_wait(&mutex->cond, &mutex->lock);
+
+    if (mutex->acquired == 0) {
+      mutex->acquired = 1;
+      mutex->holdingThread = pthread_self();
+
+      klee_lock_release(&mutex->lock);
+      return 0;
     }
-
-    klee_wait_on(mutex, 0);
   }
-
-  return result;
-}
-
-static inline void check_for_unsupported_acquire(int result) {
-  // XXX: Since the current thread has now acquired the mutex, we would trigger
-  // two lock_acquire events following each other. Our partial order does not currently
-  // handle this case.
-  if (result == EOWNERDEAD) {
-    klee_report_error(__FILE__, __LINE__, "Reacquiring of robust mutex with owner being dead (unsupported)", "xxx.err");
-  }
-}
-
-int pthread_mutex_lock(pthread_mutex_t *mutex) {
-  kpr_check_if_valid(pthread_mutex_t, mutex);
-
-  klee_toggle_thread_scheduling(0);
-
-  int hasSlept = 0;
-  int result = kpr_mutex_lock_internal(mutex, &hasSlept);
-
-  check_for_unsupported_acquire(result);
-
-  size_t acquired = mutex->acquired;
-  if (acquired == 1) {
-    klee_por_register_event(por_lock_acquire, mutex);
-  }
-
-  klee_toggle_thread_scheduling(1);
-  if (hasSlept == 0 && acquired == 1) {
-    klee_preempt_thread();
-  }
-
-  return result;
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
-
-  klee_toggle_thread_scheduling(0);
-
-  int result = kpr_mutex_trylock_internal(mutex);
-
-  check_for_unsupported_acquire(result);
-
-  if (mutex->acquired == 1 && mutex->holdingThread == pthread_self()) {
-    klee_por_register_event(por_lock_acquire, mutex);
-  }
-
-  klee_toggle_thread_scheduling(1);
-  klee_preempt_thread();
-
-  return result;
+  assert(0);
+  // Currently unsupported
 }
 
 int pthread_mutex_consistent(pthread_mutex_t *mutex) {
-  int result = EINVAL;
-
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
-  klee_toggle_thread_scheduling(0);
+  klee_lock_acquire(&mutex->lock);
 
-  if (mutex->holdingThread == pthread_self() && mutex->robustState == KPR_MUTEX_INCONSISTENT) {
-    mutex->robustState = KPR_MUTEX_NORMAL;
-    result = 0;
+  if (mutex->robust != PTHREAD_MUTEX_ROBUST) {
+    klee_lock_release(&mutex->lock);
+    return EINVAL;
   }
-  klee_toggle_thread_scheduling(1);
+
+  int result = 0;
+
+  if (mutex->holdingThread != pthread_self() || mutex->robustState != KPR_MUTEX_INCONSISTENT) {
+    result = EINVAL;
+  } else {
+    mutex->robustState = KPR_MUTEX_NORMAL;
+  }
+
+  klee_lock_release(&mutex->lock);
 
   return result;
 }
 
-int kpr_mutex_unlock_internal(pthread_mutex_t *mutex, bool forceUnlock) {
-  pthread_t thread = pthread_self();
+int kpr_mutex_unlock(pthread_mutex_t *mutex, bool force) {
+  if (kpr_mutex_default(mutex)) {
+    mutex->acquired = 0;
+    mutex->holdingThread = NULL;
 
-  if (mutex->acquired == 0 || mutex->holdingThread != thread) {
-    if (mutex->type == PTHREAD_MUTEX_NORMAL && mutex->robust == PTHREAD_MUTEX_STALLED) {
-      klee_report_error(__FILE__, __LINE__, "Unlocking a normal, nonrobust mutex results in undefined behavior", "undef");
-    }
+    klee_lock_release(&mutex->lock);
+    return 0;
+  }
 
-    // The return code for error checking mutexes or robust
+  klee_lock_acquire(&mutex->lock);
+  if (mutex->holdingThread != pthread_self()) {
+    assert(mutex->type == PTHREAD_MUTEX_ERRORCHECK || mutex->type == PTHREAD_MUTEX_RECURSIVE);
+
+    klee_lock_release(&mutex->lock);
     return EPERM;
   }
 
-  if (mutex->robustState == KPR_MUTEX_INCONSISTENT) {
-    mutex->robustState = KPR_MUTEX_UNUSABLE;
-  }
-
-  if (mutex->type == PTHREAD_MUTEX_RECURSIVE && !forceUnlock) {
+  bool unlock;
+  if (mutex->type == PTHREAD_MUTEX_RECURSIVE) {
+    assert(mutex->acquired > 0);
     mutex->acquired--;
 
-    if (mutex->acquired > 0) {
-      return 0;
-    }
+    unlock = mutex->acquired == 0 || force;
   } else {
-    mutex->acquired = 0;
+    unlock = true;
   }
 
-  klee_release_waiting(mutex, KLEE_RELEASE_ALL);
+  if (mutex->robust == PTHREAD_MUTEX_ROBUST && unlock) {
+    // We have to check whether the mutex is was from a dead thread and is
+    // now made consistent again.
+    // If this is not the case and we actually have to unlock the mutex,
+    // then the mutex will become unusable
+
+    if (mutex->robustState == KPR_MUTEX_INCONSISTENT) {
+      mutex->robustState = KPR_MUTEX_UNUSABLE;
+    }
+  }
+
+  if (unlock) {
+    mutex->acquired = 0;
+    mutex->holdingThread = NULL;
+    klee_cond_signal(&mutex->cond);
+  }
+
+  klee_lock_release(&mutex->lock);
 
   return 0;
 }
@@ -196,40 +203,30 @@ int kpr_mutex_unlock_internal(pthread_mutex_t *mutex, bool forceUnlock) {
 int pthread_mutex_unlock(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
-  klee_toggle_thread_scheduling(0);
-
-  int result = kpr_mutex_unlock_internal(mutex, false);
-  size_t acquired = mutex->acquired;
-
-  if (result == 0 && acquired == 0) {
-    klee_por_register_event(por_lock_release, mutex);
-  }
-
-  klee_toggle_thread_scheduling(1);
-
-  if (acquired == 0) {
-    klee_preempt_thread();
-  }
-
-  return result;
+  return kpr_mutex_unlock(mutex, false);
 }
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex) {
   kpr_check_if_valid(pthread_mutex_t, mutex);
 
   if (mutex->acquired >= 1) {
-    klee_toggle_thread_scheduling(1);
     return EBUSY;
   }
 
-  klee_por_register_event(por_lock_destroy, mutex);
+  // 0xAB is the random pattern of klee
+  memset(mutex, 0xAB, sizeof(pthread_mutex_t));
+
+  if (!kpr_mutex_default(mutex)) {
+    klee_por_register_event(por_condition_variable_destroy, &mutex->cond);
+  }
+  klee_por_register_event(por_lock_destroy, &mutex->lock);
 
   return 0;
 }
 
 int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *time) {
-  klee_warning_once("pthread_mutex_timedlock: timed lock not supported, calling pthread_mutex_lock instead");
-  return pthread_mutex_lock(mutex);
+  klee_warning_once("pthread_mutex_timedlock: timed lock not supported, calling pthread_mutex_trylock instead");
+  return pthread_mutex_trylock(mutex);
 }
 
 //int pthread_mutex_getprioceiling(const pthread_mutex_t *__restrict, int *__restrict);
