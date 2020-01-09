@@ -178,6 +178,10 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 		if(n->right_child()) {
 			continue;
 		}
+		if(n->_event->ends_atomic_operation()) {
+			// event always has to follow its predecessor, it can not be excluded independently
+			continue;
+		}
 		if(n->_event->kind() == por::event::event_kind::local) {
 			// do not compute alternatives to local events, this is done by KLEE
 			continue;
@@ -186,10 +190,6 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 			// thread_init always has to immediately succeed its thread_create
 			// there is no (unique) alternative to be found here
 			continue;
-		}
-		if(n->_event->kind() == por::event::event_kind::thread_exit) {
-			// thread_exit always has to immediately succeed the preceding lock_release on the same thread
-			// there is no (unique) alternative to be found here
 		}
 
 		assert(n->_event != nullptr);

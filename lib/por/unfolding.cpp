@@ -71,6 +71,7 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 
 	por::event::event const* e = nullptr;
 	for(auto d : D) {
+		assert(!d->ends_atomic_operation());
 		if(!in_immediate_conflict_with_color(*d, red)) {
 			e = d;
 			break;
