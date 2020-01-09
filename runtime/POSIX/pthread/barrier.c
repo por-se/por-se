@@ -37,6 +37,8 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier) {
   pthread_mutex_destroy(&barrier->mutex);
   pthread_cond_destroy(&barrier->cond);
 
+  kpr_ensure_invalid(pthread_barrier_t, barrier);
+
   return 0;
 }
 

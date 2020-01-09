@@ -52,9 +52,9 @@ int sem_destroy (sem_t *sem) {
     return -1;
   }
 
-  memset(sem, 0xAB, sizeof(sem_t));
-
   klee_por_register_event(por_lock_destroy, &sem->mutex);
+
+  kpr_ensure_invalid(sem_t, sem);
 
   return 0;
 }

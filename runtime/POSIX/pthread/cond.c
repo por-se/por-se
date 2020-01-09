@@ -32,10 +32,10 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
     return EBUSY;
   }
 
-  memset(lock, 0xAB, sizeof(pthread_cond_t));
-
   klee_por_register_event(por_condition_variable_destroy, &lock->internalCond);
   // klee_por_register_event(por_lock_destroy, &lock->lock);
+
+  kpr_ensure_invalid(pthread_cond_t, lock);
 
   return 0;
 }

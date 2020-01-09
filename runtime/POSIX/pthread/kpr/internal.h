@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define KPR_OTHER_INIT (0)
 #define KPR_RANDOM_INIT (1)
@@ -23,6 +24,9 @@ void kpr_check_already_init(pthread_internal_t* data);
 
 #define kpr_check_for_double_init(argument) kpr_check_already_init(&argument->magic)
 #define kpr_ensure_valid(argument) argument->magic.magic = PTHREAD_INTERNAL_MAGIC_VALUE
+
+// 0xAB is the random pattern of klee
+#define kpr_ensure_invalid(typename, argument) memset((argument), 0xAB, sizeof(typename))
 
 typedef struct {
   void* argument;

@@ -69,6 +69,8 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
   pthread_mutex_destroy(&lock->mutex);
   pthread_cond_destroy(&lock->cond);
 
+  kpr_ensure_invalid(pthread_rwlock_t, lock);
+
   return 0;
 }
 

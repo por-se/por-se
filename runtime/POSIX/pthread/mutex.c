@@ -254,13 +254,12 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
     return EBUSY;
   }
 
-  // 0xAB is the random pattern of klee
-  memset(mutex, 0xAB, sizeof(pthread_mutex_t));
-
   if (!kpr_mutex_default(mutex)) {
     klee_por_register_event(por_condition_variable_destroy, &mutex->cond);
   }
   klee_por_register_event(por_lock_destroy, &mutex->lock);
+
+  kpr_ensure_invalid(pthread_mutex_t, mutex);
 
   return 0;
 }
