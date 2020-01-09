@@ -314,7 +314,7 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
   state.calledExit = true;
   executor.exitCurrentThread(state);
 
-  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), true);
+  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
@@ -939,7 +939,7 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   assert(arguments.empty() && "invalid number of arguments to klee_exit_thread");
   executor.exitCurrentThread(state);
 
-  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), true);
+  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
 }
 
 void SpecialFunctionHandler::handleToggleThreadScheduling(klee::ExecutionState &state,

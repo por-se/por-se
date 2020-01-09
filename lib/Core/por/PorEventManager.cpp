@@ -246,27 +246,37 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
   return true;
 }
 
-bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid, bool snapshotsAllowed) {
+bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid, bool atomic) {
   if (LogPorEvents) {
     logEventThreadAndKind(state, por_thread_exit);
 
+    if (atomic) {
+      llvm::errs() << " (atomic)";
+    }
+
     llvm::errs() << " and exited thread " << tid << "\n";
+  }
+
+  [[maybe_unused]] auto pred = state.porNode->last_included_event();
+  if (atomic) {
+    assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
   assert(state.currentThread().pathSincePorLocal.empty());
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &tid, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
-    por::event::event const* e = cfg.exit_thread(tid);
+  extendPorNode(state, [this, &state, &tid, &atomic](por::configuration& cfg) -> por::node::registration_t {
+    por::event::event const* e = cfg.exit_thread(tid, atomic);
 
-    if(snapshotsAllowed) {
-      auto standby = createStandbyState(state, por_thread_exit);
-      attachFingerprintToEvent(state, *e);
-      return std::make_pair(e, std::move(standby));
-    }
-    return std::make_pair(e, nullptr);
+    auto standby = createStandbyState(state, por_thread_exit);
+    attachFingerprintToEvent(state, *e);
+    return std::make_pair(e, std::move(standby));
   });
+
+  if (atomic) {
+    assert(pred == state.porNode->last_included_event()->thread_predecessor());
+  }
 
   return true;
 }

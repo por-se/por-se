@@ -2080,7 +2080,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
              && kmodule->module->getFunction("__uClibc_main") == nullptr);
       state.calledExit = true;
       exitCurrentThread(state);
-      porEventManager.registerThreadExit(state, state.currentThreadId(), true);
+      porEventManager.registerThreadExit(state, state.currentThreadId(), false);
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses

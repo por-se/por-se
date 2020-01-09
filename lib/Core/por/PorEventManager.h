@@ -31,7 +31,7 @@ namespace klee {
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
-      bool registerThreadExit(ExecutionState &state, const ThreadId &tid, bool snapshotsAllowed = true);
+      bool registerThreadExit(ExecutionState &state, const ThreadId &tid, bool atomic);
       bool registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread);
       bool registerThreadInit(ExecutionState &state, const ThreadId &tid);
 
