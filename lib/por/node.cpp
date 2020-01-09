@@ -127,7 +127,7 @@ por::leaf node::make_right_branch(por::comb A) {
 
 	auto s_last = s->last_included_event();
 	for(auto& r : rschedule()) {
-		if (r == s_last) {
+		if(r == s_last) {
 			break;
 		}
 		catch_up.push_front(r);

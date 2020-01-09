@@ -367,7 +367,7 @@ namespace por::event {
 
 	bool event::is_enabled(por::configuration const& configuration) const noexcept {
 		por::cone C(configuration);
-		if(std::any_of(cone().begin(), cone().end(), [&C](auto &pair) {
+		if(std::any_of(cone().begin(), cone().end(), [&C](auto& pair) {
 			por::event::event const* p = pair.second;
 			if(!C.has(p->tid())) {
 				return true;
@@ -378,7 +378,7 @@ namespace por::event {
 			return false;
 		}
 
-		for(auto &p : immediate_predecessors()) {
+		for(auto& p : immediate_predecessors()) {
 			assert(C.has(p->tid()) && p->depth() <= C.at(p->tid())->depth()); // imm pred are subset of cone
 			por::event::event const* e = C.at(p->tid());
 			while(e != p) {

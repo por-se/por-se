@@ -199,7 +199,7 @@ namespace por {
 		bool was_notified(por::thread_id const& thread, por::event::cond_id_t const& cond) {
 			por::event::event const* wait1 = last_of_tid(thread);
 			assert(wait1 != nullptr);
-			if (wait1->kind() != por::event::event_kind::wait1) {
+			if(wait1->kind() != por::event::event_kind::wait1) {
 				return false;
 			}
 			return wait2_predecessor_cond(*wait1, last_of_cid(cond)) != nullptr;

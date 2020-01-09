@@ -368,7 +368,7 @@ namespace por::event {
 
 		template<typename T>
 		static color_t colorize(color_t color, T begin, T end) {
-			for (; begin != end; ++begin) {
+			for(; begin != end; ++begin) {
 				(*begin)->_color = color;
 			}
 			return color;

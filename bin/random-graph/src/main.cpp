@@ -318,7 +318,7 @@ int main(int argc, char** argv){
 				if(cid) {
 					auto lid = 0;
 					for(auto& e : configuration.lock_heads()) {
-						auto *l = e.second;
+						auto* l = e.second;
 						while(l != nullptr && wait1->is_less_than(*l)) {
 							l = l->lock_predecessor();
 						}

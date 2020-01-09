@@ -135,7 +135,7 @@ namespace por {
 		node& operator=(const node&) = delete;
 		node& operator=(node&&) = delete;
 		~node() {
-			// avoid infinite recursion: use post-order tree traversal
+			// avoid stack overflow: use post-order tree traversal
 			std::stack<node*> S;
 			node* n = this;
 			node* last = nullptr;

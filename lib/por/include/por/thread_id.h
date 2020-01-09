@@ -188,15 +188,15 @@ namespace por {
 
 		static std::optional<thread_id> from_string(std::string const& tid_as_string) {
 			std::istringstream sstream(tid_as_string);
-			if (!sstream) {
+			if(!sstream) {
 				return {};
 			}
 
 			thread_id tid{};
 
-			for (;;) {
+			for(;;) {
 				char nextChar = sstream.peek();
-				if (nextChar < '0' || nextChar > '9') {
+				if(nextChar < '0' || nextChar > '9') {
 					// We expected the start of a local id but this is not a number
 					return {};
 				}
@@ -207,19 +207,19 @@ namespace por {
 
 				// If the stream either fails or it was not possible to read a correct lid, then
 				// return an empty optional
-				if (sstream.fail() || sstream.bad() || lid == 0) {
+				if(sstream.fail() || sstream.bad() || lid == 0) {
 					return {};
 				}
 
 				tid = thread_id(tid, lid);
 
-				if (sstream.eof()) {
+				if(sstream.eof()) {
 					break;
 				}
 
 				// If the stream did not end and after the lid and no colon is present, then
 				// the tid has to be in an invalid format -> failure
-				if (sstream.get() != ',') {
+				if(sstream.get() != ',') {
 					return {};
 				}
 			}

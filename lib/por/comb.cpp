@@ -227,7 +227,7 @@ comb::concurrent_combinations(std::function<bool(std::vector<por::event::event c
 			if((mask >> i) & 1)
 				++popcount;
 		}
-		if (popcount > 0) {
+		if(popcount > 0) {
 			// indexes of the threads enabled in current mask
 			// (of which there are popcount-many)
 			std::vector<por::event::thread_id_t> selected_threads;

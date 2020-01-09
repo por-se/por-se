@@ -34,10 +34,10 @@ static void testOperatorOverloads() {
 
 	// Special test that goes deeper into the hierarchy
 	thread_id tid(thread_id(), 1);
-	for (int i = 0; i < 12; i++) {
+	for(int i = 0; i < 12; i++) {
 		tid = thread_id(tid, i + 2);
 
-		for (int j = 0; j <= i + 1; j++) {
+		for(int j = 0; j <= i + 1; j++) {
 			assert(tid[j] == j + 1);
 		}
 	}
@@ -61,15 +61,15 @@ static void testFormattingOfThreadIds() {
 static void testParsing(std::string input, bool shouldWork) {
 	auto result = thread_id::from_string(input);
 
-	if (static_cast<bool>(result) != shouldWork) {
+	if(static_cast<bool>(result) != shouldWork) {
 		std::cerr << "Parsing of input: '" << input << "' should not have been successful.\n";
 		exit(-1);
 	}
 
-	if (shouldWork) {
+	if(shouldWork) {
 		std::string output = result->to_string();
 
-		if (output != input) {
+		if(output != input) {
 			std::cerr << "Parsing tid does not match input input: '" << input << "' output: '" << output << "'.\n";
 			exit(-1);
 		}

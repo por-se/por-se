@@ -157,7 +157,7 @@ namespace por {
 
 		template<typename T>
 		void remove(T begin, T end) {
-			for (; begin != end; ++begin) {
+			for(; begin != end; ++begin) {
 				if(_teeth.count((*begin)->tid())) {
 					_teeth[(*begin)->tid()].remove(**begin);
 					if(_teeth[(*begin)->tid()].empty()) {

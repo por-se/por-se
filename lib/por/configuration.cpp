@@ -203,7 +203,7 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 			os << "\n"
 			   << "    edge[color=blue arrowtail=vee style=dashed dir=back constraint=false weight=0]\n"
 			   << "    // object dependency edges\n";
-			for(auto &r : deps) {
+			for(auto& r : deps) {
 				os << "    e" << events[r.second] << " -> e" << events[r.first] << "\n";
 			}
 		}
@@ -213,7 +213,7 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 	os << "  edge[color=blue arrowtail=vee dir=back]\n"
 	   << "  // dependency edges across threads\n";
 
-	for(auto &r : inter_thread_dependencies) {
+	for(auto& r : inter_thread_dependencies) {
 		os << "  e" << events[r.second] << " -> e" << events[r.first] << "\n";
 	}
 

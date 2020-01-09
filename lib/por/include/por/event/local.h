@@ -67,7 +67,7 @@ namespace por::event {
 
 		std::string path_string() const noexcept override {
 			std::stringstream ss;
-			for (auto &p : path()) {
+			for(auto& p : path()) {
 				ss << std::to_string(p);
 			}
 			return ss.str();
