@@ -81,6 +81,16 @@ enum
   PTHREAD_PRIO_PROTECT
 };
 
+/* Special kpr addition  */
+enum
+{
+  // Never set by ourself
+  KPR_TRYLOCK_UNKNOWN,
+
+  KPR_TRYLOCK_ENABLED,
+  KPR_TRYLOCK_DISABLED
+};
+
 /* Process shared or private flag.  */
 enum
 {
@@ -144,9 +154,13 @@ typedef struct kpr_mutex {
   pthread_t holdingThread;
 
   int robustState;
+
+  int trylock_support;
 } pthread_mutex_t;
-#define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL, 0 }
-#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_STALLED, 0, NULL, 0 }
+#define PTHREAD_MUTEX_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL, 0, KPR_TRYLOCK_UNKNOWN }
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_RECURSIVE, PTHREAD_MUTEX_STALLED, 0, NULL, 0, KPR_TRYLOCK_UNKNOWN }
+
+#define KPR_MUTEX_INITIALIZER_TRYLOCK { PTHREAD_INTERNAL_MAGIC, NULL, NULL, PTHREAD_MUTEX_DEFAULT, PTHREAD_MUTEX_STALLED, 0, NULL, 0, KPR_TRYLOCK_ENABLED }
 
 typedef struct {
   pthread_internal_t magic;
@@ -197,6 +211,8 @@ typedef struct {
   int type;
   int robust;
   int pshared;
+
+  int trylock_support;
 } pthread_mutexattr_t;
 
 typedef struct {
@@ -339,6 +355,10 @@ int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);
 //int pthread_mutexattr_getprotocol(const pthread_mutexattr_t *attr, int *protocol);
 //int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int prioceiling);
 //int pthread_mutexattr_setprotocol(pthread_mutexattr_t *attr, int protocol);
+
+// This is a special addition that we only support for the kpr runtime
+int kpr_pthread_mutexattr_settrylock(pthread_mutexattr_t *attr, int enabled);
+int kpr_pthread_mutexattr_gettrylock(const pthread_mutexattr_t *attr, int* enabled);
 
 // Rwlock attributes
 int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);

@@ -7,6 +7,7 @@ int pthread_mutexattr_init(pthread_mutexattr_t *attr) {
   attr->type = PTHREAD_MUTEX_DEFAULT;
   attr->type = PTHREAD_MUTEX_STALLED;
   attr->type = PTHREAD_PROCESS_PRIVATE;
+  attr->trylock_support = KPR_TRYLOCK_UNKNOWN;
   return 0;
 }
 
@@ -53,5 +54,20 @@ int pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared) {
   }
 
   attr->pshared = pshared;
+  return 0;
+}
+
+// Own addition:
+int kpr_pthread_mutexattr_settrylock(pthread_mutexattr_t *attr, int enabled) {
+  if (enabled != KPR_TRYLOCK_ENABLED && enabled != KPR_TRYLOCK_DISABLED) {
+    klee_report_error(__FILE__, __LINE__, "trying to set a trylock enabled value that is unknown", "user");
+  }
+
+  attr->trylock_support = enabled;
+  return 0;
+}
+
+int kpr_pthread_mutexattr_gettrylock(const pthread_mutexattr_t *attr, int* enabled) {
+  *enabled = attr->trylock_support;
   return 0;
 }
