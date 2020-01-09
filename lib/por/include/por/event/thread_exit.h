@@ -13,33 +13,43 @@ namespace por::event {
 		// 1. same-thread predecessor
 		std::array<event const*, 1> _predecessors;
 
+		bool _atomic;
+
 	protected:
-		thread_exit(thread_id_t tid, event const& thread_predecessor)
+		thread_exit(thread_id_t tid, event const& thread_predecessor, bool atomic)
 			: event(event_kind::thread_exit, tid, thread_predecessor)
 			, _predecessors{&thread_predecessor}
+			, _atomic(atomic)
 		{
 			assert(this->thread_predecessor());
 			assert(this->thread_predecessor()->tid());
 			assert(this->thread_predecessor()->tid() == this->tid());
 			assert(this->thread_predecessor()->kind() != event_kind::program_init);
 			assert(this->thread_predecessor()->kind() != event_kind::thread_exit);
+
+			if(this->is_atomic()) {
+				assert(this->thread_predecessor()->kind() == event_kind::lock_release);
+			}
 		}
 
 	public:
 		static event const& alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
-			event const& thread_predecessor
+			event const& thread_predecessor,
+			bool atomic = false
 		) {
 			return unfolding.deduplicate(thread_exit{
 				tid,
-				thread_predecessor
+				thread_predecessor,
+				atomic
 			});
 		}
 
 		thread_exit(thread_exit&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors)) {
+		, _predecessors(std::move(that._predecessors))
+		, _atomic(that._atomic) {
 			assert(_predecessors.size() == 1);
 			assert(thread_predecessor() != nullptr);
 			replace_successor_of(*thread_predecessor(), that);
@@ -59,7 +69,8 @@ namespace por::event {
 
 		std::string to_string(bool details) const noexcept override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit"
+					+ (is_atomic() ? " (atomic)" : "") + "]";
 			return "thread_exit";
 		}
 
@@ -70,5 +81,7 @@ namespace por::event {
 		event const* thread_predecessor() const noexcept override {
 			return _predecessors[0];
 		}
+
+		bool is_atomic() const noexcept { return _atomic; }
 	};
 }

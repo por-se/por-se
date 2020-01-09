@@ -278,7 +278,7 @@ namespace por {
 			return thread_event;
 		}
 
-		por::event::event const* exit_thread(event::thread_id_t thread) {
+		por::event::event const* exit_thread(event::thread_id_t thread, bool atomic = false) {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it != _thread_heads.end() && "Thread must exist");
 			auto& thread_event = thread_it->second;
@@ -286,7 +286,7 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 
 			assert(active_threads() > 0);
-			thread_event = &event::thread_exit::alloc(*_unfolding, thread, *thread_event);
+			thread_event = &event::thread_exit::alloc(*_unfolding, thread, *thread_event, atomic);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_exit);
 
 			++_size;

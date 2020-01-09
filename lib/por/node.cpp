@@ -18,10 +18,13 @@ namespace {
 		for(auto &[tid, thread] : comb.threads()) {
 			auto max = thread.max();
 			if(max->kind() == por::event::event_kind::thread_exit) {
-				auto pred = max->thread_predecessor();
-				assert(pred->kind() == por::event::event_kind::lock_release);
-				libpor_check(std::find(thread.begin(), thread.end(), pred) != thread.end());
-				map.emplace(pred, max);
+				auto exit = static_cast<por::event::thread_exit const*>(max);
+				if(exit->is_atomic()) {
+					auto pred = max->thread_predecessor();
+					assert(pred->kind() == por::event::event_kind::lock_release);
+					libpor_check(std::find(thread.begin(), thread.end(), pred) != thread.end());
+					map.emplace(pred, max);
+				}
 			}
 		}
 		// beware of iterator invalidation in comb
