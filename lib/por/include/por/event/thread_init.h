@@ -29,7 +29,7 @@ namespace por::event {
 		}
 
 	public:
-		static event const& alloc(
+		static por::unfolding::dedupliation_result alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
 			event const& creation_predecessor

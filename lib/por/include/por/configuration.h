@@ -85,7 +85,7 @@ namespace por {
 		configuration_root& add_thread() {
 			event::thread_id_t tid = thread_id(thread_id(), _thread_heads.size() + 1);
 
-			_thread_heads.emplace(tid, &event::thread_init::alloc(*_unfolding, tid, _program_init));
+			_thread_heads.emplace(tid, event::thread_init::alloc(*_unfolding, tid, _program_init));
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
 
 			[[maybe_unused]] auto init = static_cast<por::event::thread_init const*>(_thread_heads[tid]);
@@ -235,7 +235,7 @@ namespace por {
 			assert(new_tid);
 			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
 			assert(_thread_create.find(new_tid) == _thread_create.end() && "Thread with same id was already created");
-			thread_event = &event::thread_create::alloc(*_unfolding, thread, *thread_event, new_tid);
+			thread_event = event::thread_create::alloc(*_unfolding, thread, *thread_event, new_tid);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
 			_thread_create.emplace(new_tid, thread_event);
 
@@ -252,7 +252,7 @@ namespace por {
 			auto thread_it = _thread_heads.find(thread);
 			assert(thread_it == _thread_heads.end() && "Thread must not be initialized");
 
-			_thread_heads.emplace(thread, &event::thread_init::alloc(*_unfolding, thread, *thread_create));
+			_thread_heads.emplace(thread, event::thread_init::alloc(*_unfolding, thread, *thread_create));
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
 			_thread_create.erase(create_it);
 
@@ -271,7 +271,7 @@ namespace por {
 			auto& joined_event = joined_it->second;
 			assert(joined_event->kind() == por::event::event_kind::thread_exit && "Joined thread must be exited");
 
-			thread_event = &event::thread_join::alloc(*_unfolding, thread, *thread_event, *joined_event);
+			thread_event = event::thread_join::alloc(*_unfolding, thread, *thread_event, *joined_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_join);
 
 			++_size;
@@ -286,7 +286,7 @@ namespace por {
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
 
 			assert(active_threads() > 0);
-			thread_event = &event::thread_exit::alloc(*_unfolding, thread, *thread_event, atomic);
+			thread_event = event::thread_exit::alloc(*_unfolding, thread, *thread_event, atomic);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_exit);
 
 			++_size;
@@ -304,7 +304,7 @@ namespace por {
 			assert(_lock_heads.find(lock) == _lock_heads.end() && "Lock id already taken");
 			assert(_used_lock_ids.count(lock) == 0 && "Lock id cannot be reused");
 
-			thread_event = &event::lock_create::alloc(*_unfolding, thread, lock, *thread_event);
+			thread_event = event::lock_create::alloc(*_unfolding, thread, lock, *thread_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_create);
 			_lock_heads.emplace(lock, thread_event);
 			_used_lock_ids.insert(lock);
@@ -323,7 +323,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(_lock_heads.find(lock) == _lock_heads.end()) {
 					assert(lock > 0 && "Lock id must not be zero");
-					thread_event = &event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
+					thread_event = event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 					_used_lock_ids.insert(lock);
 
@@ -333,7 +333,7 @@ namespace por {
 			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
+			thread_event = event::lock_destroy::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_destroy);
 			_lock_heads.erase(lock_it);
 
@@ -351,7 +351,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				if(lock_it == _lock_heads.end()) {
 					assert(lock > 0 && "Lock id must not be zero");
-					thread_event = &event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
+					thread_event = event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, nullptr);
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					_lock_heads.emplace(lock, thread_event);
 					_used_lock_ids.insert(lock);
@@ -362,7 +362,7 @@ namespace por {
 			}
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
+			thread_event = event::lock_acquire::alloc(*_unfolding, thread, lock, *thread_event, lock_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			lock_event = thread_event;
 
@@ -379,7 +379,7 @@ namespace por {
 			auto lock_it = _lock_heads.find(lock);
 			assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 			auto& lock_event = lock_it->second;
-			thread_event = &event::lock_release::alloc(*_unfolding, thread, lock, *thread_event, *lock_event, atomic);
+			thread_event = event::lock_release::alloc(*_unfolding, thread, lock, *thread_event, *lock_event, atomic);
 			_unfolding->stats_inc_event_created(por::event::event_kind::lock_release);
 			lock_event = thread_event;
 
@@ -397,7 +397,7 @@ namespace por {
 			assert(_cond_heads.find(cond) == _cond_heads.end() && "Condition variable id already taken");
 			assert(_used_cond_ids.count(cond) == 0 && "Condition variable id cannot be reused");
 
-			thread_event = &por::event::condition_variable_create::alloc(*_unfolding, thread, cond, *thread_event);
+			thread_event = por::event::condition_variable_create::alloc(*_unfolding, thread, cond, *thread_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_create);
 			_cond_heads.emplace(cond, std::vector{thread_event});
 			_used_cond_ids.insert(cond);
@@ -416,7 +416,7 @@ namespace por {
 			if constexpr(optional_creation_events) {
 				assert(cond > 0 && "Condition variable id must not be zero");
 				if(cond_head_it == _cond_heads.end()) {
-					thread_event = &por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, {});
+					thread_event = por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, {});
 					_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 					_used_cond_ids.insert(cond);
 
@@ -434,7 +434,7 @@ namespace por {
 				_w2_heads.erase(it);
 			}
 
-			thread_event = &por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, preds);
+			thread_event = por::event::condition_variable_destroy::alloc(*_unfolding, thread, cond, *thread_event, preds);
 			_unfolding->stats_inc_event_created(por::event::event_kind::condition_variable_destroy);
 			_cond_heads.erase(cond_head_it);
 
@@ -492,7 +492,7 @@ namespace por {
 					assert(lock > 0 && "Lock id must not be zero");
 					assert(lock_it != _lock_heads.end() && "Lock must (still) exist");
 					auto& lock_event = lock_it->second;
-					thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, {});
+					thread_event = por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, {});
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 					lock_event = thread_event;
 					_cond_heads.emplace(cond, std::vector{thread_event});
@@ -509,7 +509,7 @@ namespace por {
 			auto& lock_event = lock_it->second;
 
 			std::vector<por::event::event const*> non_waiting = wait1_predecessors_cond(*thread_event, cond_preds);
-			thread_event = &por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, std::move(non_waiting));
+			thread_event = por::event::wait1::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, std::move(non_waiting));
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 			lock_event = thread_event;
 			cond_preds.push_back(thread_event);
@@ -556,7 +556,7 @@ namespace por {
 
 			auto cond_event = wait2_predecessor_cond(*thread_event, cond_preds);
 			assert(cond_event && "There has to be a notifying event before a wait2");
-			thread_event = &por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, *cond_event);
+			thread_event = por::event::wait2::alloc(*_unfolding, thread, cond, lock, *thread_event, *lock_event, *cond_event);
 			_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 			lock_event = thread_event;
 			_w2_heads[cond].emplace_back(thread_event);
@@ -627,7 +627,7 @@ namespace por {
 				if(cond_head_it == _cond_heads.end() && !notified_thread) {
 					// only possible for lost signal: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
-					thread_event = &por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, std::vector<por::event::event const*>());
+					thread_event = por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, std::vector<por::event::event const*>());
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
@@ -641,7 +641,7 @@ namespace por {
 
 			if(!notified_thread) { // lost signal
 				auto prev_notifications = lost_notification_predecessors_cond(*thread_event, cond_preds);
-				thread_event = &por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_notifications));
+				thread_event = por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_notifications));
 				_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				cond_preds.push_back(thread_event);
 			} else { // notifying signal
@@ -655,7 +655,7 @@ namespace por {
 				auto& cond_event = *notified_wait1_predecessor(notified_thread, cond_preds);
 				assert(cond_event == notified_thread_event);
 
-				thread_event = &por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, *cond_event);
+				thread_event = por::event::signal::alloc(*_unfolding, thread, cond, *thread_event, *cond_event);
 				_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				cond_event = thread_event;
 			}
@@ -677,7 +677,7 @@ namespace por {
 				if(cond_head_it == _cond_heads.end() && notified_threads.empty()) {
 					// only possible for lost broadcast: otherwise there would be at least a wait1 in _cond_heads
 					assert(cond > 0 && "Condition variable id must not be zero");
-					thread_event = &por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, {});
+					thread_event = por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, {});
 					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 					_cond_heads.emplace(cond, std::vector{thread_event});
 					_used_cond_ids.insert(cond);
@@ -691,7 +691,7 @@ namespace por {
 
 			if(notified_threads.empty()) { // lost broadcast
 				auto prev_notifications = lost_notification_predecessors_cond(*thread_event, cond_preds);
-				thread_event = &por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_notifications));
+				thread_event = por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_notifications));
 				_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 				cond_preds.push_back(thread_event);
 			} else { // notifying broadcast
@@ -744,7 +744,7 @@ namespace por {
 					prev_events.push_back(pred);
 				}
 
-				thread_event = &por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_events));
+				thread_event = por::event::broadcast::alloc(*_unfolding, thread, cond, *thread_event, std::move(prev_events));
 				_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 				cond_preds.push_back(thread_event);
 			}
@@ -760,7 +760,7 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 
-			thread_event = &event::local<D>::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
+			thread_event = event::local<D>::alloc(*_unfolding, thread, *thread_event, std::move(local_path));
 			_unfolding->stats_inc_event_created(por::event::event_kind::local);
 
 			++_size;

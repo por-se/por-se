@@ -15,6 +15,21 @@ namespace por {
 	class configuration;
 
 	class unfolding {
+	public:
+		struct dedupliation_result {
+			bool unknown;
+			por::event::event const& event;
+
+			operator por::event::event const&() const noexcept {
+				return event;
+			}
+
+			operator por::event::event const*() const noexcept {
+				return &event;
+			}
+		};
+
+	private:
 		using key_t = std::tuple<por::event::thread_id_t, std::size_t, por::event::event_kind>;
 		using value_t = std::vector<std::unique_ptr<por::event::event>>;
 
@@ -72,13 +87,13 @@ namespace por {
 		}
 
 		template<typename T, typename = std::enable_if<std::is_base_of_v<por::event::event, T>>>
-		por::event::event const& deduplicate(T&& e) {
+		dedupliation_result deduplicate(T&& e) {
 			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
 			if(it != _events.end()) {
 				for(auto& v : it->second) {
 					if(compare_events(e, *v.get())) {
 						stats_inc_event_deduplicated();
-						return *v.get();
+						return {false, *v.get()};
 					}
 				}
 			}
@@ -97,7 +112,7 @@ namespace por {
 				return false;
 			}), ptr_icfl.end());
 			ptr->_immediate_conflicts = std::move(ptr_icfl);
-			return *ptr;
+			return {true, *ptr};
 		}
 
 		void remove_event(por::event::event const& e) {

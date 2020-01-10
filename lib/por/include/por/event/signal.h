@@ -113,7 +113,7 @@ namespace por::event {
 
 	public:
 		// notifying signal
-		static event const& alloc(
+		static por::unfolding::dedupliation_result alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
@@ -129,7 +129,7 @@ namespace por::event {
 		}
 
 		// lost signal
-		static event const& alloc(
+		static por::unfolding::dedupliation_result alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
 			cond_id_t cid,
