@@ -68,9 +68,6 @@ namespace por {
 			data()[_size - 1] = localId;
 		}
 
-		[[deprecated("use thread_id(thread_id(), localId) instead")]]
-		explicit thread_id(thread_size_t localId) : thread_id(thread_id(), localId) { }
-
 		thread_id(thread_id const& other) : thread_id() {
 			resize(other._size);
 			std::memcpy(data(), other.data(), other._size * sizeof(*data()));
