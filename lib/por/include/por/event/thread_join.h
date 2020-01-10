@@ -46,7 +46,8 @@ namespace por::event {
 
 		thread_join(thread_join&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors)) {
+		, _predecessors(that._predecessors) {
+			that._predecessors = {};
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -73,6 +74,9 @@ namespace por::event {
 		}
 
 		util::iterator_range<event const* const*> predecessors() const noexcept override {
+			if(_predecessors[0] == nullptr) {
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr); // only after move-ctor
+			}
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

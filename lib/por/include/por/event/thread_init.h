@@ -42,7 +42,8 @@ namespace por::event {
 
 		thread_init(thread_init&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors)) {
+		, _predecessors(that._predecessors) {
+			that._predecessors = {};
 			assert(_predecessors.size() == 1);
 			assert(thread_creation_predecessor() != nullptr);
 			replace_successor_of(*thread_creation_predecessor(), that);
@@ -50,9 +51,9 @@ namespace por::event {
 
 		~thread_init() {
 			assert(!has_successors());
-			assert(_predecessors.size() == 1);
-			assert(thread_creation_predecessor() != nullptr);
-			remove_from_successors_of(*thread_creation_predecessor());
+			if(thread_creation_predecessor() != nullptr) {
+				remove_from_successors_of(*thread_creation_predecessor());
+			}
 		}
 
 		thread_init() = delete;

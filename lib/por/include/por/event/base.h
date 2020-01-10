@@ -175,11 +175,15 @@ namespace por::event {
 		, _cone(std::move(that._cone))
 		, _tid(std::move(that._tid))
 		, _kind(that._kind)
+		, _color(that._color)
+		, _imm_cfl_color(that._imm_cfl_color)
 		, _successors(std::move(that._successors))
+		, _immediate_conflicts(std::move(that._immediate_conflicts))
+		, _fingerprint_set(that._fingerprint_set)
 		, _fingerprint(std::move(that._fingerprint))
 		, _thread_delta(std::move(that._thread_delta))
 		, _is_cutoff(that._is_cutoff) {
-			assert(!that.has_successors());
+			assert(!has_successors());
 		}
 
 		virtual ~event() {

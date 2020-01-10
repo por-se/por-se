@@ -48,8 +48,9 @@ namespace por::event {
 
 		local(local&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors))
+		, _predecessors(that._predecessors)
 		, _path(std::move(that._path)) {
+			that._predecessors = {};
 			assert(_predecessors.size() == 1);
 			assert(thread_predecessor() != nullptr);
 			replace_successor_of(*thread_predecessor(), that);
@@ -57,9 +58,9 @@ namespace por::event {
 
 		~local() {
 			assert(!has_successors());
-			assert(_predecessors.size() == 1);
-			assert(thread_predecessor() != nullptr);
-			remove_from_successors_of(*thread_predecessor());
+			if(thread_predecessor() != nullptr) {
+				remove_from_successors_of(*thread_predecessor());
+			}
 		}
 
 		explicit local() = delete;
@@ -83,6 +84,9 @@ namespace por::event {
 		}
 
 		util::iterator_range<event const* const*> predecessors() const noexcept override {
+			if(_predecessors[0] == nullptr) {
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr); // only after move-ctor
+			}
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

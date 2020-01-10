@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <array>
+#include <set>
 
 namespace por::event {
 	class wait2 final : public event {
@@ -88,9 +89,10 @@ namespace por::event {
 
 		wait2(wait2&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors))
+		, _predecessors(that._predecessors)
 		, _cid(that._cid)
 		, _lid(that._lid) {
+			that._predecessors = {};
 			for(auto& pred : predecessors()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
@@ -99,7 +101,8 @@ namespace por::event {
 
 		~wait2() {
 			assert(!has_successors());
-			for(auto& pred : predecessors()) {
+			std::set<event const*> P(predecessors().begin(), predecessors().end());
+			for(auto& pred : P) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}
@@ -117,6 +120,9 @@ namespace por::event {
 		}
 
 		util::iterator_range<event const* const*> predecessors() const noexcept override {
+			if(_predecessors[0] == nullptr) {
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr); // only after move-ctor
+			}
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

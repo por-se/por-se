@@ -45,8 +45,9 @@ namespace por::event {
 
 		lock_create(lock_create&& that)
 		: event(std::move(that))
-		, _predecessors(std::move(that._predecessors))
+		, _predecessors(that._predecessors)
 		, _lid(std::move(that._lid)) {
+			that._predecessors = {};
 			assert(_predecessors.size() == 1);
 			assert(thread_predecessor() != nullptr);
 			replace_successor_of(*thread_predecessor(), that);
@@ -54,9 +55,9 @@ namespace por::event {
 
 		~lock_create() {
 			assert(!has_successors());
-			assert(_predecessors.size() == 1);
-			assert(thread_predecessor() != nullptr);
-			remove_from_successors_of(*thread_predecessor());
+			if(thread_predecessor() != nullptr) {
+				remove_from_successors_of(*thread_predecessor());
+			}
 		}
 
 		lock_create() = delete;
@@ -71,6 +72,9 @@ namespace por::event {
 		}
 
 		util::iterator_range<event const* const*> predecessors() const noexcept override {
+			if(_predecessors[0] == nullptr) {
+				return util::make_iterator_range<event const* const*>(nullptr, nullptr); // only after move-ctor
+			}
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 

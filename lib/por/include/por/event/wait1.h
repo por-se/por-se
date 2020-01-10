@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <set>
 
 namespace por::event {
 	class wait1 final : public event {
@@ -108,7 +109,8 @@ namespace por::event {
 
 		~wait1() {
 			assert(!has_successors());
-			for(auto& pred : predecessors()) {
+			std::set<event const*> P(predecessors().begin(), predecessors().end());
+			for(auto& pred : P) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}

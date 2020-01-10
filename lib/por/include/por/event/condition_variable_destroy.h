@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <set>
 
 namespace por::event {
 	class condition_variable_destroy final : public event {
@@ -94,8 +95,8 @@ namespace por::event {
 
 		~condition_variable_destroy() {
 			assert(!has_successors());
-			assert(!has_successors());
-			for(auto& pred : predecessors()) {
+			std::set<event const*> P(predecessors().begin(), predecessors().end());
+			for(auto& pred : P) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}
