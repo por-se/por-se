@@ -41,6 +41,8 @@ namespace por::event {
 			assert(this->lock_predecessor()->kind() == event_kind::lock_release || this->lock_predecessor()->kind() == event_kind::wait1);
 			assert(this->lock_predecessor()->lid() == this->lid());
 
+			assert(this->thread_predecessor() != this->lock_predecessor());
+
 			assert(this->cid());
 			assert(this->lid());
 
