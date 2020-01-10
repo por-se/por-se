@@ -1227,7 +1227,7 @@ namespace por {
 		                                por::event::lock_id_t lid,
 		                                por::event::event_kind kind) const noexcept {
 			por::event::event const* et = last_of_tid(tid);
-			por::event::event const* em = et->lock_predecessor();
+			por::event::event const* em = last_of_lid(lid);
 			por::event::event const* es = nullptr;
 
 			assert(em);
@@ -1276,10 +1276,11 @@ namespace por {
 			por::cone C(*this);
 			por::comb A = C.setminus(P);
 			A.insert(*em);
-			por::comb X(A, [](por::event::event const& e) {
-				return e.kind() == por::event::event_kind::lock_release
-				       || e.kind() == por::event::event_kind::wait1
-				       || e.kind() == por::event::event_kind::lock_create;
+			por::comb X(A, [&lid](por::event::event const& e) {
+				return e.lid() == lid
+				       && (e.kind() == por::event::event_kind::lock_release
+				           || e.kind() == por::event::event_kind::wait1
+				           || e.kind() == por::event::event_kind::lock_create);
 			});
 
 			std::vector<conflicting_extension> result;
@@ -1294,6 +1295,8 @@ namespace por {
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 				}
 			}
+
+			return result;
 		}
 
 		std::vector<conflicting_extension> conflicting_extensions() const noexcept {
