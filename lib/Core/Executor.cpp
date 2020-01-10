@@ -4548,6 +4548,10 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     return;
   }
 
+  if (!state.currentThread().pathSincePorLocal.empty()) {
+    porEventManager.registerLocal(state, addedStates, false);
+  }
+
   if (isWrite) {
     executeMemoryWrite(state, memRegion.value(), address, value);
   } else {
