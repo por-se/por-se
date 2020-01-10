@@ -12,6 +12,7 @@
 #include "fd-poll.h"
 #include "net/socket.h"
 #include "runtime-lock.h"
+#include "output/out.h"
 
 #include "klee/klee.h"
 #include "klee/runtime/kpr/list.h"
@@ -625,15 +626,22 @@ ssize_t write(int fd, const void *buf, size_t count) {
   } else if (!f->dfile) {
     int r;
 
-    buf = __concretize_ptr(buf);
-    count = __concretize_size(count);
-    /* XXX In terms of looking for bugs we really should do this check
-       before concretization, at least once the routine has been fixed
-       to properly work with symbolics. */
-    klee_check_memory_access(buf, count);
-    if (f->fd == 1 || f->fd == 2)
-      r = syscall(__NR_write, f->fd, buf, count);
-    else r = syscall(__NR_pwrite64, f->fd, buf, count, (off64_t) f->off);
+    if (f->fd == 1 || f->fd == 2) {
+      r = kpr_output(
+        f->fd == 1 ? KPR_OUTPUT_STDOUT : KPR_OUTPUT_STDERR,
+        buf,
+        count
+      );
+    } else {
+      buf = __concretize_ptr(buf);
+      count = __concretize_size(count);
+      /* XXX In terms of looking for bugs we really should do this check
+        before concretization, at least once the routine has been fixed
+        to properly work with symbolics. */
+      klee_check_memory_access(buf, count);
+
+      r = syscall(__NR_pwrite64, f->fd, buf, count, (off64_t) f->off);
+    }
 
     if (r == -1) {
       kpr_release_runtime_lock();
@@ -1949,72 +1957,3 @@ int pipe2(int pipefd[2], int flags) {
 int pipe(int pipefds[2]) {
   return pipe2(pipefds, 0);
 }
-
-#define PRINTF_BUFFER_SIZE 2048
-
-int kpr_output_formatted(int target, const char *format, va_list args) {
-  char buffer[PRINTF_BUFFER_SIZE];
-
-  int ret = vsnprintf(buffer, PRINTF_BUFFER_SIZE, format, args);
-
-  if (ret > PRINTF_BUFFER_SIZE) {
-    klee_warning("print() call overflowed internal buffer - truncated output");
-  }
-
-  klee_output(target, buffer);
-  return ret;
-}
-
-int puts(const char* out) {
-  klee_output(1, out);
-  klee_output(1, "\n");
-  return 0;
-}
-
-int vprintf(const char *format, va_list args) {
-  return kpr_output_formatted(1, format, args);
-}
-
-// int vfprintf(FILE *stream, const char *format, va_list ap) {
-//   // Just hope that we have the uclibc as libc ...
-//   int fd = fileno(stream);
-//   if (fd < 0) {
-//     return fd;
-//   }
-
-//   if (fd == 1) {
-//     return kpr_output_formatted(1, format, ap);
-//   } else if (fd == 2) {
-//     return kpr_output_formatted(2, format, ap);
-//   } else {
-//     char buffer[PRINTF_BUFFER_SIZE];
-
-//     int ret = vsnprintf(buffer, PRINTF_BUFFER_SIZE, format, ap);
-
-//     if (ret > PRINTF_BUFFER_SIZE) {
-//       klee_warning("vfprintf() call overflowed internal buffer - truncated output");
-//     }
-
-//     return write(fd, buffer, ret);
-//   }
-
-//   return 0;
-// }
-
-int printf(const char *format, ...) {
-  va_list args;
-  va_start(args, format);
-  int ret = vprintf(format, args);
-  va_end(args);
-
-  return ret;
-}
-
-// int fprintf(FILE *stream, const char *format, ...) {
-//   va_list args;
-//   va_start(args, format);
-//   int ret = vfprintf(stream, format, args);
-//   va_end(args);
-
-//   return ret;
-// }

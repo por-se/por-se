@@ -1278,26 +1278,71 @@ void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
   assert(arguments.size() == 2 && "invalid number of arguments to klee_output - expected 2");
 
   auto outputTargetExpr = executor.toUnique(state, arguments[0]);
-  if (!isa<ConstantExpr>(outputTargetExpr)) {
-    executor.terminateStateOnError(state, "klee_output", Executor::User);
+  auto outputBufferExpr = executor.toUnique(state, arguments[1]);
+
+  if (!isa<ConstantExpr>(outputTargetExpr) || !isa<ConstantExpr>(outputBufferExpr)) {
+    executor.terminateStateOnError(state, "Symbolic argument passed to klee_output", Executor::User);
     return;
   }
 
   auto outputTarget = cast<ConstantExpr>(outputTargetExpr)->getZExtValue();
   if (outputTarget != 1 && outputTarget != 2) {
-    executor.terminateStateOnError(state, "klee_output", Executor::User);
+    executor.terminateStateOnError(state, "Invalid target passed to klee_output", Executor::User);
     return;
   }
 
-  auto out = readStringAtAddress(state, arguments[1]);
+  ObjectPair op;
+  ref<ConstantExpr> address = cast<ConstantExpr>(outputBufferExpr);
+  if (!state.addressSpace.resolveOne(address, op)) {
+    executor.terminateStateOnError(
+      state,
+      "Invalid buffer pointer passed to klee_output",
+      Executor::TerminateReason::User
+    );
+    return;
+  }
+
+  const MemoryObject *mo = op.first;
+  const ObjectState *os = op.second;
+
+  if (mo->address != address->getZExtValue()) {
+    executor.terminateStateOnError(
+      state,
+      "Interior pointer passed to klee_output",
+      Executor::TerminateReason::User
+    );
+    return;
+  }
+
+  char *buf = new char[mo->size];
+
+  for (size_t i = 0; i < mo->size; i++) {
+    ref<Expr> cur = os->read8(i);
+    cur = executor.toUnique(state, cur);
+
+    if (!isa<ConstantExpr>(cur)) {
+      delete[] buf;
+
+      executor.terminateStateOnError(
+        state,
+        "Symbolic char in output buffer during klee_output",
+        Executor::TerminateReason::User
+      );
+      return;
+    }
+
+    buf[i] = cast<ConstantExpr>(cur)->getZExtValue(8);
+  }
 
   if (outputTarget == 1) {
-    llvm::outs() << out;
+    llvm::outs() << buf;
     llvm::outs().flush();
   } else {
-    llvm::errs() << out;
+    llvm::errs() << buf;
     llvm::errs().flush();
   }
+
+  delete[] buf;
 
   executor.bindLocal(target, state, ConstantExpr::create(0, Expr::Int32));
 }
