@@ -5152,7 +5152,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
 
   if (result->isRace) {
     // So two important cases: always racing or only racing with specific symbolic values
-    if (result->canBeSafe) {
+    if (result->canBeSafe && false) { // FIXME: incompleteness; handle catch-up problem!
       auto statePair = fork(state, result->conditionToBeSafe, true);
 
       auto safeState = statePair.first;
