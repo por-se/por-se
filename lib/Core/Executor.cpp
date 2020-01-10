@@ -89,6 +89,7 @@
 #include <sstream>
 #include <string>
 #include <sys/mman.h>
+#include <variant>
 #include <vector>
 
 
@@ -3627,7 +3628,36 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   }
   por::configuration const& cfg = state.porNode->configuration();
 
-  for(auto cex : cfg.conflicting_extensions()) {
+  std::vector<por::conflicting_extension> conflicting_extensions = cfg.conflicting_extensions();
+
+  if (maximalConfiguration) {
+    for (auto &[tid, thread] : state.threads) {
+      if (thread.isRunnable(cfg)) {
+        continue; // FIXME: incompleteness
+      }
+      if (thread.state == ThreadState::Waiting) {
+        por::event::lock_id_t lid;
+        por::event::event_kind kind;
+
+        if (auto lock = std::get_if<Thread::wait_lock_t>(&thread.waiting)) {
+          lid = lock->lock;
+          kind = por::event::event_kind::lock_acquire;
+        } else if (auto wait = std::get_if<Thread::wait_cv_2_t>(&thread.waiting)) {
+          lid = wait->lock;
+          kind = por::event::event_kind::wait2;
+        } else {
+          continue;
+        }
+
+        auto dlcex = cfg.conflicting_extensions_deadlock(tid, lid, kind);
+        for (auto &cex : dlcex) {
+          conflicting_extensions.emplace_back(std::move(cex));
+        }
+      }
+    }
+  }
+
+  for (auto const &cex : conflicting_extensions) {
     por::event::event const& x = cex.extension();
     if (!x.has_successors()) {
       bool remove = false;
@@ -3648,7 +3678,7 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   branch.pop_back(); // remove root node
   auto leaves = por::node::create_right_branches(branch);
 
-  for(auto l : leaves) {
+  for (auto const &l : leaves) {
     ExecutionState *toExecute = new ExecutionState(l);
 
     registerFork(state, toExecute);
