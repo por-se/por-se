@@ -202,6 +202,19 @@ void ExecutionState::cutoffThread(const ThreadId &tid) {
   thread->get().state = ThreadState::Cutoff;
 }
 
+std::set<ThreadId> ExecutionState::runnableThreads() const {
+  assert(porNode);
+  auto cfg = porNode->configuration();
+
+  std::set<ThreadId> runnable;
+  for (auto &[tid, thread] : threads) {
+    if (thread.isRunnable(cfg)) {
+      runnable.insert(tid);
+    }
+  }
+  return runnable;
+}
+
 void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
   mo->refCount++;
   symbolics.emplace_back(mo, array);

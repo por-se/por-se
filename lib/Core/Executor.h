@@ -229,6 +229,8 @@ private:
 
   void exploreSchedules(ExecutionState &state, bool maximalConfiguration = false);
 
+  std::optional<ThreadId> selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable);
+
   void scheduleNextThread(ExecutionState &state, const ThreadId &tid);
 
   void updateStatesJSON(KInstruction *ki, const ExecutionState &state,

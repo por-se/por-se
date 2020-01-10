@@ -5299,20 +5299,61 @@ void Executor::registerFork(ExecutionState &state, ExecutionState* fork) {
 }
 
 void Executor::scheduleThreads(ExecutionState &state) {
-  std::set<ThreadId> runnable;
+  std::set<ThreadId> runnable = state.runnableThreads();
+  state.onlyOneThreadRunnableSinceEpochStart = runnable.size() == 1;
 
   assert(state.porNode);
+  auto cfg = state.porNode->configuration();
 
-  for (auto &[tid, thread] : state.threads) {
-    if (thread.isRunnable(state.porNode->configuration())) {
-      runnable.insert(tid);
+  ThreadId tid;
+
+  while (state.needsCatchUp()) {
+    auto peekTid = state.peekCatchUp()->tid();
+    auto peekThread = state.getThreadById(peekTid);
+
+    if (!peekThread) {
+      klee_warning("Thread to catch up to not found. Terminating State.");
+      terminateState(state);
+      return;
+    }
+
+    if (peekThread.has_value()) {
+      tid = peekTid;
+
+      Thread& nextThread = peekThread.value().get();
+      if (nextThread.state == ThreadState::Waiting && nextThread.isRunnable(cfg)) {
+        scheduleNextThread(state, tid);
+
+        runnable = state.runnableThreads();
+        state.onlyOneThreadRunnableSinceEpochStart = runnable.size() == 1;
+        continue;
+      }
+
+      if (nextThread.state == ThreadState::Cutoff) {
+        nextThread.state = ThreadState::Runnable; // FIXME: is that right?
+        klee_warning("Catch up on cutoff event");
+      }
+
+      break;
     }
   }
 
+  if (!state.needsCatchUp()) {
+    auto res = selectStateForScheduling(state, runnable);
+    if (!res) {
+      return;
+    }
+    tid = res.value();
+  }
+
+  state.needsThreadScheduling = false;
+  scheduleNextThread(state, tid);
+}
+
+
+std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable) {
   bool disabledThread = false;
   bool wasEmpty = runnable.empty();
-
-  state.onlyOneThreadRunnableSinceEpochStart = runnable.size() == 1;
 
   if (!state.needsCatchUp() && !state.porNode->D().empty()) {
     const por::configuration &C = state.porNode->configuration();
@@ -5363,7 +5404,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     if (disabledThread && !wasEmpty) {
       klee_warning("Disabled all threads because of porNode->D(). Terminating State.");
       terminateState(state);
-      return;
+      return {};
     }
 
     bool allExited = true;
@@ -5383,7 +5424,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       terminateStateOnDeadlock(state);
     }
 
-    return;
+    return {};
   }
 
   // pick thread according to policy by default
@@ -5404,33 +5445,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
   }
 
-  if (state.needsCatchUp()) {
-    auto peekTid = state.peekCatchUp()->tid();
-    auto peekThread = state.getThreadById(peekTid);
-
-    if (!peekThread) {
-      std::cerr << "TRYING TO CATCH UP TO: " << state.peekCatchUp()->to_string(true) << "\n";
-      std::cerr << "complete sequence:\n";
-      for(auto& cu : state.catchUp) {
-        std::cerr << "\t" << cu->to_string(true) << "\n";
-      }
-
-      klee_warning("Thread to catch up to not found. Terminating State.");
-      terminateState(state);
-      return;
-    }
-
-    if (peekThread.has_value()) {
-      tid = peekTid;
-      if (peekThread.value().get().state == ThreadState::Cutoff) {
-        peekThread.value().get().state = ThreadState::Runnable; // FIXME: is that right?
-        klee_warning("Catch up on cutoff event");
-      }
-    }
-  }
-
-  state.needsThreadScheduling = false;
-  scheduleNextThread(state, tid);
+  return tid;
 }
 
 void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {

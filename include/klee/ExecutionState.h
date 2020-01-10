@@ -229,6 +229,8 @@ public:
   /// @brief will mark the referenced thread as cutoff
   void cutoffThread(const ThreadId &tid);
 
+  std::set<ThreadId> runnableThreads() const;
+
   void popFrameOfCurrentThread();
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
