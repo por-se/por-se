@@ -3334,7 +3334,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::updateStates(ExecutionState *current) {
-  if (current) {
+  if (current && std::find(removedStates.begin(), removedStates.end(), current) == removedStates.end()) {
     if (!current->currentThread().pathSincePorLocal.empty()) {
       porEventManager.registerLocal(*current, addedStates);
     }
