@@ -153,7 +153,6 @@ namespace por {
 		std::array<std::size_t, 16> _events_created{};
 		std::array<std::size_t, 16> _unique_events{};
 		std::size_t _events_deduplicated = 0; // total number of deduplicated events
-		std::size_t _cex_candidates = 0; // number of candidates (before visited)
 		std::size_t _cex_created = 0; // number of conflicting extensions generated
 		std::size_t _cex_inserted = 0; // number of actual conflicting extensions inserted
 		std::size_t _configurations = 0; // number of times cex generation was called (NOT necessarily maximal)
@@ -214,9 +213,6 @@ namespace por {
 		void stats_inc_event_deduplicated() noexcept {
 			++_events_deduplicated;
 		}
-		void stats_inc_cex_candidates(std::size_t inc) noexcept {
-			_cex_candidates += inc;
-		}
 		void stats_inc_cex_created(std::size_t inc) noexcept {
 			_cex_created += inc;
 		}
@@ -271,7 +267,6 @@ namespace por {
 			std::cout << "  signal: " << _unique_events[kind_index(por::event::event_kind::signal)] << "\n";
 			std::cout << "  broadcast: " << _unique_events[kind_index(por::event::event_kind::broadcast)] << "\n";
 			std::cout << "Events deduplicated: " << std::to_string(_events_deduplicated) << "\n";
-			std::cout << "CEX candidates: " << std::to_string(_cex_candidates) << "\n";
 			std::cout << "CEX created: " << std::to_string(_cex_created) << "\n";
 			std::cout << "CEX inserted: " << std::to_string(_cex_inserted) << "\n";
 			std::cout << "Configurations: " << std::to_string(_configurations) << "\n";

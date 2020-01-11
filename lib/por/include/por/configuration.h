@@ -18,20 +18,6 @@
 namespace por {
 	class configuration;
 
-	class conflicting_extension {
-		por::event::event const* _event;
-		por::event::event const& _extension;
-
-	public:
-		conflicting_extension(por::event::event const& extension) : _event(nullptr), _extension(extension) { }
-
-		conflicting_extension(por::event::event const& event, por::event::event const& extension)
-		: _event(&event), _extension(extension) { }
-
-		por::event::event const* event() const noexcept { return _event; }
-		por::event::event const& extension() const noexcept { return _extension; }
-	};
-
 	class configuration_iterator {
 		por::configuration const* _configuration = nullptr;
 		std::map<por::event::thread_id_t, por::event::event const*>::const_reverse_iterator _thread;
@@ -768,10 +754,10 @@ namespace por {
 		}
 
 	private:
-		std::vector<conflicting_extension> cex_acquire(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::dedupliation_result> cex_acquire(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::lock_acquire || e.kind() == por::event::event_kind::wait2);
 
-			std::vector<conflicting_extension> result;
+			std::vector<por::unfolding::dedupliation_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -805,20 +791,20 @@ namespace por {
 
 			if(em == nullptr) {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
-				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, nullptr));
+				result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, nullptr));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			} else if(em->kind() == por::event::event_kind::lock_release || em->kind() == por::event::event_kind::wait1) {
 				if(e.kind() == por::event::event_kind::lock_acquire) {
-					result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
+					result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 				} else {
 					assert(e.kind() == por::event::event_kind::wait2);
-					result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *em, *es));
+					result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *em, *es));
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 				}
 			} else if(em->kind() == por::event::event_kind::lock_create) {
 				assert(e.kind() == por::event::event_kind::lock_acquire); // wait2 must have a wait1 or release as predecessor
-				result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
+				result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
 				_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 			}
 
@@ -827,12 +813,12 @@ namespace por {
 			while(ep != nullptr && (em == nullptr || !ep->is_less_than_eq(*em)) && (es == nullptr || !ep->is_less_than_eq(*es))) {
 				if(ep->kind() == por::event::event_kind::lock_release || ep->kind() == por::event::event_kind::wait1 || ep->kind() == por::event::event_kind::lock_create) {
 					if(e.kind() == por::event::event_kind::lock_acquire) {
-						result.emplace_back(e, por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, ep));
+						result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, ep));
 						_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 					} else {
 						assert(e.kind() == por::event::event_kind::wait2);
 						assert(ep->kind() != por::event::event_kind::lock_create);
-						result.emplace_back(e, por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *ep, *es));
+						result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *ep, *es));
 						_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 					}
 				}
@@ -842,10 +828,10 @@ namespace por {
 			return result;
 		}
 
-		std::vector<conflicting_extension> cex_wait1(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::dedupliation_result> cex_wait1(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::wait1);
 
-			std::vector<conflicting_extension> result;
+			std::vector<por::unfolding::dedupliation_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -891,7 +877,7 @@ namespace por {
 				if(cond_create) {
 					N.push_back(cond_create);
 				}
-				result.emplace_back(e, por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *e.lock_predecessor(), std::move(N)));
+				result.emplace_back(por::event::wait1::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *e.lock_predecessor(), std::move(N)));
 				_unfolding->stats_inc_event_created(por::event::event_kind::wait1);
 				return false; // result of concurrent_combinations not needed
 			});
@@ -972,10 +958,10 @@ namespace por {
 			return outstanding_wait1(cid, cone);
 		}
 
-		std::vector<conflicting_extension> cex_notification(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::dedupliation_result> cex_notification(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::signal || e.kind() == por::event::event_kind::broadcast);
 
-			std::vector<conflicting_extension> result;
+			std::vector<por::unfolding::dedupliation_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -1103,10 +1089,10 @@ namespace por {
 				}
 
 				if(e.kind() == por::event::event_kind::signal) {
-					result.emplace_back(e, por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
+					result.emplace_back(por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				} else if(e.kind() == por::event::event_kind::broadcast) {
-					result.emplace_back(e, por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
+					result.emplace_back(por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, std::move(N)));
 					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 				}
 
@@ -1157,7 +1143,7 @@ namespace por {
 					if(w == sig->wait_predecessor())
 						continue;
 
-					result.emplace_back(e, por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, *w));
+					result.emplace_back(por::event::signal::alloc(*_unfolding, e.tid(), cid, *et, *w));
 					_unfolding->stats_inc_event_created(por::event::event_kind::signal);
 				}
 			}
@@ -1212,7 +1198,7 @@ namespace por {
 						N.push_back(m);
 					}
 
-					result.emplace_back(e, por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, N));
+					result.emplace_back(por::event::broadcast::alloc(*_unfolding, e.tid(), cid, *et, N));
 					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 					return false; // result of concurrent_combinations not needed
 				});
@@ -1222,10 +1208,11 @@ namespace por {
 		}
 
 	public:
-		std::vector<conflicting_extension>
+		std::vector<por::event::event const*>
 		conflicting_extensions_deadlock(por::thread_id tid,
 		                                por::event::lock_id_t lid,
-		                                por::event::event_kind kind) const noexcept {
+		                                por::event::event_kind kind,
+		                                bool unknown_only = false) const noexcept {
 			por::event::event const* et = last_of_tid(tid);
 			por::event::event const* em = last_of_lid(lid);
 			por::event::event const* es = nullptr;
@@ -1283,27 +1270,34 @@ namespace por {
 				           || e.kind() == por::event::event_kind::lock_create);
 			});
 
-			std::vector<conflicting_extension> result;
+			std::vector<por::unfolding::dedupliation_result> candidates;
 			for(auto& em : X) {
 				if(kind == por::event::event_kind::lock_acquire) {
-					result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, tid, lid, *et, em));
+					candidates.emplace_back(por::event::lock_acquire::alloc(*_unfolding, tid, lid, *et, em));
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
 				} else {
 					assert(kind == por::event::event_kind::wait2);
 					assert(em->kind() != por::event::event_kind::lock_create);
-					result.emplace_back(por::event::wait2::alloc(*_unfolding, tid, es->cid(), lid, *et, *em, *es));
+					candidates.emplace_back(por::event::wait2::alloc(*_unfolding, tid, es->cid(), lid, *et, *em, *es));
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
 				}
 			}
 
+			std::vector<por::event::event const*> result;
+			std::for_each(candidates.begin(), candidates.end(), [&unknown_only, &result](auto const& dedup) {
+				if(unknown_only && !dedup.unknown) {
+					return;
+				}
+				result.emplace_back(dedup);
+			});
 			return result;
 		}
 
-		std::vector<conflicting_extension> conflicting_extensions() const noexcept {
+		std::vector<por::event::event const*> conflicting_extensions(bool unknown_only = false) const noexcept {
 			_unfolding->stats_inc_configuration();
-			std::vector<conflicting_extension> S;
+			std::vector<por::event::event const*> result;
 			for(auto* e : *this) {
-				std::vector<conflicting_extension> candidates;
+				std::vector<por::unfolding::dedupliation_result> candidates;
 				switch(e->kind()) {
 					case por::event::event_kind::lock_acquire:
 					case por::event::event_kind::wait2:
@@ -1319,13 +1313,15 @@ namespace por {
 					default:
 						continue;
 				}
-				_unfolding->stats_inc_cex_candidates(candidates.size());
-				for(auto& cex : candidates) {
-					S.emplace_back(std::move(cex));
-				}
+				std::for_each(candidates.begin(), candidates.end(), [&unknown_only, &result](auto const& dedup) {
+					if(unknown_only && !dedup.unknown) {
+						return;
+					}
+					result.emplace_back(dedup);
+				});
 			}
-			_unfolding->stats_inc_cex_created(S.size());
-			return S;
+			_unfolding->stats_inc_cex_created(result.size());
+			return result;
 		}
 
 		por::event::event const* compute_alternative(std::vector<por::event::event const*> D) const noexcept {

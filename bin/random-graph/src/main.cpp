@@ -372,23 +372,18 @@ int main(int argc, char** argv){
 	auto cex = configuration.conflicting_extensions();
 	std::cerr << cex.size() << " cex found\n";
 	for(auto& entry : cex) {
-		if(entry.event() != nullptr) {
-			std::cerr << "for " << entry.event()->to_string(true) << " @ " << entry.event() << ": ";
-		} else {
-			std::cerr << "for deadlock: ";
-		}
-		std::cerr << entry.extension().to_string(true) << " @ " << &entry.extension() << "\n";
+		std::cerr << entry->to_string(true) << " @ " << entry << "\n";
 		std::cerr << "with immediate predecessor(s):\n";
-		for(auto e : entry.extension().immediate_predecessors()) {
+		for(auto e : entry->immediate_predecessors()) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 		}
 		std::cerr << "and immediate conflict(s):\n";
-		auto icfl = entry.extension().immediate_conflicts();
+		auto icfl = entry->immediate_conflicts();
 		for(auto e : icfl) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 			auto e_icfl = e->immediate_conflicts();
 			for(auto c : e_icfl) {
-				assert(std::find(e_icfl.begin(), e_icfl.end(), &entry.extension()) != icfl.end());
+				assert(std::find(e_icfl.begin(), e_icfl.end(), entry) != icfl.end());
 			}
 		}
 		std::cerr << "\n";
