@@ -149,9 +149,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       auto path = std::move(thread.pathSincePorLocal);
       thread.pathSincePorLocal = {};
       por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+      attachFingerprintToEvent(state, *e);
       if (snapshotsAllowed) {
         auto standby = createStandbyState(state, por_local);
-        attachFingerprintToEvent(state, *e);
         return std::make_pair(e, std::move(standby));
       }
       return std::make_pair(e, nullptr);
@@ -168,9 +168,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     auto path = std::move(thread.pathSincePorLocal);
     thread.pathSincePorLocal = {};
     por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+    attachFingerprintToEvent(state, *e);
     if (snapshotsAllowed) {
       auto standby = createStandbyState(state, por_local);
-      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
     return std::make_pair(e, nullptr);
@@ -187,9 +187,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
         auto path = std::move(thread.pathSincePorLocal);
         thread.pathSincePorLocal = {};
         por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+        attachFingerprintToEvent(*s, *e);
         if (snapshotsAllowed) {
           auto standby = createStandbyState(*s, por_local);
-          attachFingerprintToEvent(*s, *e);
           return std::make_pair(e, std::move(standby));
         }
         return std::make_pair(e, nullptr);
@@ -366,10 +366,9 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
 
   extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.acquire_lock(state.currentThreadId(), mId);
-
+    attachFingerprintToEvent(state, *e);
     if(snapshotsAllowed) {
       auto standby = createStandbyState(state, por_lock_acquire);
-      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
     return std::make_pair(e, nullptr);
@@ -400,10 +399,9 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
 
   extendPorNode(state, [this, &state, &mId, &snapshot, &atomic](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.release_lock(state.currentThreadId(), mId, atomic);
-
+    attachFingerprintToEvent(state, *e);
     if (snapshot) {
       auto standby = createStandbyState(state, por_lock_release);
-      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     }
     return std::make_pair(e, nullptr);
