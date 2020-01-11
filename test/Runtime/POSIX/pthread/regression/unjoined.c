@@ -41,4 +41,4 @@ int main(int argc, char *argv[]) {
 }
 
 // FIXME: is there a better way to check the paths - this number changes based on internal changes to the runtime
-// CHECK-LOCK: KLEE: done: completed paths = 4
+// CHECK-LOCK: KLEE: done: completed paths = 2

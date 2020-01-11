@@ -142,7 +142,7 @@ void kpr_key_clear_data_of_thread(void) {
     struct key_data* data = &keyData[i];
 
     if (data->value != NULL) {
-      cleanup_needed = false;
+      cleanup_needed = true;
       break;
     }
   }
