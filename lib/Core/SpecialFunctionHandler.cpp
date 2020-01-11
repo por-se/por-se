@@ -991,14 +991,6 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
       successful = executor.porEventManager.registerLockDestroy(state, args[0]);
       break;
 
-    case por_lock_release:
-      successful = executor.porEventManager.registerLockRelease(state, args[0], true, false);
-      break;
-
-    case por_lock_acquire:
-      successful = executor.porEventManager.registerLockAcquire(state, args[0]);
-      break;
-
     case por_condition_variable_create:
       successful = executor.porEventManager.registerCondVarCreate(state, args[0]);
       break;
@@ -1007,17 +999,9 @@ void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
       successful = executor.porEventManager.registerCondVarDestroy(state, args[0]);
       break;
 
-    case por_wait1:
-      successful = executor.porEventManager.registerCondVarWait1(state, args[0], args[1]);
-      break;
-
-    case por_wait2:
-      successful = executor.porEventManager.registerCondVarWait2(state, args[0], args[1]);
-      break;
-
     default:
       executor.terminateStateOnError(state, "klee_por_register_event", Executor::User,
-              nullptr, "Invalid por event kind specified");
+              nullptr, "Forbidden por event kind specified");
       break;
   }
 
