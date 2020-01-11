@@ -3628,7 +3628,7 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   }
   por::configuration const& cfg = state.porNode->configuration();
 
-  std::vector<por::conflicting_extension> conflicting_extensions = cfg.conflicting_extensions();
+  std::vector<const por::event::event *> conflicting_extensions = cfg.conflicting_extensions(true);
 
   if (maximalConfiguration) {
     for (auto &[tid, thread] : state.threads) {
@@ -3649,28 +3649,23 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
           continue;
         }
 
-        auto dlcex = cfg.conflicting_extensions_deadlock(tid, lid, kind);
-        for (auto &cex : dlcex) {
-          conflicting_extensions.emplace_back(std::move(cex));
-        }
+        auto dlcex = cfg.conflicting_extensions_deadlock(tid, lid, kind, true);
+        conflicting_extensions.insert(conflicting_extensions.end(), dlcex.begin(), dlcex.end());
       }
     }
   }
 
-  for (auto const &cex : conflicting_extensions) {
-    por::event::event const& x = cex.extension();
-    if (!x.has_successors()) {
-      bool remove = false;
+  for (por::event::event const *cex : conflicting_extensions) {
+    bool remove = false;
 
-      if (x.is_cutoff()) {
-        remove = true;
-      } else if (MaxContextSwitchDegree && por::is_above_csd_limit(x, MaxContextSwitchDegree)) {
-        klee_warning("Context Switch Degree of conflicting extension above limit.");
-      }
+    if (cex->is_cutoff()) {
+      remove = true;
+    } else if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
+      klee_warning("Context Switch Degree of conflicting extension above limit.");
+    }
 
-      if (remove) {
-        cfg.unfolding()->remove_event(x);
-      }
+    if (remove) {
+      cfg.unfolding()->remove_event(*cex);
     }
   }
 
