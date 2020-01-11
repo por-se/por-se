@@ -158,6 +158,11 @@ public:
                               const KInstruction *caller);
   bool updateExternalCallFragment(std::uint64_t externalCallCounter);
   bool updateAcquiredLockFragment(std::uint64_t lockId, const ThreadId &holdingThread);
+  void updateThreadStateFragment(const ThreadId &threadId, std::uint8_t state);
+  void updateThreadWaitingOnLockFragment(const ThreadId &threadId, std::uint64_t lockId);
+  void updateThreadWaitingOnCV_1Fragment(const ThreadId &threadId, std::uint64_t condId, std::uint64_t lockId);
+  void updateThreadWaitingOnCV_2Fragment(const ThreadId &threadId, std::uint64_t condId, std::uint64_t lockId);
+  void updateThreadWaitingOnJoinFragment(const ThreadId &threadId, const ThreadId &joinedId);
 };
 
 template <typename T>

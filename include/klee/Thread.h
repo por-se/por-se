@@ -57,7 +57,7 @@ namespace klee {
     ~StackFrame();
   };
 
-  enum class ThreadState {
+  enum class ThreadState : std::uint8_t {
     Waiting,
     Runnable,
     Exited,

@@ -506,12 +506,34 @@ void MemoryState::registerPopFrame(const StackFrame &sf) {
 
 MemoryFingerprintDelta MemoryState::getThreadDelta(const Thread &thread) const {
   MemoryFingerprint copy = thread.fingerprint;
+  const ThreadId &threadId = thread.getThreadId();
 
   if (thread.state != ThreadState::Exited) {
-    copy.updateProgramCounterFragment(thread.getThreadId(),
+    copy.updateProgramCounterFragment(threadId,
                                       thread.stack.size() - 1,
                                       thread.pc->inst);
     copy.addToFingerprint();
+
+    copy.updateThreadStateFragment(threadId, static_cast<std::uint8_t>(thread.state));
+    copy.addToFingerprint();
+
+    if (std::visit([&copy, &threadId](auto&& w) -> bool {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+        copy.updateThreadWaitingOnLockFragment(threadId, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_1_t>) {
+        copy.updateThreadWaitingOnCV_1Fragment(threadId, w.cond, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+        copy.updateThreadWaitingOnCV_2Fragment(threadId, w.cond, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
+        copy.updateThreadWaitingOnJoinFragment(threadId, w.thread);
+      } else {
+        return false;
+      }
+      return true;
+    }, thread.waiting)) {
+      copy.addToFingerprint();
+    }
 
     // include live locals in current stack frame
     if (thread.liveSet != nullptr) {
@@ -520,7 +542,7 @@ MemoryFingerprintDelta MemoryState::getThreadDelta(const Thread &thread) const {
         if (value.isNull())
           continue;
 
-        copy.updateLocalFragment(thread.getThreadId(), thread.stack.size() - 1, ki->inst, value);
+        copy.updateLocalFragment(threadId, thread.stack.size() - 1, ki->inst, value);
         copy.addToFingerprint();
       }
     }

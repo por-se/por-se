@@ -370,4 +370,46 @@ bool MemoryFingerprintT<D, S, V>::updateAcquiredLockFragment(std::uint64_t lockI
   return false;
 }
 
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateThreadStateFragment(const ThreadId &threadId, std::uint8_t state) {
+  getDerived().updateUint8(12);
+  updateThreadId(threadId);
+  getDerived().updateUint8(state);
+}
+
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateThreadWaitingOnLockFragment(const ThreadId &threadId, std::uint64_t lockId) {
+  getDerived().updateUint8(13);
+  updateThreadId(threadId);
+  getDerived().updateUint64(lockId);
+}
+
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateThreadWaitingOnCV_1Fragment(const ThreadId &threadId,
+                                                                    std::uint64_t condId,
+                                                                    std::uint64_t lockId) {
+  getDerived().updateUint8(14);
+  updateThreadId(threadId);
+  getDerived().updateUint64(condId);
+  getDerived().updateUint64(lockId);
+}
+
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateThreadWaitingOnCV_2Fragment(const ThreadId &threadId,
+                                                                    std::uint64_t condId,
+                                                                    std::uint64_t lockId) {
+  getDerived().updateUint8(15);
+  updateThreadId(threadId);
+  getDerived().updateUint64(condId);
+  getDerived().updateUint64(lockId);
+}
+
+template <typename D, std::size_t S, typename V>
+void MemoryFingerprintT<D, S, V>::updateThreadWaitingOnJoinFragment(const ThreadId &threadId,
+                                                                    const ThreadId &joinedId) {
+  getDerived().updateUint8(16);
+  updateThreadId(threadId);
+  updateThreadId(joinedId);
+}
+
 } // namespace klee
