@@ -136,6 +136,23 @@ int pthread_setspecific(pthread_key_t k, const void *val) {
 // this is an internal method for the runtime to invoke all destructors that are associated with the
 // keys that this thread created/used
 void kpr_key_clear_data_of_thread(void) {
+  bool cleanup_needed = false;
+
+  for (int i = 0; i < PTHREAD_KEYS_MAX; i++) {
+    struct key_data* data = &keyData[i];
+
+    if (data->value != NULL) {
+      cleanup_needed = false;
+      break;
+    }
+  }
+
+  if (!cleanup_needed) {
+    // Avoid doing any actual cleanup if not needed
+    // as we lock a global lock before
+    return;
+  }
+
   lock_metadata();
 
   for (int it = 0; it < PTHREAD_DESTRUCTOR_ITERATIONS; it++) {
