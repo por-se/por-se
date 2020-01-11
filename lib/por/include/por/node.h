@@ -227,6 +227,10 @@ namespace por {
 
 		using registration_t = std::pair<por::event::event const*, std::shared_ptr<por::state const>>;
 
+	private:
+		node* make_left_child(std::function<registration_t(por::configuration*)>);
+
+	public:
 		node* make_left_child(std::function<registration_t(por::configuration&)>);
 
 		node* make_right_local_child(std::function<registration_t(por::configuration&)>);

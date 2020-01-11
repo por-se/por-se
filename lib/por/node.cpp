@@ -34,13 +34,18 @@ namespace {
 	}
 }
 
-node* node::make_left_child(std::function<registration_t(por::configuration&)> func) {
+node* node::make_left_child(std::function<registration_t(por::configuration*)> func) {
 	assert(!_left && "node already has left child");
 	assert(!_event && "node must not have an event yet");
 
 	_left = allocate_left_child();
 	std::shared_ptr<state const> standby_state;
-	std::tie(_event, standby_state) = func(*_left->_C);
+
+	if(_left->_C) {
+		std::tie(_event, standby_state) = func(_left->_C.get());
+	} else {
+		std::tie(_event, standby_state) = func(nullptr);
+	}
 
 	if(standby_state) {
 		_left->_standby_state = std::move(standby_state);
@@ -53,6 +58,13 @@ node* node::make_left_child(std::function<registration_t(por::configuration&)> f
 	_is_sweep_node = false;
 
 	return _left.get();
+}
+
+node* node::make_left_child(std::function<registration_t(por::configuration&)> func) {
+	assert(_C);
+	return make_left_child([&func](por::configuration* cfg) {
+		return func(*cfg);
+	});
 }
 
 node* node::make_right_local_child(std::function<registration_t(por::configuration&)> func) {
@@ -153,7 +165,7 @@ por::leaf node::make_right_branch(por::comb A) {
 		}
 
 		for(por::event::event const* a : min) {
-			n = n->make_left_child([&a, &n](por::configuration&) {
+			n = n->make_left_child([&a, &n](por::configuration*) {
 				return std::make_pair(a, nullptr);
 			});
 			assert(n->parent()->_event == a);
