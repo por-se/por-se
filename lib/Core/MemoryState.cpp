@@ -430,8 +430,9 @@ void MemoryState::registerArgument(const ThreadId &threadID,
   fingerprint.addToFingerprintAndDelta(delta);
 
   if (DebugStatePruning) {
+    assert(kf->function->hasName());
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
-                 << reinterpret_cast<std::uintptr_t>(kf) << ": "
+                 << kf->function->getName() << ": "
                  << ExprString(value) << "\n";
   }
 }
