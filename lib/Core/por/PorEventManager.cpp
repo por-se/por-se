@@ -216,9 +216,8 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
 
   extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
     por::event::event const* e = cfg.create_thread(state.currentThreadId(), tid);
-    auto standby = createStandbyState(state, por_thread_create);
     attachFingerprintToEvent(state, *e);
-    return std::make_pair(e, standby);
+    return std::make_pair(e, nullptr);
   });
 
   return true;
@@ -246,8 +245,9 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
       return std::make_pair(e, std::move(standby));
     });
   } else {
+    assert(state.currentThreadId() != tid);
     extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
-      por::event::event const* e = cfg.init_thread(tid);
+      por::event::event const* e = cfg.init_thread(tid, state.currentThreadId());
       auto standby = createStandbyState(state, por_thread_init);
       attachFingerprintToEvent(state, *e);
       return std::make_pair(e, standby);

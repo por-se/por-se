@@ -87,7 +87,7 @@ bool Thread::isRunnable(const por::configuration &configuration) const noexcept 
   if (state == ThreadState::Waiting) {
     return std::visit([&configuration](auto&& w) -> bool {
       using T = std::decay_t<decltype(w)>;
-      if constexpr (std::is_same_v<T, wait_none_t> || std::is_same_v<T, wait_init_t>) {
+      if constexpr (std::is_same_v<T, wait_none_t>) {
         return true;
       } else if constexpr (std::is_same_v<T, wait_lock_t> || std::is_same_v<T, wait_cv_2_t>) {
         return configuration.can_acquire_lock(w.lock);

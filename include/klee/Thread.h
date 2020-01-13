@@ -81,7 +81,6 @@ namespace klee {
       typedef std::vector<StackFrame> stack_ty;
 
       struct wait_none_t { };
-      struct wait_init_t { };
       struct wait_lock_t { por::event::lock_id_t lock; };
       struct wait_cv_1_t { por::event::cond_id_t cond; por::event::lock_id_t lock; };
       struct wait_cv_2_t { por::event::cond_id_t cond; por::event::lock_id_t lock; };
@@ -109,10 +108,10 @@ namespace klee {
       unsigned incomingBBIndex;
 
       /// @brief life cycle state of this thread
-      ThreadState state = ThreadState::Waiting;
+      ThreadState state = ThreadState::Runnable;
 
       /// @brief the resource the thread is currently waiting for
-      std::variant<wait_none_t,wait_init_t,wait_lock_t,wait_cv_1_t,wait_cv_2_t,wait_join_t> waiting = wait_init_t{};
+      std::variant<wait_none_t,wait_lock_t,wait_cv_1_t,wait_cv_2_t,wait_join_t> waiting = wait_none_t{};
 
       /// @brief value of the pthread_t pointer the thread was created with
       ref<Expr> runtimeStructPtr;

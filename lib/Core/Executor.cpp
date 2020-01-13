@@ -4696,10 +4696,8 @@ void Executor::runFunctionAsMain(Function *f,
   Thread &thread = state->getThreadById(ExecutionState::mainThreadId).value().get();
   thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
   thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
-  thread.state = ThreadState::Runnable;
-  thread.waiting = Thread::wait_none_t{};
   scheduleNextThread(*state, ExecutionState::mainThreadId);
-  
+
   MemoryObject *argvMO = nullptr;
 
   // In order to make uclibc happy and be closer to what the system is
@@ -5105,6 +5103,7 @@ ThreadId Executor::createThread(ExecutionState &state,
     statsTracker->framePushed(threadStartFrame, nullptr);
 
   porEventManager.registerThreadCreate(state, thread.getThreadId());
+  porEventManager.registerThreadInit(state, thread.getThreadId());
 
   return thread.getThreadId();
 }
@@ -5450,9 +5449,7 @@ void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
     thread.waiting = Thread::wait_none_t{};
     std::visit([this,&state](auto&& w) {
       using T = std::decay_t<decltype(w)>;
-      if constexpr (std::is_same_v<T, Thread::wait_init_t>) {
-        porEventManager.registerThreadInit(state, state.currentThreadId());
-      } else if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+      if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
         state.memoryState.registerAcquiredLock(w.lock, state.currentThreadId());
         porEventManager.registerLockAcquire(state, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
