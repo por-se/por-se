@@ -48,7 +48,6 @@ const ThreadId ExecutionState::mainThreadId{ThreadId(), 1};
 ExecutionState::ExecutionState(KFunction *kf) :
     id(next_id++),
     currentSchedulingIndex(0),
-    onlyOneThreadRunnableSinceEpochStart(true),
     atomicPhase(false),
     depth(0),
     instsSinceCovNew(0),
@@ -91,7 +90,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     id(next_id++),
     lostNotifications(state.lostNotifications),
     currentSchedulingIndex(state.currentSchedulingIndex),
-    onlyOneThreadRunnableSinceEpochStart(state.onlyOneThreadRunnableSinceEpochStart),
     raceDetection(state.raceDetection),
     threads(state.threads),
     needsThreadScheduling(state.needsThreadScheduling),

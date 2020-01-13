@@ -84,8 +84,6 @@ private:
   /// @brief The sync point where we wait for the threads
   uint64_t currentSchedulingIndex;
 
-  bool onlyOneThreadRunnableSinceEpochStart;
-
   /// @brief tracks and checks all memory accesses
   DataRaceDetection raceDetection;
 
