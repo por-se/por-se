@@ -176,7 +176,7 @@ int main(int argc, char** argv){
 			std::uint16_t local_id = ++thread_spawns[source];
 			auto tid = por::thread_id(source, local_id);
 			configuration.create_thread(source, tid);
-			configuration.init_thread(tid);
+			configuration.init_thread(tid, source);
 			std::cout << "+T " << tid << " (" << source << ")\n";
 		} else if(roll < 60) {
 			// join thread

@@ -93,9 +93,6 @@ namespace por {
 		// contains most recent event of ALL threads that ever existed within this configuration
 		std::map<por::event::thread_id_t, por::event::event const*> _thread_heads;
 
-		// contains most recent event
-		std::map<por::event::thread_id_t, por::event::event const*> _thread_create;
-
 		// contains most recent event of ACTIVE locks
 		std::map<event::lock_id_t, por::event::event const*> _lock_heads;
 
@@ -220,19 +217,18 @@ namespace por {
 
 			assert(new_tid);
 			assert(thread_heads().find(new_tid) == thread_heads().end() && "Thread with same id already exists");
-			assert(_thread_create.find(new_tid) == _thread_create.end() && "Thread with same id was already created");
 			thread_event = event::thread_create::alloc(*_unfolding, thread, *thread_event, new_tid);
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_create);
-			_thread_create.emplace(new_tid, thread_event);
 
 			++_size;
 			return thread_event;
 		}
 
-		por::event::event const* init_thread(event::thread_id_t thread) {
-			auto create_it = _thread_create.find(thread);
-			assert(create_it != _thread_create.end() && "Thread must have been created");
+		por::event::event const* init_thread(event::thread_id_t thread, event::thread_id_t created_from) {
+			auto create_it = _thread_heads.find(created_from);
+			assert(create_it != _thread_heads.end() && "Creating thread must exist");
 			auto& thread_create = create_it->second;
+			assert(thread_create->kind() == por::event::event_kind::thread_create && "Creation must happen immediately before");
 			assert(thread_create->tid() != thread);
 
 			auto thread_it = _thread_heads.find(thread);
@@ -240,7 +236,6 @@ namespace por {
 
 			_thread_heads.emplace(thread, event::thread_init::alloc(*_unfolding, thread, *thread_create));
 			_unfolding->stats_inc_event_created(por::event::event_kind::thread_init);
-			_thread_create.erase(create_it);
 
 			++_size;
 			return _thread_heads[thread];

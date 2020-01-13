@@ -220,19 +220,33 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 		por::comb A = J.setminus(C);
 		libpor_check(A.is_sorted());
 
+		std::vector<por::event::event const*> atomic_successors;
+
 		// make sure to include thread_exit if immediately preceding lock_release is in A
-		std::vector<por::event::event const*> exit_events;
 		for(auto& l : A) {
 			if(l->kind() == por::event::event_kind::lock_release) {
 				auto exit = std::find_if(l->successors().begin(), l->successors().end(), [&l](auto& succ) {
 					return succ->kind() == por::event::event_kind::thread_exit;
 				});
 				if(exit != l->successors().end()) {
-					exit_events.push_back(*exit);
+					atomic_successors.push_back(*exit);
 				}
 			}
 		}
-		for(auto& e : exit_events) {
+
+		// make sure to include thread_init if thread_create is in A
+		for(auto& l : A) {
+			if(l->kind() == por::event::event_kind::thread_create) {
+				auto init = std::find_if(l->successors().begin(), l->successors().end(), [&l](auto& succ) {
+					return succ->kind() == por::event::event_kind::thread_init;
+				});
+				if(init != l->successors().end()) {
+					atomic_successors.push_back(*init);
+				}
+			}
+		}
+
+		for(auto& e : atomic_successors) {
 			A.insert(*e);
 		}
 

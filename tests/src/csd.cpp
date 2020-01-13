@@ -31,7 +31,7 @@ namespace {
 		configuration.acquire_lock(thread1, 1);
 		auto thread2 = por::thread_id{thread1, 1};
 		configuration.create_thread(thread1, thread2);
-		configuration.init_thread(thread2);
+		configuration.init_thread(thread2, thread1);
 		configuration.release_lock(thread1, 1);
 		configuration.acquire_lock(thread2, 1);
 
@@ -45,7 +45,7 @@ namespace {
 		configuration.acquire_lock(thread1, 1);
 		auto thread2 = por::thread_id{thread1, 1};
 		configuration.create_thread(thread1, thread2);
-		configuration.init_thread(thread2);
+		configuration.init_thread(thread2, thread1);
 		configuration.release_lock(thread1, 1);
 		configuration.acquire_lock(thread2, 1);
 
@@ -59,7 +59,7 @@ namespace {
 		configuration.acquire_lock(thread1, 1);
 		auto thread2 = por::thread_id{thread1, 1};
 		configuration.create_thread(thread1, thread2);
-		configuration.init_thread(thread2);
+		configuration.init_thread(thread2, thread1);
 		configuration.release_lock(thread1, 1);
 		configuration.acquire_lock(thread2, 1);
 		configuration.exit_thread(thread2);
@@ -75,7 +75,7 @@ namespace {
 		configuration.acquire_lock(thread1, 1);
 		auto thread2 = por::thread_id{thread1, 1};
 		configuration.create_thread(thread1, thread2);
-		configuration.init_thread(thread2);
+		configuration.init_thread(thread2, thread1);
 		configuration.release_lock(thread1, 1);
 		configuration.acquire_lock(thread2, 1);
 		configuration.exit_thread(thread2);

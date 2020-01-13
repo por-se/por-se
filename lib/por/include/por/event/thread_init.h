@@ -26,6 +26,9 @@ namespace por::event {
 				|| (this->thread_creation_predecessor()->kind() == event_kind::thread_create
 					&& this->thread_creation_predecessor()->tid())
 			);
+
+			assert(this->ends_atomic_operation());
+			assert(this->atomic_predecessor() == this->thread_creation_predecessor());
 		}
 
 	public:
@@ -76,5 +79,11 @@ namespace por::event {
 		}
 
 		event const* thread_creation_predecessor() const noexcept { return _predecessors[0]; }
+
+		bool ends_atomic_operation() const noexcept override { return true; }
+
+		event const* atomic_predecessor() const noexcept override {
+			return thread_creation_predecessor();
+		}
 	};
 }
