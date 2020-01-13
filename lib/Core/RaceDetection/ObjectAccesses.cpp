@@ -46,49 +46,18 @@ std::shared_ptr<ObjectAccesses::OperationList> ObjectAccesses::OperationList::re
       continue;
     }
 
-    auto savedIsAtomic = opData.isAtomic();
-    auto savedIsWrite = opData.isWrite();
-
-    if (savedIsWrite) {
-      if (!savedIsAtomic) {
-        // This race type races with every other type -> tracking the incoming one does not add value
-        return nullptr;
-      }
-
-      // So we have an atomic write -> if the incoming is any atomic type, then easily skippable
-      if (incoming.isAtomic()) {
-        return nullptr;
-      }
-
-      // Saved one is an atomic write and the incoming one is not atomic
-      if (incoming.isWrite()) {
-        return replace(incoming, from, i);
-      }
-
-      continue;
+    if (opData.isWrite()) {
+      // This race type races with every other type -> tracking the incoming one does not add value
+      return nullptr;
     }
 
-    // We know now for sure that the saved on is a read (atomic or non-atomic)
+    // We know now for sure that the saved on is a read
     if (incoming.isWrite()) {
-      // So the incoming one is racing with nearly every type (only exception: incoming atomic write)
-
-      if (incoming.isAtomic() && !savedIsAtomic) {
-        continue;
-      }
-
+      // So the incoming one is racing with every type
       return replace(incoming, from, i);
     }
 
-    // The combination is two reads, if one of them is non-atomic, then this one wins, otherwise do nothing
-    if (!savedIsAtomic) {
-      return nullptr;
-    }
-
-    if (!incoming.isAtomic()) {
-      return nullptr;
-    }
-
-    return replace(incoming, from, i);
+    return nullptr;
   }
 
   // So the deduplication was not successful. Simply add it

@@ -102,9 +102,6 @@ public:
   /// @brief the history of scheduling up until now
   std::vector<ThreadId> schedulingHistory;
 
-  /// @brief if the current state is in an temporary atomic phase
-  bool atomicPhase;
-
   // Overall state of the state - Data specific
 
   /// @brief Address space used by this state (e.g. Global and Heap)

@@ -48,7 +48,6 @@ const ThreadId ExecutionState::mainThreadId{ThreadId(), 1};
 ExecutionState::ExecutionState(KFunction *kf) :
     id(next_id++),
     currentSchedulingIndex(0),
-    atomicPhase(false),
     depth(0),
     instsSinceCovNew(0),
     coveredNew(false),
@@ -95,7 +94,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     needsThreadScheduling(state.needsThreadScheduling),
     calledExit(state.calledExit),
     schedulingHistory(state.schedulingHistory),
-    atomicPhase(state.atomicPhase),
 
     addressSpace(state.addressSpace),
     constraints(state.constraints),

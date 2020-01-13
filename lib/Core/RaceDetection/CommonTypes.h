@@ -23,9 +23,6 @@ namespace klee {
       WRITE,
       READ,
 
-      ATOMIC_WRITE,
-      ATOMIC_READ,
-
       ALLOC,
       FREE
     };
@@ -104,15 +101,11 @@ namespace klee {
     };
 
     [[nodiscard]] bool isWrite() const {
-      return type == Type::WRITE || type == Type::ATOMIC_WRITE;
+      return type == Type::WRITE;
     }
 
     [[nodiscard]] bool isRead() const {
-      return type == Type::READ || type == Type::ATOMIC_READ;
-    }
-
-    [[nodiscard]] bool isAtomic() const {
-      return type == Type::ATOMIC_WRITE || type == Type::ATOMIC_READ;
+      return type == Type::READ;
     }
 
     [[nodiscard]] bool isAlloc() const {
@@ -128,9 +121,6 @@ namespace klee {
         case Type::UNKNOWN: return "un";
         case Type::WRITE: return "w";
         case Type::READ: return "r";
-
-        case Type::ATOMIC_WRITE: return "a+w";
-        case Type::ATOMIC_READ: return "a+r";
 
         case Type::ALLOC: return "a";
         case Type::FREE: return "f";

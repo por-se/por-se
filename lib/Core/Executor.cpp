@@ -3194,9 +3194,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // performs its operation, stores the result and returns the value that was originally at the pointer.
     auto ai = cast<AtomicRMWInst>(i);
 
-    bool wasAtomicPhase = state.atomicPhase;
-    state.atomicPhase = true;
-
     auto memValWidth = getWidthForLLVMType(ai->getValOperand()->getType());
 
     ref<Expr> pointer = eval(ki, 0, state).value;
@@ -3272,16 +3269,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Every AtomicRMW returns the old value
     bindLocal(ki, state, oldValue);
 
-    state.atomicPhase = wasAtomicPhase;
-
     porEventManager.registerLockRelease(state, memLoc->first->getId(), true, true);
     break;
   }
 
   case Instruction::AtomicCmpXchg: {
-    bool wasAtomicPhase = state.atomicPhase;
-    state.atomicPhase = true;
-
     ref<Expr> pointer = eval(ki, 0, state).value;
     ref<Expr> compare = eval(ki, 1, state).value;
     ref<Expr> newValue = eval(ki, 2, state).value;
@@ -3318,8 +3310,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     //          but in the ConcatExpr it has to be the last in order to work correctly
     // FIXME: this is totally broken, but there is no easy fix at the moment
     bindLocal(ki, state, ConcatExpr::create(equal, oldValue));
-
-    state.atomicPhase = wasAtomicPhase;
 
     porEventManager.registerLockRelease(state, src->first->getId(), true, true);
     break;
@@ -5153,14 +5143,6 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
   operation.tid = state.currentThreadId();
   operation.instruction = state.currentThread().prevPc;
   operation.type = type;
-
-  if (!operation.isAlloc() && !operation.isFree() && state.atomicPhase) {
-    if (operation.isRead()) {
-      operation.type = MemoryOperation::Type::ATOMIC_READ;
-    } else {
-      operation.type = MemoryOperation::Type::ATOMIC_WRITE;
-    }
-  }
 
   StateBoundTimingSolver solv(state, *solver, coreSolverTimeout);
 

@@ -206,10 +206,6 @@ DataRaceDetection::SolverPath(const por::node& node,
             continue;
           }
 
-          if (access.isAtomic() && operation.isAtomic()) {
-            continue; // FIXME: remove special casing for atomics!
-          }
-
           if (access.isRead() && operation.isRead()) {
             continue;
           }
@@ -359,10 +355,6 @@ DataRaceDetection::FastPath(const por::node& node,
 
         // So we now know for sure that only standard accesses are inside here
         for (auto const& op : patterns.getAccesses()) {
-          if (operation.isAtomic() && op.isAtomic()) {
-            continue; // FIXME: remove special casing for atomics!
-          }
-
           if (operation.isRead() && op.isRead()) {
             continue;
           }
