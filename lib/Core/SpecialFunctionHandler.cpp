@@ -1335,10 +1335,10 @@ void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,
   }
 
   if (outputTarget == 1) {
-    llvm::outs() << buf;
+    llvm::outs().write(buf, mo->size);
     llvm::outs().flush();
   } else {
-    llvm::errs() << buf;
+    llvm::errs().write(buf, mo->size);
     llvm::errs().flush();
   }
 
