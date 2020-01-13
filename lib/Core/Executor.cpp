@@ -1664,6 +1664,10 @@ void Executor::stepInstruction(ExecutionState &state) {
 
   Thread &thread = state.currentThread();
 
+  if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
+    thread.liveSet = &thread.prevPc->info->getLiveLocals();
+  }
+
   ++stats::instructions;
   ++state.steppedInstructions;
   thread.prevPc = thread.pc;
@@ -3326,10 +3330,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   default:
     terminateStateOnExecError(state, "illegal instruction");
     break;
-  }
-
-  if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
-    thread.liveSet = &thread.prevPc->info->getLiveLocals();
   }
 }
 
