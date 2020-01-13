@@ -5314,8 +5314,9 @@ void Executor::scheduleThreads(ExecutionState &state) {
       }
 
       if (nextThread.state == ThreadState::Cutoff) {
-        nextThread.state = ThreadState::Runnable; // FIXME: is that right?
-        klee_warning("Catch up on cutoff event");
+        klee_warning("Trying to catch up on cutoff event. Aborting.");
+        terminateStateSilently(state);
+        return;
       }
 
       break;
