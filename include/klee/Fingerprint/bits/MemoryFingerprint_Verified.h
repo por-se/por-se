@@ -76,7 +76,12 @@ class VerifiedMemoryFingerprint
   }
 
   static std::string toString_impl(const typename Base::value_t &fingerprintValue) {
-    return MemoryFingerprint_StringSet::toString(fingerprintValue.stringSet);
+    if (fingerprintValue.isDiff) {
+      return MemoryFingerprint_StringSet::toString(fingerprintValue.stringSet);
+    } else {
+      return hashT::toString(fingerprintValue.hash) + ": "
+        + MemoryFingerprint_StringSet::toString(fingerprintValue.stringSet);
+    }
   }
 
   static void executeAdd(typename Base::value_t &dst, const typename Base::value_t &src) {

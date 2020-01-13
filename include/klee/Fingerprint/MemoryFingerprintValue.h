@@ -6,9 +6,11 @@
 #include "klee/Config/config.h"
 #endif
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cassert>
+#include <iterator>
 #include <map>
 #include <tuple>
 
@@ -33,6 +35,7 @@ class VerifiedMemoryFingerprintValue {
 
   MemoryFingerprintValue_StringSet stringSet;
   MemoryFingerprintValue_CryptoPP_BLAKE2b hash;
+  bool isDiff = false;
 
 public:
   bool operator<(const VerifiedMemoryFingerprintValue<hashT> &other) const {
@@ -43,6 +46,18 @@ public:
     if (hash == other.hash)
       assert(stringSet == other.stringSet);
     return hash == other.hash && stringSet == other.stringSet;
+  }
+
+  VerifiedMemoryFingerprintValue<hashT> diff(const VerifiedMemoryFingerprintValue<hashT> &other) const {
+    VerifiedMemoryFingerprintValue<hashT> difference;
+    difference.hash = {};
+    difference.isDiff = true;
+
+    std::set_symmetric_difference(stringSet.begin(), stringSet.end(),
+                                  other.stringSet.begin(), other.stringSet.end(),
+                                  std::inserter(difference.stringSet, difference.stringSet.end()));
+
+    return difference;
   }
 
   VerifiedMemoryFingerprintValue() = default;

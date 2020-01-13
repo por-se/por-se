@@ -1,6 +1,11 @@
 #ifndef KLEE_MEMORYFINGERPRINTDELTA_H
 #define KLEE_MEMORYFINGERPRINTDELTA_H
 
+#ifndef KLEE_OUTSIDE_BUILD_TREE
+// for ENABLE_VERIFIED_FINGERPRINTS
+#include "klee/Config/config.h"
+#endif
+
 #include "klee/Fingerprint/MemoryFingerprintValue.h"
 
 #include <cstdint>
@@ -25,6 +30,18 @@ class MemoryFingerprintDelta {
   friend bool operator!=(const MemoryFingerprintDelta &lhs, const MemoryFingerprintDelta &rhs) {
     return !(lhs == rhs);
   }
+
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+public:
+  MemoryFingerprintDelta diff(const MemoryFingerprintDelta &other) const {
+    MemoryFingerprintDelta difference;
+
+    difference.fingerprintValue = fingerprintValue.diff(other.fingerprintValue);
+
+    return difference;
+  }
+#endif
+
 };
 
 } // namespace klee
