@@ -99,7 +99,7 @@ DataRaceDetection::isDataRace(const por::node& node,
   auto clockStart = std::chrono::steady_clock::now();
 
   // Test if we can try a fast path -> races with a concrete offset or alloc/free
-  const auto& easyResult = FastPath(node, operation);
+  const auto easyResult = FastPath(node, operation);
 
   if (easyResult.has_value()) {
     // So if the fast path could produce any definite claims, then either
@@ -184,52 +184,50 @@ DataRaceDetection::SolverPath(const por::node& node,
 
   std::vector<std::pair<ThreadId, const AccessMetaData&>> accessesToCheck;
 
-  for (auto& pair : threadsToCheck) {
-    if (pair.first == operation.tid) {
+  for (auto const &pair : threadsToCheck) {
+    ThreadId const& tid = pair.first;
+    if (tid == operation.tid) {
       continue;
     }
 
-    const auto* evt = pair.second;
-    for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
-      assert(evt->tid() != operation.tid);
+    por::event::event const *evt = pair.second;
+    assert(evt != nullptr);
 
+    for (; evt != nullptr; evt = evt->thread_predecessor()) {
       auto memAccesses = getAccessesAfter(*evt);
-      auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object);
+      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object); accessed.has_value()) {
+        const auto& accessPatterns = accessed.value().get();
 
-      // This memory object was not accessed
-      if (!accessed.has_value()) {
-        continue;
+        assert(!accessPatterns.isAllocOrFree() && "Would have been tested in the fastpath");
+
+        for (auto& access : accessPatterns.getAccesses()) {
+          // check early since this is an easy pair
+          if (operation.isConstantOffset() && access.isConstantOffset()) {
+            continue;
+          }
+
+          if (access.isAtomic() && operation.isAtomic()) {
+            continue; // FIXME: remove special casing for atomics!
+          }
+
+          if (access.isRead() && operation.isRead()) {
+            continue;
+          }
+
+          // So if we could actually make a bounds check and the result
+          // was that the accesses are not overlapping, then we do not
+          // have to check this combination with the solver
+          auto inBounds = operation.isOverlappingWith(access);
+          if (inBounds.has_value() && !inBounds.value()) {
+            continue;
+          }
+
+          accessesToCheck.emplace_back(tid, access);
+        }
       }
 
-      const auto& accessPatterns = accessed->get();
-
-      assert(!accessPatterns.isAllocOrFree() && "Would have been tested in the fastpath");
-
-      for (auto& access : accessPatterns.getAccesses()) {
-        // Also checked earlier since this is also a easy pair
-        if (operation.isConstantOffset() && access.isConstantOffset()) {
-          continue;
-        }
-
-        // To atomic operations cannot race
-        if (access.isAtomic() && operation.isAtomic()) {
-          continue;
-        }
-
-        // To reads also never race
-        if (access.isRead() && operation.isRead()) {
-          continue;
-        }
-
-        // So if we could actually make a bounds check and the result
-        // was that the accesses are not overlapping, then we do not
-        // have to check this combination with the solver
-        auto inBounds = operation.isOverlappingWith(access);
-        if (inBounds.has_value() && !inBounds.value()) {
-          continue;
-        }
-
-        accessesToCheck.emplace_back(pair.first, access);
+      if (evt->is_less_than(*curEventOfOperatingThread)) {
+        break;
       }
     }
   }
@@ -333,80 +331,65 @@ DataRaceDetection::FastPath(const por::node& node,
 
   RaceDetectionResult result;
 
-  // We cannot give a definite result if during the check we encounter
-  // a symbolic offset that is not matching and has to be checked by the solver.
-  // If there is no such checks needed, then the result is already "final"
-  // (e.g. a definite result whether this is racing)
-  bool canGiveDefiniteResult = true;
-
-  for (auto& pair : threadsToCheck) {
-    if (pair.first == operation.tid) {
+  for (auto const &pair : threadsToCheck) {
+    ThreadId const& tid = pair.first;
+    if (tid == operation.tid) {
       continue;
     }
 
-    const auto* evt = pair.second;
-    for (;evt != nullptr && !evt->is_less_than(*curEventOfOperatingThread); evt = evt->thread_predecessor()) {
-      assert(evt->tid() != operation.tid);
+    por::event::event const *evt = pair.second;
+    assert(evt != nullptr);
 
+    for (; evt != nullptr; evt = evt->thread_predecessor()) {
       auto memAccesses = getAccessesAfter(*evt);
-      auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object);
+      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object); accessed.has_value()) {
+        const auto& patterns = accessed.value().get();
 
-      // This memory object was not accessed
-      if (!accessed.has_value()) {
-        continue;
-      }
+        if (incomingIsAllocOrFree || patterns.isAllocOrFree()) {
+          // We race with every other access, therefore simply pick the first
+          result.racingInstruction = patterns.isAllocOrFree()
+                                    ? patterns.getAllocFreeInstruction()
+                                    : patterns.getAccesses().front().instruction;
 
-      const auto& patterns = accessed->get();
-
-      if (incomingIsAllocOrFree || patterns.isAllocOrFree()) {
-        // We race with every other access, therefore simply pick the first
-        result.racingInstruction = patterns.isAllocOrFree()
-                                   ? patterns.getAllocFreeInstruction()
-                                   : patterns.getAccesses().front().instruction;
-
-        result.racingThread = pair.first;
-        result.isRace = true;
-        result.canBeSafe = false;
-        return result;
-      }
-
-      // So we now know for sure that only standard accesses are inside here
-      for (auto& op : patterns.getAccesses()) {
-        // To atomic operations cannot race
-        if (operation.isAtomic() && op.isAtomic()) {
-          continue;
-        }
-
-        // To reads also never race
-        if (operation.isRead() && op.isRead()) {
-          continue;
-        }
-
-        // So now we know that every other combination will actually race.
-        // Therefore, we do not have to check any other access type, but only have to check the offsets
-        auto inBounds = operation.isOverlappingWith(op);
-        if (!inBounds.has_value()) {
-          canGiveDefiniteResult = false;
-          continue;
-        }
-
-        if (inBounds.value()) {
-          result.racingInstruction = op.instruction;
-          result.racingThread = pair.first;
+          result.racingThread = tid;
           result.isRace = true;
           result.canBeSafe = false;
           return result;
         }
+
+        // So we now know for sure that only standard accesses are inside here
+        for (auto const& op : patterns.getAccesses()) {
+          if (operation.isAtomic() && op.isAtomic()) {
+            continue; // FIXME: remove special casing for atomics!
+          }
+
+          if (operation.isRead() && op.isRead()) {
+            continue;
+          }
+
+          if (auto isOverlapping = operation.isOverlappingWith(op); isOverlapping.has_value()) {
+            if (isOverlapping.value()) {
+              result.racingInstruction = op.instruction;
+              result.racingThread = tid;
+              result.isRace = true;
+              result.canBeSafe = false;
+              return result;
+            }
+          } else {
+            // We cannot give a definite result if during the check we encounter
+            // a symbolic offset that is not matching and has to be checked by the solver.
+            return {};
+          }
+        }
+      }
+
+      if (evt->is_less_than(*curEventOfOperatingThread)) {
+        break;
       }
     }
   }
 
-  if (canGiveDefiniteResult) {
-    // Literally no thread has accessed the memory object in any way
-    result.isRace = false;
-    result.hasNewConstraints = false;
-    return result;
-  }
-
-  return {};
+  result.isRace = false;
+  result.hasNewConstraints = false;
+  return result;
 }
