@@ -4,6 +4,7 @@
 #include "klee/Config/config.h"
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Support/ErrorHandling.h"
+#include "klee/StatePruningCmdLine.h"
 
 #include "por/configuration.h"
 #include "por/event/event.h"
@@ -638,13 +639,12 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     return;
   }
 
-std::stringstream os;
-os << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "] corresponding: " << corresponding->to_string(true)
-   << " with fingerprint: " << MemoryFingerprint::toString(*correspondingFPV) << "\n";
-os << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "]        cutoff: " << cutoff->to_string(true) << "\n"
-   << " with fingerprint: " << MemoryFingerprint::toString(*cutoffFPV) << "\n";
-
-klee_warning(os.str().c_str());
+  if (DebugStatePruning) {
+    llvm::errs() << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "] corresponding: " << corresponding->to_string(true)
+                << " with fingerprint: " << MemoryFingerprint::toString(*correspondingFPV) << "\n";
+    llvm::errs() << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "]        cutoff: " << cutoff->to_string(true) << "\n"
+                << " with fingerprint: " << MemoryFingerprint::toString(*cutoffFPV) << "\n";
+  }
 
   cutoff->mark_as_cutoff();
 }
