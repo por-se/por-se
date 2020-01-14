@@ -15,7 +15,9 @@
 // The magic stuff is a pattern that is detected in the runtime to distinguish between
 // correctly initialized static mutexes and zero initialized ones
 typedef struct {
-  char magic;
+  // Has to be a volatile so that the data race detection can properly detect
+  // races between initialization and other events
+  volatile char magic;
 } pthread_internal_t;
 #define PTHREAD_INTERNAL_MAGIC_VALUE 42
 #define PTHREAD_INTERNAL_MAGIC {.magic = 42}

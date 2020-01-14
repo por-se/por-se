@@ -22,11 +22,11 @@ void kpr_check_already_init(pthread_internal_t* data);
 
 #define kpr_check_if_valid(typename, argument) kpr_check_init_pattern((pthread_internal_t*) argument, sizeof(typename));
 
-#define kpr_check_for_double_init(argument) kpr_check_already_init(&argument->magic)
-#define kpr_ensure_valid(argument) argument->magic.magic = PTHREAD_INTERNAL_MAGIC_VALUE
+#define kpr_check_for_double_init(argument) (kpr_check_already_init(&(argument)->magic))
+#define kpr_ensure_valid(argument) ((argument)->magic.magic = PTHREAD_INTERNAL_MAGIC_VALUE, (void) 0)
 
 // 0xAB is the random pattern of klee
-#define kpr_ensure_invalid(typename, argument) memset((argument), 0xAB, sizeof(typename))
+#define kpr_ensure_invalid(typename, argument) (memset((argument), 0xAB, sizeof(typename)))
 
 typedef struct {
   void* argument;
