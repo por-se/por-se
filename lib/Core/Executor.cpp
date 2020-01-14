@@ -1769,7 +1769,7 @@ void Executor::executeCall(ExecutionState &state,
       break;
     case Intrinsic::fabs: {
       ref<ConstantExpr> arg =
-          toConstant(state, eval(ki, 0, state).value, "floating point");
+          toConstant(state, arguments[0], "floating point");
       if (!fpWidthToSemantics(arg->getWidth()))
         return terminateStateOnExecError(
             state, "Unsupported intrinsic llvm.fabs call");
