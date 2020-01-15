@@ -820,7 +820,6 @@ static const char *modelledExternals[] = {
   "klee_stack_trace",
   "klee_create_thread",
   "klee_exit_thread",
-  "klee_por_register_event",
   "klee_por_thread_join",
   "klee_lock_acquire",
   "klee_lock_release",

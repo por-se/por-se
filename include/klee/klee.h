@@ -158,8 +158,6 @@ extern "C" {
 
   void klee_exit_thread(void* lock_to_release) __attribute__ ((__noreturn__));
 
-  void klee_por_register_event(por_event_t evt, ...);
-
   // Should only be used internally to find the correct thread
   void klee_por_thread_join(void *runtime_struct);
 

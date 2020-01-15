@@ -15,11 +15,6 @@ int pthread_cond_init(pthread_cond_t *lock, const pthread_condattr_t *attr) {
   lock->waitingMutex = NULL;
   lock->waitingCount = 0;
 
-  // We cannot register this create event as this might introduce a scheduling
-  // point that we do not want to have.
-  // klee_por_register_event(por_lock_create, &lock->lock);
-  klee_por_register_event(por_condition_variable_create, &lock->internalCond);
-
   kpr_ensure_valid(lock);
 
   return 0;
@@ -31,9 +26,6 @@ int pthread_cond_destroy(pthread_cond_t *lock) {
   if (lock->waitingCount != 0) {
     return EBUSY;
   }
-
-  klee_por_register_event(por_condition_variable_destroy, &lock->internalCond);
-  // klee_por_register_event(por_lock_destroy, &lock->lock);
 
   kpr_ensure_invalid(pthread_cond_t, lock);
 

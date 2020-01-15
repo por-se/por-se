@@ -23,8 +23,6 @@ static inline void kpr_sem_init(sem_t *sem, unsigned int value) {
 
   sem->waitingCount = 0;
 
-  klee_por_register_event(por_lock_create, &sem->mutex);
-
   kpr_ensure_valid(sem);
 }
 
@@ -51,8 +49,6 @@ int sem_destroy (sem_t *sem) {
     errno = EINVAL;
     return -1;
   }
-
-  klee_por_register_event(por_lock_destroy, &sem->mutex);
 
   kpr_ensure_invalid(sem_t, sem);
 

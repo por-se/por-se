@@ -43,11 +43,6 @@ int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) 
     kpr_pthread_mutexattr_gettrylock(attr, &mutex->trylock_support);
   }
 
-  klee_por_register_event(por_lock_create, &mutex->lock);
-  if (!kpr_mutex_default(mutex)) {
-    klee_por_register_event(por_condition_variable_create, &mutex->cond);
-  }
-
   kpr_ensure_valid(mutex);
 
   return 0;
@@ -253,11 +248,6 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex) {
   if (mutex->acquired >= 1) {
     return EBUSY;
   }
-
-  if (!kpr_mutex_default(mutex)) {
-    klee_por_register_event(por_condition_variable_destroy, &mutex->cond);
-  }
-  klee_por_register_event(por_lock_destroy, &mutex->lock);
 
   kpr_ensure_invalid(pthread_mutex_t, mutex);
 

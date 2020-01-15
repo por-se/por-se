@@ -116,7 +116,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_warning_once", handleWarningOnce, false),
   add("klee_create_thread", handleCreateThread, false),
   addDNR("klee_exit_thread", handleExitThread),
-  add("klee_por_register_event", handlePorRegisterEvent, false),
   add("klee_por_thread_join", handlePorThreadJoin, false),
 
   add("klee_lock_acquire", handleLockAcquire, false),
@@ -952,62 +951,6 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   executor.exitCurrentThread(state);
 
   executor.porEventManager.registerThreadExit(state, ownTid, true);
-}
-
-void SpecialFunctionHandler::handlePorRegisterEvent(klee::ExecutionState &state,
-                                                    klee::KInstruction *target,
-                                                    std::vector<klee::ref<klee::Expr>> &arguments) {
-  assert(!arguments.empty() && "invalid number of arguments to klee_por_register_event");
-
-  ref<Expr> kindExpr = executor.toUnique(state, arguments[0]);
-
-  if (!isa<ConstantExpr>(kindExpr)) {
-    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
-    return;
-  }
-
-  auto kind = (por_event_t) cast<ConstantExpr>(kindExpr)->getZExtValue();
-
-  // All arguments have to be of type uint64_t
-  std::vector<std::uint64_t> args;
-  for (auto it = arguments.begin() + 1; it != arguments.end(); it++) {
-    ref<Expr> expr = executor.toUnique(state, *it);
-
-    if (!isa<ConstantExpr>(expr)) {
-      executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
-      return;
-    }
-
-    args.push_back(cast<ConstantExpr>(expr)->getZExtValue());
-  }
-
-  bool successful = false;
-  switch (kind) {
-    case por_lock_create:
-      successful = executor.porEventManager.registerLockCreate(state, args[0]);
-      break;
-
-    case por_lock_destroy:
-      successful = executor.porEventManager.registerLockDestroy(state, args[0]);
-      break;
-
-    case por_condition_variable_create:
-      successful = executor.porEventManager.registerCondVarCreate(state, args[0]);
-      break;
-
-    case por_condition_variable_destroy:
-      successful = executor.porEventManager.registerCondVarDestroy(state, args[0]);
-      break;
-
-    default:
-      executor.terminateStateOnError(state, "klee_por_register_event", Executor::User,
-              nullptr, "Forbidden por event kind specified");
-      break;
-  }
-
-  if (!successful) {
-    executor.terminateStateOnError(state, "klee_por_register_event", Executor::User);
-  }
 }
 
 void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
