@@ -87,7 +87,6 @@ ExecutionState::~ExecutionState() {
 
 ExecutionState::ExecutionState(const ExecutionState& state):
     id(next_id++),
-    lostNotifications(state.lostNotifications),
     currentSchedulingIndex(state.currentSchedulingIndex),
     raceDetection(state.raceDetection),
     threads(state.threads),

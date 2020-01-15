@@ -1222,7 +1222,6 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
   if (choice) {
     executor.porEventManager.registerCondVarSignal(state, cid, choice.value());
   } else {
-    ++state.lostNotifications;
     executor.porEventManager.registerCondVarSignal(state, cid, {});
   }
 }
@@ -1263,10 +1262,6 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
         notifiedThreads.push_back(tid);
       }
     }
-  }
-
-  if (notifiedThreads.empty()) {
-    ++state.lostNotifications;
   }
 
   executor.porEventManager.registerCondVarBroadcast(state, cid, notifiedThreads);
