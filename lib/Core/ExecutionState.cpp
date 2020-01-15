@@ -149,8 +149,7 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
     addressSpace.unbindObject(mo);
   }
 
-  if (PruneStates && porNode && thread->stack.size() > 1) {
-    // FIXME: detect when in tmp state of Executor::getSymbolicSolution()
+  if (PruneStates && porNode) {
     memoryState.registerPopFrame(sf);
   }
 
