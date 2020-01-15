@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "kpr/list-types.h"
 
@@ -111,9 +112,6 @@ enum
 #define PTHREAD_SCOPE_PROCESS   PTHREAD_SCOPE_PROCESS
 };
 
-// Forward declare this one only because it is needed in the kpr_thread
-struct kpr_mutex;
-
 typedef struct kpr_cond {
   pthread_internal_t magic;
 
@@ -125,23 +123,46 @@ typedef struct kpr_cond {
 } pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, NULL, NULL, NULL, 0 }
 
-typedef struct {
-  uint8_t state;
-  uint8_t mode;
+struct kpr_thread_data {
+  bool detached;
 
-  void* startArg;
-  void* (*startRoutine) (void* arg);
-
-  void* returnValue;
-
-  kpr_list cleanupStack;
-
-  void* joinLock;
+  // cond variable that is only used to wait until a thread exits.
+  // Note: only available if the thread is not detached
   void* joinCond;
 
-  void* cond;
-} kpr_thread;
-typedef kpr_thread* pthread_t;
+  // cond variable that only this thread uses to put itself into a waiting
+  // state. Other threads have to signal this thread by using this cond
+  // variable.
+  void* selfWaitCond;
+
+  void* startArg;
+  void* returnValue;
+
+  void* (*threadFunction) (void* arg);
+
+  kpr_list cleanupStack;
+};
+
+struct kpr_thread {
+  // This `kpr_thread` structure is available for every thread once the
+  // thread is created. If a thread exists, then the `kpr_thread` is still
+  // available to determine the state of the thread (e.g. for robust mutexes).
+  // In contrast, the `kpr_thread_data` (data field in this structure) is
+  // only relevant during a thread's lifetime. It is only available until
+  // the thread is cleaned up.
+
+  
+  // The current state of the thread: e.g. alive, exited
+  uint8_t state;
+
+  // Lock to guard this thread structure and the nested `data` structure.
+  // Can be used in conjunction with the `data->joinCond`
+  void* lock;
+
+  struct kpr_thread_data* data;
+};
+
+typedef struct kpr_thread* pthread_t;
 
 typedef struct kpr_mutex {
   pthread_internal_t magic;
