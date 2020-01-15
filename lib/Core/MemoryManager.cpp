@@ -332,13 +332,10 @@ void MemoryManager::initThreadMemoryMapping(const ThreadId& tid, std::uintptr_t 
 
 MemoryObject *MemoryManager::allocate(std::uint64_t size,
                                       bool isLocal,
-                                      bool isGlobal,
                                       const llvm::Value *allocSite,
                                       const Thread &thread,
                                       std::size_t stackframeIndex,
                                       std::size_t alignment) {
-  assert(!isGlobal);
-
   if (size > 10 * 1024 * 1024)
     klee_warning_once(nullptr, "Large alloc: %" PRIu64
                                " bytes.  KLEE may run out of memory.",
@@ -382,7 +379,7 @@ MemoryObject *MemoryManager::allocate(std::uint64_t size,
 
   ++stats::allocations;
   MemoryObject *res =
-          new MemoryObject(address, size, alignment, isLocal, isGlobal, false, false, allocSite,
+          new MemoryObject(address, size, alignment, isLocal, false, false, false, allocSite,
                            std::make_pair(thread.getThreadId(), stackframeIndex), this);
   objects.insert(res);
   return res;

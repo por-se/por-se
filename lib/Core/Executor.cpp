@@ -1920,7 +1920,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       MemoryObject *mo = sf.varargs =
-          memory->allocate(size, true, false, thread.prevPc->inst,
+          memory->allocate(size, true, thread.prevPc->inst,
                            thread,
                            thread.stack.size() - 1,
                            (requires16ByteAlignment ? 16 : 8));
@@ -4182,7 +4182,7 @@ void Executor::executeAlloc(ExecutionState &state,
       allocationAlignment = getAllocationAlignment(allocSite);
     }
     MemoryObject *mo =
-        memory->allocate(CE->getZExtValue(), isLocal, /*isGlobal=*/false,
+        memory->allocate(CE->getZExtValue(), isLocal,
                          allocSite, thread,
                          thread.stack.size() - 1,
                          allocationAlignment);

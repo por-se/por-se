@@ -86,7 +86,7 @@ public:
    * Returns memory object which contains a handle to real virtual process
    * memory.
    */
-  MemoryObject *allocate(std::uint64_t size, bool isLocal, bool isGlobal,
+  MemoryObject *allocate(std::uint64_t size, bool isLocal,
                          const llvm::Value *allocSite, const Thread &thread,
                          std::size_t stackframeIndex, std::size_t alignment);
 
