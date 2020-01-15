@@ -17,7 +17,7 @@ static void thread(void* arg) {
   // CHECK-CHILD-DAG: Starting test
 
   // CHECK-CHILD-DAG: POR event: thread_create with current thread [[M_TID]] and created thread [[SEC_TID:[0-9,]+]]
-  // CHECK-CHILD-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
+  // CHECK-CHILD-DAG: POR event: thread_init with current thread [[M_TID]] and initialized thread [[SEC_TID]]
 
   // CHECK-CHILD-DAG: POR event: lock_acquire with current thread [[SEC_TID]] on mutex [[LID:[0-9]+]]
   klee_lock_acquire(&lock);

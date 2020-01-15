@@ -20,7 +20,7 @@ int main(void) {
 
   // CHECK-DAG: POR event: thread_exit with current thread [[M_TID]] and exited thread [[M_TID]]
 
-  // CHECK-DAG: POR event: thread_init with current thread [[SEC_TID]] and initialized thread [[SEC_TID]]
+  // CHECK-DAG: POR event: thread_init with current thread [[M_TID]] and initialized thread [[SEC_TID]]
   // CHECK-DAG: POR event: thread_exit with current thread [[SEC_TID]] and exited thread [[SEC_TID]]
 
   return 0;
