@@ -555,13 +555,13 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   auto thread = state.getThreadById(event.tid());
   assert(thread && "no thread with given id found");
 
-  MemoryFingerprint fingerprint;
+  MemoryFingerprint copy;
   auto delta = state.memoryState.getThreadDelta(*thread);
-  fingerprint.addDelta(delta);
+  copy.addDelta(delta);
 
   for (auto &[tid, c] : event.cone()) {
     if (tid != event.tid()) {
-      fingerprint.addDelta(c->thread_delta());
+      copy.addDelta(c->thread_delta());
     }
   }
 
@@ -577,11 +577,20 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
     }
   }
 
-  event.set_fingerprint(fingerprint.getFingerprint(expressions), delta);
+  auto fingerprint = copy.getFingerprint(expressions);
+  bool res = event.set_fingerprint(fingerprint, delta);
 
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
+  if (!res) {
+    llvm::errs() << MemoryFingerprint::toString(event.fingerprint().diff(fingerprint)) << "\n";
+    llvm::errs() << "\n";
+    llvm::errs() << MemoryFingerprint::toString(event.thread_delta().diff(delta)) << "\n";
+  }
+
   assert(MemoryFingerprint::validateFingerprint(event.fingerprint()));
 #endif
+
+  assert(res && "fingerprint does not match!");
 }
 
 
