@@ -150,15 +150,14 @@ namespace por::event {
 			return _thread_delta;
 		}
 
-		void set_fingerprint(fingerprint_value_t fingerprint, fingerprint_delta_t thread_delta) const noexcept {
+		bool set_fingerprint(fingerprint_value_t fingerprint, fingerprint_delta_t thread_delta) const noexcept {
 			if(has_fingerprint()) {
-				assert(thread_delta == _thread_delta);
-				assert(fingerprint == _fingerprint);
-			} else {
-				_fingerprint_set = true;
-				_thread_delta = thread_delta;
-				_fingerprint = fingerprint;
+				return thread_delta == _thread_delta && fingerprint == _fingerprint;
 			}
+			_fingerprint_set = true;
+			_thread_delta = thread_delta;
+			_fingerprint = fingerprint;
+			return true;
 		}
 
 		mutable bool _is_cutoff = false;
