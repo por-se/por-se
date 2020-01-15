@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "pthread.h"
+#include "klee_types.h"
 
 #define SEM_FAILED ((sem_t *) 0)
 
@@ -21,8 +22,8 @@ typedef struct {
 
   size_t waitingCount;
 
-  void* mutex;
-  void* cond;
+  klee_sync_primitive_t mutex;
+  klee_sync_primitive_t cond;
 } sem_t;
 
 int sem_init(sem_t *sem, int f, unsigned v);

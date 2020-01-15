@@ -9,6 +9,7 @@
 #include <stdbool.h>
 
 #include "kpr/list-types.h"
+#include "klee_types.h"
 
 #define _USING_PORSE_PTHREAD (1)
 
@@ -115,8 +116,8 @@ enum
 typedef struct kpr_cond {
   pthread_internal_t magic;
 
-  void* internalCond;
-  void* lock;
+  klee_sync_primitive_t internalCond;
+  klee_sync_primitive_t lock;
 
   struct kpr_mutex* waitingMutex;
   uint64_t waitingCount;
@@ -128,12 +129,12 @@ struct kpr_thread_data {
 
   // cond variable that is only used to wait until a thread exits.
   // Note: only available if the thread is not detached
-  void* joinCond;
+  klee_sync_primitive_t joinCond;
 
   // cond variable that only this thread uses to put itself into a waiting
   // state. Other threads have to signal this thread by using this cond
   // variable.
-  void* selfWaitCond;
+  klee_sync_primitive_t selfWaitCond;
 
   void* startArg;
   void* returnValue;
@@ -157,7 +158,7 @@ struct kpr_thread {
 
   // Lock to guard this thread structure and the nested `data` structure.
   // Can be used in conjunction with the `data->joinCond`
-  void* lock;
+  klee_sync_primitive_t lock;
 
   struct kpr_thread_data* data;
 };
@@ -167,8 +168,8 @@ typedef struct kpr_thread* pthread_t;
 typedef struct kpr_mutex {
   pthread_internal_t magic;
 
-  void* lock;
-  void* cond;
+  klee_sync_primitive_t lock;
+  klee_sync_primitive_t cond;
 
   int type; // normal, errorcheck, recursive
   int robust; // stalled, robust

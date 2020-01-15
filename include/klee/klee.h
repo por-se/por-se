@@ -14,6 +14,7 @@
 #include "stddef.h"
 
 #include "por/events.h"
+#include "runtime/klee_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -167,11 +168,6 @@ extern "C" {
   // ---
   // KLEE thread synchronization framework
   // ---
-
-  // 'Pointer' to ensure that klee is theoretically
-  // able to write to the specified locations an arbitrary value
-  // that has the width of a pointer
-  typedef void* klee_sync_primitive_t;
 
   void klee_lock_acquire(klee_sync_primitive_t* lock);
   void klee_lock_release(klee_sync_primitive_t* lock);
