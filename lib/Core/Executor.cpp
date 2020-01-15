@@ -5046,7 +5046,7 @@ ThreadId Executor::createThread(ExecutionState &state,
   std::uint64_t alignment = alignof(errno);
   std::uint64_t size = sizeof(*getErrnoLocation(state));
 
-  MemoryObject* thErrno = memory->allocateGlobal(size, thread.prevPc->inst, thread.getThreadId(), alignment);
+  MemoryObject* thErrno = memory->allocate(size, true, nullptr, thread, 0, alignment);
   if (thErrno == nullptr) {
     klee_error("Could not allocate memory for thread local objects");
   }
