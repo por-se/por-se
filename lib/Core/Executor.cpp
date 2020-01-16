@@ -4004,11 +4004,25 @@ void Executor::callExternalFunction(ExecutionState &state,
     auto terminated = std::find(removedStates.begin(), removedStates.end(), &state) != removedStates.end();
 
     if (!terminated) {
+      auto retValueExpected = !function->getReturnType()->isVoidTy();
       auto retValueNeeded = !target->inst->use_empty();
 
       auto retValue = retValueExpected
           ? getDestCell(state, target).value
           : ref<Expr>(nullptr);
+
+      if (retValueExpected && retValue.get() == nullptr) {
+        // A return value is expected, but the SpecialFunctionHandler did not add
+        // a value to the correct cell. While this is definitely bad, it does not
+        // directly mean that we have to terminate the state directly
+
+        if (retValueNeeded) {
+          terminateStateOnExecError(state, "return value is needed, but was not set by the SpecialFunctionHandler");
+          return;
+        }
+
+        klee_warning("expected a return value but none was set by the SpecialFunctionHandler");
+      }
 
       if (DebugPrintCalls) {
         DebugPrinter::printStateContext(llvm::errs(), state);
