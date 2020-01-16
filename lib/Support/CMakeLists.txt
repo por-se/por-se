@@ -7,6 +7,7 @@
 #
 #===------------------------------------------------------------------------===#
 klee_add_component(kleeSupport
+  CallPrinter.cpp
   CompressionStream.cpp
   ErrorHandling.cpp
   FileHandling.cpp

@@ -16,6 +16,7 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/Support/CallPrinter.h"
 #include "klee/OptionCategories.h"
 #include "klee/StatePruningCmdLine.h"
 #include "klee/Thread.h"
@@ -376,25 +377,14 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
   const KInstruction *target = thread->prevPc;
   for (auto it = thread->stack.rbegin(), ie = thread->stack.rend(); it != ie; ++it) {
     const StackFrame &sf = *it;
-    llvm::Function *f = sf.kf->function;
     const InstructionInfo &ii = *target->info;
     out << "\t#" << idx++;
     std::stringstream AssStream;
     AssStream << std::setw(8) << std::setfill('0') << ii.assemblyLine;
     out << AssStream.str();
-    out << " in " << f->getName().str() << " (";
-    // Yawn, we could go up and print varargs if we wanted to.
-    unsigned index = 0;
-    for (auto ai = f->arg_begin(), ae = f->arg_end(); ai != ae; ++ai) {
-      if (ai!=f->arg_begin()) out << ", ";
+    out << " in ";
+    CallPrinter::printCall(out, sf.kf, sf);
 
-      out << ai->getName().str();
-      // XXX should go through function
-      ref<Expr> value = sf.locals[sf.kf->getArgRegister(index++)].value;
-      if (value.get() && isa<ConstantExpr>(value))
-        out << "=" << value;
-    }
-    out << ")";
     if (ii.file != "")
       out << " at " << ii.file << ":" << ii.line;
     out << "\n";

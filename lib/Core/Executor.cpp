@@ -39,6 +39,7 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/Internal/Support/CallPrinter.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/Internal/Support/FileHandling.h"
 #include "klee/Internal/Support/FloatEvaluation.h"
@@ -500,6 +501,21 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
           "Pick a random thread (default).")
         KLEE_LLVM_CL_VAL_END),
     cl::init(ThreadSchedulingPolicy::Random));
+  void printDebugContext(llvm::raw_ostream& os, const ExecutionState& state) {
+    auto sid = state.id;
+    auto tid = state.currentThreadId().to_string();
+
+    std::stringstream tmp;
+    tmp << "[state: " << std::setw(6) << sid
+        << " thread: " << std::setw(5) << tid
+        << "]";
+
+    os << tmp.str();
+  }
+
+  constexpr void printPadding(llvm::raw_ostream& os, size_t count, char character) {
+    while (count--) os << character;
+  }
 } // namespace
 
 namespace klee {
@@ -1718,56 +1734,12 @@ void Executor::executeCall(ExecutionState &state,
   }
 
   if (DebugPrintCalls) {
-    auto sid = state.id;
-    auto tid = state.tid().to_string();
+    printDebugContext(llvm::errs(), state);
+    printPadding(llvm::errs(), state.stack().size() * 2, ' ');
 
-    std::stringstream tmp;
-    tmp << "[state: " << std::setw(6) << sid
-        << " thread: " << std::setw(5) << tid
-        << "] " << std::setfill(' ') << std::setw(state.stack().size() * 2) << "+";
-    if (f->hasName()) {
-      llvm::errs() << tmp.str() << f->getName() << '(';
-    } else {
-      llvm::errs() << tmp.str() << "<unnamed function>(";
-    }
-
-    bool first = true;
-
-    for (std::size_t i = 0; i < arguments.size(); i++) {
-      if (first) {
-        first = false;
-      } else {
-        llvm::errs() << ", ";
-      }
-
-      const auto& argValue = arguments[i];
-
-      if (i < f->arg_size()) {
-        const auto* fArg = (f->args().begin() + i);
-
-        if (fArg->hasName()) {
-          llvm::errs() << fArg->getName() << " = ";
-        }
-
-        if (auto v = dyn_cast<ConstantExpr>(argValue.get())) {
-          if (fArg->getType()->isPointerTy()) {
-            llvm::errs() << "0x" << v->getAPValue().toString(16, false);
-          } else {
-            llvm::errs() << v->getAPValue();
-          }
-        } else {
-          llvm::errs() << " <sym>";
-        }
-      } else {
-        if (auto v = dyn_cast<ConstantExpr>(argValue.get())) {
-          llvm::errs() << v->getAPValue();
-        } else {
-          llvm::errs() << " <sym>";
-        }
-      }
-    }
-
-    llvm::errs() << ")\n";
+    llvm::errs() << '+';
+    CallPrinter::printCall(llvm::errs(), f, arguments);
+    llvm::errs() << '\n';
   }
 
   Instruction *i = ki->inst;
@@ -2075,34 +2047,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (DebugPrintCalls) {
-      auto sid = state.id;
-      auto tid = state.tid().to_string();
-      auto* f = sf.kf->function;
+      printDebugContext(llvm::errs(), state);
+      printPadding(llvm::errs(), (state.stack().size() - 1) * 2, ' ');
 
-      std::stringstream tmp;
-      tmp << "[state: " << std::setw(6) << sid
-          << " thread: " << std::setw(5) << tid
-          << "] " << std::setfill(' ') << std::setw(state.stackFrameIndex() * 2) << "-";
-      if (f->hasName()) {
-        llvm::errs() << tmp.str() << f->getName() << " -> ";
-      } else {
-        llvm::errs() << tmp.str() << "<unnamed function> -> ";
-      }
-
-      if (isVoidReturn) {
-        llvm::errs() << " <void>";
-      } else {
-        if (auto v = dyn_cast<ConstantExpr>(result.get())) {
-          if (caller && caller->getType()->isPointerTy()) {
-            llvm::errs() << "0x" << v->getAPValue().toString(16, false);
-          } else {
-            llvm::errs() << v->getAPValue();
-          }
-        } else {
-          llvm::errs() << " <sym>";
-        }
-      }
-
+      llvm::errs() << '-';
+      CallPrinter::printCallReturn(llvm::errs(), sf.kf->function, result);
       llvm::errs() << '\n';
     }
     
@@ -4048,8 +3997,31 @@ void Executor::callExternalFunction(ExecutionState &state,
                                     Function *function,
                                     std::vector< ref<Expr> > &arguments) {
   // check if specialFunctionHandler wants it
-  if (specialFunctionHandler->handle(state, function, target, arguments))
+  if (specialFunctionHandler->handle(state, function, target, arguments)) {
+    // Make sure that we actually check whether the state was terminated
+    // in that case, do not try to access anything of the state
+
+    auto terminated = std::find(removedStates.begin(), removedStates.end(), &state) != removedStates.end();
+
+    if (!terminated) {
+      auto retValueNeeded = !target->inst->use_empty();
+
+      auto retValue = retValueExpected
+          ? getDestCell(state, target).value
+          : ref<Expr>(nullptr);
+
+      if (DebugPrintCalls) {
+        DebugPrinter::printStateContext(llvm::errs(), state);
+        printPadding(llvm::errs(), state.stack().size() * 2, ' ');
+
+        llvm::errs() << '-';
+        CallPrinter::printCallReturn(llvm::errs(), function, retValue);
+        llvm::errs() << '\n';
+      }
+    }
+
     return;
+  }
 
   if (ExternalCalls == ExternalCallPolicy::None) {
     klee_warning("Disallowed call to external function: %s\n",
@@ -4119,15 +4091,10 @@ void Executor::callExternalFunction(ExecutionState &state,
 
     std::string TmpStr;
     llvm::raw_string_ostream os(TmpStr);
-    os << "calling external: " << function->getName().str() << "(";
-    for (unsigned i=0; i<arguments.size(); i++) {
-      os << arguments[i];
-      if (i != arguments.size()-1)
-        os << ", ";
-    }
-
+    os << "calling external: ";
+    DebugPrinter::printCall(os, function, arguments);
     os << ") at " << state.pc()->getSourceLocation();
-    
+
     if (AllExternalWarnings)
       klee_warning("%s", os.str().c_str());
     else
@@ -4206,6 +4173,19 @@ void Executor::callExternalFunction(ExecutionState &state,
     ref<Expr> e = ConstantExpr::fromMemory((void*) args, 
                                            getWidthForLLVMType(resultType));
     bindLocal(target, state, e);
+  }
+
+  if (DebugPrintCalls) {
+    auto retValue = function->getReturnType()->isVoidTy()
+      ? ref<Expr>(nullptr)
+      : getDestCell(state, target).value;
+
+    DebugPrinter::printStateContext(llvm::errs(), state);
+    printPadding(llvm::errs(), state.stack().size() * 2, ' ');
+
+    llvm::errs() << '-';
+    CallPrinter::printCallReturn(llvm::errs(), function, retValue);
+    llvm::errs() << '\n';
   }
 }
 
@@ -4824,9 +4804,11 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   if (DebugPrintCalls) {
-    std::stringstream tmp;
-    tmp << "[state: " << std::setw(6) << 0 << " thread: " << std::setw(2) << 0 << "] ";
-    llvm::errs() << tmp.str() << f->getName() << "\n";
+    printDebugContext(llvm::errs(), *state);
+
+    llvm::errs() << " +";
+    CallPrinter::printCall(llvm::errs(), f, arguments);
+    llvm::errs() << '\n';
   }
 
   if (pathWriter) 
