@@ -115,7 +115,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     steppedInstructions(state.steppedInstructions)
 {
   // Since we copied the threads, we can use the thread id to look it up
-  currentThread(state.currentThreadId());
+  currentThread(state.tid());
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;

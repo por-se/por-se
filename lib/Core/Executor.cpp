@@ -984,7 +984,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
       alias = ga;
     }
 
-    memory->registerAlias(&*i, evalConstant(alias->getAliasee(), state.currentThreadId()));
+    memory->registerAlias(&*i, evalConstant(alias->getAliasee(), state.tid()));
   }
 
   // once all objects are allocated, do the actual initialization
@@ -997,12 +997,12 @@ void Executor::initializeGlobals(ExecutionState &state) {
     if (i->hasInitializer()) {
       const GlobalVariable *v = &*i;
 
-      auto mo = memory->lookupGlobalMemoryObject(v, state.currentThreadId());
+      auto mo = memory->lookupGlobalMemoryObject(v, state.tid());
 
       const ObjectState *os = state.addressSpace.findObject(mo);
       assert(os);
       ObjectState *wos = state.addressSpace.getWriteable(mo, os);
-      initializeGlobalObject(state, wos, i->getInitializer(), 0, state.currentThreadId());
+      initializeGlobalObject(state, wos, i->getInitializer(), 0, state.tid());
       if (i->isConstant())
         constantObjects.emplace_back(wos);
     }
@@ -1462,7 +1462,7 @@ const Cell& Executor::eval(KInstruction *ki, unsigned index,
 
     // instructions is null since we want to mimic the behavior during constant folding
     // see: bindModuleConstants
-    auto value = evalConstant(c, state.currentThreadId(), nullptr);
+    auto value = evalConstant(c, state.tid(), nullptr);
 
     // TODO: This is not really a great way to achieve this ...
     // Since we are returning a reference here we cannot return a stack allocated variable.
@@ -1501,7 +1501,7 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
          "argument has previouly been set!");
   if (PruneStates) {
     // no need to unregister argument (can only be set once within the same stack frame)
-    state.memoryState.registerArgument(state.currentThreadId(), state.stackFrameIndex(), kf, index, value);
+    state.memoryState.registerArgument(state.tid(), state.stackFrameIndex(), kf, index, value);
   }
   getArgumentCell(state, kf, index).value = value;
 }
@@ -1621,7 +1621,7 @@ void Executor::printDebugInstructions(ExecutionState &state) {
   if (!DebugPrintInstructions.isSet(STDERR_COMPACT) &&
       !DebugPrintInstructions.isSet(FILE_COMPACT)) {
     auto sid = state.id;
-    auto tid = state.currentThreadId();
+    auto tid = state.tid();
     auto sf = state.stackFrameIndex();
     std::stringstream tmp;
     tmp << "[state: " << std::setw(6) << sid
@@ -1701,7 +1701,7 @@ void Executor::executeCall(ExecutionState &state,
 
   if (DebugPrintCalls) {
     auto sid = state.id;
-    auto tid = state.currentThreadId().to_string();
+    auto tid = state.tid().to_string();
 
     std::stringstream tmp;
     tmp << "[state: " << std::setw(6) << sid
@@ -1851,7 +1851,7 @@ void Executor::executeCall(ExecutionState &state,
     thread.pc = kf->instructions;
     thread.liveSet = kf->getLiveLocals(&kf->function->front());
     if (PruneStates) {
-      state.memoryState.registerPushFrame(state.currentThreadId(), state.stackFrameIndex(),
+      state.memoryState.registerPushFrame(state.tid(), state.stackFrameIndex(),
                                           kf, state.prevPc());
     }
 
@@ -2058,7 +2058,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (DebugPrintCalls) {
       auto sid = state.id;
-      auto tid = state.currentThreadId().to_string();
+      auto tid = state.tid().to_string();
       auto* f = sf.kf->function;
 
       std::stringstream tmp;
@@ -2096,7 +2096,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
              && kmodule->module->getFunction("__uClibc_main") == nullptr);
       state.calledExit = true;
       exitCurrentThread(state);
-      porEventManager.registerThreadExit(state, state.currentThreadId(), false);
+      porEventManager.registerThreadExit(state, state.tid(), false);
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
@@ -2285,7 +2285,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
       // Iterate through all non-default cases and order them by expressions
       for (auto i : si->cases()) {
-        ref<Expr> value = evalConstant(i.getCaseValue(), state.currentThreadId());
+        ref<Expr> value = evalConstant(i.getCaseValue(), state.tid());
 
         BasicBlock *caseSuccessor = i.getCaseSuccessor();
         expressionOrder.insert(std::make_pair(value, caseSuccessor));
@@ -5091,7 +5091,7 @@ void Executor::exitCurrentThread(ExecutionState &state) {
     const GlobalVariable *v = &*i;
 
     if (v->isThreadLocal()) {
-      auto mo = memory->lookupGlobalMemoryObject(v, state.currentThreadId());
+      auto mo = memory->lookupGlobalMemoryObject(v, state.tid());
 
       processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
 
@@ -5117,7 +5117,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
   operation.object = mo;
   operation.offset = offset;
   operation.numBytes = numBytes;
-  operation.tid = state.currentThreadId();
+  operation.tid = state.tid();
   operation.instruction = state.prevPc();
   operation.type = type;
 
@@ -5193,7 +5193,7 @@ Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObj
   os << memInfo << "\n";
 
   os << "--- Executed\n";
-  os << state.currentThreadId() << " races with " << racingThread;
+  os << state.tid() << " races with " << racingThread;
 
   const InstructionInfo &ii = *racingInstruction->info;
   if (!ii.file.empty()) {
@@ -5209,7 +5209,7 @@ Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObj
     << " (assembly.ll:" << ii.assemblyLine << ")"
     << "\n";
 
-  os << state.currentThreadId()
+  os << state.tid()
     << " -> " << *state.prevPc()->inst
     << " (assembly.ll:" << state.prevPc()->info->assemblyLine << ")"
     << "\n";
@@ -5409,10 +5409,10 @@ void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
     std::visit([this,&state](auto&& w) {
       using T = std::decay_t<decltype(w)>;
       if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
-        state.memoryState.registerAcquiredLock(w.lock, state.currentThreadId());
+        state.memoryState.registerAcquiredLock(w.lock, state.tid());
         porEventManager.registerLockAcquire(state, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
-        state.memoryState.registerAcquiredLock(w.lock, state.currentThreadId());
+        state.memoryState.registerAcquiredLock(w.lock, state.tid());
         porEventManager.registerCondVarWait2(state, w.cond, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
         porEventManager.registerThreadJoin(state, w.thread);

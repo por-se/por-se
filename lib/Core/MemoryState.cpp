@@ -303,7 +303,7 @@ void MemoryState::registerAcquiredLock(por::event::lock_id_t lock_id, const Thre
   }
 
   assert(tid && lock_id > 0 && "Must be set");
-  assert(executionState->currentThreadId() == tid);
+  assert(executionState->tid() == tid);
 
   auto &fingerprint = executionState->threadFingerprint();
   fingerprint.updateAcquiredLockFragment(lock_id, tid);
@@ -321,7 +321,7 @@ void MemoryState::unregisterAcquiredLock(por::event::lock_id_t lock_id, const Th
   }
 
   assert(tid && lock_id > 0 && "Must be set");
-  assert(executionState->currentThreadId() == tid);
+  assert(executionState->tid() == tid);
 
   auto &fingerprint = executionState->threadFingerprint();
   fingerprint.updateAcquiredLockFragment(lock_id, tid);
@@ -420,7 +420,7 @@ void MemoryState::registerArgument(const ThreadId &threadID,
     return;
   }
 
-  assert(executionState->currentThreadId() == threadID);
+  assert(executionState->tid() == threadID);
   auto &fingerprint = executionState->threadFingerprint();
   MemoryFingerprintDelta &delta = executionState->stackFrame().fingerprintDelta;
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
@@ -464,7 +464,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
-  assert(executionState->currentThreadId() == threadID);
+  assert(executionState->tid() == threadID);
   auto &fingerprint = executionState->threadFingerprint();
   MemoryFingerprintDelta &delta = executionState->stackFrame().fingerprintDelta;
 

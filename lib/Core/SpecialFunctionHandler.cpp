@@ -318,7 +318,7 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
   state.calledExit = true;
   executor.exitCurrentThread(state);
 
-  executor.porEventManager.registerThreadExit(state, state.currentThreadId(), false);
+  executor.porEventManager.registerThreadExit(state, state.tid(), false);
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
@@ -943,7 +943,7 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   }
 
   auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
-  const auto& ownTid = state.currentThreadId();
+  const auto& ownTid = state.tid();
 
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
   executor.porEventManager.registerLockRelease(state, lid, false, false);
@@ -1020,7 +1020,7 @@ void SpecialFunctionHandler::handleLockRelease(ExecutionState &state,
   }
 
   auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
-  const auto& ownTid = state.currentThreadId();
+  const auto& ownTid = state.tid();
 
   // Test if the lock is acquired and whether we are the one that has the lock
   const auto& lockHeads = state.porNode->configuration().lock_heads();
@@ -1077,7 +1077,7 @@ void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
   auto cid = cast<ConstantExpr>(cidExpr)->getZExtValue();
   auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
 
-  const auto& ownTid = state.currentThreadId();
+  const auto& ownTid = state.tid();
 
   // Test if the lock is acquired and whether we are the one that has the lock
   const auto& lockHeads = state.porNode->configuration().lock_heads();

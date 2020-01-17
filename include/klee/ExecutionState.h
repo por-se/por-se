@@ -185,7 +185,7 @@ public:
   }
 
   /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
-  const ThreadId &currentThreadId() const {
+  const ThreadId &tid() const {
     return _currentThread->tid;
   }
 
@@ -206,7 +206,7 @@ public:
   }
 
   bool isOnMainThread() const {
-    return currentThreadId() == mainThreadId;
+    return tid() == mainThreadId;
   }
 
   const auto& getDataRaceStats() const {
