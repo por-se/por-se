@@ -77,7 +77,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const noexcept override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_destroy lid: " + std::to_string(lid()) + "]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_destroy lid: " + std::to_string(lid()) + (is_cutoff() ? " CUTOFF" : "") + "]";
 			return "lock_destroy";
 		}
 

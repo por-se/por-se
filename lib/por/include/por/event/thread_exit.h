@@ -75,7 +75,7 @@ namespace por::event {
 		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: thread_exit"
-					+ (ends_atomic_operation() ? " (atomic)" : "") + "]";
+					+ (ends_atomic_operation() ? " (atomic)" : "") + (is_cutoff() ? " CUTOFF" : "") + "]";
 			return "thread_exit";
 		}
 

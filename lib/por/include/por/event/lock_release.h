@@ -101,7 +101,7 @@ namespace por::event {
 		std::string to_string(bool details) const noexcept override {
 			if(details)
 				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: lock_release"
-					+ (ends_atomic_operation() ? " (atomic)" : "") + " lid: " + std::to_string(lid()) + "]";
+					+ (ends_atomic_operation() ? " (atomic)" : "") + " lid: " + std::to_string(lid()) + (is_cutoff() ? " CUTOFF" : "") + "]";
 			return "lock_release";
 		}
 

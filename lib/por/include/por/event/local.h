@@ -77,6 +77,9 @@ namespace por::event {
 					res += " PATH: " + path_string();
 				}
 				res += "]";
+				if (is_cutoff()) {
+					res += " CUTOFF";
+				}
 				return res;
 			} else {
 				return "local";

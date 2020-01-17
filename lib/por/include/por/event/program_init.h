@@ -21,7 +21,7 @@ namespace por::event {
 
 		std::string to_string(bool details) const noexcept override {
 			if(details)
-				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: program_init]";
+				return "[tid: " + tid().to_string() + " depth: " + std::to_string(depth()) + " kind: program_init" + (is_cutoff() ? " CUTOFF" : "") + "]";
 			return "program_init";
 		}
 

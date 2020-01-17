@@ -197,6 +197,9 @@ namespace por::event {
 					}
 					result += "}";
 				}
+				if (is_cutoff()) {
+					result += " CUTOFF";
+				}
 				return "[" + result + "]";
 			}
 			return "broadcast";

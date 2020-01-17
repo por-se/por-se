@@ -179,6 +179,9 @@ namespace por::event {
 				} else {
 					result += "notifying: " + wait_predecessor()->tid().to_string() + "@" + std::to_string(wait_predecessor()->depth());
 				}
+				if (is_cutoff()) {
+					result += " CUTOFF";
+				}
 				return "[" + result + "]";
 			}
 			return "signal";
