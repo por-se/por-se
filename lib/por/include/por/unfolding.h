@@ -93,6 +93,9 @@ namespace por {
 				for(auto& v : it->second) {
 					if(compare_events(e, *v.get())) {
 						stats_inc_event_deduplicated();
+						if(e.is_cutoff()) {
+							v->mark_as_cutoff();
+						}
 						return {false, *v.get()};
 					}
 				}
