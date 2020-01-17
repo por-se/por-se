@@ -335,11 +335,9 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
       }
     }
 
-    Thread &thread = es.currentThread();
-
-    Instruction *inst = thread.pc->inst;
-    const InstructionInfo &ii = *thread.pc->info;
-    StackFrame &sf = thread.stack.back();
+    Instruction *inst = es.pc()->inst;
+    const InstructionInfo &ii = *es.pc()->info;
+    const StackFrame &sf = es.stackFrame();
     theStatisticManager->setIndex(ii.id);
     if (UseCallPaths)
       theStatisticManager->setContext(&sf.callPathNode->statistics);
@@ -375,7 +373,7 @@ void StatsTracker::stepInstruction(ExecutionState &es) {
 ///
 
 /* Should be called _after_ the es->pushFrame() */
-void StatsTracker::framePushed(StackFrame *current, StackFrame *parentFrame) {
+void StatsTracker::framePushed(StackFrame *current, const StackFrame *parentFrame) {
   if (OutputIStats) {
     if (UseCallPaths) {
       CallPathNode *parent = parentFrame ? parentFrame->callPathNode : nullptr;
@@ -566,17 +564,13 @@ void StatsTracker::writeStatsLine() {
 }
 
 void StatsTracker::updateStateStatistics(uint64_t addend) {
-  for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
-         ie = executor.states.end(); it != ie; ++it) {
-    ExecutionState &state = **it;
-    Thread &thread = state.currentThread();
-    if (thread.state == ThreadState::Exited)
+  for (ExecutionState *state : executor.states) {
+    if (state->threadState() == ThreadState::Exited)
       continue;
-    const InstructionInfo &ii = *thread.pc->info;
+    const InstructionInfo &ii = *state->pc()->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
     if (UseCallPaths) {
-      assert(!thread.stack.empty() && "Stack should be available in order to write the stats");
-      thread.stack.back().callPathNode->statistics.incrementValue(stats::states, addend);
+      state->stackFrame().callPathNode->statistics.incrementValue(stats::states, addend);
     }
   }
 }
@@ -994,18 +988,14 @@ void StatsTracker::computeReachableUncovered() {
     }
   } while (changed);
 
-  for (std::set<ExecutionState*>::iterator it = executor.states.begin(),
-         ie = executor.states.end(); it != ie; ++it) {
-    ExecutionState *es = *it;
-    Thread &thread = es->currentThread();
-
+  for (ExecutionState *es : executor.states) {
     uint64_t currentFrameMinDist = 0;
-    for (auto sfIt = thread.stack.begin(), sf_ie = thread.stack.end(); sfIt != sf_ie; ++sfIt) {
+    for (auto sfIt = es->stack().begin(), sf_ie = es->stack().end(); sfIt != sf_ie; ++sfIt) {
       auto next = sfIt + 1;
       KInstIterator kii;
 
-      if (next == thread.stack.end()) {
-        kii = thread.pc;
+      if (next == es->stack().end()) {
+        kii = es->pc();
       } else {
         kii = next->caller;
         ++kii;

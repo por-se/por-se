@@ -72,10 +72,7 @@ namespace klee {
     friend class MemoryState;
     friend class MemoryManager;
     friend class PorEventManager;
-    friend class StatsTracker;
-    friend class Searcher;
     friend class SpecialFunctionHandler;
-    friend class WeightedRandomSearcher;
 
     public:
       typedef std::vector<StackFrame> stack_ty;

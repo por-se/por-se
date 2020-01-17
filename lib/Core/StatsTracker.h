@@ -76,7 +76,7 @@ namespace klee {
     StatsTracker &operator=(StatsTracker &&other) noexcept = delete;
 
     // called after a new StackFrame has been pushed (for callpath tracing)
-    void framePushed(StackFrame *current, StackFrame *parentFrame);
+    void framePushed(StackFrame *current, const StackFrame *parentFrame);
 
     // called after a StackFrame has been popped
     void framePopped(ExecutionState &es);

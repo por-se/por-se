@@ -266,6 +266,10 @@ public:
 
   std::set<ThreadId> runnableThreads() const;
 
+  void pushFrame(KInstIterator caller, KFunction *kf) {
+    currentThread().pushFrame(caller, kf);
+  }
+
   void popFrameOfThread() { popFrameOfThread(currentThread()); }
 
   void addSymbolic(const MemoryObject *mo, const Array *array);

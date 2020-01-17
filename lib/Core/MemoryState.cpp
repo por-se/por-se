@@ -302,12 +302,10 @@ void MemoryState::registerAcquiredLock(por::event::lock_id_t lock_id, const Thre
                  << " by thread " << tid << "\n";
   }
 
-  auto& thread = executionState->currentThread();
-
   assert(tid && lock_id > 0 && "Must be set");
-  assert(thread.getThreadId() == tid);
+  assert(executionState->currentThreadId() == tid);
 
-  auto &fingerprint = thread.fingerprint;
+  auto &fingerprint = executionState->threadFingerprint();
   fingerprint.updateAcquiredLockFragment(lock_id, tid);
   fingerprint.addToFingerprint();
 }
@@ -322,12 +320,10 @@ void MemoryState::unregisterAcquiredLock(por::event::lock_id_t lock_id, const Th
                  << " by thread " << tid << "\n";
   }
 
-  auto& thread = executionState->currentThread();
-
   assert(tid && lock_id > 0 && "Must be set");
-  assert(thread.getThreadId() == tid);
+  assert(executionState->currentThreadId() == tid);
 
-  auto &fingerprint = thread.fingerprint;
+  auto &fingerprint = executionState->threadFingerprint();
   fingerprint.updateAcquiredLockFragment(lock_id, tid);
   fingerprint.removeFromFingerprint();
 }
@@ -340,7 +336,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  auto &fingerprint = executionState->currentThread().fingerprint;
+  auto &fingerprint = executionState->threadFingerprint();
 
   ref<Expr> offset = mo.getOffsetExpr(address);
   ConstantExpr *concreteOffset = dyn_cast<ConstantExpr>(offset);
@@ -351,8 +347,9 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
   MemoryFingerprintDelta *delta = nullptr;
   if (mo.isLocal) {
     std::pair<ThreadId, std::size_t> alloc = mo.getAllocationStackFrame();
-    Thread &thread = executionState->threads.at(alloc.first);
-    StackFrame &sf = thread.stack.at(alloc.second);
+    auto thread = executionState->getThreadById(alloc.first);
+    assert(thread.has_value());
+    StackFrame &sf = executionState->stack(thread->get()).at(alloc.second);
     delta = &sf.fingerprintDelta;
   }
 
@@ -423,9 +420,9 @@ void MemoryState::registerArgument(const ThreadId &threadID,
     return;
   }
 
-  Thread &thread = executionState->currentThread();
-  auto &fingerprint = thread.fingerprint;
-  MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
+  assert(executionState->currentThreadId() == threadID);
+  auto &fingerprint = executionState->threadFingerprint();
+  MemoryFingerprintDelta &delta = executionState->stackFrame().fingerprintDelta;
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
   fingerprint.addToFingerprintAndDelta(delta);
 
@@ -467,13 +464,13 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
-  Thread &thread = executionState->currentThread();
-  auto &fingerprint = thread.fingerprint;
-  MemoryFingerprintDelta &delta = thread.stack.back().fingerprintDelta;
+  assert(executionState->currentThreadId() == threadID);
+  auto &fingerprint = executionState->threadFingerprint();
+  MemoryFingerprintDelta &delta = executionState->stackFrame().fingerprintDelta;
 
   // second but last stack frame
-  std::size_t oldIndex = thread.stack.size() - 2;
-  StackFrame &oldsf = thread.stack.at(oldIndex);
+  std::size_t oldIndex = executionState->stackFrameIndex() - 1;
+  StackFrame &oldsf = executionState->stack().at(oldIndex);
 
   // add locals and symbolic references to stackframe fingerprint
   // these will be automatically removed when the stack frame is popped
@@ -486,8 +483,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
     if (value.isNull())
       continue;
 
-    auto tid = thread.getThreadId();
-    fingerprint.updateLocalFragment(tid, oldIndex, ki->inst, value);
+    fingerprint.updateLocalFragment(threadID, oldIndex, ki->inst, value);
     fingerprint.addToFingerprintAndDelta(delta);
   }
 
@@ -501,7 +497,7 @@ void MemoryState::registerPopFrame(const StackFrame &sf) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 
-  auto &fingerprint = executionState->currentThread().fingerprint;
+  auto &fingerprint = executionState->threadFingerprint();
   fingerprint.removeDelta(sf.fingerprintDelta);
 }
 
