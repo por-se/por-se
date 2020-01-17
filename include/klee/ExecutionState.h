@@ -277,6 +277,25 @@ public:
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
 
+  bool hasUnregisteredDecisions() const noexcept {
+    return !thread().pathSincePorLocal.empty();
+  }
+
+  auto &unregisteredDecisions() const noexcept {
+    return thread().pathSincePorLocal;
+  }
+
+  void addDecision(Thread::decision_t decision) noexcept {
+    thread().pathSincePorLocal.emplace_back(decision.branch, decision.expr);
+  }
+  void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept { addDecision({branch, expr}); }
+
+  auto peekDecision() const noexcept {
+    assert(peekCatchUp() && peekCatchUp()->kind() == por::event::event_kind::local);
+    auto decision = thread().getNextDecisionFromLocal(peekCatchUp());
+    return decision;
+  }
+
   bool needsCatchUp() const noexcept {
     if (!porNode) return false;
     return !catchUp.empty();

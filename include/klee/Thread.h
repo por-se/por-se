@@ -12,6 +12,7 @@
 #include "pseudoalloc/pseudoalloc.h"
 #include "por/event/event.h"
 
+#include <optional>
 #include <variant>
 #include <vector>
 #include <unordered_map>
@@ -71,11 +72,15 @@ namespace klee {
     friend class ExecutionState;
     friend class MemoryState;
     friend class MemoryManager;
-    friend class PorEventManager;
     friend class SpecialFunctionHandler;
 
     public:
       typedef std::vector<StackFrame> stack_ty;
+
+      struct decision_t {
+        std::uint64_t branch;
+        ref<Expr> expr;
+      };
 
       struct wait_none_t { };
       struct wait_lock_t { por::event::lock_id_t lock; };
@@ -132,6 +137,8 @@ namespace klee {
       Thread(const Thread &thread);
       Thread(ThreadId tid, KFunction *entry);
 
+      using local_event_t = por::event::local<decltype(pathSincePorLocal)::value_type>;
+
       ThreadId getThreadId() const;
 
       bool isRunnable(const por::configuration &configuration) const noexcept;
@@ -139,6 +146,15 @@ namespace klee {
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
+
+      decision_t getNextDecisionFromLocal(const por::event::event *event) noexcept {
+        assert(event->kind() == por::event::event_kind::local);
+        auto local = static_cast<const Thread::local_event_t *>(event);
+        std::size_t nextIndex = pathSincePorLocal.size();
+        assert(local->path().size() > nextIndex);
+        auto pair = local->path()[nextIndex];
+        return {pair.first, pair.second};
+      }
 
     friend class por::event::local<decltype(pathSincePorLocal)::value_type>;
   };

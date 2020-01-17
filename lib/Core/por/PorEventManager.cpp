@@ -13,7 +13,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <sstream>
 #include <string>
 #include <utility>
 
@@ -44,15 +43,6 @@ namespace {
           "Record standby states for all events (default).")
         KLEE_LLVM_CL_VAL_END),
     llvm::cl::init(StandbyStatePolicy::All));
-}
-
-template<>
-std::string por::event::local<decltype(klee::Thread::pathSincePorLocal)::value_type>::path_string() const noexcept {
-  std::stringstream os;
-  for (auto &[branch, expr] : path()) {
-    os << branch;
-  }
-  return os.str();
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -130,14 +120,14 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     logEventThreadAndKind(state, por_local);
 
     llvm::errs() << " and path ";
-    for(auto &[b, _] : state.thread().pathSincePorLocal) {
+    for(auto &[b, _] : state.unregisteredDecisions()) {
       llvm::errs() << b << " ";
     }
 
     llvm::errs() << "\n";
   }
 
-  assert(!state.thread().pathSincePorLocal.empty());
+  assert(state.hasUnregisteredDecisions());
   assert(std::find(addedStates.begin(), addedStates.end(), &state) == addedStates.end());
 
   state.needsThreadScheduling = true;
@@ -146,10 +136,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     assert(addedStates.empty());
     state.porNode = state.porNode->catch_up(
     [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
-      auto& thread = state.thread();
-      auto path = std::move(thread.pathSincePorLocal);
-      thread.pathSincePorLocal = {};
-      por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+      auto path = std::move(state.unregisteredDecisions());
+      state.unregisteredDecisions() = {};
+      por::event::event const* e = cfg.local(state.tid(), std::move(path));
       attachFingerprintToEvent(state, *e);
       if (snapshotsAllowed) {
         auto standby = createStandbyState(state, por_local);
@@ -165,10 +154,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   por::node *n = state.porNode;
   state.porNode = state.porNode->make_left_child(
       [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
-    auto& thread = state.thread();
-    auto path = std::move(thread.pathSincePorLocal);
-    thread.pathSincePorLocal = {};
-    por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+    auto path = std::move(state.unregisteredDecisions());
+    state.unregisteredDecisions() = {};
+    por::event::event const* e = cfg.local(state.tid(), std::move(path));
     attachFingerprintToEvent(state, *e);
     if (snapshotsAllowed) {
       auto standby = createStandbyState(state, por_local);
@@ -181,13 +169,12 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   assert(state.porNode->parent() == n);
 
   for(auto& s : addedStates) {
-    if (!s->thread().pathSincePorLocal.empty()) {
+    if (s->hasUnregisteredDecisions()) {
       s->porNode = n->make_right_local_child(
           [this, &s, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
-        auto& thread = s->thread();
-        auto path = std::move(thread.pathSincePorLocal);
-        thread.pathSincePorLocal = {};
-        por::event::event const* e = cfg.local(thread.getThreadId(), std::move(path));
+        auto path = std::move(s->unregisteredDecisions());
+        s->unregisteredDecisions() = {};
+        por::event::event const* e = cfg.local(s->tid(), std::move(path));
         attachFingerprintToEvent(*s, *e);
         if (snapshotsAllowed) {
           auto standby = createStandbyState(*s, por_local);
@@ -210,7 +197,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -230,7 +217,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -273,7 +260,7 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
     assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -299,7 +286,7 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -321,7 +308,7 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -342,7 +329,7 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -394,7 +381,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -423,7 +410,7 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -444,7 +431,7 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -465,7 +452,7 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -491,7 +478,7 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
     llvm::errs() << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -512,7 +499,7 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -533,7 +520,7 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  assert(state.thread().pathSincePorLocal.empty());
+  assert(!state.hasUnregisteredDecisions());
 
   state.needsThreadScheduling = true;
 
@@ -571,7 +558,7 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
       continue;
     }
 
-    auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(e);
+    auto local = static_cast<const Thread::local_event_t *>(e);
     for (auto &[branch, expr] : local->path()) {
       expressions.push_back(expr);
     }

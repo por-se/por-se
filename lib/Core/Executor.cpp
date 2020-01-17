@@ -1027,24 +1027,19 @@ void Executor::branch(ExecutionState &state,
   assert(N);
 
   if (state.needsCatchUp()) {
-    const por::event::event* event = state.peekCatchUp();
-    assert(event->kind() == por::event::event_kind::local);
-    auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
-
-    std::size_t nextIndex = state.thread().pathSincePorLocal.size();
-    assert(local->path().size() > nextIndex);
-    std::uint64_t branch = local->path()[nextIndex].first;
+    auto decision = state.peekDecision();
+    assert(conditions[decision.branch] == decision.expr);
 
     for (unsigned i=0; i<N; ++i) {
-      if (i == branch) {
+      if (i == decision.branch) {
         result.push_back(&state);
       } else {
         result.push_back(nullptr);
       }
     }
 
-    state.addConstraint(conditions[branch]);
-    state.thread().pathSincePorLocal.emplace_back(branch, conditions[branch]);
+    state.addConstraint(conditions[decision.branch]);
+    state.addDecision(decision);
 
     return;
 
@@ -1122,7 +1117,7 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i) {
     if (result[i]) {
       addConstraint(*result[i], conditions[i], true);
-      result[i]->thread().pathSincePorLocal.emplace_back(i, conditions[i]);
+      result[i]->addDecision(i, conditions[i]);
     }
   }
 }
@@ -1284,23 +1279,21 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     return StatePair(0, &current);
   } else {
     if (current.needsCatchUp()) {
-      const por::event::event* event = current.peekCatchUp();
-      assert(event->kind() == por::event::event_kind::local);
-      auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
-
-      std::size_t nextIndex = current.thread().pathSincePorLocal.size();
-      assert(local->path().size() > nextIndex);
-      std::uint64_t branch = local->path()[nextIndex].first;
+      auto decision = current.peekDecision();
 
       // add constraints
-      if (branch) {
+      if (decision.branch) {
+        assert(decision.branch == 1);
+        assert(decision.expr == condition);
         current.addConstraint(condition);
-        current.thread().pathSincePorLocal.emplace_back(1, condition);
+        current.addDecision(decision);
         return StatePair(&current, nullptr);
       } else {
         auto invCond = Expr::createIsZero(condition);
+        assert(decision.branch == 0);
+        assert(decision.expr == invCond);
         current.addConstraint(invCond);
-        current.thread().pathSincePorLocal.emplace_back(0, invCond);
+        current.addDecision(decision);
         return StatePair(nullptr, &current);
       }
     }
@@ -1370,8 +1363,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
 
-    trueState->thread().pathSincePorLocal.emplace_back(1, condition);
-    falseState->thread().pathSincePorLocal.emplace_back(0, invertedCondition);
+    trueState->addDecision(1, condition);
+    falseState->addDecision(0, invertedCondition);
 
     addConstraint(*trueState, condition, true);
     addConstraint(*falseState, invertedCondition, true);
@@ -1419,16 +1412,11 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition, bool al
 
   if (!alreadyInPath) {
     if (state.needsCatchUp()) {
-      const por::event::event* event = state.peekCatchUp();
-      assert(event->kind() == por::event::event_kind::local);
-      auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
-
-      std::size_t nextIndex = state.thread().pathSincePorLocal.size();
-      assert(local->path().size() > nextIndex);
-      assert(local->path()[nextIndex].first == 0);
-      assert(local->path()[nextIndex].second == condition);
+      auto decision = state.peekDecision();
+      assert(decision.branch == 0);
+      assert(decision.expr == condition);
     }
-    state.thread().pathSincePorLocal.emplace_back(0, condition);
+    state.addDecision(0, condition);
   }
 
   if (ivcEnabled)
@@ -3194,7 +3182,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
 
-    if (!state.thread().pathSincePorLocal.empty()) {
+    if (state.hasUnregisteredDecisions()) {
       porEventManager.registerLocal(state, addedStates, false);
     }
 
@@ -3281,7 +3269,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
 
-    if (!state.thread().pathSincePorLocal.empty()) {
+    if (state.hasUnregisteredDecisions()) {
       porEventManager.registerLocal(state, addedStates, false);
     }
 
@@ -3315,7 +3303,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::updateStates(ExecutionState *current) {
   if (current && std::find(removedStates.begin(), removedStates.end(), current) == removedStates.end()) {
-    if (!current->thread().pathSincePorLocal.empty()) {
+    if (current->hasUnregisteredDecisions()) {
       porEventManager.registerLocal(*current, addedStates);
     }
 
@@ -4540,7 +4528,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     return;
   }
 
-  if (!state.thread().pathSincePorLocal.empty()) {
+  if (state.hasUnregisteredDecisions()) {
     porEventManager.registerLocal(state, addedStates, false);
   }
 
@@ -5077,7 +5065,7 @@ ThreadId Executor::createThread(ExecutionState &state,
 
 void Executor::exitCurrentThread(ExecutionState &state) {
   // needs to come before thread_exit event
-  if (state.isOnMainThread() && !state.thread().pathSincePorLocal.empty()) {
+  if (state.isOnMainThread() && state.hasUnregisteredDecisions()) {
     static std::vector<ExecutionState *> emptyVec;
     porEventManager.registerLocal(state, emptyVec, false);
   }

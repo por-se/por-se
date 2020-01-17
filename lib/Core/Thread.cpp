@@ -5,6 +5,8 @@
 
 #include "por/configuration.h"
 
+#include <sstream>
+
 using namespace llvm;
 using namespace klee;
 
@@ -108,4 +110,13 @@ void Thread::popStackFrame() {
 
 void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
   stack.emplace_back(caller, kf);
+}
+
+template<>
+std::string Thread::local_event_t::path_string() const noexcept {
+  std::stringstream os;
+  for (auto &[branch, expr] : path()) {
+    os << branch;
+  }
+  return os.str();
 }
