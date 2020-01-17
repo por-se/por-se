@@ -3331,12 +3331,6 @@ void Executor::updateStates(ExecutionState *current) {
 
     const por::configuration &cfg = current->porNode->configuration();
     if (current->needsThreadScheduling) {
-      auto tid = current->currentThreadId();
-      const por::event::event *lastEvent = cfg.last_of_tid(tid);
-
-      if (lastEvent && lastEvent->is_cutoff()) {
-          current->cutoffThread(tid);
-      }
       scheduleThreads(*current);
     } else {
       // If we do not need thread scheduling, then the current thread

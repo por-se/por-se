@@ -603,6 +603,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   const por::event::event &event = *state.porNode->parent()->event();
 
   if (event.is_cutoff()) {
+    state.cutoffThread(state.currentThreadId());
     return;
   }
 
@@ -653,6 +654,10 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
                 << " with fingerprint: " << MemoryFingerprint::toString(*correspondingFPV) << "\n";
     llvm::errs() << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "]        cutoff: " << cutoff->to_string(true) << "\n"
                 << " with fingerprint: " << MemoryFingerprint::toString(*cutoffFPV) << "\n";
+  }
+
+  if (cutoffState) {
+    cutoffState->cutoffThread(cutoffState->currentThreadId());
   }
 
   cutoff->mark_as_cutoff();
