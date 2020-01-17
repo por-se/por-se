@@ -160,7 +160,11 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 				}
 			}
 
-			os << "\"]\n";
+			if(e->is_cutoff()) {
+				os << "\" style=\"dashed\"]\n";
+			} else {
+				os << "\"]\n";
+			}
 			++event_id;
 		}
 
