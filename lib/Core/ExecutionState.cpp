@@ -115,7 +115,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     steppedInstructions(state.steppedInstructions)
 {
   // Since we copied the threads, we can use the thread id to look it up
-  currentThread(state.tid());
+  thread(state.tid());
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
@@ -158,13 +158,11 @@ void ExecutionState::popFrameOfThread(Thread &thread) {
 }
 
 Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
-  auto& curThread = currentThread();
-
-  ThreadId tid = ThreadId(curThread.tid, ++curThread.spawnedThreads);
+  ThreadId newTid = ThreadId(tid(), ++thread().spawnedThreads);
 
   auto result = threads.emplace(std::piecewise_construct,
-                                std::forward_as_tuple(tid),
-                                std::forward_as_tuple(tid, kf));
+                                std::forward_as_tuple(newTid),
+                                std::forward_as_tuple(newTid, kf));
   assert(result.second);
 
   Thread &newThread = result.first->second;
@@ -276,7 +274,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
 }
 
 void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
-  dumpStackOfThread(out, &currentThread());
+  dumpStackOfThread(out, &thread());
 }
 
 void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {

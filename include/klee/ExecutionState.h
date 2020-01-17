@@ -67,12 +67,12 @@ private:
   /// @brief Pointer to the thread that is currently executed
   Thread *_currentThread = nullptr;
 
-  Thread &currentThread(Thread &thread) {
+  Thread &thread(Thread &thread) {
     _currentThread = &thread;
     return *_currentThread;
   }
 
-  Thread &currentThread(const ThreadId &tid) {
+  Thread &thread(const ThreadId &tid) {
     auto it = threads.find(tid);
     assert(it != threads.end() && "Invalid thread ID");
     _currentThread = &it->second;
@@ -180,7 +180,7 @@ public:
   ExecutionState *branch();
 
   /// @brief returns a reference to the current thread (only valid for one 'klee instruction')
-  Thread &currentThread() const {
+  Thread &thread() const {
     return *_currentThread;
   }
 
@@ -214,63 +214,63 @@ public:
   }
 
   KInstIterator pc(const Thread &thread) const { return thread.pc; }
-  KInstIterator pc() const { return pc(currentThread()); }
+  KInstIterator pc() const { return pc(thread()); }
 
   KInstIterator prevPc(const Thread &thread) const { return thread.prevPc; }
-  KInstIterator prevPc() const { return prevPc(currentThread()); }
+  KInstIterator prevPc() const { return prevPc(thread()); }
 
   StackFrame &stackFrame(Thread &thread) {
     assert(!thread.stack.empty());
     return thread.stack.back();
   }
-  StackFrame &stackFrame() { return stackFrame(currentThread()); }
+  StackFrame &stackFrame() { return stackFrame(thread()); }
   const StackFrame &stackFrame(const Thread &thread) const {
     assert(!thread.stack.empty());
     return thread.stack.back();
   }
-  const StackFrame &stackFrame() const { return stackFrame(currentThread()); }
+  const StackFrame &stackFrame() const { return stackFrame(thread()); }
 
   std::size_t stackFrameIndex(Thread &thread) const {
     assert(!thread.stack.empty());
     return thread.stack.size() - 1;
   }
-  std::size_t stackFrameIndex() const { return stackFrameIndex(currentThread()); }
+  std::size_t stackFrameIndex() const { return stackFrameIndex(thread()); }
 
   Thread::stack_ty &stack(Thread &thread) {
     return thread.stack;
   }
-  Thread::stack_ty &stack() { return stack(currentThread()); }
+  Thread::stack_ty &stack() { return stack(thread()); }
   const Thread::stack_ty &stack(const Thread &thread) const {
     return thread.stack;
   }
-  const Thread::stack_ty &stack() const { return stack(currentThread()); }
+  const Thread::stack_ty &stack() const { return stack(thread()); }
 
   MemoryFingerprint &threadFingerprint(Thread &thread) {
     return thread.fingerprint;
   }
-  MemoryFingerprint &threadFingerprint() { return threadFingerprint(currentThread()); }
+  MemoryFingerprint &threadFingerprint() { return threadFingerprint(thread()); }
 
   /// @brief will create a new thread
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
   ThreadState threadState(const Thread &thread) const { return thread.state; }
-  ThreadState threadState() const { return threadState(currentThread()); }
+  ThreadState threadState() const { return threadState(thread()); }
 
   /// @brief will exit the referenced thread
   void exitThread(Thread &thread);
-  void exitThread() { exitThread(currentThread()); }
+  void exitThread() { exitThread(thread()); }
 
   /// @brief will mark the referenced thread as cutoff
   void cutoffThread(Thread &thread);
-  void cutoffThread() { cutoffThread(currentThread()); }
+  void cutoffThread() { cutoffThread(thread()); }
 
   std::set<ThreadId> runnableThreads() const;
 
   void pushFrame(KInstIterator caller, KFunction *kf) {
-    currentThread().pushFrame(caller, kf);
+    thread().pushFrame(caller, kf);
   }
 
-  void popFrameOfThread() { popFrameOfThread(currentThread()); }
+  void popFrameOfThread() { popFrameOfThread(thread()); }
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }

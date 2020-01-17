@@ -804,7 +804,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
                                            void *addr, unsigned size, 
                                            bool isReadOnly) {
   auto mo = memory->allocateFixed(reinterpret_cast<std::uint64_t>(addr),
-                                  size, nullptr, state.currentThread(),
+                                  size, nullptr, state.thread(),
                                   state.stackFrameIndex());
   ObjectState *os = bindObjectInState(state, mo, false);
   for (unsigned i = 0; i < size; i++) {
@@ -858,7 +858,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
   errnoObj->isUserSpecified = true;
 
   // Should be the main thread
-  state.currentThread().errnoMo = errnoObj;
+  state.thread().errnoMo = errnoObj;
 #endif
 
   // Disabled, we don't want to promote use of live externals.
@@ -1031,7 +1031,7 @@ void Executor::branch(ExecutionState &state,
     assert(event->kind() == por::event::event_kind::local);
     auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
 
-    std::size_t nextIndex = state.currentThread().pathSincePorLocal.size();
+    std::size_t nextIndex = state.thread().pathSincePorLocal.size();
     assert(local->path().size() > nextIndex);
     std::uint64_t branch = local->path()[nextIndex].first;
 
@@ -1044,7 +1044,7 @@ void Executor::branch(ExecutionState &state,
     }
 
     state.addConstraint(conditions[branch]);
-    state.currentThread().pathSincePorLocal.emplace_back(branch, conditions[branch]);
+    state.thread().pathSincePorLocal.emplace_back(branch, conditions[branch]);
 
     return;
 
@@ -1122,7 +1122,7 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i) {
     if (result[i]) {
       addConstraint(*result[i], conditions[i], true);
-      result[i]->currentThread().pathSincePorLocal.emplace_back(i, conditions[i]);
+      result[i]->thread().pathSincePorLocal.emplace_back(i, conditions[i]);
     }
   }
 }
@@ -1172,7 +1172,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   solver->setTimeout(time::Span());
   if (!success) {
     // Since we were unsuccessful, restore the previous program counter for the current thread
-    Thread &thread = current.currentThread();
+    Thread &thread = current.thread();
     thread.pc = thread.prevPc;
 
     terminateStateEarly(current, "Query timed out (fork).");
@@ -1288,19 +1288,19 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       assert(event->kind() == por::event::event_kind::local);
       auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
 
-      std::size_t nextIndex = current.currentThread().pathSincePorLocal.size();
+      std::size_t nextIndex = current.thread().pathSincePorLocal.size();
       assert(local->path().size() > nextIndex);
       std::uint64_t branch = local->path()[nextIndex].first;
 
       // add constraints
       if (branch) {
         current.addConstraint(condition);
-        current.currentThread().pathSincePorLocal.emplace_back(1, condition);
+        current.thread().pathSincePorLocal.emplace_back(1, condition);
         return StatePair(&current, nullptr);
       } else {
         auto invCond = Expr::createIsZero(condition);
         current.addConstraint(invCond);
-        current.currentThread().pathSincePorLocal.emplace_back(0, invCond);
+        current.thread().pathSincePorLocal.emplace_back(0, invCond);
         return StatePair(nullptr, &current);
       }
     }
@@ -1370,8 +1370,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
 
-    trueState->currentThread().pathSincePorLocal.emplace_back(1, condition);
-    falseState->currentThread().pathSincePorLocal.emplace_back(0, invertedCondition);
+    trueState->thread().pathSincePorLocal.emplace_back(1, condition);
+    falseState->thread().pathSincePorLocal.emplace_back(0, invertedCondition);
 
     addConstraint(*trueState, condition, true);
     addConstraint(*falseState, invertedCondition, true);
@@ -1423,12 +1423,12 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition, bool al
       assert(event->kind() == por::event::event_kind::local);
       auto local = static_cast<const por::event::local<decltype(Thread::pathSincePorLocal)::value_type>*>(event);
 
-      std::size_t nextIndex = state.currentThread().pathSincePorLocal.size();
+      std::size_t nextIndex = state.thread().pathSincePorLocal.size();
       assert(local->path().size() > nextIndex);
       assert(local->path()[nextIndex].first == 0);
       assert(local->path()[nextIndex].second == condition);
     }
-    state.currentThread().pathSincePorLocal.emplace_back(0, condition);
+    state.thread().pathSincePorLocal.emplace_back(0, condition);
   }
 
   if (ivcEnabled)
@@ -1654,7 +1654,7 @@ void Executor::stepInstruction(ExecutionState &state) {
   if(state.needsCatchUp())
     ++stats::catchUpInstructions;
 
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
 
   if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
     thread.liveSet = &thread.prevPc->info->getLiveLocals();
@@ -1846,7 +1846,7 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
-    Thread &thread = state.currentThread();
+    Thread &thread = state.thread();
     state.pushFrame(state.prevPc(), kf);
     thread.pc = kf->instructions;
     thread.liveSet = kf->getLiveLocals(&kf->function->front());
@@ -1986,7 +1986,7 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   // With that done we simply set an index in the state so that PHI
   // instructions know which argument to eval, set the pc, and continue.
 
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
 
   // XXX this lookup has to go ?
   KFunction *kf = thread.stack.back().kf;
@@ -2033,7 +2033,7 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
 
   assert(state.threadState() == ThreadState::Runnable);
 
@@ -3194,7 +3194,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
 
-    if (!state.currentThread().pathSincePorLocal.empty()) {
+    if (!state.thread().pathSincePorLocal.empty()) {
       porEventManager.registerLocal(state, addedStates, false);
     }
 
@@ -3281,7 +3281,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
 
-    if (!state.currentThread().pathSincePorLocal.empty()) {
+    if (!state.thread().pathSincePorLocal.empty()) {
       porEventManager.registerLocal(state, addedStates, false);
     }
 
@@ -3315,7 +3315,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::updateStates(ExecutionState *current) {
   if (current && std::find(removedStates.begin(), removedStates.end(), current) == removedStates.end()) {
-    if (!current->currentThread().pathSincePorLocal.empty()) {
+    if (!current->thread().pathSincePorLocal.empty()) {
       porEventManager.registerLocal(*current, addedStates);
     }
 
@@ -3326,7 +3326,7 @@ void Executor::updateStates(ExecutionState *current) {
       // If we do not need thread scheduling, then the current thread
       // must still be runnable -> we will try to execute the next instruction
       // in the current thread
-      assert(current->currentThread().isRunnable(cfg));
+      assert(current->thread().isRunnable(cfg));
     }
   }
 
@@ -3791,7 +3791,7 @@ void Executor::terminateStateSilently(ExecutionState &state) {
   auto it = std::find(addedStates.begin(), addedStates.end(), &state);
 
   if (it == addedStates.end()) {
-    Thread &thread = state.currentThread();
+    Thread &thread = state.thread();
     thread.pc = thread.prevPc;
     auto it2 __attribute__ ((unused)) = std::find(removedStates.begin(),
                                                   removedStates.end(), &state);
@@ -4018,7 +4018,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   state.addressSpace.copyOutConcretes();
 #ifndef WINDOWS
   // Update external errno state with local state value
-  Thread& curThread = state.currentThread();
+  Thread& curThread = state.thread();
   const ObjectState* errnoOs = state.addressSpace.findObject(curThread.errnoMo);
 
   ref<Expr> errValueExpr = errnoOs->read(0, curThread.errnoMo->size * 8);
@@ -4130,7 +4130,7 @@ ObjectState *Executor::bindObjectInState(ExecutionState &state,
   // matter because all we use this list for is to unbind the object
   // on function return.
   if (isLocal) {
-    state.currentThread().stack.back().allocas.push_back(mo);
+    state.thread().stack.back().allocas.push_back(mo);
   }
 
   return os;
@@ -4151,7 +4151,7 @@ void Executor::executeAlloc(ExecutionState &state,
     }
     MemoryObject *mo =
         memory->allocate(CE->getZExtValue(), isLocal,
-                         allocSite, state.currentThread(),
+                         allocSite, state.thread(),
                          state.stackFrameIndex(),
                          allocationAlignment);
     if (!mo) {
@@ -4184,7 +4184,7 @@ void Executor::executeAlloc(ExecutionState &state,
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
 
-        reallocatedObject->parent->deallocate(reallocatedObject, state.currentThread());
+        reallocatedObject->parent->deallocate(reallocatedObject, state.thread());
         state.addressSpace.unbindObject(reallocatedObject);
       }
 
@@ -4408,7 +4408,7 @@ Executor::extractMemoryObject(ExecutionState &state, ref<Expr> address, Expr::Wi
     solver->setTimeout(time::Span());
 
     if (!success) {
-      state.currentThread().pc = state.currentThread().prevPc;
+      state.thread().pc = state.thread().prevPc;
       terminateStateEarly(state, "Query timed out (bounds check).");
       return {};
     }
@@ -4447,7 +4447,7 @@ Executor::extractMemoryObject(ExecutionState &state, ref<Expr> address, Expr::Wi
     unbound = branches.second;
     if (unbound) {
       // Reset current pc since the operation has to be redone in the forked state
-      unbound->currentThread().pc = unbound->currentThread().prevPc;
+      unbound->thread().pc = unbound->thread().prevPc;
     } else {
       break;
     }
@@ -4541,7 +4541,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     return;
   }
 
-  if (!state.currentThread().pathSincePorLocal.empty()) {
+  if (!state.thread().pathSincePorLocal.empty()) {
     porEventManager.registerLocal(state, addedStates, false);
   }
 
@@ -5078,7 +5078,7 @@ ThreadId Executor::createThread(ExecutionState &state,
 
 void Executor::exitCurrentThread(ExecutionState &state) {
   // needs to come before thread_exit event
-  if (state.isOnMainThread() && !state.currentThread().pathSincePorLocal.empty()) {
+  if (state.isOnMainThread() && !state.thread().pathSincePorLocal.empty()) {
     static std::vector<ExecutionState *> emptyVec;
     porEventManager.registerLocal(state, emptyVec, false);
   }
@@ -5392,7 +5392,7 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
 }
 
 void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
-  Thread &thread = state.currentThread(tid);
+  Thread &thread = state.thread(tid);
 
   state.schedulingHistory.push_back(tid);
   state.currentSchedulingIndex = state.schedulingHistory.size() - 1;

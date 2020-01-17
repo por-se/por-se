@@ -534,7 +534,7 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning");
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   klee_warning("%s: %s", thread.stack.back().kf->function->getName().data(),
@@ -546,7 +546,7 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_warning_once");
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   klee_warning_once(0, "%s: %s", thread.stack.back().kf->function->getName().data(),
@@ -609,7 +609,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
          "invalid number of arguments to klee_get_errno");
 
   // Retrieve the memory object of the errno variable
-  const MemoryObject* thErrno = state.currentThread().errnoMo;
+  const MemoryObject* thErrno = state.thread().errnoMo;
   const ObjectState* errValue = state.addressSpace.findObject(thErrno);
 
   assert(errValue != nullptr && "errno should be created for every thread");
@@ -624,7 +624,7 @@ void SpecialFunctionHandler::handleErrnoLocation(
   assert(arguments.size() == 0 &&
          "invalid number of arguments to __errno_location/__error");
 
-  const MemoryObject* thErrno = state.currentThread().errnoMo;
+  const MemoryObject* thErrno = state.thread().errnoMo;
 
   executor.bindLocal(target, state, thErrno->getBaseExpr());
 }
@@ -790,7 +790,7 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
   assert(isa<ConstantExpr>(arguments[1]) &&
          "expect constant size argument to klee_define_fixed_object");
 
-  Thread &thread = state.currentThread();
+  Thread &thread = state.thread();
   
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
@@ -1001,8 +1001,8 @@ void SpecialFunctionHandler::handleLockAcquire(ExecutionState &state,
 
   auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
 
-  state.currentThread().state = ThreadState::Waiting;
-  state.currentThread().waiting = Thread::wait_lock_t{lid};
+  state.thread().state = ThreadState::Waiting;
+  state.thread().waiting = Thread::wait_lock_t{lid};
 
   state.needsThreadScheduling = true;
 }
@@ -1118,8 +1118,8 @@ void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
     return;
   }
 
-  state.currentThread().state = ThreadState::Waiting;
-  state.currentThread().waiting = Thread::wait_cv_1_t{cid, lid};
+  state.thread().state = ThreadState::Waiting;
+  state.thread().waiting = Thread::wait_cv_1_t{cid, lid};
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
   executor.porEventManager.registerCondVarWait1(state, cid, lid);
 }
