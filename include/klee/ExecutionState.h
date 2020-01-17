@@ -213,8 +213,48 @@ public:
     return raceDetection.getStats();
   }
 
+  KInstIterator pc(const Thread &thread) const { return thread.pc; }
+  KInstIterator pc() const { return pc(currentThread()); }
+
+  KInstIterator prevPc(const Thread &thread) const { return thread.prevPc; }
+  KInstIterator prevPc() const { return prevPc(currentThread()); }
+
+  StackFrame &stackFrame(Thread &thread) {
+    assert(!thread.stack.empty());
+    return thread.stack.back();
+  }
+  StackFrame &stackFrame() { return stackFrame(currentThread()); }
+  const StackFrame &stackFrame(const Thread &thread) const {
+    assert(!thread.stack.empty());
+    return thread.stack.back();
+  }
+  const StackFrame &stackFrame() const { return stackFrame(currentThread()); }
+
+  std::size_t stackFrameIndex(Thread &thread) const {
+    assert(!thread.stack.empty());
+    return thread.stack.size() - 1;
+  }
+  std::size_t stackFrameIndex() const { return stackFrameIndex(currentThread()); }
+
+  Thread::stack_ty &stack(Thread &thread) {
+    return thread.stack;
+  }
+  Thread::stack_ty &stack() { return stack(currentThread()); }
+  const Thread::stack_ty &stack(const Thread &thread) const {
+    return thread.stack;
+  }
+  const Thread::stack_ty &stack() const { return stack(currentThread()); }
+
+  MemoryFingerprint &threadFingerprint(Thread &thread) {
+    return thread.fingerprint;
+  }
+  MemoryFingerprint &threadFingerprint() { return threadFingerprint(currentThread()); }
+
   /// @brief will create a new thread
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
+
+  ThreadState threadState(const Thread &thread) const { return thread.state; }
+  ThreadState threadState() const { return threadState(currentThread()); }
 
   /// @brief will exit the referenced thread
   void exitThread(Thread &thread);
