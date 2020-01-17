@@ -4018,10 +4018,9 @@ void Executor::callExternalFunction(ExecutionState &state,
   state.addressSpace.copyOutConcretes();
 #ifndef WINDOWS
   // Update external errno state with local state value
-  Thread& curThread = state.thread();
-  const ObjectState* errnoOs = state.addressSpace.findObject(curThread.errnoMo);
+  const ObjectState* errnoOs = state.addressSpace.findObject(state.errnoMo());
 
-  ref<Expr> errValueExpr = errnoOs->read(0, curThread.errnoMo->size * 8);
+  ref<Expr> errValueExpr = errnoOs->read(0, state.errnoMo()->size * 8);
   ConstantExpr *errnoValue = dyn_cast<ConstantExpr>(errValueExpr);
   if (!errnoValue) {
     terminateStateOnExecError(state,
@@ -4031,7 +4030,7 @@ void Executor::callExternalFunction(ExecutionState &state,
   }
 
   externalDispatcher->setLastErrno(
-      errnoValue->getZExtValue(curThread.errnoMo->size * 8));
+      errnoValue->getZExtValue(state.errnoMo()->size * 8));
 #endif
 
   if (!SuppressExternalWarnings) {
@@ -4071,7 +4070,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 #ifndef WINDOWS
   // Update errno memory object with the errno value from the call
   int error = externalDispatcher->getLastErrno();
-  state.addressSpace.copyInConcrete(state, curThread.errnoMo, errnoOs,
+  state.addressSpace.copyInConcrete(state, state.errnoMo(), errnoOs,
                                     (uint64_t)&error);
 #endif
 

@@ -609,7 +609,7 @@ void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
          "invalid number of arguments to klee_get_errno");
 
   // Retrieve the memory object of the errno variable
-  const MemoryObject* thErrno = state.thread().errnoMo;
+  const MemoryObject* thErrno = state.errnoMo();
   const ObjectState* errValue = state.addressSpace.findObject(thErrno);
 
   assert(errValue != nullptr && "errno should be created for every thread");
@@ -624,7 +624,7 @@ void SpecialFunctionHandler::handleErrnoLocation(
   assert(arguments.size() == 0 &&
          "invalid number of arguments to __errno_location/__error");
 
-  const MemoryObject* thErrno = state.thread().errnoMo;
+  const MemoryObject* thErrno = state.errnoMo();
 
   executor.bindLocal(target, state, thErrno->getBaseExpr());
 }

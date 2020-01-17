@@ -250,6 +250,8 @@ public:
   }
   MemoryFingerprint &threadFingerprint() { return threadFingerprint(thread()); }
 
+  const MemoryObject *errnoMo() { return thread().errnoMo; }
+
   /// @brief will create a new thread
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
