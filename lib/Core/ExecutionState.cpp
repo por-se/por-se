@@ -182,6 +182,7 @@ void ExecutionState::exitThread(const ThreadId &tid) {
   assert(thread && "Could not find thread with given id");
 
   thread->get().state = ThreadState::Exited;
+  needsThreadScheduling = true;
 
    // Now remove all stack frames
    while (!thread->get().stack.empty()) {
@@ -194,6 +195,7 @@ void ExecutionState::cutoffThread(const ThreadId &tid) {
   assert(thread && "Could not find thread with given id");
 
   thread->get().state = ThreadState::Cutoff;
+  needsThreadScheduling = true;
 }
 
 std::set<ThreadId> ExecutionState::runnableThreads() const {
