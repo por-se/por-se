@@ -2114,7 +2114,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
       }
 
-      state.popFrameOfCurrentThread();
+      state.popFrameOfThread();
 
       if (statsTracker)
         statsTracker->framePopped(state);
@@ -5099,8 +5099,7 @@ void Executor::exitCurrentThread(ExecutionState &state) {
     porEventManager.registerLocal(state, emptyVec, false);
   }
 
-  const ThreadId& tid = state.currentThreadId();
-  state.exitThread(tid);
+  state.exitThread();
   state.needsThreadScheduling = true;
 
   auto m = kmodule->module.get();
@@ -5108,7 +5107,7 @@ void Executor::exitCurrentThread(ExecutionState &state) {
     const GlobalVariable *v = &*i;
 
     if (v->isThreadLocal()) {
-      auto mo = memory->lookupGlobalMemoryObject(v, tid);
+      auto mo = memory->lookupGlobalMemoryObject(v, state.currentThreadId());
 
       processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
 

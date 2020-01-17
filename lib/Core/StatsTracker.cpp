@@ -398,7 +398,7 @@ void StatsTracker::framePushed(StackFrame *current, StackFrame *parentFrame) {
   }
 }
 
-/* Should be called _after_ the es->popFrameOfCurrentThread() */
+/* Should be called _after_ the es->popFrameOfThread() */
 void StatsTracker::framePopped(ExecutionState &es) {
   // XXX remove me?
 }

@@ -603,7 +603,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   const por::event::event &event = *state.porNode->parent()->event();
 
   if (event.is_cutoff()) {
-    state.cutoffThread(state.currentThreadId());
+    state.cutoffThread();
     return;
   }
 
@@ -657,7 +657,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   }
 
   if (cutoffState) {
-    cutoffState->cutoffThread(cutoffState->currentThreadId());
+    cutoffState->cutoffThread();
   }
 
   cutoff->mark_as_cutoff();

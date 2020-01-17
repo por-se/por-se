@@ -80,7 +80,7 @@ ExecutionState::~ExecutionState() {
   // We have to clean up all stack frames of all threads
   for (auto& [_, thread] : threads) {
     while (!thread.stack.empty()) {
-      popFrameOfThread(&thread);
+      popFrameOfThread(thread);
     }
   }
 }
@@ -139,13 +139,13 @@ ExecutionState *ExecutionState::branch() {
   return falseState;
 }
 
-void ExecutionState::popFrameOfThread(Thread* thread) {
-  StackFrame &sf = thread->stack.back();
+void ExecutionState::popFrameOfThread(Thread &thread) {
+  StackFrame &sf = thread.stack.back();
 
   for (auto it = sf.allocas.rbegin(), end = sf.allocas.rend(); it != end; it++) {
     const MemoryObject* mo = *it;
 
-    mo->parent->deallocate(mo, *thread);
+    mo->parent->deallocate(mo, thread);
     addressSpace.unbindObject(mo);
   }
 
@@ -154,11 +154,7 @@ void ExecutionState::popFrameOfThread(Thread* thread) {
   }
 
   // Let the thread class handle the rest
-  thread->popStackFrame();
-}
-
-void ExecutionState::popFrameOfCurrentThread() {
-  popFrameOfThread(&currentThread());
+  thread.popStackFrame();
 }
 
 Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) {
@@ -177,24 +173,17 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
   return newThread;
 }
 
-void ExecutionState::exitThread(const ThreadId &tid) {
-  auto thread = getThreadById(tid);
-  assert(thread && "Could not find thread with given id");
-
-  thread->get().state = ThreadState::Exited;
+void ExecutionState::exitThread(Thread &thread) {
+  thread.state = ThreadState::Exited;
   needsThreadScheduling = true;
 
-   // Now remove all stack frames
-   while (!thread->get().stack.empty()) {
-    popFrameOfThread(&thread->get());
+   while (!thread.stack.empty()) {
+    popFrameOfThread(thread);
   }
 }
 
-void ExecutionState::cutoffThread(const ThreadId &tid) {
-  auto thread = getThreadById(tid);
-  assert(thread && "Could not find thread with given id");
-
-  thread->get().state = ThreadState::Cutoff;
+void ExecutionState::cutoffThread(Thread &thread) {
+  thread.state = ThreadState::Cutoff;
   needsThreadScheduling = true;
 }
 

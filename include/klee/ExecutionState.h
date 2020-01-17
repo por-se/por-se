@@ -160,7 +160,7 @@ public:
   std::uint64_t steppedInstructions;
 
 private:
-  void popFrameOfThread(Thread* thread);
+  void popFrameOfThread(Thread &thread);
 
   void dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const;
 
@@ -217,14 +217,16 @@ public:
   Thread &createThread(KFunction *kf, ref <Expr> runtimeStructPtr);
 
   /// @brief will exit the referenced thread
-  void exitThread(const ThreadId &tid);
+  void exitThread(Thread &thread);
+  void exitThread() { exitThread(currentThread()); }
 
   /// @brief will mark the referenced thread as cutoff
-  void cutoffThread(const ThreadId &tid);
+  void cutoffThread(Thread &thread);
+  void cutoffThread() { cutoffThread(currentThread()); }
 
   std::set<ThreadId> runnableThreads() const;
 
-  void popFrameOfCurrentThread();
+  void popFrameOfThread() { popFrameOfThread(currentThread()); }
 
   void addSymbolic(const MemoryObject *mo, const Array *array);
   void addConstraint(ref<Expr> e) { constraints.addConstraint(e); }
