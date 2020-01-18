@@ -459,6 +459,11 @@ cl::opt<bool>ExploreSchedules(
       cl::desc("Explore alternative thread schedules (default=true)"),
       cl::init(true));
 
+cl::opt<bool> DebugAlternatives(
+  "debug-alternative-schedules",
+  cl::init(false),
+  cl::cat(DebugCat));
+
 enum class ThreadSchedulingPolicy {
   First, // first runnable thread (by id)
   Last, // last runnable thread (by id)
@@ -3642,7 +3647,14 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
     toExecute->needsThreadScheduling = true;
     scheduleThreads(*toExecute);
 
-//    llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l.start->to_string() << "\n";
+    if (DebugAlternatives) {
+      llvm::errs() << "leaf (state id: " << toExecute->id << "): " << l.start->to_string();
+      llvm::errs() << "catch-up:\n";
+      for (auto const *e : l.catch_up) {
+        llvm::errs() << "  " << e->to_string(true) << "\n";
+      }
+      llvm::errs() << "\n";
+    }
   }
 
   if (maximalConfiguration && !state.porNode->has_children()) {
