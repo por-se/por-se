@@ -187,6 +187,17 @@ public:
     return it->second;
   }
 
+  std::optional<std::reference_wrapper<const Thread>> getThreadByRuntimeStructPtr(ref<Expr> expr) const {
+    // For now we assume that the runtime struct ptr is unique for every pthread object in the runtime.
+    // (At the current time, this is guaranteed with the pthread implementation)
+    for (const auto& [tid, thread] : threads) {
+      if (thread.runtimeStructPtr == expr) {
+        return thread;
+      }
+    }
+    return {};
+  }
+
   bool isOnMainThread() const {
     return tid() == mainThreadId;
   }

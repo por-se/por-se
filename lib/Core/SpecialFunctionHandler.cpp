@@ -532,10 +532,9 @@ void SpecialFunctionHandler::handleWarning(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to klee_warning");
-  Thread &thread = state.thread();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning("%s: %s", thread.stack.back().kf->function->getName().data(),
+  klee_warning("%s: %s", state.stackFrame().kf->function->getName().data(),
                msg_str.c_str());
 }
 
@@ -544,10 +543,9 @@ void SpecialFunctionHandler::handleWarningOnce(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_warning_once");
-  Thread &thread = state.thread();
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  klee_warning_once(0, "%s: %s", thread.stack.back().kf->function->getName().data(),
+  klee_warning_once(0, "%s: %s", state.stackFrame().kf->function->getName().data(),
                     msg_str.c_str());
 }
 
@@ -788,14 +786,12 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
   assert(isa<ConstantExpr>(arguments[1]) &&
          "expect constant size argument to klee_define_fixed_object");
 
-  Thread &thread = state.thread();
-  
   uint64_t address = cast<ConstantExpr>(arguments[0])->getZExtValue();
   uint64_t size = cast<ConstantExpr>(arguments[1])->getZExtValue();
   MemoryObject *mo = executor.memory->allocateFixed(address, size,
-                                                    thread.prevPc->inst,
-                                                    thread,
-                                                    thread.stack.size() - 1);
+                                                    state.prevPc()->inst,
+                                                    state.thread(),
+                                                    state.stackFrameIndex());
   ObjectState *os = executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
   if (PruneStates)
@@ -961,26 +957,14 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
     return;
   }
 
-  ThreadId tid;
-  bool found = false;
-
-  // For now we assume that the runtime struct ptr is unique for every pthread object in the runtime.
-  // (At the current time, this is guaranteed with the pthread implementation)
-  for (const auto& th : state.threads) {
-    if (th.second.runtimeStructPtr == expr) {
-      tid = th.first;
-      found = true;
-      break;
+  if (auto result = state.getThreadByRuntimeStructPtr(expr)) {
+    const Thread &thread = result->get();
+    if (!executor.porEventManager.registerThreadJoin(state, thread.getThreadId())) {
+      executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
     }
-  }
-
-  if (!found) {
+  } else {
     executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
     return;
-  }
-
-  if (!executor.porEventManager.registerThreadJoin(state, tid)) {
-    executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
   }
 }
 

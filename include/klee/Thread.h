@@ -72,7 +72,6 @@ namespace klee {
     friend class ExecutionState;
     friend class MemoryState;
     friend class MemoryManager;
-    friend class SpecialFunctionHandler;
 
     public:
       typedef std::vector<StackFrame> stack_ty;
