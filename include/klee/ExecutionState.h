@@ -67,11 +67,6 @@ private:
   /// @brief Pointer to the thread that is currently executed
   Thread *_currentThread = nullptr;
 
-  Thread &thread(Thread &thread) {
-    _currentThread = &thread;
-    return *_currentThread;
-  }
-
   Thread &thread(const ThreadId &tid) {
     auto it = threads.find(tid);
     assert(it != threads.end() && "Invalid thread ID");
@@ -264,6 +259,8 @@ public:
   /// @brief will mark the referenced thread as cutoff
   void cutoffThread(Thread &thread);
   void cutoffThread() { cutoffThread(thread()); }
+
+  Thread::waiting_t runThread(Thread &thread);
 
   std::set<ThreadId> runnableThreads() const;
 

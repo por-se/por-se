@@ -189,6 +189,37 @@ void ExecutionState::cutoffThread(Thread &thread) {
   needsThreadScheduling = true;
 }
 
+Thread::waiting_t ExecutionState::runThread(Thread &thread) {
+  _currentThread = &thread;
+  const ThreadId &tid = thread.getThreadId();
+  schedulingHistory.push_back(tid);
+  currentSchedulingIndex = schedulingHistory.size() - 1;
+  if (ptreeNode) {
+    ptreeNode->schedulingDecision.scheduledThread = tid;
+    ptreeNode->schedulingDecision.epochNumber = schedulingHistory.size();
+  }
+
+  Thread::waiting_t previous = Thread::wait_none_t{};
+
+  if (thread.state == ThreadState::Waiting) {
+    thread.state = ThreadState::Runnable;
+    previous = thread.waiting;
+    thread.waiting = Thread::wait_none_t{};
+    std::visit([this,&tid](auto&& w) {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+        memoryState.registerAcquiredLock(w.lock, tid);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+        memoryState.registerAcquiredLock(w.lock, tid);
+      }
+    }, previous);
+  } else if (thread.state != ThreadState::Runnable) {
+    assert(0);
+  }
+
+  return previous;
+}
+
 std::set<ThreadId> ExecutionState::runnableThreads() const {
   assert(porNode);
   auto cfg = porNode->configuration();

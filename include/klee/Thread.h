@@ -88,6 +88,8 @@ namespace klee {
       struct wait_cv_2_t { por::event::cond_id_t cond; por::event::lock_id_t lock; };
       struct wait_join_t { ThreadId thread; };
 
+      using waiting_t = std::variant<wait_none_t,wait_lock_t,wait_cv_1_t,wait_cv_2_t,wait_join_t>;
+
     private:
       /// @brief Pointer to instruction to be executed after the current
       /// instruction
@@ -113,7 +115,7 @@ namespace klee {
       ThreadState state = ThreadState::Runnable;
 
       /// @brief the resource the thread is currently waiting for
-      std::variant<wait_none_t,wait_lock_t,wait_cv_1_t,wait_cv_2_t,wait_join_t> waiting = wait_none_t{};
+      waiting_t waiting = wait_none_t{};
 
       /// @brief value of the pthread_t pointer the thread was created with
       ref<Expr> runtimeStructPtr;

@@ -5377,36 +5377,24 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
 }
 
 void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
-  Thread &thread = state.thread(tid);
-
-  state.schedulingHistory.push_back(tid);
-  state.currentSchedulingIndex = state.schedulingHistory.size() - 1;
-  if (state.ptreeNode) {
-    state.ptreeNode->schedulingDecision.scheduledThread = tid;
-    state.ptreeNode->schedulingDecision.epochNumber = state.schedulingHistory.size();
-  }
-
-  // NOTE: event registration has to come last for consistent standby state
-  if (thread.state == ThreadState::Waiting) {
-    thread.state = ThreadState::Runnable;
-    auto resource = thread.waiting;
-    thread.waiting = Thread::wait_none_t{};
+  auto res = state.getThreadById(tid);
+  assert(res.has_value());
+  Thread &thread = res->get();
+  auto previous = state.runThread(thread);
+  if (!std::holds_alternative<Thread::wait_none_t>(previous)) {
+    // NOTE: event registration has to come last for consistent standby state
     std::visit([this,&state](auto&& w) {
       using T = std::decay_t<decltype(w)>;
       if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
-        state.memoryState.registerAcquiredLock(w.lock, state.tid());
         porEventManager.registerLockAcquire(state, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
-        state.memoryState.registerAcquiredLock(w.lock, state.tid());
         porEventManager.registerCondVarWait2(state, w.cond, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
         porEventManager.registerThreadJoin(state, w.thread);
       } else {
-        assert(0);
+        assert(0 && "thread cannot be woken up!");
       }
-    }, resource);
-  } else if (thread.state != ThreadState::Runnable) {
-    assert(0);
+    }, previous);
   }
 }
 
