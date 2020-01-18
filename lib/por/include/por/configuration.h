@@ -749,10 +749,10 @@ namespace por {
 		}
 
 	private:
-		std::vector<por::unfolding::dedupliation_result> cex_acquire(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::deduplication_result> cex_acquire(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::lock_acquire || e.kind() == por::event::event_kind::wait2);
 
-			std::vector<por::unfolding::dedupliation_result> result;
+			std::vector<por::unfolding::deduplication_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -823,10 +823,10 @@ namespace por {
 			return result;
 		}
 
-		std::vector<por::unfolding::dedupliation_result> cex_wait1(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::deduplication_result> cex_wait1(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::wait1);
 
-			std::vector<por::unfolding::dedupliation_result> result;
+			std::vector<por::unfolding::deduplication_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -953,10 +953,10 @@ namespace por {
 			return outstanding_wait1(cid, cone);
 		}
 
-		std::vector<por::unfolding::dedupliation_result> cex_notification(por::event::event const& e) const noexcept {
+		std::vector<por::unfolding::deduplication_result> cex_notification(por::event::event const& e) const noexcept {
 			assert(e.kind() == por::event::event_kind::signal || e.kind() == por::event::event_kind::broadcast);
 
-			std::vector<por::unfolding::dedupliation_result> result;
+			std::vector<por::unfolding::deduplication_result> result;
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
@@ -1265,7 +1265,7 @@ namespace por {
 				           || e.kind() == por::event::event_kind::lock_create);
 			});
 
-			std::vector<por::unfolding::dedupliation_result> candidates;
+			std::vector<por::unfolding::deduplication_result> candidates;
 			for(auto& em : X) {
 				if(kind == por::event::event_kind::lock_acquire) {
 					candidates.emplace_back(por::event::lock_acquire::alloc(*_unfolding, tid, lid, *et, em));
@@ -1292,7 +1292,7 @@ namespace por {
 			_unfolding->stats_inc_configuration();
 			std::vector<por::event::event const*> result;
 			for(auto* e : *this) {
-				std::vector<por::unfolding::dedupliation_result> candidates;
+				std::vector<por::unfolding::deduplication_result> candidates;
 				switch(e->kind()) {
 					case por::event::event_kind::lock_acquire:
 					case por::event::event_kind::wait2:

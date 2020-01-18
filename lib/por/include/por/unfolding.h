@@ -16,7 +16,7 @@ namespace por {
 
 	class unfolding {
 	public:
-		struct dedupliation_result {
+		struct deduplication_result {
 			bool unknown;
 			por::event::event const& event;
 
@@ -87,7 +87,7 @@ namespace por {
 		}
 
 		template<typename T, typename = std::enable_if<std::is_base_of_v<por::event::event, T>>>
-		dedupliation_result deduplicate(T&& e) {
+		deduplication_result deduplicate(T&& e) {
 			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
 			if(it != _events.end()) {
 				for(auto& v : it->second) {

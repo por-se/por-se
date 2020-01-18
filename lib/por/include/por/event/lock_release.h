@@ -56,7 +56,7 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::dedupliation_result alloc(
+		static por::unfolding::deduplication_result alloc(
 			unfolding& unfolding,
 			thread_id_t tid,
 			lock_id_t lid,
