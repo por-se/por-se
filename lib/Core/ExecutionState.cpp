@@ -184,6 +184,7 @@ void ExecutionState::exitThread(bool callToExit) {
     llvm::errs() << "[state id: " << id << "] Exiting thread " << current->getThreadId().to_string() << "\n";
   }
 
+  assert(current->state == ThreadState::Runnable);
   current->state = ThreadState::Exited;
   needsThreadScheduling = true;
 

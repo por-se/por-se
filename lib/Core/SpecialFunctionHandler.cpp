@@ -942,8 +942,10 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
   executor.porEventManager.registerLockRelease(state, lid, false, false);
 
-  executor.exitCurrentThread(state, false);
-  executor.porEventManager.registerThreadExit(state, ownTid, true);
+  if (state.threadState() != ThreadState::Cutoff) {
+    executor.exitCurrentThread(state, false);
+    executor.porEventManager.registerThreadExit(state, ownTid, true);
+  }
 }
 
 void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
