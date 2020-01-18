@@ -1209,6 +1209,11 @@ namespace por {
 		                                por::event::event_kind kind,
 		                                bool unknown_only = false) const noexcept {
 			por::event::event const* et = last_of_tid(tid);
+
+			if(et->is_cutoff()) {
+				return {};
+			}
+
 			por::event::event const* em = last_of_lid(lid);
 			por::event::event const* es = nullptr;
 
@@ -1247,6 +1252,8 @@ namespace por {
 
 				if(es == nullptr) {
 					return {};
+				} else if(es->is_cutoff()) {
+					return {};
 				}
 
 				// P = [et] \cup [es]
@@ -1260,6 +1267,7 @@ namespace por {
 			A.insert(*em);
 			por::comb X(A, [&lid](por::event::event const& e) {
 				return e.lid() == lid
+				       && !e.is_cutoff()
 				       && (e.kind() == por::event::event_kind::lock_release
 				           || e.kind() == por::event::event_kind::wait1
 				           || e.kind() == por::event::event_kind::lock_create);
@@ -1267,6 +1275,9 @@ namespace por {
 
 			std::vector<por::unfolding::deduplication_result> candidates;
 			for(auto& em : X) {
+				if(em->is_cutoff()) {
+					continue;
+				}
 				if(kind == por::event::event_kind::lock_acquire) {
 					candidates.emplace_back(por::event::lock_acquire::alloc(*_unfolding, tid, lid, *et, em));
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
