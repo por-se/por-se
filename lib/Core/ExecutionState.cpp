@@ -40,6 +40,13 @@
 
 using namespace klee;
 
+namespace {
+  llvm::cl::opt<bool>
+  DebugThreadTransitions("debug-thread-transitions",
+                         llvm::cl::init(false),
+                         llvm::cl::cat(DebugCat));
+} // namespace
+
 size_t ExecutionState::next_id = 0;
 const ThreadId ExecutionState::mainThreadId{ThreadId(), 1};
 
@@ -173,6 +180,10 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
 }
 
 void ExecutionState::exitThread(bool callToExit) {
+  if (DebugThreadTransitions) {
+    llvm::errs() << "[state id: " << id << "] Exiting thread " << current->getThreadId().to_string() << "\n";
+  }
+
   current->state = ThreadState::Exited;
   needsThreadScheduling = true;
 
@@ -186,11 +197,36 @@ void ExecutionState::exitThread(bool callToExit) {
 }
 
 void ExecutionState::cutoffThread(Thread &thread) {
+  if (DebugThreadTransitions) {
+    llvm::errs() << "[state id: " << id << "] Cutting off thread " << current->getThreadId().to_string() << "\n";
+  }
+
   thread.state = ThreadState::Cutoff;
   needsThreadScheduling = true;
 }
 
 void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
+  if (DebugThreadTransitions) {
+    llvm::errs() << "[state id: " << id << "] Blocking thread " << thread.getThreadId().to_string() << " on ";
+    std::visit([&os=llvm::errs()](auto&& w) {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, Thread::wait_none_t>) {
+        os << "wait_none_t{}";
+      } else if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+        os << "wait_lock_t{" << w.lock << "}";
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_1_t>) {
+        os << "wait_cv_1_t{" << w.cond << ", " << w.lock << "}";
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+        os << "wait_cv_2_t{" << w.cond << ", " << w.lock << "}";
+      } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
+        os << "wait_join_t{" << w.thread.to_string() << "}";
+      } else {
+        assert(0);
+      }
+    }, blockOn);
+    llvm::errs() << "\n";
+  }
+
   assert(thread.state == ThreadState::Runnable || thread.state == ThreadState::Waiting);
 
   if (auto cv_2 = std::get_if<Thread::wait_cv_2_t>(&blockOn)) {
@@ -210,6 +246,10 @@ void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
 }
 
 Thread::waiting_t ExecutionState::runThread(Thread &thread) {
+  if (DebugThreadTransitions) {
+    llvm::errs() << "[state id: " << id << "] Running thread " << current->getThreadId().to_string() << "\n";
+  }
+
   current = &thread;
   const ThreadId &tid = thread.getThreadId();
   schedulingHistory.push_back(tid);
