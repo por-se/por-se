@@ -998,10 +998,7 @@ void SpecialFunctionHandler::handleLockAcquire(ExecutionState &state,
 
   auto lid = cast<ConstantExpr>(lidExpr)->getZExtValue();
 
-  state.thread().state = ThreadState::Waiting;
-  state.thread().waiting = Thread::wait_lock_t{lid};
-
-  state.needsThreadScheduling = true;
+  state.blockThread(Thread::wait_lock_t{lid});
 }
 
 void SpecialFunctionHandler::handleLockRelease(ExecutionState &state,
@@ -1115,8 +1112,7 @@ void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
     return;
   }
 
-  state.thread().state = ThreadState::Waiting;
-  state.thread().waiting = Thread::wait_cv_1_t{cid, lid};
+  state.blockThread(Thread::wait_cv_1_t{cid, lid});
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
   executor.porEventManager.registerCondVarWait1(state, cid, lid);
 }
@@ -1143,9 +1139,8 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
     if (!signal->is_lost()) {
       assert(state.getThreadById(signal->notified_thread()));
       auto &thread = state.getThreadById(signal->notified_thread()).value().get();
-      if (thread.state != ThreadState::Cutoff) {
-        assert(thread.state == ThreadState::Waiting);
-        thread.waiting = Thread::wait_cv_2_t{signal->cid(), signal->wait_predecessor()->lid()};
+      if (state.threadState(thread) != ThreadState::Cutoff) {
+        state.blockThread(thread, Thread::wait_cv_2_t{signal->cid(), signal->wait_predecessor()->lid()});
       }
       choice = signal->notified_thread();
     }
@@ -1153,9 +1148,8 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
     for (auto &[tid, thread] : state.threads) {
       auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
       if (w && w->cond == cid) {
-        if (thread.state != ThreadState::Cutoff) {
-          assert(thread.state == ThreadState::Waiting);
-          thread.waiting = Thread::wait_cv_2_t{w->cond, w->lock};
+        if (state.threadState(thread) != ThreadState::Cutoff) {
+          state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
         }
         choice = tid;
         break; // always take first possible choice
@@ -1193,9 +1187,8 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     for (const auto &wait1 : broadcast->wait_predecessors()) {
       assert(state.getThreadById(wait1->tid()));
       auto &thread = state.getThreadById(wait1->tid()).value().get();
-      if (thread.state != ThreadState::Cutoff) {
-        assert(thread.state == ThreadState::Waiting);
-        thread.waiting = Thread::wait_cv_2_t{wait1->cid(), wait1->lid()};
+      if (state.threadState(thread) != ThreadState::Cutoff) {
+        state.blockThread(thread, Thread::wait_cv_2_t{wait1->cid(), wait1->lid()});
       }
       notifiedThreads.push_back(wait1->tid());
     }
@@ -1203,9 +1196,8 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     for (auto &[tid, thread] : state.threads) {
       auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
       if (w && w->cond == cid) {
-        if (thread.state != ThreadState::Cutoff) {
-          assert(thread.state == ThreadState::Waiting);
-          thread.waiting = Thread::wait_cv_2_t{w->cond, w->lock};
+        if (state.threadState(thread) != ThreadState::Cutoff) {
+          state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
         }
         notifiedThreads.push_back(tid);
       }

@@ -249,6 +249,9 @@ public:
 
   Thread::waiting_t runThread(Thread &thread);
 
+  void blockThread(Thread &thread, Thread::waiting_t blockOn);
+  void blockThread(Thread::waiting_t blockOn) { blockThread(thread(), std::move(blockOn)); }
+
   std::set<ThreadId> runnableThreads() const;
 
   void pushFrame(KInstIterator caller, KFunction *kf) {

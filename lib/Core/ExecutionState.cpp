@@ -190,6 +190,25 @@ void ExecutionState::cutoffThread(Thread &thread) {
   needsThreadScheduling = true;
 }
 
+void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
+  assert(thread.state == ThreadState::Runnable || thread.state == ThreadState::Waiting);
+
+  if (auto cv_2 = std::get_if<Thread::wait_cv_2_t>(&blockOn)) {
+    assert(thread.state != ThreadState::Cutoff);
+    assert(thread.state == ThreadState::Waiting);
+    auto cv_1 = std::get<Thread::wait_cv_1_t>(thread.waiting);
+    assert(cv_1.cond == cv_2->cond);
+    assert(cv_1.lock == cv_2->lock);
+  } else {
+    assert(thread.state == ThreadState::Runnable);
+  }
+
+  thread.state = ThreadState::Waiting;
+  thread.waiting = blockOn;
+
+  needsThreadScheduling = true;
+}
+
 Thread::waiting_t ExecutionState::runThread(Thread &thread) {
   current = &thread;
   const ThreadId &tid = thread.getThreadId();
