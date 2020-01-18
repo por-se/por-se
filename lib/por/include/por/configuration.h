@@ -1239,7 +1239,7 @@ namespace por {
 					} else if(p->kind() == por::event::event_kind::signal) {
 						auto sig = static_cast<por::event::signal const*>(p);
 						if(sig->wait_predecessor() == et) {
-							es = sig->wait_predecessor();
+							es = p;
 							break;
 						}
 					}
