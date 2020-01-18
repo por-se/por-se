@@ -60,6 +60,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
                                   std::forward_as_tuple(mainThreadId),
                                   std::forward_as_tuple(mainThreadId, kf));
     assert(result.second);
+    runThread(result.first->second);
+    assert(current);
 }
 
 
@@ -114,8 +116,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     catchUp(state.catchUp),
     steppedInstructions(state.steppedInstructions)
 {
-  // Since we copied the threads, we can use the thread id to look it up
-  thread(state.tid());
+  current = &threads.at(state.tid());
 
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
@@ -172,15 +173,15 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
 }
 
 void ExecutionState::exitThread(bool callToExit) {
-  _currentThread->state = ThreadState::Exited;
+  current->state = ThreadState::Exited;
   needsThreadScheduling = true;
 
   if (callToExit) {
     calledExit = true;
   }
 
-   while (!_currentThread->stack.empty()) {
-    popFrameOfThread(*_currentThread);
+   while (!current->stack.empty()) {
+    popFrameOfThread(*current);
   }
 }
 
@@ -190,7 +191,7 @@ void ExecutionState::cutoffThread(Thread &thread) {
 }
 
 Thread::waiting_t ExecutionState::runThread(Thread &thread) {
-  _currentThread = &thread;
+  current = &thread;
   const ThreadId &tid = thread.getThreadId();
   schedulingHistory.push_back(tid);
   currentSchedulingIndex = schedulingHistory.size() - 1;

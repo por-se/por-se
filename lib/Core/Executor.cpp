@@ -4645,12 +4645,9 @@ void Executor::runFunctionAsMain(Function *f,
   // we cannot correctly initialize / allocate the needed memory regions
   auto *state = new ExecutionState(kmodule->functionMap[f]);
 
-  // FIXME: refactor!
-  // By default the state creates the main thread
-  Thread &thread = state->getThreadById(ExecutionState::mainThreadId).value().get();
-  thread.threadHeapAlloc = memory->createThreadHeapAllocator(thread.getThreadId());
-  thread.threadStackAlloc = memory->createThreadStackAllocator(thread.getThreadId());
-  scheduleNextThread(*state, ExecutionState::mainThreadId);
+  // By default the state creates and executes the main thread
+  state->thread().threadHeapAlloc = memory->createThreadHeapAllocator(state->tid());
+  state->thread().threadStackAlloc = memory->createThreadStackAllocator(state->tid());
 
   MemoryObject *argvMO = nullptr;
 
@@ -4672,7 +4669,7 @@ void Executor::runFunctionAsMain(Function *f,
       Instruction *first = &*(f->begin()->begin());
       argvMO =
           memory->allocateGlobal((argc + 1 + envc + 1 + 1) * NumPtrBytes,
-                           /*allocSite=*/first, /*threadId=*/ thread.getThreadId(),/*alignment=*/8);
+                           /*allocSite=*/first, /*threadId=*/ state->tid(),/*alignment=*/8);
 
       if (!argvMO)
         klee_error("Could not allocate memory for function arguments");
@@ -4702,8 +4699,7 @@ void Executor::runFunctionAsMain(Function *f,
 
 
   if (statsTracker) {
-    StackFrame* currentFrame = &thread.stack.back();
-    statsTracker->framePushed(currentFrame, 0);
+    statsTracker->framePushed(&state->stackFrame(), 0);
   }
 
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
@@ -4723,8 +4719,8 @@ void Executor::runFunctionAsMain(Function *f,
 
         MemoryObject *arg =
             memory->allocateGlobal(len + 1,
-                             /*allocSite=*/thread.pc->inst,
-                             /*tid=*/thread.getThreadId(),
+                             /*allocSite=*/state->pc()->inst,
+                             /*tid=*/state->tid(),
                              /*alignment=*/8);
         if (!arg)
           klee_error("Could not allocate memory for function arguments");
@@ -4750,7 +4746,7 @@ void Executor::runFunctionAsMain(Function *f,
 
   // register thread_init event for main thread at last possible moment
   // to ensure that all data structures are properly set up
-  porEventManager.registerThreadInit(*state, thread.getThreadId());
+  porEventManager.registerThreadInit(*state, state->tid());
 
   auto unfolding = rootNode->configuration().unfolding();
 

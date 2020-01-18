@@ -56,23 +56,11 @@ protected:
 public:
   const size_t id;
 
-  typedef std::map<ThreadId, Thread> threads_ty;
-
   static const ThreadId mainThreadId;
 
 private:
   ExecutionState() = delete;
   ExecutionState &operator=(const ExecutionState &) = delete;
-
-  /// @brief Pointer to the thread that is currently executed
-  Thread *_currentThread = nullptr;
-
-  Thread &thread(const ThreadId &tid) {
-    auto it = threads.find(tid);
-    assert(it != threads.end() && "Invalid thread ID");
-    _currentThread = &it->second;
-    return *_currentThread;
-  }
 
   /// @brief The sync point where we wait for the threads
   uint64_t currentSchedulingIndex;
@@ -84,7 +72,10 @@ public:
   // Execution - Control Flow specific
 
   /// @brief Thread map representing all threads that exist at the moment
-  threads_ty threads;
+  std::map<ThreadId, Thread> threads;
+
+  /// @brief currently selected thread
+  Thread *current = nullptr;
 
   /// @brief True if scheduleThreads() should be run after current instruction
   bool needsThreadScheduling = false;
@@ -175,14 +166,10 @@ public:
   ExecutionState *branch();
 
   /// @brief returns a reference to the current thread (only valid for one 'klee instruction')
-  Thread &thread() const {
-    return *_currentThread;
-  }
+  Thread &thread() const { return *current; }
 
   /// @brief returns the ID of the current thread (only valid for one 'klee instruction')
-  const ThreadId &tid() const {
-    return _currentThread->tid;
-  }
+  const ThreadId &tid() const { return current->tid; }
 
   std::optional<std::reference_wrapper<Thread>> getThreadById(const ThreadId &tid) {
     auto it = threads.find(tid);
