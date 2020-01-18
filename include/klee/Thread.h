@@ -145,6 +145,14 @@ namespace klee {
 
       bool isRunnable(const por::configuration &configuration) const noexcept;
 
+      template<typename W>
+      std::optional<W> isWaitingOn() const noexcept {
+        if (auto w = std::get_if<W>(&waiting)) {
+          return *w;
+        }
+        return std::nullopt;
+      }
+
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);

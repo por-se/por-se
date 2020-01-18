@@ -3598,10 +3598,10 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
         por::event::lock_id_t lid;
         por::event::event_kind kind;
 
-        if (auto lock = std::get_if<Thread::wait_lock_t>(&thread.waiting)) {
+        if (auto lock = thread.isWaitingOn<Thread::wait_lock_t>()) {
           lid = lock->lock;
           kind = por::event::event_kind::lock_acquire;
-        } else if (auto wait = std::get_if<Thread::wait_cv_2_t>(&thread.waiting)) {
+        } else if (auto wait = thread.isWaitingOn<Thread::wait_cv_2_t>()) {
           lid = wait->lock;
           kind = por::event::event_kind::wait2;
         } else {

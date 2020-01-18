@@ -1146,7 +1146,7 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
     }
   } else {
     for (auto &[tid, thread] : state.threads) {
-      auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
+      auto w = thread.isWaitingOn<Thread::wait_cv_1_t>();
       if (w && w->cond == cid) {
         if (state.threadState(thread) != ThreadState::Cutoff) {
           state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
@@ -1194,7 +1194,7 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     }
   } else {
     for (auto &[tid, thread] : state.threads) {
-      auto w = std::get_if<Thread::wait_cv_1_t>(&thread.waiting);
+      auto w = thread.isWaitingOn<Thread::wait_cv_1_t>();
       if (w && w->cond == cid) {
         if (state.threadState(thread) != ThreadState::Cutoff) {
           state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
