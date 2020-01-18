@@ -171,12 +171,16 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
   return newThread;
 }
 
-void ExecutionState::exitThread(Thread &thread) {
-  thread.state = ThreadState::Exited;
+void ExecutionState::exitThread(bool callToExit) {
+  _currentThread->state = ThreadState::Exited;
   needsThreadScheduling = true;
 
-   while (!thread.stack.empty()) {
-    popFrameOfThread(thread);
+  if (callToExit) {
+    calledExit = true;
+  }
+
+   while (!_currentThread->stack.empty()) {
+    popFrameOfThread(*_currentThread);
   }
 }
 

@@ -560,7 +560,7 @@ public:
   ThreadId createThread(ExecutionState &state,
                                 KFunction *startRoutine,
                                 ref<Expr> runtimeStructPtr);
-  void exitCurrentThread(ExecutionState &state);
+  void exitCurrentThread(ExecutionState &state, bool callToExit);
 };
 } // End klee namespace
 

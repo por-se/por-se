@@ -315,9 +315,7 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
                            std::vector<ref<Expr> > &arguments) {
   assert(arguments.size()==1 && "invalid number of arguments to exit");
 
-  state.calledExit = true;
-  executor.exitCurrentThread(state);
-
+  executor.exitCurrentThread(state, true);
   executor.porEventManager.registerThreadExit(state, state.tid(), false);
 }
 
@@ -948,8 +946,7 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
   executor.porEventManager.registerLockRelease(state, lid, false, false);
 
-  executor.exitCurrentThread(state);
-
+  executor.exitCurrentThread(state, false);
   executor.porEventManager.registerThreadExit(state, ownTid, true);
 }
 

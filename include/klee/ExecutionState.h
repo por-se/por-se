@@ -258,9 +258,8 @@ public:
   ThreadState threadState(const Thread &thread) const { return thread.state; }
   ThreadState threadState() const { return threadState(thread()); }
 
-  /// @brief will exit the referenced thread
-  void exitThread(Thread &thread);
-  void exitThread() { exitThread(thread()); }
+  /// @brief will exit the current thread
+  void exitThread(bool callToExit);
 
   /// @brief will mark the referenced thread as cutoff
   void cutoffThread(Thread &thread);

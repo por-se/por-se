@@ -2082,8 +2082,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // hence exit() is called implicitly return from main
       assert(kmodule->module->getFunction("__klee_posix_wrapped_main") == nullptr
              && kmodule->module->getFunction("__uClibc_main") == nullptr);
-      state.calledExit = true;
-      exitCurrentThread(state);
+      exitCurrentThread(state, true);
       porEventManager.registerThreadExit(state, state.tid(), false);
     } else {
       // When we pop the stack frame, we free the memory regions
@@ -5063,15 +5062,14 @@ ThreadId Executor::createThread(ExecutionState &state,
   return thread.getThreadId();
 }
 
-void Executor::exitCurrentThread(ExecutionState &state) {
+void Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
   // needs to come before thread_exit event
   if (state.isOnMainThread() && state.hasUnregisteredDecisions()) {
     static std::vector<ExecutionState *> emptyVec;
     porEventManager.registerLocal(state, emptyVec, false);
   }
 
-  state.exitThread();
-  state.needsThreadScheduling = true;
+  state.exitThread(callToExit);
 
   auto m = kmodule->module.get();
   for (auto i = m->global_begin(), e = m->global_end(); i != e; ++i) {
