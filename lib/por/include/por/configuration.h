@@ -763,6 +763,10 @@ namespace por {
 			// signaling event (only for wait2)
 			por::event::event const* es = nullptr;
 
+			if(et->is_cutoff()) {
+				return {};
+			}
+
 			assert(et != nullptr);
 
 			if(e.kind() == por::event::event_kind::lock_acquire) {
@@ -774,6 +778,11 @@ namespace por {
 				assert(e.kind() == por::event::event_kind::wait2);
 				es = static_cast<por::event::wait2 const*>(&e)->notifying_event();
 				assert(es != nullptr);
+
+				if(es->is_cutoff()) {
+					return {};
+				}
+
 				while(em != nullptr && !em->is_less_than_eq(*et) && !em->is_less_than(*es)) {
 					// descend chain of lock events until em is in [et] \cup [es]
 					em = em->lock_predecessor();
@@ -830,6 +839,10 @@ namespace por {
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
+
+			if(et->is_cutoff()) {
+				return {};
+			}
 
 			// exclude condition variable create event from comb (if present)
 			por::event::event const* cond_create = nullptr;
@@ -960,6 +973,10 @@ namespace por {
 
 			// immediate causal predecessor on same thread
 			por::event::event const* et = e.thread_predecessor();
+
+			if(et->is_cutoff()) {
+				return {};
+			}
 
 			// exclude condition variable create event from comb (if present)
 			por::event::event const* cond_create = nullptr;
@@ -1294,6 +1311,7 @@ namespace por {
 				if(unknown_only && !dedup.unknown) {
 					return;
 				}
+				libpor_check(!dedup.event.is_cutoff());
 				result.emplace_back(dedup);
 			});
 			return result;
@@ -1320,7 +1338,7 @@ namespace por {
 						continue;
 				}
 				std::for_each(candidates.begin(), candidates.end(), [&unknown_only, &result](auto const& dedup) {
-					if(unknown_only && !dedup.unknown) {
+					if((unknown_only && !dedup.unknown) || dedup.event.is_cutoff()) {
 						return;
 					}
 					result.emplace_back(dedup);
