@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <set>
 
 namespace {
 	// defined in signal.h
@@ -164,7 +163,7 @@ namespace por::event {
 		, _predecessors(std::move(that._predecessors))
 		, _num_notified_threads(that._num_notified_threads)
 		, _cid(that._cid) {
-			for(auto& pred : predecessors()) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
 			}
@@ -172,8 +171,7 @@ namespace por::event {
 
 		~broadcast() {
 			assert(!has_successors());
-			std::set<event const*> P(predecessors().begin(), predecessors().end());
-			for(auto& pred : P) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}

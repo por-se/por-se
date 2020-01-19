@@ -61,7 +61,7 @@ namespace por::event {
 		, _predecessors(that._predecessors)
 		, _lid(std::move(that._lid)) {
 			that._predecessors = {};
-			for(auto& pred : predecessors()) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
 			}
@@ -69,7 +69,7 @@ namespace por::event {
 
 		~lock_acquire() {
 			assert(!has_successors());
-			for(auto& pred : predecessors()) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}

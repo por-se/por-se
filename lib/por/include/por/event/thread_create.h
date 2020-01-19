@@ -6,7 +6,6 @@
 
 #include <cassert>
 #include <array>
-#include <set>
 
 namespace por::event {
 	class thread_create final : public event {

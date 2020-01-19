@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include <set>
 
 namespace por::event {
 	class wait1 final : public event {
@@ -101,7 +100,7 @@ namespace por::event {
 		, _predecessors(std::move(that._predecessors))
 		, _cid(std::move(that._cid))
 		, _lid(std::move(that._lid)) {
-			for(auto& pred : predecessors()) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				replace_successor_of(*pred, that);
 			}
@@ -109,8 +108,7 @@ namespace por::event {
 
 		~wait1() {
 			assert(!has_successors());
-			std::set<event const*> P(predecessors().begin(), predecessors().end());
-			for(auto& pred : P) {
+			for(auto& pred : immediate_predecessors_from_cone()) {
 				assert(pred != nullptr);
 				remove_from_successors_of(*pred);
 			}

@@ -118,6 +118,7 @@ namespace por::event {
 		// distinct color for compute_immediate_conflicts_sup()
 		mutable color_t _imm_cfl_color = 0;
 
+		// events that have this as immediate predecessor
 		mutable std::set<event const*> _successors;
 
 		mutable std::vector<event const*> _immediate_conflicts;
@@ -238,15 +239,9 @@ namespace por::event {
 
 			assert(immediate_predecessor._depth < _depth);
 			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
-			if(&immediate_predecessor == _cone.at(immediate_predecessor.tid())) {
-				immediate_predecessor._successors.insert(this);
-			}
 			if(single_other_predecessor != nullptr) {
 				assert(single_other_predecessor->_depth < _depth);
 				libpor_check(_cone.size() >= single_other_predecessor->_cone.size());
-				if(single_other_predecessor == _cone.at(single_other_predecessor->tid())) {
-					single_other_predecessor->_successors.insert(this);
-				}
 			}
 			for(auto& op : other_predecessors) {
 				if(!op) {
@@ -254,9 +249,9 @@ namespace por::event {
 				}
 				assert(op->_depth < _depth);
 				libpor_check(_cone.size() >= op->_cone.size());
-				if(op == _cone.at(op->tid())) {
-					op->_successors.insert(this);
-				}
+			}
+			for(auto& p : immediate_predecessors_from_cone()) {
+				p->_successors.insert(this);
 			}
 		}
 
