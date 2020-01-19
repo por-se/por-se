@@ -12,7 +12,41 @@ namespace por::event {
 }
 
 namespace por {
+	class cone;
 	class configuration;
+
+	class cone_event_iterator {
+		por::cone const* _cone = nullptr;
+		std::map<thread_id, por::event::event const*>::const_iterator _event;
+
+	public:
+		using value_type = por::event::event const*;
+		using difference_type = std::ptrdiff_t;
+		using pointer = por::event::event const* const*;
+		using reference = por::event::event const* const&;
+
+		using iterator_category = std::forward_iterator_tag;
+
+		cone_event_iterator() = default;
+		explicit cone_event_iterator(por::cone const& cone, bool end=false);
+
+		reference operator*() const noexcept { return _event->second; }
+		pointer operator->() const noexcept { return &_event->second; }
+
+		cone_event_iterator& operator++() noexcept;
+		cone_event_iterator operator++(int) noexcept {
+			cone_event_iterator tmp = *this;
+			++(*this);
+			return tmp;
+		}
+
+		bool operator==(const cone_event_iterator& rhs) const noexcept {
+			return _cone == rhs._cone && _event == rhs._event;
+		}
+		bool operator!=(const cone_event_iterator& rhs) const noexcept {
+			return !(*this == rhs);
+		}
+	};
 
 	// includes maximal event per thread (excl. program_init / thread 0)
 	class cone {
@@ -33,6 +67,11 @@ namespace por {
 		auto find(thread_id const& tid) const { return _map.find(tid); }
 		auto at(thread_id const& tid) const { return _map.at(tid); }
 		auto has(thread_id const& tid) const { return _map.count(tid) != 0; }
+
+		auto events_begin() const noexcept { return cone_event_iterator(*this); }
+		auto events_end() const noexcept { return cone_event_iterator(*this, true); }
+
+		auto events() const noexcept { return util::make_iterator_range(events_begin(), events_end()); }
 
 		void insert(por::event::event const& event);
 

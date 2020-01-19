@@ -8,6 +8,27 @@
 
 using namespace por;
 
+cone_event_iterator::cone_event_iterator(por::cone const& cone, bool end) {
+	_cone = &cone;
+	if(!end && !cone.empty()) {
+		_event = _cone->begin();
+	}
+}
+
+cone_event_iterator& cone_event_iterator::operator++() noexcept {
+	if(!_cone) {
+		return *this;
+	}
+
+	if(std::next(_event) != _cone->end()) {
+		++_event;
+	} else {
+		_event = decltype(_event)();
+	}
+
+	return *this;
+}
+
 void cone::insert(por::event::event const& p) {
 	if(p.kind() == por::event::event_kind::program_init) {
 		return;
