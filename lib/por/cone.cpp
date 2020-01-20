@@ -108,6 +108,40 @@ void cone::extend_unchecked_single(por::event::event const& event) noexcept {
 	_map[event.tid()] = &event;
 }
 
+std::vector<por::event::event const*> cone::max() const noexcept {
+	std::vector<por::event::event const*> result;
+	for(auto& [tid, tmax] : _map) {
+		bool is_maximal_element = true;
+		for(auto it = result.begin(); it != result.end();) {
+			if((*it)->is_less_than(*tmax)) {
+				it = result.erase(it);
+			} else {
+				if(tmax->is_less_than(**it)) {
+					is_maximal_element = false;
+					break;
+				}
+				++it;
+			}
+		}
+		if(is_maximal_element) {
+			result.push_back(tmax);
+		}
+	}
+
+#ifdef LIBPOR_CHECKED
+	for(auto& a : result) {
+		for(auto& b : result) {
+			if(a == b) {
+				continue;
+			}
+			libpor_check(!a->is_less_than_eq(*b) && !b->is_less_than_eq(*a));
+		}
+	}
+#endif
+
+	return result;
+}
+
 // computes a comb of [*this] \setminus [rhs]
 por::comb cone::setminus(por::cone const& rhs) const noexcept {
 	por::comb result;
