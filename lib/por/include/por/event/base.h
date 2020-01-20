@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 
 #ifdef LIBPOR_KLEE
@@ -295,6 +297,149 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(nullptr, nullptr);
 		}
 
+	private:
+		template<typename T>
+		class storing_iterator {
+			std::shared_ptr<T> _ptr;
+			typename T::iterator _it;
+
+		public:
+			using value_type = por::event::event const*;
+			using difference_type = std::ptrdiff_t;
+			using pointer = por::event::event const* const*;
+			using reference = por::event::event const* const&;
+
+			using iterator_category = std::forward_iterator_tag;
+
+			storing_iterator() = default;
+			explicit storing_iterator(std::shared_ptr<T> ptr, bool end = false) noexcept : _ptr(ptr) {
+				if(!end) {
+					_it = ptr->begin();
+				} else {
+					_it = ptr->end();
+				}
+			}
+
+			reference operator*() const noexcept { return *_it; }
+			pointer operator->() const noexcept { return &*_it; }
+
+			storing_iterator& operator++() noexcept {
+				if(!_ptr) {
+					return *this;
+				}
+
+				if(_it != _ptr->end()) {
+					++_it;
+				}
+
+				return *this;
+			}
+			storing_iterator operator++(int) noexcept {
+				storing_iterator tmp = *this;
+				++(*this);
+				return tmp;
+			}
+
+			bool operator==(const storing_iterator<T>& rhs) const noexcept {
+				libpor_check(decltype(_it)() == decltype(_it)());
+				return _ptr == rhs._ptr && _it == rhs._it;
+			}
+			bool operator!=(const storing_iterator<T>& rhs) const noexcept {
+				return !(*this == rhs);
+			}
+		};
+
+		class imm_pred_iterator {
+			using storing_vector_t = storing_iterator<std::vector<event const*>>;
+			using iterator_range_t = event const* const*;
+
+			std::variant<storing_vector_t, iterator_range_t> _it;
+
+		public:
+			using value_type = por::event::event const*;
+			using difference_type = std::ptrdiff_t;
+			using pointer = por::event::event const* const*;
+			using reference = por::event::event const* const&;
+
+			using iterator_category = std::forward_iterator_tag;
+
+			imm_pred_iterator() = default;
+
+		private:
+			imm_pred_iterator(util::iterator_range<event const* const*> range, bool end = false)
+			: _it(end ? range.end() : range.begin())
+			{ }
+			imm_pred_iterator(event const* const* it)
+			: _it(it)
+			{ }
+			imm_pred_iterator(std::shared_ptr<std::vector<event const*>> ptr, bool end = false)
+			: _it(storing_vector_t(ptr, end))
+			{ }
+
+		public:
+			static auto make_range_from_range(util::iterator_range<event const* const*> &&range) {
+				return util::make_iterator_range(imm_pred_iterator(range), imm_pred_iterator(range, true));
+			}
+			static auto make_range_from_range(event const* const* begin, event const* const* end) {
+				return util::make_iterator_range(imm_pred_iterator(begin), imm_pred_iterator(end));
+			}
+			static auto make_range_from_vector(std::shared_ptr<std::vector<event const*>> ptr) {
+				return util::make_iterator_range(imm_pred_iterator(ptr), imm_pred_iterator(ptr, true));
+			}
+
+			reference operator*() const noexcept {
+				if(std::holds_alternative<storing_vector_t>(_it)) {
+					return *std::get<storing_vector_t>(_it);
+				} else {
+					return *std::get<iterator_range_t>(_it);
+				}
+			}
+
+			pointer operator->() const noexcept {
+				if(std::holds_alternative<storing_vector_t>(_it)) {
+					return &*std::get<storing_vector_t>(_it);
+				} else {
+					return &*std::get<iterator_range_t>(_it);
+				}
+			}
+
+			imm_pred_iterator& operator++() noexcept {
+				if(std::holds_alternative<storing_vector_t>(_it)) {
+					std::advance(std::get<storing_vector_t>(_it), 1);
+				} else {
+					std::advance(std::get<iterator_range_t>(_it), 1);
+				}
+				return *this;
+			}
+
+			imm_pred_iterator operator++(int) noexcept {
+				imm_pred_iterator tmp = *this;
+				++(*this);
+				return tmp;
+			}
+
+			bool operator==(const imm_pred_iterator& rhs) const noexcept {
+				libpor_check(decltype(_it)() == decltype(_it)());
+				return _it == rhs._it;
+			}
+			bool operator!=(const imm_pred_iterator& rhs) const noexcept {
+				return !(*this == rhs);
+			}
+		};
+
+	protected:
+		using immediate_predecessor_range_t = util::iterator_range<imm_pred_iterator>;
+		static auto make_immediate_predecessor_range(util::iterator_range<event const* const*> range) noexcept {
+			return imm_pred_iterator::make_range_from_range(std::move(range));
+		}
+		static auto make_immediate_predecessor_range(event const* const* begin, event const* const* end) noexcept {
+			return imm_pred_iterator::make_range_from_range(begin, end);
+		}
+		static auto make_immediate_predecessor_range(std::shared_ptr<std::vector<event const*>> ptr) noexcept {
+			return imm_pred_iterator::make_range_from_vector(std::move(ptr));
+		}
+
+	public:
 		auto const& successors() const noexcept {
 			return _successors;
 		}
