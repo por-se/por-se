@@ -421,9 +421,8 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::compute_immediate_conflicts_sup(event const* find) const noexcept {
-		static color_t imm_cfl_next_color;
-		color_t blue = ++imm_cfl_next_color;
-		color_t red = ++imm_cfl_next_color;
+		color_t blue = new_cfl_color();
+		color_t red = new_cfl_color();
 
 		std::vector<event const*> W(causes_begin(), causes_end());
 		for(auto& w : W) {

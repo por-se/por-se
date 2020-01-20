@@ -550,5 +550,11 @@ namespace por::event {
 		[[nodiscard]] static color_t colorize(T begin, T end) {
 			return colorize(new_color(), std::move(begin), std::move(end));
 		}
+
+	private:
+		[[nodiscard]] static color_t new_cfl_color() noexcept {
+			static color_t next_cfl_color;
+			return ++next_cfl_color;
+		}
 	};
 }
