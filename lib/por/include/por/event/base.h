@@ -198,6 +198,8 @@ namespace por::event {
 		event& operator=(event&&) = delete;
 
 	protected:
+		std::vector<event const*> immediate_predecessors_from_cone() const noexcept;
+
 		event(event_kind kind, thread_id_t tid)
 		: _depth(0)
 		, _tid(tid)
@@ -440,6 +442,11 @@ namespace por::event {
 		}
 
 	public:
+		virtual immediate_predecessor_range_t immediate_predecessors() const noexcept {
+			auto ptr = std::make_shared<std::vector<event const*>>(immediate_predecessors_from_cone());
+			return make_immediate_predecessor_range(std::move(ptr));
+		}
+
 		auto const& successors() const noexcept {
 			return _successors;
 		}
@@ -523,8 +530,6 @@ namespace por::event {
 		bool is_enabled(configuration const&) const noexcept;
 
 		std::size_t mark_as_cutoff() const noexcept;
-
-		std::vector<event const*> immediate_predecessors() const noexcept;
 
 		std::vector<event const*> const& immediate_conflicts() const noexcept {
 			return _immediate_conflicts;

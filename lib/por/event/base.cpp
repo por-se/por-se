@@ -415,24 +415,9 @@ namespace por::event {
 		return new_cutoffs;
 	}
 
-	std::vector<event const*> event::immediate_predecessors() const noexcept {
-		std::vector<event const*> result;
-		[[maybe_unused]] bool program_init = false;
-		for(auto& p : predecessors()) {
-			if(p->kind() == event_kind::program_init) {
-				assert(!program_init);
-				program_init = true;
-				result.push_back(p);
-			} else if(p == _cone.at(p->tid())) {
-				if(std::find(result.begin(), result.end(), p) != result.end()) {
-					continue;
-				}
-				result.push_back(p);
-			}
-		}
-		libpor_check(result.size() <= _cone.size() || (program_init && result.size() <= _cone.size() + 1));
-		libpor_check(result.size() <= predecessors().size());
-		return result;
+	std::vector<event const*> event::immediate_predecessors_from_cone() const noexcept {
+		assert(kind() != event_kind::thread_init && "program_init could be missing (not stored in cone)");
+		return _cone.max();
 	}
 
 	std::vector<event const*> event::compute_immediate_conflicts_sup(event const* find) const noexcept {
