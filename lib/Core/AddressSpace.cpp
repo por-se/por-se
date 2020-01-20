@@ -335,6 +335,30 @@ bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
   return true;
 }
 
+bool AddressSpace::checkChangedConcreteObjects(std::function<bool(const MemoryObject&,const std::uint8_t*)> func) {
+  for (MemoryMap::iterator it = objects.begin(), ie = objects.end();
+       it != ie; ++it) {
+    const MemoryObject *mo = it->first;
+
+    if (mo->isUserSpecified) {
+      continue;
+    }
+
+    auto address = reinterpret_cast<std::uint8_t*>(mo->address);
+    const ObjectState *os = it->second;
+    if (memcmp(address, os->concreteStore, mo->size) == 0) {
+      continue;
+    }
+
+    bool abort = func(*mo, os->concreteStore);
+    if (abort) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /***/
 
 bool MemoryObjectLT::operator()(const MemoryObject *a, const MemoryObject *b) const {

@@ -4063,6 +4063,45 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
+  bool failure = state.addressSpace.checkChangedConcreteObjects(
+    [this,&state](const MemoryObject& mo, const auto* store) -> bool {
+      // So we already know that the object was modified, now check each byte
+      // range for actual changes
+      auto address = reinterpret_cast<std::uint8_t*>(mo.address);
+
+      for (std::size_t i = 0; i < mo.size; i++) {
+        if (address[i] == store[i]) {
+          continue;
+        }
+
+        // We found the first changed byte, now check for the first
+        // byte that did not change or once the size is reached
+        auto end = i + 1;
+        while (end < mo.size && address[end] != store[end]) {
+          end++;
+        }
+
+        bool safe = processMemoryAccess(
+          state,
+          &mo,
+          ConstantExpr::alloc(i, 64),
+          end - i,
+          MemoryOperation::Type::WRITE
+        );
+
+        if (!safe) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+  );
+
+  if (failure) {
+    return;
+  }
+
   if (!state.addressSpace.copyInConcretes(state)) {
     terminateStateOnError(state, "external modified read-only object",
                           External);

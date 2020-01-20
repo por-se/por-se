@@ -147,6 +147,10 @@ namespace klee {
     /// @return
     bool copyInConcrete(ExecutionState &state, const MemoryObject *mo,
                         const ObjectState *os, uint64_t src_address);
+
+    bool checkChangedConcreteObjects(
+      std::function<bool(const MemoryObject&, const std::uint8_t*)> func
+    );
   };
 } // End klee namespace
 
