@@ -1,4 +1,6 @@
-#include "klee/Internal/Support/CallPrinter.h"
+#include "klee/Internal/Support/DebugPrinter.h"
+
+#include "klee/ExecutionState.h"
 
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -104,7 +106,7 @@ namespace {
 };
 
 namespace klee {
-  void CallPrinter::printCall(llvm::raw_ostream& os, llvm::Function* f, const std::vector<ref<Expr>>& args) {
+  void DebugPrinter::printCall(llvm::raw_ostream& os, llvm::Function* f, const std::vector<ref<Expr>>& args) {
     printFunctionName(os, f);
 
     bool first = true;
@@ -125,7 +127,7 @@ namespace klee {
     os << ')';
   }
 
-  void CallPrinter::printCall(llvm::raw_ostream& os, KFunction* kf, const StackFrame& sf) {
+  void DebugPrinter::printCall(llvm::raw_ostream& os, KFunction* kf, const StackFrame& sf) {
     const auto* f = kf->function;
     printFunctionName(os, f);
 
@@ -157,7 +159,7 @@ namespace klee {
     os << ')';
   }
 
-  void CallPrinter::printCallReturn(llvm::raw_ostream& os, llvm::Function* f, ref<Expr> value) {
+  void DebugPrinter::printCallReturn(llvm::raw_ostream& os, llvm::Function* f, ref<Expr> value) {
     printFunctionName(os, f);
 
     auto* retType = f->getReturnType();
@@ -172,5 +174,22 @@ namespace klee {
       // KLEE does not always set a return value if one is technically needed ...
       os << "<undefined>";
     }
+  }
+
+  void DebugPrinter::printStateContext(llvm::raw_ostream& os, const ExecutionState& state, bool withFrameIndex) {
+    auto sid = state.id;
+    auto tid = state.tid().to_string();
+
+    std::stringstream tmp;
+    tmp << "[state: " << std::setw(6) << sid
+        << " thread: " << std::setw(5) << tid;
+
+    if (withFrameIndex) {
+      tmp << " sf: " << std::setw(3) << state.stackFrameIndex();
+    }
+
+    tmp << "]";
+
+    os << tmp.str();
   }
 };

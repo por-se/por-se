@@ -39,7 +39,7 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
-#include "klee/Internal/Support/CallPrinter.h"
+#include "klee/Internal/Support/DebugPrinter.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/Internal/Support/FileHandling.h"
 #include "klee/Internal/Support/FloatEvaluation.h"
@@ -501,18 +501,6 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
           "Pick a random thread (default).")
         KLEE_LLVM_CL_VAL_END),
     cl::init(ThreadSchedulingPolicy::Random));
-  void printDebugContext(llvm::raw_ostream& os, const ExecutionState& state) {
-    auto sid = state.id;
-    auto tid = state.currentThreadId().to_string();
-
-    std::stringstream tmp;
-    tmp << "[state: " << std::setw(6) << sid
-        << " thread: " << std::setw(5) << tid
-        << "]";
-
-    os << tmp.str();
-  }
-
   constexpr void printPadding(llvm::raw_ostream& os, size_t count, char character) {
     while (count--) os << character;
   }
@@ -1734,11 +1722,11 @@ void Executor::executeCall(ExecutionState &state,
   }
 
   if (DebugPrintCalls) {
-    printDebugContext(llvm::errs(), state);
+    DebugPrinter::printStateContext(llvm::errs(), state);
     printPadding(llvm::errs(), state.stack().size() * 2, ' ');
 
     llvm::errs() << '+';
-    CallPrinter::printCall(llvm::errs(), f, arguments);
+    DebugPrinter::printCall(llvm::errs(), f, arguments);
     llvm::errs() << '\n';
   }
 
@@ -2047,11 +2035,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (DebugPrintCalls) {
-      printDebugContext(llvm::errs(), state);
+      DebugPrinter::printStateContext(llvm::errs(), state);
       printPadding(llvm::errs(), (state.stack().size() - 1) * 2, ' ');
 
       llvm::errs() << '-';
-      CallPrinter::printCallReturn(llvm::errs(), sf.kf->function, result);
+      DebugPrinter::printCallReturn(llvm::errs(), sf.kf->function, result);
       llvm::errs() << '\n';
     }
     
@@ -4029,7 +4017,7 @@ void Executor::callExternalFunction(ExecutionState &state,
         printPadding(llvm::errs(), state.stack().size() * 2, ' ');
 
         llvm::errs() << '-';
-        CallPrinter::printCallReturn(llvm::errs(), function, retValue);
+        DebugPrinter::printCallReturn(llvm::errs(), function, retValue);
         llvm::errs() << '\n';
       }
     }
@@ -4198,7 +4186,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     printPadding(llvm::errs(), state.stack().size() * 2, ' ');
 
     llvm::errs() << '-';
-    CallPrinter::printCallReturn(llvm::errs(), function, retValue);
+    DebugPrinter::printCallReturn(llvm::errs(), function, retValue);
     llvm::errs() << '\n';
   }
 }
@@ -4818,10 +4806,10 @@ void Executor::runFunctionAsMain(Function *f,
   }
 
   if (DebugPrintCalls) {
-    printDebugContext(llvm::errs(), *state);
+    DebugPrinter::printStateContext(llvm::errs(), *state);
 
     llvm::errs() << " +";
-    CallPrinter::printCall(llvm::errs(), f, arguments);
+    DebugPrinter::printCall(llvm::errs(), f, arguments);
     llvm::errs() << '\n';
   }
 

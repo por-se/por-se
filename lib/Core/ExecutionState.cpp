@@ -16,7 +16,7 @@
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
-#include "klee/Internal/Support/CallPrinter.h"
+#include "klee/Internal/Support/DebugPrinter.h"
 #include "klee/OptionCategories.h"
 #include "klee/StatePruningCmdLine.h"
 #include "klee/Thread.h"
@@ -383,7 +383,7 @@ void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thr
     AssStream << std::setw(8) << std::setfill('0') << ii.assemblyLine;
     out << AssStream.str();
     out << " in ";
-    CallPrinter::printCall(out, sf.kf, sf);
+    DebugPrinter::printCall(out, sf.kf, sf);
 
     if (ii.file != "")
       out << " at " << ii.file << ":" << ii.line;
