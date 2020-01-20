@@ -162,12 +162,8 @@ namespace por::event {
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
 		, _num_notified_threads(that._num_notified_threads)
-		, _cid(that._cid) {
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
-		}
+		, _cid(that._cid)
+		{ }
 
 		~broadcast() {
 			assert(!has_successors());

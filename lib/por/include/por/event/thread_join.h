@@ -48,10 +48,6 @@ namespace por::event {
 		: event(std::move(that))
 		, _predecessors(that._predecessors) {
 			that._predecessors = {};
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
 		}
 
 		~thread_join() {

@@ -49,7 +49,6 @@ namespace por::event {
 			that._predecessors = {};
 			assert(_predecessors.size() == 1);
 			assert(thread_creation_predecessor() != nullptr);
-			replace_successor_of(*thread_creation_predecessor(), that);
 		}
 
 		~thread_init() {

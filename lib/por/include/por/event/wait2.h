@@ -94,10 +94,6 @@ namespace por::event {
 		, _cid(that._cid)
 		, _lid(that._lid) {
 			that._predecessors = {};
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
 		}
 
 		~wait2() {

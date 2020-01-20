@@ -99,12 +99,8 @@ namespace por::event {
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
 		, _cid(std::move(that._cid))
-		, _lid(std::move(that._lid)) {
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
-		}
+		, _lid(std::move(that._lid))
+		{ }
 
 		~wait1() {
 			assert(!has_successors());

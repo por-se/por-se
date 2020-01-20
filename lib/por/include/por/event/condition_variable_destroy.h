@@ -85,12 +85,8 @@ namespace por::event {
 		condition_variable_destroy(condition_variable_destroy&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _cid(that._cid) {
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
-		}
+		, _cid(that._cid)
+		{ }
 
 		~condition_variable_destroy() {
 			assert(!has_successors());

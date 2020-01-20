@@ -104,6 +104,7 @@ namespace por {
 			stats_inc_unique_event(e.kind());
 			++_size;
 			auto ptr = store_event(std::forward<T>(e));
+			ptr->add_to_successors();
 
 			// compute exact immediate conflict relation
 			auto ptr_icfl = ptr->compute_immediate_conflicts_sup();

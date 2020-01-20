@@ -79,10 +79,6 @@ namespace por::event {
 		, _lid(std::move(that._lid))
 		, _atomic(that._atomic) {
 			that._predecessors = {};
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
 		}
 
 		~lock_release() {

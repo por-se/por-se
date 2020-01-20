@@ -10,7 +10,6 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
-#include <set>
 #include <string>
 #include <variant>
 #include <vector>
@@ -119,7 +118,7 @@ namespace por::event {
 		mutable color_t _imm_cfl_color = 0;
 
 		// events that have this as immediate predecessor
-		mutable std::set<event const*> _successors;
+		mutable std::vector<event const*> _successors;
 
 		mutable std::vector<event const*> _immediate_conflicts;
 
@@ -220,7 +219,6 @@ namespace por::event {
 		{
 			assert(immediate_predecessor._depth < _depth);
 			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
-			immediate_predecessor._successors.insert(this);
 		}
 
 		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const* single_other_predecessor, util::iterator_range<event const* const*> other_predecessors)
@@ -251,9 +249,6 @@ namespace por::event {
 				assert(op->_depth < _depth);
 				libpor_check(_cone.size() >= op->_cone.size());
 			}
-			for(auto& p : immediate_predecessors_from_cone()) {
-				p->_successors.insert(this);
-			}
 		}
 
 		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, util::iterator_range<event const* const*> other_predecessors)
@@ -269,14 +264,23 @@ namespace por::event {
 		: event(kind, tid, immediate_predecessor, single_other_predecessor, util::make_iterator_range<event const* const*>(nullptr, nullptr))
 		{ }
 
-		void remove_from_successors_of(event const& event) const noexcept {
-			event._successors.erase(this);
+		void add_to_successors() const noexcept {
+			for(auto& p : immediate_predecessors()) {
+				p->_successors.push_back(this);
+			}
 		}
 
-		void replace_successor_of(event const& event, por::event::event const& old) const noexcept {
-			std::set<por::event::event const*>& succ = event._successors;
-			succ.erase(&old);
-			succ.insert(this);
+		void remove_from_successors_of(event const& event) const noexcept {
+			auto it = std::find(event._successors.begin(), event._successors.end(), this);
+			if(it != event._successors.end()) {
+				if(event._successors.size() > 1) {
+					std::iter_swap(it, event._successors.end() - 1);
+					event._successors.pop_back();
+				} else {
+					assert(event._successors.empty() || event._successors.front() == this);
+					event._successors.clear();
+				}
+			}
 		}
 
 	public:

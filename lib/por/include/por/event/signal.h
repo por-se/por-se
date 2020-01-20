@@ -149,12 +149,8 @@ namespace por::event {
 		signal(signal&& that)
 		: event(std::move(that))
 		, _predecessors(std::move(that._predecessors))
-		, _cid(that._cid) {
-			for(auto& pred : immediate_predecessors_from_cone()) {
-				assert(pred != nullptr);
-				replace_successor_of(*pred, that);
-			}
-		}
+		, _cid(that._cid)
+		{ }
 
 		~signal() {
 			assert(!has_successors());
