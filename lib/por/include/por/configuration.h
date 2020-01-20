@@ -5,7 +5,8 @@
 #include "event/event.h"
 #include "unfolding.h"
 
-#include <util/sso_array.h>
+#include "util/check.h"
+#include "util/sso_array.h"
 
 #include <cassert>
 #include <iterator>
@@ -49,6 +50,7 @@ namespace por {
 		}
 
 		bool operator==(const configuration_iterator& rhs) const noexcept {
+			libpor_check(decltype(_thread)() == decltype(_thread)());
 			return _configuration == rhs._configuration && _thread == rhs._thread && _event == rhs._event;
 		}
 		bool operator!=(const configuration_iterator& rhs) const noexcept {

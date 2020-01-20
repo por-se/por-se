@@ -2,7 +2,8 @@
 
 #include "por/thread_id.h"
 
-#include <util/iterator_range.h>
+#include "util/check.h"
+#include "util/iterator_range.h"
 
 #include <deque>
 #include <functional>
@@ -73,6 +74,7 @@ namespace por {
 		}
 
 		bool operator==(const comb_iterator& rhs) const noexcept {
+			libpor_check(decltype(_tooth)() == decltype(_tooth)());
 			return _comb == rhs._comb && _tooth == rhs._tooth && _event == rhs._event;
 		}
 		bool operator!=(const comb_iterator& rhs) const noexcept {

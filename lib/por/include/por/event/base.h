@@ -90,6 +90,7 @@ namespace por::event {
 		}
 
 		bool operator==(const event_iterator& rhs) const noexcept {
+			libpor_check(decltype(_thread)() == decltype(_thread)());
 			return _lc == rhs._lc && _thread == rhs._thread && _event == rhs._event && _with_root == rhs._with_root;
 		}
 		bool operator!=(const event_iterator& rhs) const noexcept {
