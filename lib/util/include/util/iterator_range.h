@@ -22,18 +22,12 @@ namespace util {
 			return _end;
 		}
 
-		template<decltype(nullptr)>
 		std::size_t size() const noexcept {
-			return 0;
-		}
-
-		std::size_t size() const noexcept {
-			return std::distance(_begin, _end);
-		}
-
-		template<decltype(nullptr)>
-		bool constexpr empty() const noexcept {
-			return true;
+			if constexpr(std::is_same_v<std::decay_t<T>, std::decay_t<decltype(nullptr)>>) {
+				return 0;
+			} else {
+				return std::distance(_begin, _end);
+			}
 		}
 
 		bool empty() const noexcept {
