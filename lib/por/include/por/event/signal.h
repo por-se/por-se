@@ -195,6 +195,26 @@ namespace por::event {
 			}
 		}
 
+		immediate_predecessor_range_t immediate_predecessors() const noexcept override {
+			if(is_lost()) {
+				// also handles empty _predecessors
+				auto ptr = std::make_shared<std::vector<event const*>>(immediate_predecessors_from_cone());
+				return make_immediate_predecessor_range(std::move(ptr));
+			} else {
+				// lost signal
+				if(_predecessors[1]->is_less_than(*_predecessors[0])) {
+					// only thread_predecessor
+					return make_immediate_predecessor_range(_predecessors.data(), _predecessors.data() + 1);
+				} else if(_predecessors[0]->is_less_than(*_predecessors[1])) {
+					// only wait_predecessor
+					return make_immediate_predecessor_range(_predecessors.data() + 1, _predecessors.data() + 2);
+				} else {
+					// both
+					return make_immediate_predecessor_range(_predecessors.data(), _predecessors.data() + 2);
+				}
+			}
+		}
+
 		event const* thread_predecessor() const noexcept override {
 			return _predecessors[0];
 		}

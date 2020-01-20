@@ -126,6 +126,21 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + _predecessors.size());
 		}
 
+		immediate_predecessor_range_t immediate_predecessors() const noexcept override {
+			if(_predecessors[0] == nullptr) {
+				return make_immediate_predecessor_range(nullptr, nullptr); // only after move-ctor
+			} else if(_predecessors[1]->is_less_than(*_predecessors[2])) {
+				// only lock_predecessor
+				return make_immediate_predecessor_range(_predecessors.data() + 2, _predecessors.data() + 3);
+			} else if(_predecessors[2]->is_less_than(*_predecessors[1])) {
+				// only notifying_predecessor
+				return make_immediate_predecessor_range(_predecessors.data() + 1, _predecessors.data() + 2);
+			} else {
+				// both
+				return make_immediate_predecessor_range(_predecessors.data() + 1, _predecessors.data() + 3);
+			}
+		}
+
 		event const* thread_predecessor() const noexcept override {
 			return _predecessors[0];
 		}

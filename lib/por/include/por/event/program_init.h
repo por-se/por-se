@@ -25,6 +25,10 @@ namespace por::event {
 			return "program_init";
 		}
 
+		immediate_predecessor_range_t immediate_predecessors() const noexcept override {
+			return make_immediate_predecessor_range(nullptr, nullptr);
+		}
+
 		event const* thread_predecessor() const noexcept override {
 			return nullptr;
 		}
