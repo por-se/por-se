@@ -83,6 +83,10 @@ unfolding::compute_alternative(por::configuration const& c, std::vector<por::eve
 	for(auto f : e->immediate_conflicts()) {
 		assert(f->color() != red); // f should not be in C
 
+		if(f->is_cutoff()) {
+			continue;
+		}
+
 		// determine if f is in conflict with some event in C or intersects with D
 		bool in_conflict = false;
 		std::vector<por::event::event const*> W{f};
