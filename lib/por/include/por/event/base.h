@@ -123,7 +123,8 @@ namespace por::event {
 
 		mutable std::vector<event const*> _immediate_conflicts;
 
-		std::vector<event const*> compute_immediate_conflicts_sup(event const* test = nullptr) const noexcept;
+		std::vector<event const*> compute_immediate_conflicts_sup() const noexcept;
+		bool immediate_conflicts_sup_contains(event const* find) const noexcept;
 
 		void clear_cache_immediate_conflicts() const noexcept {
 			_immediate_conflicts.clear();

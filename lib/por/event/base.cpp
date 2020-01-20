@@ -420,13 +420,58 @@ namespace por::event {
 		return _cone.max();
 	}
 
-	std::vector<event const*> event::compute_immediate_conflicts_sup(event const* find) const noexcept {
+	bool event::immediate_conflicts_sup_contains(event const* find) const noexcept {
 		color_t blue = new_cfl_color();
 		color_t red = new_cfl_color();
 
-		std::vector<event const*> W(causes_begin(), causes_end());
-		for(auto& w : W) {
-			w->_imm_cfl_color = red;
+		std::vector<event const*> W;
+		for(auto const* c : causes()) {
+			c->_imm_cfl_color = red;
+			W.push_back(c);
+		}
+
+		while(!W.empty()) {
+			auto event = W.back();
+			W.pop_back();
+
+			assert(event != nullptr);
+
+			for(auto& succ : event->successors()) {
+				if(succ == this || succ->_imm_cfl_color == red || succ->_imm_cfl_color == blue) {
+					continue;
+				}
+
+				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
+					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
+					return e->_imm_cfl_color != red;
+				})) {
+					continue;
+				}
+
+				if(is_independent_of(succ)) {
+					libpor_check(succ->is_independent_of(this));
+					succ->_imm_cfl_color = red;
+					W.push_back(succ);
+				} else {
+					if(succ == find) {
+						return true;
+					}
+					succ->_imm_cfl_color = blue;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	std::vector<event const*> event::compute_immediate_conflicts_sup() const noexcept {
+		color_t blue = new_cfl_color();
+		color_t red = new_cfl_color();
+
+		std::vector<event const*> W;
+		for(auto const* c : causes()) {
+			c->_imm_cfl_color = red;
+			W.push_back(c);
 		}
 
 		std::vector<event const*> result;
@@ -454,9 +499,6 @@ namespace por::event {
 					succ->_imm_cfl_color = red;
 					W.push_back(succ);
 				} else {
-					if(succ == find) {
-						return {find};
-					}
 					succ->_imm_cfl_color = blue;
 					result.push_back(succ);
 				}
@@ -473,9 +515,6 @@ namespace por::event {
 		}) && "conflicting event is causally dependent on this");
 #endif
 
-		if(find != nullptr) {
-			return {};
-		}
 		return result;
 	}
 }

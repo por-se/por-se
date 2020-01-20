@@ -108,7 +108,7 @@ namespace por {
 			// compute exact immediate conflict relation
 			auto ptr_icfl = ptr->compute_immediate_conflicts_sup();
 			ptr_icfl.erase(std::remove_if(ptr_icfl.begin(), ptr_icfl.end(), [&ptr](auto& other) {
-				if(other->compute_immediate_conflicts_sup(ptr).empty()) {
+				if(!other->immediate_conflicts_sup_contains(ptr)) {
 					return true;
 				}
 				other->_immediate_conflicts.push_back(ptr);
