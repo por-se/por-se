@@ -421,27 +421,36 @@ namespace por::event {
 	}
 
 	bool event::immediate_conflicts_sup_contains(event const* find) const noexcept {
-		color_t blue = new_cfl_color();
-		color_t red = new_cfl_color();
+		color_t const blue = new_cfl_color();
+		color_t const red = new_cfl_color();
 
 		std::vector<event const*> W;
-		for(auto const* c : causes()) {
-			c->_imm_cfl_color = red;
-			W.push_back(c);
+		for(auto const* p : predecessors()) {
+			if(p->_imm_cfl_color != red) {
+				p->_imm_cfl_color = red;
+				W.push_back(p);
+			}
+		}
+		for(std::size_t i = 0; i < W.size(); ++i) {
+			for(auto const* p : W[i]->predecessors()) {
+				if(p->_imm_cfl_color != red) {
+					p->_imm_cfl_color = red;
+					W.push_back(p);
+				}
+			}
 		}
 
 		while(!W.empty()) {
-			auto event = W.back();
+			auto const* event = W.back();
 			W.pop_back();
-
 			assert(event != nullptr);
 
-			for(auto& succ : event->successors()) {
+			for(auto const* succ : event->successors()) {
 				if(succ == this || succ->_imm_cfl_color == red || succ->_imm_cfl_color == blue) {
 					continue;
 				}
 
-				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
+				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, red](auto& e) {
 					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
 					return e->_imm_cfl_color != red;
 				})) {
@@ -465,21 +474,30 @@ namespace por::event {
 	}
 
 	std::vector<event const*> event::compute_immediate_conflicts_sup() const noexcept {
-		color_t blue = new_cfl_color();
-		color_t red = new_cfl_color();
+		color_t const blue = new_cfl_color();
+		color_t const red = new_cfl_color();
 
 		std::vector<event const*> W;
-		for(auto const* c : causes()) {
-			c->_imm_cfl_color = red;
-			W.push_back(c);
+		for(auto const* p : predecessors()) {
+			if(p->_imm_cfl_color != red) {
+				p->_imm_cfl_color = red;
+				W.push_back(p);
+			}
+		}
+		for(std::size_t i = 0; i < W.size(); ++i) {
+			for(auto const* p : W[i]->predecessors()) {
+				if(p->_imm_cfl_color != red) {
+					p->_imm_cfl_color = red;
+					W.push_back(p);
+				}
+			}
 		}
 
 		std::vector<event const*> result;
 
 		while(!W.empty()) {
-			auto event = W.back();
+			auto const* event = W.back();
 			W.pop_back();
-
 			assert(event != nullptr);
 
 			for(auto& succ : event->successors()) {
@@ -487,7 +505,7 @@ namespace por::event {
 					continue;
 				}
 
-				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, &red](auto& e) {
+				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, red](auto& e) {
 					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
 					return e->_imm_cfl_color != red;
 				})) {
