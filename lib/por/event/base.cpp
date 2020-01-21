@@ -420,7 +420,7 @@ namespace por::event {
 		return _cone.max();
 	}
 
-	bool event::immediate_conflicts_sup_contains(event const* find) const noexcept {
+	std::vector<event const*> event::compute_immediate_conflicts() const noexcept {
 		color_t const blue = new_cfl_color();
 		color_t const red = new_cfl_color();
 
@@ -428,6 +428,10 @@ namespace por::event {
 		for(auto const* p : predecessors()) {
 			if(p->_imm_cfl_color != red) {
 				p->_imm_cfl_color = red;
+				for(auto const * c : p->immediate_conflicts()) {
+					libpor_check(c->_imm_cfl_color != red);
+					c->_imm_cfl_color = blue;
+				}
 				W.push_back(p);
 			}
 		}
@@ -435,59 +439,10 @@ namespace por::event {
 			for(auto const* p : W[i]->predecessors()) {
 				if(p->_imm_cfl_color != red) {
 					p->_imm_cfl_color = red;
-					W.push_back(p);
-				}
-			}
-		}
-
-		while(!W.empty()) {
-			auto const* event = W.back();
-			W.pop_back();
-			assert(event != nullptr);
-
-			for(auto const* succ : event->successors()) {
-				if(succ == this || succ->_imm_cfl_color == red || succ->_imm_cfl_color == blue) {
-					continue;
-				}
-
-				if(auto preds = succ->predecessors(); std::any_of(preds.begin(), preds.end(), [this, red](auto& e) {
-					// non-red predecessor => cannot determine yet whether succ is in causes(e) or concurrent to e
-					return e->_imm_cfl_color != red;
-				})) {
-					continue;
-				}
-
-				if(is_independent_of(succ)) {
-					libpor_check(succ->is_independent_of(this));
-					succ->_imm_cfl_color = red;
-					W.push_back(succ);
-				} else {
-					if(succ == find) {
-						return true;
+					for(auto const * c : p->immediate_conflicts()) {
+						libpor_check(c->_imm_cfl_color != red);
+						c->_imm_cfl_color = blue;
 					}
-					succ->_imm_cfl_color = blue;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	std::vector<event const*> event::compute_immediate_conflicts_sup() const noexcept {
-		color_t const blue = new_cfl_color();
-		color_t const red = new_cfl_color();
-
-		std::vector<event const*> W;
-		for(auto const* p : predecessors()) {
-			if(p->_imm_cfl_color != red) {
-				p->_imm_cfl_color = red;
-				W.push_back(p);
-			}
-		}
-		for(std::size_t i = 0; i < W.size(); ++i) {
-			for(auto const* p : W[i]->predecessors()) {
-				if(p->_imm_cfl_color != red) {
-					p->_imm_cfl_color = red;
 					W.push_back(p);
 				}
 			}
@@ -500,7 +455,7 @@ namespace por::event {
 			W.pop_back();
 			assert(event != nullptr);
 
-			for(auto& succ : event->successors()) {
+			for(auto const* succ : event->successors()) {
 				if(succ == this || succ->_imm_cfl_color == red || succ->_imm_cfl_color == blue) {
 					continue;
 				}

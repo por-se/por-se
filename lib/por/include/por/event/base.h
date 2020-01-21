@@ -114,16 +114,14 @@ namespace por::event {
 
 		mutable color_t _color = 0;
 
-		// distinct color for compute_immediate_conflicts_sup()
+		// distinct color for compute_immediate_conflicts()
 		mutable color_t _imm_cfl_color = 0;
 
 		// events that have this as immediate predecessor
 		mutable std::vector<event const*> _successors;
 
 		mutable std::vector<event const*> _immediate_conflicts;
-
-		std::vector<event const*> compute_immediate_conflicts_sup() const noexcept;
-		bool immediate_conflicts_sup_contains(event const* find) const noexcept;
+		std::vector<event const*> compute_immediate_conflicts() const noexcept;
 
 		void clear_cache_immediate_conflicts() const noexcept {
 			_immediate_conflicts.clear();

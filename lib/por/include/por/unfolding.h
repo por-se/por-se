@@ -106,16 +106,16 @@ namespace por {
 			auto ptr = store_event(std::forward<T>(e));
 			ptr->add_to_successors();
 
-			// compute exact immediate conflict relation
-			auto ptr_icfl = ptr->compute_immediate_conflicts_sup();
-			ptr_icfl.erase(std::remove_if(ptr_icfl.begin(), ptr_icfl.end(), [&ptr](auto& other) {
-				if(!other->immediate_conflicts_sup_contains(ptr)) {
-					return true;
-				}
+			ptr->_immediate_conflicts = ptr->compute_immediate_conflicts();
+			for(auto const* other : ptr->_immediate_conflicts) {
+#ifdef LIBPOR_CHECKED
+				auto other_cfls = other->compute_immediate_conflicts();
+				libpor_check(std::find(other_cfls.begin(), other_cfls.end(), ptr) != other_cfls.end());
+				libpor_check(!other->is_less_than(*ptr));
+				libpor_check(!ptr->is_less_than(*other));
+#endif
 				other->_immediate_conflicts.push_back(ptr);
-				return false;
-			}), ptr_icfl.end());
-			ptr->_immediate_conflicts = std::move(ptr_icfl);
+			}
 			return {true, *ptr};
 		}
 
