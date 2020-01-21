@@ -124,7 +124,6 @@ namespace por {
 			if(it != _events.end()) {
 				auto& events = it->second;
 				events.erase(std::remove_if(events.begin(), events.end(), [this, &e](auto& v) {
-					--_size;
 					if(&e != v.get()) {
 						return false;
 					}
@@ -136,6 +135,7 @@ namespace por {
 						}
 						ic->_immediate_conflicts.erase(it);
 					}
+					--_size;
 					return true;
 				}), events.end());
 			}
