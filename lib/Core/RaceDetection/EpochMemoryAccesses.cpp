@@ -3,31 +3,17 @@
 using namespace klee;
 
 void EpochMemoryAccesses::pruneDataForMemoryObject(const MemoryObject* obj) {
-  memoryOperations.erase(obj->getId());
+  memoryOperations.erase(obj->address);
 }
 
 void EpochMemoryAccesses::trackMemoryOperation(const MemoryOperation& op) {
-  auto moId = op.object->getId();
-  auto it = memoryOperations.find(moId);
-
-  if (it == memoryOperations.end()) {
-    auto insertId = memoryOperations.insert(std::make_pair(moId, ObjectAccesses{}));
-    assert(insertId.second);
-    insertId.first->second.trackMemoryOperation(op);
-    return;
-  }
-
-  it->second.trackMemoryOperation(op);
+  memoryOperations[op.object->address].trackMemoryOperation(op);
 }
 
-std::optional<std::reference_wrapper<const ObjectAccesses>> EpochMemoryAccesses::getMemoryAccessesOfThread(
-        const MemoryObject* mo) const {
-  auto moId = mo->getId();
-  auto it = memoryOperations.find(moId);
-
-  if (it == memoryOperations.end()) {
-    return {};
+const ObjectAccesses* EpochMemoryAccesses::getMemoryAccessesOfThread(const MemoryObject* mo) const {
+  if(auto it = memoryOperations.find(mo->address); it != memoryOperations.end()) {
+    return &it->second;
+  } else {
+    return nullptr;
   }
-
-  return it->second;
 }

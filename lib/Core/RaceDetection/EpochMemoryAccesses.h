@@ -22,7 +22,6 @@ namespace klee {
 
       void pruneDataForMemoryObject(const MemoryObject* obj);
 
-      std::optional<std::reference_wrapper<const ObjectAccesses>> getMemoryAccessesOfThread(
-              const MemoryObject* mo) const;
+      const ObjectAccesses* getMemoryAccessesOfThread(const MemoryObject* mo) const;
   };
 }

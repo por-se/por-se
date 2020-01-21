@@ -195,12 +195,10 @@ DataRaceDetection::SolverPath(const por::node& node,
 
     for (; evt != nullptr; evt = evt->thread_predecessor()) {
       auto memAccesses = getAccessesAfter(*evt);
-      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object); accessed.has_value()) {
-        const auto& accessPatterns = accessed.value().get();
+      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
+        assert(!accessed->isAllocOrFree() && "Would have been tested in the fastpath");
 
-        assert(!accessPatterns.isAllocOrFree() && "Would have been tested in the fastpath");
-
-        for (auto& access : accessPatterns.getAccesses()) {
+        for (auto& access : accessed->getAccesses()) {
           // check early since this is an easy pair
           if (operation.isConstantOffset() && access.isConstantOffset()) {
             continue;
@@ -338,14 +336,12 @@ DataRaceDetection::FastPath(const por::node& node,
 
     for (; evt != nullptr; evt = evt->thread_predecessor()) {
       auto memAccesses = getAccessesAfter(*evt);
-      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object); accessed.has_value()) {
-        const auto& patterns = accessed.value().get();
-
-        if (incomingIsAllocOrFree || patterns.isAllocOrFree()) {
+      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
+        if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
           // We race with every other access, therefore simply pick the first
-          result.racingInstruction = patterns.isAllocOrFree()
-                                    ? patterns.getAllocFreeInstruction()
-                                    : patterns.getAccesses().front().instruction;
+          result.racingInstruction = accessed->isAllocOrFree()
+                                    ? accessed->getAllocFreeInstruction()
+                                    : accessed->getAccesses().front().instruction;
 
           result.racingThread = tid;
           result.isRace = true;
@@ -354,7 +350,7 @@ DataRaceDetection::FastPath(const por::node& node,
         }
 
         // So we now know for sure that only standard accesses are inside here
-        for (auto const& op : patterns.getAccesses()) {
+        for (auto const& op : accessed->getAccesses()) {
           if (operation.isRead() && op.isRead()) {
             continue;
           }
