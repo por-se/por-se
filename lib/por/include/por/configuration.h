@@ -778,7 +778,7 @@ namespace por {
 				}
 			} else {
 				assert(e.kind() == por::event::event_kind::wait2);
-				es = static_cast<por::event::wait2 const*>(&e)->notifying_event();
+				es = static_cast<por::event::wait2 const*>(&e)->notifying_predecessor();
 				assert(es != nullptr);
 
 				if(es->is_cutoff()) {
