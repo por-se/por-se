@@ -506,6 +506,8 @@ namespace por::event {
 			if(it != rhs.end()) {
 				event const& e = *it->second;
 				return _depth < e._depth || _depth == e._depth;
+			} else if (kind() == event_kind::program_init) {
+				return true;
 			}
 			return false;
 		}
