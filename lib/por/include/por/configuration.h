@@ -803,7 +803,7 @@ namespace por {
 				if(e.kind() == por::event::event_kind::lock_acquire) {
 					result.emplace_back(por::event::lock_acquire::alloc(*_unfolding, e.tid(), e.lid(), *et, em));
 					_unfolding->stats_inc_event_created(por::event::event_kind::lock_acquire);
-				} else {
+				} else if(em->kind() == por::event::event_kind::lock_release) {
 					assert(e.kind() == por::event::event_kind::wait2);
 					result.emplace_back(por::event::wait2::alloc(*_unfolding, e.tid(), e.cid(), e.lid(), *et, *em, *es));
 					_unfolding->stats_inc_event_created(por::event::event_kind::wait2);
