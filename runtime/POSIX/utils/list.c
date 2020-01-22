@@ -110,38 +110,38 @@ kpr_list_iterator kpr_list_iterate(kpr_list* stack) {
 }
 
 bool kpr_list_iterator_valid(kpr_list_iterator it) {
-  return it.current != NULL || it.next != NULL;
+  return it.cur != NULL || it.next != NULL;
 }
 
 void kpr_list_iterator_next(kpr_list_iterator* it) {
-  if (it->current == NULL && it->next == NULL) {
+  if (it->cur == NULL && it->next == NULL) {
     return;
   } else if (it->next == NULL) {
-    it->current = it->current->next;
+    it->cur = it->cur->next;
   } else {
-    it->current = it->next;
+    it->cur = it->next;
     it->next = NULL;
   }
 }
 
 void* kpr_list_iterator_value(kpr_list_iterator it) {
-  return it.current == NULL ? NULL : it.current->data;
+  return it.cur == NULL ? NULL : it.cur->data;
 }
 
 void kpr_list_erase(kpr_list* stack, kpr_list_iterator* it) {
   // So this method should erase the current iterator and update its value
-  if (it->current == NULL) {
+  if (it->cur == NULL) {
     klee_warning("Erasing iterator that does not exist");
     return;
   }
 
-  kpr_list_node* nodeToDelete = it->current;
+  kpr_list_node* nodeToDelete = it->cur;
 
   if (nodeToDelete->prev != NULL) {
     nodeToDelete->prev->next = nodeToDelete->next;
-    it->current = nodeToDelete->prev;
+    it->cur = nodeToDelete->prev;
   } else {
-    it->current = NULL;
+    it->cur = NULL;
     it->next = nodeToDelete->next;
   }
 

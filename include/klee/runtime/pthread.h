@@ -1,12 +1,14 @@
 #ifndef _PTHREAD_H
 #define _PTHREAD_H
 
+#if defined(_PORSE_PURE_HEADER)
+#warning "Using pure PORSE runtime headers"
+#endif
+
+#if !defined(_PORSE_PURE_HEADER)
 #include <sched.h>
 #include <time.h>
-
-#include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
+#endif
 
 #include "kpr/list-types.h"
 #include "klee_types.h"
@@ -120,12 +122,12 @@ typedef struct kpr_cond {
   klee_sync_primitive_t lock;
 
   struct kpr_mutex* waitingMutex;
-  uint64_t waitingCount;
+  unsigned long waitingCount;
 } pthread_cond_t;
 #define PTHREAD_COND_INITIALIZER { PTHREAD_INTERNAL_MAGIC, 0, 0, NULL, 0 }
 
 struct kpr_thread_data {
-  bool detached;
+  int detached;
 
   // cond variable that is only used to wait until a thread exits.
   // Note: only available if the thread is not detached
@@ -154,7 +156,7 @@ struct kpr_thread {
 
   
   // The current state of the thread: e.g. alive, exited
-  uint8_t state;
+  int state;
 
   // Lock to guard this thread structure and the nested `data` structure.
   // Can be used in conjunction with the `data->joinCond`
@@ -189,7 +191,7 @@ typedef struct kpr_mutex {
 typedef struct {
   pthread_internal_t magic;
   pthread_t acquiredWriter;
-  size_t acquiredReaderCount;
+  unsigned long acquiredReaderCount;
 
   pthread_mutex_t mutex;
   pthread_cond_t cond;

@@ -18,7 +18,7 @@ typedef struct kpr_list_node {
 } kpr_list_node;
 
 typedef struct {
-  kpr_list_node* current;
+  kpr_list_node* cur;
   kpr_list_node* next;
 } kpr_list_iterator;
 

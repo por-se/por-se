@@ -11,7 +11,7 @@
 #include "kpr/internal.h"
 
 static struct kpr_thread_data mainThreadData = {
-  .detached = true,
+  .detached = 1,
 
   .startArg = NULL,
   .threadFunction = NULL,
@@ -63,14 +63,14 @@ int pthread_create(pthread_t *th, const pthread_attr_t *attr, void *(*routine)(v
   thread_data->returnValue = NULL;
 
   thread->state = KPR_THREAD_STATE_LIVE;
-  thread_data->detached = false;
+  thread_data->detached = 0;
 
   if (attr != NULL) {
     int ds = 0;
     pthread_attr_getdetachstate(attr, &ds);
 
     if (ds == PTHREAD_CREATE_DETACHED) {
-      thread_data->detached = true;
+      thread_data->detached = 1;
     }
   }
 
@@ -87,12 +87,12 @@ int pthread_detach(pthread_t pthread) {
   klee_lock_acquire(lock_id);
   struct kpr_thread* thread = pthread;
 
-  if (thread->data->detached) {
+  if (thread->data->detached != 0) {
     klee_lock_release(lock_id);
     return EINVAL;
   }
 
-  thread->data->detached = true;
+  thread->data->detached = 1;
 
   if (thread->state != KPR_THREAD_STATE_LIVE) {
     // So we now have to basically do a cleanup as with join
@@ -121,7 +121,7 @@ void pthread_exit(void* arg) {
 
   kpr_key_clear_data_of_thread();
 
-  if (!thread->data->detached) {
+  if (thread->data->detached == 0) {
     thread->data->returnValue = arg;
 
     klee_cond_signal(&thread->data->joinCond);
@@ -142,7 +142,7 @@ int pthread_join(pthread_t pthread, void **ret) {
 
   klee_lock_acquire(lock_id);
 
-  if (thread->data->detached) { // detached state
+  if (thread->data->detached != 0) { // detached state
     klee_lock_release(lock_id);
     return EINVAL;
   }
