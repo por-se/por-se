@@ -4,6 +4,7 @@
 #include "klee/Config/config.h"
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Support/ErrorHandling.h"
+#include "klee/OptionCategories.h"
 #include "klee/StatePruningCmdLine.h"
 
 #include "por/configuration.h"
@@ -20,8 +21,9 @@ using namespace klee;
 
 namespace {
   llvm::cl::opt<bool>
-  LogPorEvents("log-por-events",
-               llvm::cl::init(false));
+  DebugEventRegistration("debug-event-registration",
+                         llvm::cl::init(false),
+                         llvm::cl::cat(DebugCat));
 
   enum class StandbyStatePolicy { Minimal, Half, Third, All };
 
@@ -83,7 +85,8 @@ void PorEventManager::extendPorNode(ExecutionState& state, std::function<por::no
 }
 
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_event_t kind) {
-  llvm::errs() << "POR event: " << getNameOfEvent(kind) << " with current thread " << state.tid();
+  llvm::errs() << "[state id: " << state.id << "] ";
+  llvm::errs() << "registering " << getNameOfEvent(kind) << " with current thread " << state.tid();
 }
 
 bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind) {
@@ -116,7 +119,7 @@ std::shared_ptr<const ExecutionState> PorEventManager::createStandbyState(const 
 bool PorEventManager::registerLocal(ExecutionState &state,
                                     const std::vector<ExecutionState *> &addedStates,
                                     bool snapshotsAllowed) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_local);
 
     llvm::errs() << " and path ";
@@ -191,7 +194,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
 bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId &tid) {
   assert(state.tid() != tid);
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_thread_create);
 
     llvm::errs() << " and created thread " << tid << "\n";
@@ -211,7 +214,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
 }
 
 bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &tid) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_thread_init);
 
     llvm::errs() << " and initialized thread " << tid << "\n";
@@ -245,7 +248,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
 }
 
 bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid, bool atomic) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_thread_exit);
 
     if (atomic) {
@@ -280,7 +283,7 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
 }
 
 bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_thread_join);
 
     llvm::errs() << " and joined thread " << joinedThread << "\n";
@@ -302,7 +305,7 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
 
 
 bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_lock_create);
 
     llvm::errs() << " on mutex " << mId << "\n";
@@ -323,7 +326,7 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
 }
 
 bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t mId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_lock_destroy);
 
     llvm::errs() << " on mutex " << mId << "\n";
@@ -344,7 +347,7 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
 }
 
 bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId, bool snapshotsAllowed) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_lock_acquire);
 
     llvm::errs() << " on mutex " << mId << "\n";
@@ -366,7 +369,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
 }
 
 bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool snapshot, bool atomic) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_lock_release);
 
     if (atomic) {
@@ -404,7 +407,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
 
 
 bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t cId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_condition_variable_create);
 
     llvm::errs() << " on cond. var " << cId << "\n";
@@ -425,7 +428,7 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
 }
 
 bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_condition_variable_destroy);
 
     llvm::errs() << " on cond. var " << cId << "\n";
@@ -446,7 +449,7 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
 }
 
 bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, const ThreadId& notifiedThread) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_signal);
 
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
@@ -468,7 +471,7 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
 
 bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId,
                                                const std::vector<ThreadId> &threads) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_broadcast);
 
     llvm::errs() << " on cond. var " << cId << " and broadcasted threads:";
@@ -493,7 +496,7 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
 }
 
 bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_wait1);
 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
@@ -514,7 +517,7 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
 }
 
 bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
-  if (LogPorEvents) {
+  if (DebugEventRegistration) {
     logEventThreadAndKind(state, por_wait2);
 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
@@ -537,6 +540,11 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
   if (!PruneStates) {
     return;
+  }
+
+  if (DebugEventRegistration) {
+    llvm::errs() << "[state id: " << state.id << "] ";
+    llvm::errs() << "POR event: " << event.to_string(true) << "\n";
   }
 
   auto thread = state.getThreadById(event.tid());
