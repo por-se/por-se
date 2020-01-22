@@ -5243,17 +5243,12 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
   ThreadId tid;
 
-  while (state.needsCatchUp()) {
-    auto peekTid = state.peekCatchUp()->tid();
-    auto peekThread = state.getThreadById(peekTid);
+  while (true) {
+    while (state.needsCatchUp()) {
+      auto peekTid = state.peekCatchUp()->tid();
+      auto peekThread = state.getThreadById(peekTid);
 
-    if (!peekThread) {
-      klee_warning("Thread to catch up to not found. Terminating State.");
-      terminateState(state);
-      return;
-    }
-
-    if (peekThread.has_value()) {
+      assert(peekThread.has_value());
       tid = peekTid;
 
       Thread& nextThread = peekThread.value().get();
@@ -5272,20 +5267,25 @@ void Executor::scheduleThreads(ExecutionState &state) {
 
       break;
     }
-  }
 
-  if (!state.needsCatchUp()) {
-    auto res = selectStateForScheduling(state, runnable);
-    if (!res) {
+    if (!state.needsCatchUp()) {
+      auto res = selectStateForScheduling(state, runnable);
+      if (!res) {
+        return;
+      }
+      tid = res.value();
+    }
+
+    state.needsThreadScheduling = false;
+    scheduleNextThread(state, tid);
+
+    if (state.threadState() == ThreadState::Runnable) {
       return;
     }
-    tid = res.value();
+
+    runnable = state.runnableThreads();
   }
-
-  state.needsThreadScheduling = false;
-  scheduleNextThread(state, tid);
 }
-
 
 std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable) {
   bool disabledThread = false;
