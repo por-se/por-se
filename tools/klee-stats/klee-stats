@@ -165,7 +165,7 @@ def getRow(record, stats, pr):
     return row
 
 
-def grafana(dirs):
+def grafana(dirs, host_address, port):
     dr = getLogFile(dirs[0])
     from flask import Flask, jsonify, request
     import datetime
@@ -216,7 +216,6 @@ def grafana(dirs):
         sqlTarget = ",".join(["AVG( {0} )".format(t) for t in targets if t.isalnum()])
 
         conn = sqlite3.connect(dr)
-
         s = "SELECT WallTime + ? , {fields} " \
             + " FROM stats" \
             + " WHERE WallTime >= ? AND WallTime <= ?" \
@@ -229,12 +228,17 @@ def grafana(dirs):
         for line in cursor:
             unixtimestamp = int(line[0]) / 1000 #Convert from microsecond to miliseconds
             for field, datastream in zip(line[1:], result):
-                datastream["datapoints"].append([field, unixtimestamp])
+                  if "Time" in datastream["target"] and "Wall" not in datastream["target"]\
+                     and "User" not in datastream["target"]:
+                    val = (field/(line[0]-startTime))*100
+                    datastream["datapoints"].append([val, unixtimestamp])
+                  else:
+                    datastream["datapoints"].append([field, unixtimestamp])
 
         ret = jsonify(result)
         return ret
 
-    app.run()
+    app.run(host=host_address, port=port)
     return 0
 
 def main():
@@ -255,6 +259,12 @@ def main():
     parser.add_argument('--grafana',
                           action='store_true', dest='grafana',
                           help='Start a grafana web server')
+    parser.add_argument('--grafana-host', dest='grafana_host',
+                          help='IP address grafana web server should listen to',
+                          default="127.0.0.1")
+    parser.add_argument('--grafana-port', dest='grafana_port', type=int,
+                          help='Port grafana web server should listen to',
+                          default=5000)
 
     # argument group for controlling output verboseness
     pControl = parser.add_mutually_exclusive_group(required=False)
@@ -291,7 +301,7 @@ def main():
 
     dirs = getKleeOutDirs(args.dir)
     if args.grafana:
-      return grafana(dirs)
+      return grafana(dirs, args.grafana_host, args.grafana_port)
     if len(dirs) == 0:
         print('no klee output dir found', file=sys.stderr)
         exit(1)
