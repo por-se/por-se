@@ -190,6 +190,14 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 		if(n->right_child()) {
 			continue;
 		}
+
+		if(n->_event->immediate_conflicts().empty()) {
+			continue;
+		}
+		libpor_check(n->_event->kind() != por::event::event_kind::thread_create);
+		libpor_check(n->_event->kind() != por::event::event_kind::thread_init);
+		libpor_check(n->_event->kind() != por::event::event_kind::lock_release);
+
 		if(n->_event->ends_atomic_operation()) {
 			// event always has to follow its predecessor, it can not be excluded independently
 			continue;
