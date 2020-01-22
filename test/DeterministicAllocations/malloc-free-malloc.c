@@ -2,8 +2,9 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out %t.bc 2>&1
 
-#include <stdlib.h>
 #include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 int main(int argc, char **argv) {
   uint64_t firstAddress = 0;

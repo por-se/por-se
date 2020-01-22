@@ -3,9 +3,10 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --posix-runtime --allocate-thread-heap-size=50 --allocate-thread-segments-file=%p/thread-mappings.conf %t.bc 2>&1 | FileCheck %s
 
-#include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
+#include <stdint.h>
+#include <stdlib.h>
 
 static const uint64_t SIZE_GB = 1024 * 1024 * 1024;
 static const uint64_t SEGMENT_MAIN_THREAD = 0x7ff30000000;

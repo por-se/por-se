@@ -2,10 +2,11 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out %t.bc 2>&1
 
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
 #include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 static int staticObj;
 

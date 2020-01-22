@@ -2,9 +2,10 @@
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out %t.bc 2>&1
 
+#include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <assert.h>
 
 static long pageSize;
 
