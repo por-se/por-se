@@ -249,11 +249,12 @@ void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
 }
 
 Thread::waiting_t ExecutionState::runThread(Thread &thread) {
+  current = &thread;
+
   if (DebugThreadTransitions) {
     llvm::errs() << "[state id: " << id << "] Running thread " << current->getThreadId().to_string() << "\n";
   }
 
-  current = &thread;
   const ThreadId &tid = thread.getThreadId();
   schedulingHistory.push_back(tid);
   currentSchedulingIndex = schedulingHistory.size() - 1;
