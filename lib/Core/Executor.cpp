@@ -3237,9 +3237,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       result = SelectExpr::create(UltExpr::create(oldValue, value), oldValue, value);
       break;
     }
+    case AtomicRMWInst::FAdd: {
+      return terminateStateOnExecError(state, "Unsupported atomicrmw FAdd operation");
+    }
+    case AtomicRMWInst::FSub: {
+      return terminateStateOnExecError(state, "Unsupported atomicrmw FSub operation");
+    }
     case AtomicRMWInst::BAD_BINOP:
-      terminateStateOnExecError(state, "Bad atomicrmw operation");
-      break;
+      return terminateStateOnExecError(state, "Bad atomicrmw operation");
     }
 
     // Write the new result back to the pointer
