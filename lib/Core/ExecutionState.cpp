@@ -322,25 +322,36 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
 }
 
 void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
-  out << "Thread scheduling:\n";
-  for (const auto& threadId : threads) {
-    const Thread* thread = &threadId.second;
-
-    std::string stateName;
-    if (thread->state == ThreadState::Waiting) {
-      stateName = "waiting";
-    } else if (thread->state == ThreadState::Runnable) {
-      stateName = "runnable";
-    } else if (thread->state == ThreadState::Exited) {
-      stateName = "exited";
-    } else if (thread->state == ThreadState::Cutoff) {
-      stateName = "cutoff";
+  for (auto &[tid, thread] : threads) {
+    out << "[state id: " << id << " tid: " << tid.to_string() << "] ";
+    if (thread.state == ThreadState::Waiting) {
+      out << "blocked on ";
+      std::visit([&out](auto&& w) {
+        using T = std::decay_t<decltype(w)>;
+        if constexpr (std::is_same_v<T, Thread::wait_none_t>) {
+          out << "wait_none_t{}";
+        } else if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+          out << "wait_lock_t{" << w.lock << "}";
+        } else if constexpr (std::is_same_v<T, Thread::wait_cv_1_t>) {
+          out << "wait_cv_1_t{" << w.cond << ", " << w.lock << "}";
+        } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+          out << "wait_cv_2_t{" << w.cond << ", " << w.lock << "}";
+        } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
+          out << "wait_join_t{" << w.thread.to_string() << "}";
+        } else {
+          assert(0 && "unknown waiting handle");
+        }
+      }, thread.waiting);
+    } else if (thread.state == ThreadState::Runnable) {
+      out << "runnable";
+    } else if (thread.state == ThreadState::Cutoff) {
+      out << "cutoff";
+    } else if (thread.state == ThreadState::Exited) {
+      out << "exited";
     } else {
-      stateName = "unknown";
-      assert(0 && "ThreadState value not defined!");
+      assert(0 && "unknown thread state");
     }
-
-    out << "Tid: " << thread->tid << " in state: " << stateName << "\n";
+    out << "\n";
   }
 }
 
