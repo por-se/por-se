@@ -152,6 +152,8 @@ namespace klee {
         return std::nullopt;
       }
 
+      void dumpLiveSet(llvm::raw_ostream &os) const noexcept;
+
     private:
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);

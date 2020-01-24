@@ -2,8 +2,13 @@
 
 #include "CallPathManager.h"
 #include "Memory.h"
+#include "MemoryState.h"
+
+#include "klee/Internal/Module/KInstruction.h"
 
 #include "por/configuration.h"
+
+#include "llvm/IR/Instructions.h"
 
 #include <sstream>
 
@@ -119,4 +124,31 @@ std::string Thread::local_event_t::path_string() const noexcept {
     os << branch;
   }
   return os.str();
+}
+
+void Thread::dumpLiveSet(llvm::raw_ostream &os) const noexcept {
+  os << "liveSet: {";
+  bool first = true;
+  for (auto &ki : *liveSet) {
+    if (!first) {
+      os << " ";
+    } else {
+      first = false;
+    }
+    auto inst = ki->inst;
+    os << "%";
+    if (inst->hasName()) {
+      os << inst->getName();
+    } else {
+      // extract slot number
+      std::string line;
+      llvm::raw_string_ostream sos(line);
+      sos << *inst;
+      sos.flush();
+      std::size_t start = line.find("%") + 1;
+      std::size_t end = line.find(" ", start);
+      os << line.substr(start, end - start);
+    }
+  }
+  os << "}\n";
 }
