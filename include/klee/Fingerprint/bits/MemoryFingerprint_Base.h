@@ -46,8 +46,12 @@ void MemoryFingerprintT<D, S, V>::addToFingerprint() {
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      symbolicReferences[s.first] += s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      auto [it, _] = symbolicReferences.try_emplace(array, 0);
+      it->second += count;
+      if (it->second == 0) {
+        symbolicReferences.erase(it);
+      }
     }
     resetBufferRefCount();
   }
@@ -60,8 +64,12 @@ void MemoryFingerprintT<D, S, V>::removeFromFingerprint() {
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      symbolicReferences[s.first] -= s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      auto [it, _] = symbolicReferences.try_emplace(array, 0);
+      it->second -= count;
+      if (it->second == 0) {
+        symbolicReferences.erase(it);
+      }
     }
     resetBufferRefCount();
   }
@@ -75,9 +83,21 @@ void MemoryFingerprintT<D, S, V>::addToFingerprintAndDelta(MemoryFingerprintDelt
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      symbolicReferences[s.first] += s.second;
-      delta.symbolicReferences[s.first] += s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      {
+        auto [it, _] = symbolicReferences.try_emplace(array, 0);
+        it->second += count;
+        if (it->second == 0) {
+          symbolicReferences.erase(it);
+        }
+      }
+      {
+        auto [it, _] = delta.symbolicReferences.try_emplace(array, 0);
+        it->second += count;
+        if (it->second == 0) {
+          delta.symbolicReferences.erase(it);
+        }
+      }
     }
     resetBufferRefCount();
   }
@@ -91,9 +111,21 @@ void MemoryFingerprintT<D, S, V>::removeFromFingerprintAndDelta(MemoryFingerprin
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      symbolicReferences[s.first] -= s.second;
-      delta.symbolicReferences[s.first] -= s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      {
+        auto [it, _] = symbolicReferences.try_emplace(array, 0);
+        it->second -= count;
+        if (it->second == 0) {
+          symbolicReferences.erase(it);
+        }
+      }
+      {
+        auto [it, _] = delta.symbolicReferences.try_emplace(array, 0);
+        it->second -= count;
+        if (it->second == 0) {
+          delta.symbolicReferences.erase(it);
+        }
+      }
     }
     resetBufferRefCount();
   }
@@ -106,8 +138,12 @@ void MemoryFingerprintT<D, S, V>::addToDeltaOnly(MemoryFingerprintDelta &delta) 
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      delta.symbolicReferences[s.first] += s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      auto [it, _] = delta.symbolicReferences.try_emplace(array, 0);
+      it->second += count;
+      if (it->second == 0) {
+        delta.symbolicReferences.erase(it);
+      }
     }
     resetBufferRefCount();
   }
@@ -120,8 +156,12 @@ void MemoryFingerprintT<D, S, V>::removeFromDeltaOnly(MemoryFingerprintDelta &de
   getDerived().clearHash();
 
   if (bufferContainsSymbolic) {
-    for (auto s : bufferSymbolicReferences) {
-      delta.symbolicReferences[s.first] -= s.second;
+    for (auto [array, count] : bufferSymbolicReferences) {
+      auto [it, _] = delta.symbolicReferences.try_emplace(array, 0);
+      it->second -= count;
+      if (it->second == 0) {
+        delta.symbolicReferences.erase(it);
+      }
     }
     resetBufferRefCount();
   }
@@ -131,8 +171,12 @@ template <typename D, std::size_t S, typename V>
 void MemoryFingerprintT<D, S, V>::addDelta(const MemoryFingerprintDelta &delta) {
   executeAdd(fingerprintValue, delta.fingerprintValue);
 
-  for (auto s : delta.symbolicReferences) {
-    symbolicReferences[s.first] += s.second;
+  for (auto [array, count] : delta.symbolicReferences) {
+    auto [it, _] = symbolicReferences.try_emplace(array, 0);
+    it->second += count;
+    if (it->second == 0) {
+      symbolicReferences.erase(it);
+    }
   }
 }
 
@@ -140,8 +184,12 @@ template <typename D, std::size_t S, typename V>
 void MemoryFingerprintT<D, S, V>::removeDelta(const MemoryFingerprintDelta &delta) {
   executeRemove(fingerprintValue, delta.fingerprintValue);
 
-  for (auto s : delta.symbolicReferences) {
-    symbolicReferences[s.first] -= s.second;
+  for (auto [array, count] : delta.symbolicReferences) {
+    auto [it, _] = symbolicReferences.try_emplace(array, 0);
+    it->second -= count;
+    if (it->second == 0) {
+      symbolicReferences.erase(it);
+    }
   }
 }
 
@@ -157,9 +205,8 @@ template <typename D, std::size_t S, typename valueT>
 valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &expressions) {
   std::set<const Array *> arraysReferenced;
   for (auto s : symbolicReferences) {
-    assert(s.second >= 0);
-    if (s.second > 0)
-      arraysReferenced.insert(s.first);
+    assert(s.second > 0);
+    arraysReferenced.insert(s.first);
   }
 
   if (arraysReferenced.empty())
