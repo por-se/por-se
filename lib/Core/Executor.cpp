@@ -1186,7 +1186,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
         assert(!branch && "hit invalid branch in replay path mode");
       } else {
         // add constraints
-        if(branch) {
+        if (branch) {
           res = Solver::True;
           addConstraint(current, condition);
         } else  {
@@ -1268,12 +1268,20 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    if (!isa<ConstantExpr>(condition)) {
+      current.addDecision(1, condition);
+    }
+
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
     if (!isInternal) {
       if (pathWriter) {
         current.pathOS << "0";
       }
+    }
+
+    if (!isa<ConstantExpr>(condition)) {
+      current.addDecision(0, condition);
     }
 
     return StatePair(0, &current);
@@ -1291,7 +1299,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       } else {
         auto invCond = Expr::createIsZero(condition);
         assert(decision.branch == 0);
-        assert(decision.expr == invCond);
+        assert(decision.expr == condition);
         current.addConstraint(invCond);
         current.addDecision(decision);
         return StatePair(nullptr, &current);
@@ -1364,7 +1372,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     ref<Expr> invertedCondition = Expr::createIsZero(condition);
 
     trueState->addDecision(1, condition);
-    falseState->addDecision(0, invertedCondition);
+    falseState->addDecision(0, condition);
 
     addConstraint(*trueState, condition, true);
     addConstraint(*falseState, invertedCondition, true);
