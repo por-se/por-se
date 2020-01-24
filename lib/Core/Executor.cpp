@@ -5321,9 +5321,10 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
             }
           }
 
-          if(!isJustified) {
-            disabledThread = true;
-            runnable.erase(d->tid());
+          if (!isJustified) {
+            if (runnable.erase(d->tid()) > 0) {
+              disabledThread = true;
+            }
             break; // go to next thread
           }
         }
