@@ -17,6 +17,7 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/OptionCategories.h"
+#include "klee/StatePruningCmdLine.h"
 #include "klee/Thread.h"
 
 #include "Memory.h"
@@ -28,6 +29,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "por/csd.h"
 #include "por/node.h"
 
 #include <algorithm>
@@ -281,14 +283,18 @@ Thread::waiting_t ExecutionState::runThread(Thread &thread) {
   return previous;
 }
 
-std::set<ThreadId> ExecutionState::runnableThreads() const {
+std::set<ThreadId> ExecutionState::runnableThreads() {
   assert(porNode);
   auto cfg = porNode->configuration();
 
   std::set<ThreadId> runnable;
   for (auto &[tid, thread] : threads) {
     if (thread.isRunnable(cfg)) {
-      runnable.insert(tid);
+      if (cfg.last_of_tid(tid)->is_cutoff() || (MaxContextSwitchDegree && por::is_above_csd_limit(*cfg.last_of_tid(tid), MaxContextSwitchDegree))) {
+        cutoffThread(thread);
+      } else {
+        runnable.insert(tid);
+      }
     }
   }
   return runnable;

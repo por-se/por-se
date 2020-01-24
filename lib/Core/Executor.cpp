@@ -49,6 +49,7 @@
 #include "klee/OptionCategories.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Solver/SolverStats.h"
+#include "klee/StatePruningCmdLine.h"
 #include "klee/TimerStatIncrementer.h"
 #include "klee/util/GetElementPtrTypeIterator.h"
 
@@ -489,12 +490,6 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
           "Pick a random thread (default).")
         KLEE_LLVM_CL_VAL_END),
     cl::init(ThreadSchedulingPolicy::Random));
-
-cl::opt<std::size_t> MaxContextSwitchDegree(
-      "max-csd",
-      cl::desc("Only explore alternatives with context switch degree up to this limit.  Set to 0 to disable (default=0)"),
-      cl::init(0));
-
 } // namespace
 
 namespace klee {
@@ -3625,7 +3620,8 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
     if (cex->is_cutoff()) {
       remove = true;
     } else if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
-      klee_warning("Context Switch Degree of conflicting extension above limit.");
+      //klee_warning("Context Switch Degree of conflicting extension above limit.");
+      remove = true;
     }
 
     if (remove) {
