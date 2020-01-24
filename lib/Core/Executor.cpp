@@ -1645,7 +1645,9 @@ void Executor::stepInstruction(ExecutionState &state) {
   Thread &thread = state.thread();
 
   if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
-    thread.liveSet = &thread.prevPc->info->getLiveLocals();
+    if (thread.prevPc->inst->getFunction() == thread.pc->inst->getFunction()) {
+      thread.liveSet = &thread.prevPc->info->getLiveLocals();
+    }
   }
 
   ++stats::instructions;

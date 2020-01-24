@@ -479,6 +479,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
     //       caller instruction, as the only locals that might be dead in
     //       comparison to the previous instruction are the ones passed as
     //       arguments to callee.
+    assert(ki->inst->getFunction() == oldsf.kf->function);
     ref<Expr> value = oldsf.locals[ki->dest].value;
     if (value.isNull())
       continue;
@@ -535,6 +536,7 @@ MemoryFingerprintDelta MemoryState::getThreadDelta(const Thread &thread) const {
     // include live locals in current stack frame
     if (thread.liveSet != nullptr) {
       for (const KInstruction *ki : *thread.liveSet) {
+        assert(ki->inst->getFunction() == thread.stack.back().kf->function);
         ref<Expr> value = thread.stack.back().locals[ki->dest].value;
         if (value.isNull())
           continue;
