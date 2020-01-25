@@ -91,23 +91,23 @@ void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_eve
 
 bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind) {
   bool result = true;
-  if (StandbyStates != StandbyStatePolicy::All) {
-    result = (kind == por_thread_init && state.isOnMainThread()) || (kind == por_condition_variable_create);
-
-    if (!result && StandbyStates != StandbyStatePolicy::Minimal) {
-      auto dist = state.porNode->distance_to_last_standby_state();
-      if (StandbyStates == StandbyStatePolicy::Half) {
-        result = (dist >= 2);
-      } else if (StandbyStates == StandbyStatePolicy::Third) {
-        result = (dist >= 3);
-      }
+  if (StandbyStates == StandbyStatePolicy::Minimal) {
+    if (state.threads.size() == 1 && kind == por_thread_init) {
+      return true;
+    }
+  } else if (StandbyStates != StandbyStatePolicy::All) {
+    auto dist = state.porNode->distance_to_last_standby_state();
+    if (StandbyStates == StandbyStatePolicy::Half) {
+      result = (dist >= 2);
+    } else if (StandbyStates == StandbyStatePolicy::Third) {
+      result = (dist >= 3);
     }
   }
-  return result && (state.threads.size() > 1 || kind == por_thread_init);
+  return result;
 }
 
 std::shared_ptr<const ExecutionState> PorEventManager::createStandbyState(const ExecutionState &s, por_event_t kind) {
-  if(shouldRegisterStandbyState(s, kind)) {
+  if (shouldRegisterStandbyState(s, kind)) {
     auto standby = std::make_shared<const ExecutionState>(s);
     ++stats::standbyStates;
     return standby;
@@ -359,7 +359,7 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
   extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.acquire_lock(state.tid(), mId);
     attachFingerprintToEvent(state, *e);
-    if(snapshotsAllowed) {
+    if (snapshotsAllowed) {
       auto standby = createStandbyState(state, por_lock_acquire);
       return std::make_pair(e, std::move(standby));
     }
