@@ -3585,6 +3585,7 @@ void Executor::run(ExecutionState &initialState) {
 
     if (stats::instructions % 10000 == 0) {
       exploreSchedules(state);
+      updateStates(nullptr);
     }
 
     firstInstruction = false;
