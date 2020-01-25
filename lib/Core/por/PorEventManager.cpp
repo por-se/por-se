@@ -599,7 +599,9 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   const por::event::event &event = *state.porNode->parent()->event();
 
   if (event.is_cutoff()) {
-    state.cutoffThread();
+    if (!state.needsCatchUp()) {
+      state.cutoffThread();
+    }
     return;
   }
 
@@ -618,43 +620,21 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   std::size_t eventSize = event.local_configuration_size();
   std::size_t otherSize = other.local_configuration_size();
 
-  const por::event::event *cutoff;
-  const por::event::event *corresponding;
-
-  const MemoryFingerprintValue *cutoffFPV;
-  const MemoryFingerprintValue *correspondingFPV;
-
-  ExecutionState *cutoffState = nullptr;
-
   if (eventSize > otherSize) {
     // state is at cutoff event
-    cutoff = &event;
-    cutoffFPV = &event.fingerprint();
-    corresponding = &other;
-    correspondingFPV = &it->first;
-    cutoffState = &state;
-  } else if (eventSize < otherSize) {
-    // state is a corresponding event
-    cutoff = &other;
-    cutoffFPV = &it->first;
-    corresponding = &event;
-    correspondingFPV = &event.fingerprint();
-    fingerprints.emplace(event.fingerprint(), &event);
-  } else {
-    // cannot decide
-    return;
-  }
 
-  if (DebugStatePruning) {
-    llvm::errs() << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "] corresponding: " << corresponding->to_string(true)
-                << " with fingerprint: " << MemoryFingerprint::toString(*correspondingFPV) << "\n";
-    llvm::errs() << "[state id: " << (cutoffState ? std::to_string(cutoffState->id) : "unknown") << "]        cutoff: " << cutoff->to_string(true) << "\n"
-                << " with fingerprint: " << MemoryFingerprint::toString(*cutoffFPV) << "\n";
-  }
+    if (DebugStatePruning) {
+      llvm::errs() << "[state id: " << state.id << "] corresponding: " << other.to_string(true)
+                  << " with fingerprint: " << MemoryFingerprint::toString(other.fingerprint()) << "\n";
+      llvm::errs() << "[state id: " << state.id << "]        cutoff: " << event.to_string(true) << "\n"
+                  << " with fingerprint: " << MemoryFingerprint::toString(event.fingerprint()) << "\n";
+    }
 
-  if (cutoffState) {
-    cutoffState->cutoffThread();
-  }
+    assert(state.tid() == event.tid());
+    if (!state.needsCatchUp()) {
+      state.cutoffThread();
+    }
 
-  cutoff->mark_as_cutoff();
+    event.mark_as_cutoff();
+  }
 }

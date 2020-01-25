@@ -5263,17 +5263,12 @@ void Executor::scheduleThreads(ExecutionState &state) {
       tid = peekTid;
 
       Thread& nextThread = peekThread.value().get();
+      assert(nextThread.state != ThreadState::Cutoff);
       if (nextThread.state == ThreadState::Waiting && nextThread.isRunnable(cfg)) {
         scheduleNextThread(state, tid);
 
         runnable = state.runnableThreads();
         continue;
-      }
-
-      if (nextThread.state == ThreadState::Cutoff) {
-        klee_warning("Trying to catch up on cutoff event. Aborting.");
-        terminateStateSilently(state);
-        return;
       }
 
       break;
