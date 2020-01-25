@@ -9,6 +9,12 @@
 #include <cassert>
 #include <sstream>
 
+#ifdef LIBPOR_KLEE
+namespace klee {
+	std::size_t klee_state_id(klee::ExecutionState const*);
+}
+#endif
+
 using namespace por;
 
 namespace {
@@ -324,11 +330,16 @@ std::string node::to_string(bool with_schedule) const noexcept {
 		} else {
 			result << n->_event->to_string(true) << " @ " << n->_event << "\n";
 		}
-		result << "    standby_state: ";
 		if(!n->_standby_state) {
-			result << "nullptr\n";
+			result << "    standby state: nullptr\n";
 		} else {
+#ifdef LIBPOR_KLEE
+			result << "    standby state id: ";
+			result << klee::klee_state_id(n->_standby_state.get()) << " (" << n->_standby_state << ")\n";
+#else
+			result << "    standby state: ";
 			result << n->_standby_state << "\n";
+#endif
 		}
 		result << "    is_sweep_node: " << n->_is_sweep_node << "\n";
 		result << "    |C| = " << std::to_string(n->configuration().size()) << "\n";
