@@ -27,8 +27,8 @@ int main() {
   array[0] = symHole2;
 
   // CHECK: KLEE: done: completed paths = 2
-  // CHECK: No
-  // CHECK-NEXT: Yes
+  // CHECK-DAG: No
+  // CHECK-DAG: Yes
   if (array[idx + 1] == 400)
     printf("Yes\n");
   else
