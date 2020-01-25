@@ -123,13 +123,14 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     logEventThreadAndKind(state, por_local);
 
     llvm::errs() << " and path ";
-    for(auto &[b, _] : state.unregisteredDecisions()) {
+    for (auto &[b, _] : state.unregisteredDecisions()) {
       llvm::errs() << b << " ";
     }
 
     llvm::errs() << "\n";
   }
 
+  assert(state.threadState() != ThreadState::Waiting);
   assert(state.hasUnregisteredDecisions());
   assert(std::find(addedStates.begin(), addedStates.end(), &state) == addedStates.end());
 
@@ -171,7 +172,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
   assert(state.porNode->parent() == n);
 
-  for(auto& s : addedStates) {
+  for (auto& s : addedStates) {
     if (s->hasUnregisteredDecisions()) {
       s->porNode = n->make_right_local_child(
           [this, &s, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {

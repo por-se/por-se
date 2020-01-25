@@ -349,7 +349,7 @@ private:
   /// as one of the results. Note that the output vector may included
   /// NULL pointers for states which were unable to be created.
   void branch(ExecutionState &state, 
-              const std::vector< ref<Expr> > &conditions,
+              const std::vector<std::pair<std::size_t, ref<Expr>>> &conditions,
               std::vector<ExecutionState*> &result);
 
   // Fork current and return states in which condition holds / does

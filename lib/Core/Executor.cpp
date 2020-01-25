@@ -1019,8 +1019,8 @@ void Executor::initializeGlobals(ExecutionState &state) {
   }
 }
 
-void Executor::branch(ExecutionState &state, 
-                      const std::vector< ref<Expr> > &conditions,
+void Executor::branch(ExecutionState &state,
+                      const std::vector<std::pair<std::size_t, ref<Expr>>> &conditions,
                       std::vector<ExecutionState*> &result) {
   TimerStatIncrementer timer(stats::forkTime);
   unsigned N = conditions.size();
@@ -1028,18 +1028,23 @@ void Executor::branch(ExecutionState &state,
 
   if (state.needsCatchUp()) {
     auto decision = state.peekDecision();
-    assert(conditions[decision.branch] == decision.expr);
+    bool feasible = false;
 
-    for (unsigned i=0; i<N; ++i) {
-      if (i == decision.branch) {
+    for (auto const &[choice, cond] : conditions) {
+      if (choice == decision.branch) {
+        feasible = true;
+        assert(cond == decision.expr);
         result.push_back(&state);
+        state.addConstraint(cond);
+        state.addDecision(decision);
       } else {
         result.push_back(nullptr);
       }
     }
 
-    state.addConstraint(conditions[decision.branch]);
-    state.addDecision(decision);
+    if (!feasible) {
+      terminateStateSilently(state);
+    }
 
     return;
 
@@ -1070,7 +1075,7 @@ void Executor::branch(ExecutionState &state,
   // If necessary redistribute seeds to match conditions, killing
   // states if necessary due to OnlyReplaySeeds (inefficient but
   // simple).
-  
+
   std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
     seedMap.find(&state);
   if (it != seedMap.end()) {
@@ -1086,7 +1091,7 @@ void Executor::branch(ExecutionState &state,
       for (i=0; i<N; ++i) {
         ref<ConstantExpr> res;
         bool success = 
-          solver->getValue(state, siit->assignment.evaluate(conditions[i]), 
+          solver->getValue(state, siit->assignment.evaluate(conditions[i].second),
                            res);
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
@@ -1116,8 +1121,8 @@ void Executor::branch(ExecutionState &state,
 
   for (unsigned i=0; i<N; ++i) {
     if (result[i]) {
-      addConstraint(*result[i], conditions[i], true);
-      result[i]->addDecision(i, conditions[i]);
+      addConstraint(*result[i], conditions[i].second, true);
+      result[i]->addDecision(conditions[i].first, conditions[i].second);
     }
   }
 }
@@ -1581,11 +1586,12 @@ void Executor::executeGetValue(ExecutionState &state,
       (void) success;
       values.insert(value);
     }
-    
-    std::vector< ref<Expr> > conditions;
-    for (std::set< ref<Expr> >::iterator vit = values.begin(), 
-           vie = values.end(); vit != vie; ++vit)
-      conditions.push_back(EqExpr::create(e, *vit));
+
+    std::vector<std::pair<std::size_t, ref<Expr>>> conditions;
+    std::size_t i = 0;
+    for (ref<Expr> expr : values) {
+      conditions.emplace_back(i++, EqExpr::create(e, expr));
+    }
 
     std::vector<ExecutionState*> branches;
     branch(state, conditions, branches);
@@ -2182,7 +2188,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // implements indirect branch to a label within the current function
     const auto bi = cast<IndirectBrInst>(i);
     auto address = eval(ki, 0, state).value;
-    address = toUnique(state, address);
+    // FIXME: address = toUnique(state, address);
 
     // concrete address
     if (const auto CE = dyn_cast<ConstantExpr>(address.get())) {
@@ -2195,7 +2201,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     const auto numDestinations = bi->getNumDestinations();
     std::vector<BasicBlock *> targets;
     targets.reserve(numDestinations);
-    std::vector<ref<Expr>> expressions;
+    std::vector<std::pair<std::size_t, ref<Expr>>> expressions;
     expressions.reserve(numDestinations);
 
     ref<Expr> errorCase = ConstantExpr::alloc(1, Expr::Bool);
@@ -2220,7 +2226,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       assert(success && "FIXME: Unhandled solver failure");
       if (result) {
         targets.push_back(d);
-        expressions.push_back(e);
+        expressions.emplace_back(k, e);
       }
     }
     // check errorCase feasibility
@@ -2228,7 +2234,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bool success __attribute__ ((unused)) = solver->mayBeTrue(state, errorCase, result);
     assert(success && "FIXME: Unhandled solver failure");
     if (result) {
-      expressions.push_back(errorCase);
+      assert(expressions.size() <= numDestinations);
+      expressions.emplace_back(numDestinations, errorCase);
     }
 
     // fork states
@@ -2254,9 +2261,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::Switch: {
     SwitchInst *si = cast<SwitchInst>(i);
     ref<Expr> cond = eval(ki, 0, state).value;
-    BasicBlock *bb = si->getParent();
 
-    cond = toUnique(state, cond);
+    // FIXME: cond = toUnique(state, cond);
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(cond)) {
       // Somewhat gross to create these all the time, but fine till we
       // switch to an internal rep.
@@ -2275,32 +2281,30 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // - each case value is mutual exclusive to all other values
       // - order of case branches is based on the order of the expressions of
       //   the case values, still default is handled last
-      std::vector<BasicBlock *> bbOrder;
+      std::vector<std::pair<std::size_t, BasicBlock *>> bbOrder;
       std::map<BasicBlock *, ref<Expr> > branchTargets;
 
-      std::map<ref<Expr>, BasicBlock *> expressionOrder;
+      std::vector<std::pair<ref<Expr>, BasicBlock *>> expressionOrder;
 
       // Iterate through all non-default cases and order them by expressions
       for (auto i : si->cases()) {
         ref<Expr> value = evalConstant(i.getCaseValue(), state.tid());
 
         BasicBlock *caseSuccessor = i.getCaseSuccessor();
-        expressionOrder.insert(std::make_pair(value, caseSuccessor));
+        expressionOrder.emplace_back(value, caseSuccessor);
       }
 
       // Track default branch values
       ref<Expr> defaultValue = ConstantExpr::alloc(1, Expr::Bool);
 
       // iterate through all non-default cases but in order of the expressions
-      for (std::map<ref<Expr>, BasicBlock *>::iterator
-               it = expressionOrder.begin(),
-               itE = expressionOrder.end();
-           it != itE; ++it) {
-        ref<Expr> match = EqExpr::create(cond, it->first);
+      for (std::size_t i = 0; i < expressionOrder.size(); ++i) {
+        auto it = expressionOrder[i];
+        ref<Expr> match = EqExpr::create(cond, it.first);
 
         // skip if case has same successor basic block as default case
         // (should work even with phi nodes as a switch is a single terminating instruction)
-        if (it->second == si->getDefaultDest()) continue;
+        if (it.second == si->getDefaultDest()) continue;
 
         // Make sure that the default value does not contain this target's value
         defaultValue = AndExpr::create(defaultValue, Expr::createIsZero(match));
@@ -2312,7 +2316,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         assert(success && "FIXME: Unhandled solver failure");
         (void) success;
         if (result) {
-          BasicBlock *caseSuccessor = it->second;
+          BasicBlock *caseSuccessor = it.second;
 
           // Handle the case that a basic block might be the target of multiple
           // switch cases.
@@ -2328,7 +2332,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
           // Only add basic blocks which have not been target of a branch yet
           if (res.second) {
-            bbOrder.push_back(caseSuccessor);
+            bbOrder.emplace_back(i, caseSuccessor);
           }
         }
       }
@@ -2344,28 +2348,24 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             branchTargets.insert(
                 std::make_pair(si->getDefaultDest(), defaultValue));
         if (ret.second) {
-          bbOrder.push_back(si->getDefaultDest());
+          bbOrder.emplace_back(expressionOrder.size(), si->getDefaultDest());
         }
       }
 
       // Fork the current state with each state having one of the possible
       // successors of this switch
-      std::vector< ref<Expr> > conditions;
-      for (std::vector<BasicBlock *>::iterator it = bbOrder.begin(),
-                                               ie = bbOrder.end();
-           it != ie; ++it) {
-        conditions.push_back(branchTargets[*it]);
+      std::vector<std::pair<std::size_t, ref<Expr>>> conditions;
+      for (auto &[choice, bb] : bbOrder) {
+        conditions.emplace_back(choice, branchTargets[bb]);
       }
       std::vector<ExecutionState*> branches;
       branch(state, conditions, branches);
 
       std::vector<ExecutionState*>::iterator bit = branches.begin();
-      for (std::vector<BasicBlock *>::iterator it = bbOrder.begin(),
-                                               ie = bbOrder.end();
-           it != ie; ++it) {
+      for (auto &[_, bb] : bbOrder) {
         ExecutionState *es = *bit;
         if (es)
-          transferToBasicBlock(*it, bb, *es);
+          transferToBasicBlock(bb, si->getParent(), *es);
         ++bit;
       }
     }

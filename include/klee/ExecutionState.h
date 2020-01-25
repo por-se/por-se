@@ -283,6 +283,14 @@ public:
   }
 
   void addDecision(Thread::decision_t decision) noexcept {
+    assert(std::none_of(threads.begin(), threads.end(), [this](auto& it) {
+      const Thread &thread = it.second;
+      if (thread.tid == current->tid) {
+        return false;
+      } else {
+        return !thread.pathSincePorLocal.empty();
+      }
+    }));
     thread().pathSincePorLocal.emplace_back(decision.branch, decision.expr);
   }
   void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept { addDecision({branch, expr}); }
