@@ -176,12 +176,10 @@ namespace por {
 		}
 
 		node* parent() noexcept {
-			libpor_check(!_parent || _parent->_left.get() == this || _parent->_right.get() == this);
 			return _parent;
 		}
 
 		node const* parent() const noexcept {
-			libpor_check(!_parent || _parent->_left.get() == this || _parent->_right.get() == this);
 			return _parent;
 		}
 

@@ -111,8 +111,6 @@ namespace por {
 #ifdef LIBPOR_CHECKED
 				auto other_cfls = other->compute_immediate_conflicts();
 				libpor_check(std::find(other_cfls.begin(), other_cfls.end(), ptr) != other_cfls.end());
-				libpor_check(!other->is_less_than(*ptr));
-				libpor_check(!ptr->is_less_than(*other));
 #endif
 				other->_immediate_conflicts.push_back(ptr);
 			}

@@ -19,7 +19,6 @@ namespace {
 			for(auto& event : thread) {
 				if(event->ends_atomic_operation()) {
 					auto pred = event->atomic_predecessor();
-					libpor_check(std::find(thread.begin(), thread.end(), pred) != thread.end());
 					map.emplace(pred, event);
 				}
 			}
