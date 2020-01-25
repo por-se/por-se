@@ -1,6 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --posix-runtime --exit-on-error --explore-schedules=0 --thread-scheduling=last %t.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --posix-runtime --exit-on-error --explore-schedules=0 --max-csd=0 --thread-scheduling=last %t.bc 2>&1 | FileCheck %s
 
 #include <assert.h>
 #include <pthread.h>
