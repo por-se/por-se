@@ -22,6 +22,8 @@ set(CMAKE_SHARED_LINKER_FLAGS_ASAN "-fsanitize=address,undefined"
 	CACHE STRING "Flags used by the shared libraries linker during ASan builds."
 	FORCE)
 
+option(LIBPOR_CHECKED "Enable (more) expensive checks (only available with Assertions enabled)" OFF)
+
 option(KLEE_VERIFIED_FINGERPRINTS "Enable verified fingerprints (only with KLEE_INCLUDE_DIR)" OFF)
 
 find_path(KLEE_INCLUDE_DIR klee/klee.h)
@@ -43,6 +45,11 @@ endfunction()
 
 add_subdirectory(lib)
 add_subdirectory(bin)
+
+if(LIBPOR_CHECKED)
+	target_compile_definitions(libpor PUBLIC "LIBPOR_CHECKED")
+	target_compile_definitions(libutil INTERFACE "LIBPOR_CHECKED")
+endif()
 
 export(TARGETS libpor libutil
 	FILE libpor-targets.cmake
