@@ -21,7 +21,7 @@ namespace klee {
       bool shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind);
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por_event_t kind);
       void logEventThreadAndKind(const ExecutionState &state, por_event_t kind);
-      void extendPorNode(ExecutionState&, std::function<por::node::registration_t(por::configuration&)>&&);
+      bool extendPorNode(ExecutionState&, std::function<por::node::registration_t(por::configuration&)>&&);
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
@@ -41,7 +41,7 @@ namespace klee {
       bool registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
       bool registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
 
-      void attachFingerprintToEvent(ExecutionState &state, const por::event::event &event);
+      bool attachFingerprintToEvent(ExecutionState &state, const por::event::event &event);
       void findNewCutoff(ExecutionState &state);
   };
 };

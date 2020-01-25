@@ -73,15 +73,21 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
   }
 }
 
-void PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
+bool PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
   if (state.needsCatchUp()) {
     state.porNode = state.porNode->catch_up(std::move(callback), state.peekCatchUp());
+    bool success = attachFingerprintToEvent(state, *state.peekCatchUp());
     state.catchUp.pop_front();
-    return;
+    return success;
   }
 
+  auto oldNode = state.porNode;
   state.porNode = state.porNode->make_left_child(std::move(callback));
-  findNewCutoff(state);
+  if (attachFingerprintToEvent(state, *oldNode->event())) {
+    findNewCutoff(state);
+    return true;
+  }
+  return false;
 }
 
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_event_t kind) {
@@ -136,14 +142,16 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
   state.needsThreadScheduling = true;
 
+  bool success;
+
   if (state.needsCatchUp()) {
     assert(addedStates.empty());
     state.porNode = state.porNode->catch_up(
-    [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
+    [this, &state, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
       auto path = std::move(state.unregisteredDecisions());
       state.unregisteredDecisions() = {};
       por::event::event const* e = cfg.local(state.tid(), std::move(path));
-      attachFingerprintToEvent(state, *e);
+      success = attachFingerprintToEvent(state, *e);
       if (snapshotsAllowed) {
         auto standby = createStandbyState(state, por_local);
         return std::make_pair(e, std::move(standby));
@@ -152,16 +160,16 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     }, state.peekCatchUp());
     state.catchUp.pop_front();
 
-    return true;
+    return success;
   }
 
   por::node *n = state.porNode;
   state.porNode = state.porNode->make_left_child(
-      [this, &state, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
+      [this, &state, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
     auto path = std::move(state.unregisteredDecisions());
     state.unregisteredDecisions() = {};
     por::event::event const* e = cfg.local(state.tid(), std::move(path));
-    attachFingerprintToEvent(state, *e);
+    success = attachFingerprintToEvent(state, *e);
     if (snapshotsAllowed) {
       auto standby = createStandbyState(state, por_local);
       return std::make_pair(e, std::move(standby));
@@ -173,13 +181,16 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   assert(state.porNode->parent() == n);
 
   for (auto& s : addedStates) {
+    if (!success) {
+      return false;
+    }
     if (s->hasUnregisteredDecisions()) {
       s->porNode = n->make_right_local_child(
-          [this, &s, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
+          [this, &s, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
         auto path = std::move(s->unregisteredDecisions());
         s->unregisteredDecisions() = {};
         por::event::event const* e = cfg.local(s->tid(), std::move(path));
-        attachFingerprintToEvent(*s, *e);
+        success = attachFingerprintToEvent(*s, *e);
         if (snapshotsAllowed) {
           auto standby = createStandbyState(*s, por_local);
           return std::make_pair(e, std::move(standby));
@@ -190,7 +201,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     }
   }
 
-  return true;
+  return success;
 }
 
 bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId &tid) {
@@ -205,13 +216,10 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
     por::event::event const* e = cfg.create_thread(state.tid(), tid);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, nullptr);
   });
-
-  return true;
 }
 
 bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &tid) {
@@ -225,27 +233,27 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
 
   state.needsThreadScheduling = true;
 
+  bool success;
   if (tid == ExecutionState::mainThreadId) {
     // event already present in configuration
-    state.porNode = state.porNode->make_left_child([this, &tid, &state](por::configuration& cfg) {
+    state.porNode = state.porNode->make_left_child([this, &tid, &state, &success](por::configuration& cfg) {
       auto it = cfg.thread_heads().find(tid);
       assert(it != cfg.thread_heads().end());
       por::event::event const* e = it->second;
       auto standby = createStandbyState(state, por_thread_init);
-      attachFingerprintToEvent(state, *e);
+      success = attachFingerprintToEvent(state, *e);
       return std::make_pair(e, std::move(standby));
     });
   } else {
     assert(state.tid() != tid);
-    extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
+    success = extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
       por::event::event const* e = cfg.init_thread(tid, state.tid());
       auto standby = createStandbyState(state, por_thread_init);
-      attachFingerprintToEvent(state, *e);
       return std::make_pair(e, standby);
     });
   }
 
-  return true;
+  return success;
 }
 
 bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &tid, bool atomic) {
@@ -268,11 +276,11 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &tid, &atomic](por::configuration& cfg) -> por::node::registration_t {
+  bool success = extendPorNode(state,
+  [this, &state, &tid, &atomic](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.exit_thread(tid, atomic);
 
     auto standby = createStandbyState(state, por_thread_exit);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
 
@@ -280,7 +288,7 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
     assert(pred == state.porNode->last_included_event()->thread_predecessor());
   }
 
-  return true;
+  return success;
 }
 
 bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &joinedThread) {
@@ -294,14 +302,11 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.join_thread(state.tid(), joinedThread);
     auto standby = createStandbyState(state, por_thread_join);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 
@@ -316,14 +321,11 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_lock(state.tid(), mId);
     auto standby = createStandbyState(state, por_lock_create);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t mId) {
@@ -337,14 +339,11 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_lock(state.tid(), mId);
     auto standby = createStandbyState(state, por_lock_destroy);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId, bool snapshotsAllowed) {
@@ -356,17 +355,15 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
+  return extendPorNode(state,
+  [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.acquire_lock(state.tid(), mId);
-    attachFingerprintToEvent(state, *e);
     if (snapshotsAllowed) {
       auto standby = createStandbyState(state, por_lock_acquire);
       return std::make_pair(e, std::move(standby));
     }
     return std::make_pair(e, nullptr);
   });
-
-  return true;
 }
 
 bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool snapshot, bool atomic) {
@@ -389,9 +386,9 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &mId, &snapshot, &atomic](por::configuration& cfg) -> por::node::registration_t {
+  bool success = extendPorNode(state,
+  [this, &state, &mId, &snapshot, &atomic](por::configuration& cfg) -> por::node::registration_t {
     por::event::event const* e = cfg.release_lock(state.tid(), mId, atomic);
-    attachFingerprintToEvent(state, *e);
     if (snapshot) {
       auto standby = createStandbyState(state, por_lock_release);
       return std::make_pair(e, std::move(standby));
@@ -403,7 +400,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     assert(pred == state.porNode->last_included_event()->thread_predecessor());
   }
 
-  return true;
+  return success;
 }
 
 
@@ -418,14 +415,11 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.create_cond(state.tid(), cId);
     auto standby = createStandbyState(state, por_condition_variable_create);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
@@ -439,14 +433,11 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
     por::event::event const* e = cfg.destroy_cond(state.tid(), cId);
     auto standby = createStandbyState(state, por_condition_variable_destroy);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, const ThreadId& notifiedThread) {
@@ -460,14 +451,11 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
     por::event::event const* e = cfg.signal_thread(state.tid(), cId, notifiedThread);
     auto standby = createStandbyState(state, por_signal);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId,
@@ -486,14 +474,11 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
     por::event::event const* e = cfg.broadcast_threads(state.tid(), cId, threads);
     auto standby = createStandbyState(state, por_broadcast);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
@@ -507,14 +492,11 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait1(state.tid(), cId, mId);
     auto standby = createStandbyState(state, por_wait1);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
 bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
@@ -528,19 +510,16 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 
   state.needsThreadScheduling = true;
 
-  extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
+  return extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
     por::event::event const* e = cfg.wait2(state.tid(), cId, mId);
     auto standby = createStandbyState(state, por_wait2);
-    attachFingerprintToEvent(state, *e);
     return std::make_pair(e, std::move(standby));
   });
-
-  return true;
 }
 
-void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
+bool PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
   if (!PruneStates) {
-    return;
+    return true;
   }
 
   if (DebugEventRegistration) {
@@ -586,7 +565,7 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   assert(MemoryFingerprint::validateFingerprint(event.fingerprint()));
 #endif
 
-  assert(res && "fingerprint does not match!");
+  return res;
 }
 
 

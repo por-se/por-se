@@ -316,7 +316,10 @@ void SpecialFunctionHandler::handleExit(ExecutionState &state,
   assert(arguments.size()==1 && "invalid number of arguments to exit");
 
   executor.exitCurrentThread(state, true);
-  executor.porEventManager.registerThreadExit(state, state.tid(), false);
+  if (!executor.porEventManager.registerThreadExit(state, state.tid(), false)) {
+    executor.terminateStateSilently(state);
+    return;
+  }
 }
 
 void SpecialFunctionHandler::handleSilentExit(ExecutionState &state,
@@ -921,7 +924,9 @@ void SpecialFunctionHandler::handleCreateThread(ExecutionState &state,
     return;
   }
 
-  const ThreadId& tid = executor.createThread(state, kfuncPair->second, arguments[1]);
+  if (!executor.createThread(state, kfuncPair->second, arguments[1])) {
+    return;
+  }
 }
 
 void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
@@ -940,11 +945,17 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
   const auto& ownTid = state.tid();
 
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
-  executor.porEventManager.registerLockRelease(state, lid, false, false);
+  if (!executor.porEventManager.registerLockRelease(state, lid, false, false)) {
+    executor.terminateStateSilently(state);
+    return;
+  }
 
   if (state.threadState() != ThreadState::Cutoff) {
     executor.exitCurrentThread(state, false);
-    executor.porEventManager.registerThreadExit(state, ownTid, true);
+    if (!executor.porEventManager.registerThreadExit(state, ownTid, true)) {
+      executor.terminateStateSilently(state);
+      return;
+    }
   }
 }
 
@@ -962,7 +973,8 @@ void SpecialFunctionHandler::handlePorThreadJoin(ExecutionState &state,
   if (auto result = state.getThreadByRuntimeStructPtr(expr)) {
     const Thread &thread = result->get();
     if (!executor.porEventManager.registerThreadJoin(state, thread.getThreadId())) {
-      executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
+      executor.terminateStateSilently(state);
+      return;
     }
   } else {
     executor.terminateStateOnError(state, "klee_por_thread_join", Executor::User);
@@ -1038,7 +1050,10 @@ void SpecialFunctionHandler::handleLockRelease(ExecutionState &state,
   }
 
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
-  executor.porEventManager.registerLockRelease(state, lid, true, false);
+  if (!executor.porEventManager.registerLockRelease(state, lid, true, false)) {
+    executor.terminateStateSilently(state);
+    return;
+  }
 }
 
 void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
@@ -1100,7 +1115,10 @@ void SpecialFunctionHandler::handleCondWait(ExecutionState &state,
 
   state.blockThread(Thread::wait_cv_1_t{cid, lid});
   state.memoryState.unregisterAcquiredLock(lid, ownTid);
-  executor.porEventManager.registerCondVarWait1(state, cid, lid);
+  if (!executor.porEventManager.registerCondVarWait1(state, cid, lid)) {
+    executor.terminateStateSilently(state);
+    return;
+  }
 }
 
 void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
@@ -1144,9 +1162,15 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
   }
 
   if (choice) {
-    executor.porEventManager.registerCondVarSignal(state, cid, choice.value());
+    if (!executor.porEventManager.registerCondVarSignal(state, cid, choice.value())) {
+      executor.terminateStateSilently(state);
+      return;
+    }
   } else {
-    executor.porEventManager.registerCondVarSignal(state, cid, {});
+    if (!executor.porEventManager.registerCondVarSignal(state, cid, {})) {
+      executor.terminateStateSilently(state);
+      return;
+    }
   }
 }
 
@@ -1190,7 +1214,10 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     }
   }
 
-  executor.porEventManager.registerCondVarBroadcast(state, cid, notifiedThreads);
+  if (!executor.porEventManager.registerCondVarBroadcast(state, cid, notifiedThreads)) {
+    executor.terminateStateSilently(state);
+    return;
+  }
 }
 
 void SpecialFunctionHandler::handleOutput(klee::ExecutionState &state,

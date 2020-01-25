@@ -2098,8 +2098,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // hence exit() is called implicitly return from main
       assert(kmodule->module->getFunction("__klee_posix_wrapped_main") == nullptr
              && kmodule->module->getFunction("__uClibc_main") == nullptr);
-      exitCurrentThread(state, true);
-      porEventManager.registerThreadExit(state, state.tid(), false);
+      if (!exitCurrentThread(state, true)) {
+        break;
+      }
+      if (!porEventManager.registerThreadExit(state, state.tid(), false)) {
+        terminateStateSilently(state);
+        break;
+      }
     } else {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
@@ -3192,14 +3197,21 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (state.hasUnregisteredDecisions()) {
-      porEventManager.registerLocal(state, addedStates, false);
+      if (!porEventManager.registerLocal(state, addedStates, false)) {
+        terminateStateSilently(state);
+        break;
+      }
     }
 
-    porEventManager.registerLockAcquire(state, memLoc->first->getId(), false);
+    if (!porEventManager.registerLockAcquire(state, memLoc->first->getId(), false)) {
+      terminateStateSilently(state);
+      break;
+    }
 
     auto oldValue = executeMemoryRead(state, memLoc.value(), memValWidth);
     ref<Expr> result;
 
+    bool failed = false;
     switch (ai->getOperation()) {
     case AtomicRMWInst::Xchg: {
       result = value;
@@ -3246,13 +3258,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
     case AtomicRMWInst::FAdd: {
-      return terminateStateOnExecError(state, "Unsupported atomicrmw FAdd operation");
+      failed = true;
+      terminateStateOnExecError(state, "Unsupported atomicrmw FAdd operation");
+      break;
     }
     case AtomicRMWInst::FSub: {
-      return terminateStateOnExecError(state, "Unsupported atomicrmw FSub operation");
+      failed = true;
+      terminateStateOnExecError(state, "Unsupported atomicrmw FSub operation");
+      break;
     }
     case AtomicRMWInst::BAD_BINOP:
-      return terminateStateOnExecError(state, "Bad atomicrmw operation");
+      failed = true;
+      terminateStateOnExecError(state, "Bad atomicrmw operation");
+      break;
+    }
+
+    if (failed) {
+      break;
     }
 
     // Write the new result back to the pointer
@@ -3261,7 +3283,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Every AtomicRMW returns the old value
     bindLocal(ki, state, oldValue);
 
-    porEventManager.registerLockRelease(state, memLoc->first->getId(), true, true);
+    if (!porEventManager.registerLockRelease(state, memLoc->first->getId(), true, true)) {
+      terminateStateSilently(state);
+      break;
+    }
     break;
   }
 
@@ -3284,10 +3309,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (state.hasUnregisteredDecisions()) {
-      porEventManager.registerLocal(state, addedStates, false);
+      if (!porEventManager.registerLocal(state, addedStates, false)) {
+        terminateStateSilently(state);
+        break;
+      }
     }
 
-    porEventManager.registerLockAcquire(state, src->first->getId(), false);
+    if (!porEventManager.registerLockAcquire(state, src->first->getId(), false)) {
+      terminateStateSilently(state);
+      break;
+    }
 
     auto oldValue = executeMemoryRead(state, src.value(), readWidth);
 
@@ -3303,7 +3334,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // FIXME: this is totally broken, but there is no easy fix at the moment
     bindLocal(ki, state, ConcatExpr::create(equal, oldValue));
 
-    porEventManager.registerLockRelease(state, src->first->getId(), true, true);
+    if (!porEventManager.registerLockRelease(state, src->first->getId(), true, true)) {
+      terminateStateSilently(state);
+      break;
+    }
     break;
   }
 
@@ -3318,7 +3352,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 void Executor::updateStates(ExecutionState *current) {
   if (current && std::find(removedStates.begin(), removedStates.end(), current) == removedStates.end()) {
     if (current->hasUnregisteredDecisions()) {
-      porEventManager.registerLocal(*current, addedStates);
+      if (!porEventManager.registerLocal(*current, addedStates)) {
+        terminateStateSilently(*current);
+        return;
+      }
     }
 
     const por::configuration &cfg = current->porNode->configuration();
@@ -4584,7 +4621,10 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   }
 
   if (state.hasUnregisteredDecisions()) {
-    porEventManager.registerLocal(state, addedStates, false);
+    if (!porEventManager.registerLocal(state, addedStates, false)) {
+      terminateStateSilently(state);
+      return;
+    }
   }
 
   if (isWrite) {
@@ -5045,9 +5085,9 @@ void Executor::prepareForEarlyExit() {
   }
 }
 
-ThreadId Executor::createThread(ExecutionState &state,
-                                KFunction *startRoutine,
-                                ref<Expr> runtimeStructPtr) {
+bool Executor::createThread(ExecutionState &state,
+                            KFunction *startRoutine,
+                            ref<Expr> runtimeStructPtr) {
 
   Thread &thread = state.createThread(startRoutine, runtimeStructPtr);
   StackFrame *threadStartFrame = &thread.stack.back();
@@ -5108,17 +5148,25 @@ ThreadId Executor::createThread(ExecutionState &state,
   if (statsTracker)
     statsTracker->framePushed(threadStartFrame, nullptr);
 
-  porEventManager.registerThreadCreate(state, thread.getThreadId());
-  porEventManager.registerThreadInit(state, thread.getThreadId());
-
-  return thread.getThreadId();
+  if (!porEventManager.registerThreadCreate(state, thread.getThreadId())) {
+    terminateStateSilently(state);
+    return false;
+  }
+  if (!porEventManager.registerThreadInit(state, thread.getThreadId())) {
+    terminateStateSilently(state);
+    return false;
+  }
+  return true;
 }
 
-void Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
+bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
   // needs to come before thread_exit event
   if (state.isOnMainThread() && state.hasUnregisteredDecisions()) {
     static std::vector<ExecutionState *> emptyVec;
-    porEventManager.registerLocal(state, emptyVec, false);
+    if (!porEventManager.registerLocal(state, emptyVec, false)) {
+      terminateStateSilently(state);
+      return false;
+    }
   }
 
   state.exitThread(callToExit);
@@ -5140,6 +5188,8 @@ void Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
       state.addressSpace.unbindObject(mo);
     }
   }
+
+  return true;
 }
 
 bool
@@ -5298,7 +5348,10 @@ void Executor::scheduleThreads(ExecutionState &state) {
       Thread& nextThread = peekThread.value().get();
       assert(nextThread.state != ThreadState::Cutoff);
       if (nextThread.state == ThreadState::Waiting && nextThread.isRunnable(cfg)) {
-        scheduleNextThread(state, tid);
+        if (!scheduleNextThread(state, tid)) {
+          terminateStateSilently(state);
+          return;
+        }
 
         runnable = state.runnableThreads();
         continue;
@@ -5316,7 +5369,10 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
 
     state.needsThreadScheduling = false;
-    scheduleNextThread(state, tid);
+    if (!scheduleNextThread(state, tid)) {
+      terminateStateSilently(state);
+      return;
+    }
 
     if (state.threadState() == ThreadState::Runnable) {
       return;
@@ -5424,26 +5480,28 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
   return tid;
 }
 
-void Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
+bool Executor::scheduleNextThread(ExecutionState &state, const ThreadId &tid) {
   auto res = state.getThreadById(tid);
   assert(res.has_value());
   Thread &thread = res->get();
   auto previous = state.runThread(thread);
+  bool succ = true;
   if (!std::holds_alternative<Thread::wait_none_t>(previous)) {
     // NOTE: event registration has to come last for consistent standby state
-    std::visit([this,&state](auto&& w) {
+    std::visit([this,&state,&succ](auto&& w) {
       using T = std::decay_t<decltype(w)>;
       if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
-        porEventManager.registerLockAcquire(state, w.lock);
+        succ = porEventManager.registerLockAcquire(state, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
-        porEventManager.registerCondVarWait2(state, w.cond, w.lock);
+        succ = porEventManager.registerCondVarWait2(state, w.cond, w.lock);
       } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
-        porEventManager.registerThreadJoin(state, w.thread);
+        succ = porEventManager.registerThreadJoin(state, w.thread);
       } else {
         assert(0 && "thread cannot be woken up!");
       }
     }, previous);
   }
+  return succ;
 }
 
 /// Returns the errno location in memory

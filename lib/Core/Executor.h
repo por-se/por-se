@@ -231,7 +231,7 @@ private:
 
   std::optional<ThreadId> selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable);
 
-  void scheduleNextThread(ExecutionState &state, const ThreadId &tid);
+  bool scheduleNextThread(ExecutionState &state, const ThreadId &tid);
 
   void updateStatesJSON(KInstruction *ki, const ExecutionState &state,
                         std::string ktest = "", std::string error = "");
@@ -557,10 +557,10 @@ public:
   /// Returns the errno location in memory of the state
   int *getErrnoLocation(const ExecutionState &state) const;
 
-  ThreadId createThread(ExecutionState &state,
-                                KFunction *startRoutine,
-                                ref<Expr> runtimeStructPtr);
-  void exitCurrentThread(ExecutionState &state, bool callToExit);
+  bool createThread(ExecutionState &state,
+                    KFunction *startRoutine,
+                    ref<Expr> runtimeStructPtr);
+  bool exitCurrentThread(ExecutionState &state, bool callToExit);
 };
 } // End klee namespace
 
