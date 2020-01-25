@@ -150,6 +150,9 @@ int main(int argc, char** argv){
 	// Count of threads that every thread has spawned
 	std::map<por::event::thread_id_t, std::uint16_t> thread_spawns{};
 
+	// Only wait on a cid with one lock at a time
+	std::map<por::event::cond_id_t, std::pair<por::event::lock_id_t, std::size_t>> cond_lock_pairs;
+
 #ifdef SEED
 	std::mt19937_64 gen(SEED);
 #else
@@ -245,8 +248,19 @@ int main(int argc, char** argv){
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, false, tid);
 			auto cid = choose_cond(configuration, gen);
 			if(tid && lid && cid) {
-				configuration.wait1(tid, cid, lid);
-				std::cout << " C+ " << cid << ", " <<  lid << " (" << tid << ")\n";
+				auto res = cond_lock_pairs.try_emplace(cid, lid, 1);
+				if(!res.second) {
+					if (res.first->second.first != lid) {
+						cid = 0;
+					} else {
+						assert(res.first->second.first == lid);
+						++cond_lock_pairs[cid].second;
+					}
+				}
+				if(cid) {
+					configuration.wait1(tid, cid, lid);
+					std::cout << " C+ " << cid << ", " <<  lid << " (" << tid << ")\n";
+				}
 			}
 		} else if(roll < 700) {
 			// signal single thread, if possible
@@ -340,6 +354,11 @@ int main(int argc, char** argv){
 						}
 					}
 					if(lid) {
+						assert(cond_lock_pairs[cid].first == lid);
+						--cond_lock_pairs[cid].second;
+						if(cond_lock_pairs[cid].second == 0) {
+							cond_lock_pairs.erase(cid);
+						}
 						configuration.wait2(tid, cid, lid);
 						std::cout << "wT " << cid << ", " <<  lid << " (" << tid << ")\n";
 					}
