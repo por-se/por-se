@@ -398,3 +398,7 @@ void ExecutionState::dumpAllThreadStacks(llvm::raw_ostream &out) const {
     dumpStackOfThread(out, thread);
   }
 }
+
+std::size_t klee::klee_state_id(const ExecutionState *state) {
+  return state->id;
+}

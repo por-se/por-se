@@ -309,6 +309,9 @@ public:
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
   void dumpAllThreadStacks(llvm::raw_ostream &out) const;
 };
+
+std::size_t klee_state_id(const ExecutionState *state);
+
 }
 
 #endif /* KLEE_EXECUTIONSTATE_H */
