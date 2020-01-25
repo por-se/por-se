@@ -3631,16 +3631,9 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   }
 
   for (por::event::event const *cex : conflicting_extensions) {
-    bool remove = false;
-
-    if (cex->is_cutoff()) {
-      remove = true;
-    } else if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
+    assert(!cex->is_cutoff());
+    if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
       //klee_warning("Context Switch Degree of conflicting extension above limit.");
-      remove = true;
-    }
-
-    if (remove) {
       cfg.unfolding()->remove_event(*cex);
     }
   }
