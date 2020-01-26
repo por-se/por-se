@@ -76,6 +76,9 @@ std::string PorEventManager::getNameOfEvent(por_event_t kind) {
 bool PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
   if (state.needsCatchUp()) {
     state.porNode = state.porNode->catch_up(std::move(callback), state.peekCatchUp());
+    if (state.porNode == nullptr) {
+      return false;
+    }
     bool success = attachFingerprintToEvent(state, *state.peekCatchUp());
     state.catchUp.pop_front();
     return success;
@@ -158,6 +161,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       }
       return std::make_pair(e, nullptr);
     }, state.peekCatchUp());
+    if (state.porNode == nullptr) {
+      return false;
+    }
     state.catchUp.pop_front();
 
     return success;
