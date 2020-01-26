@@ -154,6 +154,7 @@ namespace por {
 	private:
 		std::array<std::size_t, 16> _events_created{};
 		std::array<std::size_t, 16> _unique_events{};
+		std::array<std::size_t, 16> _cutoff_events{};
 		std::size_t _events_deduplicated = 0; // total number of deduplicated events
 		std::size_t _cex_created = 0; // number of conflicting extensions generated
 		std::size_t _cex_inserted = 0; // number of actual conflicting extensions inserted
@@ -205,8 +206,12 @@ namespace por {
 			++_events_created[kind_index(kind)];
 		}
 		void stats_inc_unique_event(por::event::event_kind kind) noexcept {
-			assert(kind_index(kind) < _events_created.size());
+			assert(kind_index(kind) < _unique_events.size());
 			++_unique_events[kind_index(kind)];
+		}
+		void stats_inc_cutoff_event(por::event::event_kind kind) noexcept {
+			assert(kind_index(kind) < _cutoff_events.size());
+			++_cutoff_events[kind_index(kind)];
 		}
 		void stats_inc_event_deduplicated() noexcept {
 			++_events_deduplicated;
@@ -268,6 +273,28 @@ namespace por {
 			std::cout << ". wait2: " << _unique_events[kind_index(por::event::event_kind::wait2)] << "\n";
 			std::cout << ". signal: " << _unique_events[kind_index(por::event::event_kind::signal)] << "\n";
 			std::cout << ". broadcast: " << _unique_events[kind_index(por::event::event_kind::broadcast)] << "\n";
+			std::cout << "Cutoff Events: ";
+			std::size_t cutoff_events = 0;
+			for (std::size_t count : _cutoff_events) {
+				cutoff_events += count;
+			}
+			std::cout << cutoff_events << "\n";
+			std::cout << "x local: " << _cutoff_events[kind_index(por::event::event_kind::local)] << "\n";
+			std::cout << "x program_init: " << _cutoff_events[kind_index(por::event::event_kind::program_init)] << "\n";
+			std::cout << "x thread_create: " << _cutoff_events[kind_index(por::event::event_kind::thread_create)] << "\n";
+			std::cout << "x thread_join: " << _cutoff_events[kind_index(por::event::event_kind::thread_join)] << "\n";
+			std::cout << "x thread_init: " << _cutoff_events[kind_index(por::event::event_kind::thread_init)] << "\n";
+			std::cout << "x thread_exit: " << _cutoff_events[kind_index(por::event::event_kind::thread_exit)] << "\n";
+			std::cout << "x lock_create: " << _cutoff_events[kind_index(por::event::event_kind::lock_create)] << "\n";
+			std::cout << "x lock_destroy: " << _cutoff_events[kind_index(por::event::event_kind::lock_destroy)] << "\n";
+			std::cout << "x lock_acquire: " << _cutoff_events[kind_index(por::event::event_kind::lock_acquire)] << "\n";
+			std::cout << "x lock_release: " << _cutoff_events[kind_index(por::event::event_kind::lock_release)] << "\n";
+			std::cout << "x condition_variable_create: " << _cutoff_events[kind_index(por::event::event_kind::condition_variable_create)] << "\n";
+			std::cout << "x condition_variable_destroy: " << _cutoff_events[kind_index(por::event::event_kind::condition_variable_destroy)] << "\n";
+			std::cout << "x wait1: " << _cutoff_events[kind_index(por::event::event_kind::wait1)] << "\n";
+			std::cout << "x wait2: " << _cutoff_events[kind_index(por::event::event_kind::wait2)] << "\n";
+			std::cout << "x signal: " << _cutoff_events[kind_index(por::event::event_kind::signal)] << "\n";
+			std::cout << "x broadcast: " << _cutoff_events[kind_index(por::event::event_kind::broadcast)] << "\n";
 			std::cout << "Events deduplicated: " << std::to_string(_events_deduplicated) << "\n";
 			std::cout << "CEX created: " << std::to_string(_cex_created) << "\n";
 			std::cout << "CEX inserted: " << std::to_string(_cex_inserted) << "\n";
