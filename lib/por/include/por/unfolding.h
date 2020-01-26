@@ -159,10 +159,6 @@ namespace por {
 		std::size_t _cex_inserted = 0; // number of actual conflicting extensions inserted
 		std::size_t _configurations = 0; // number of times cex generation was called (NOT necessarily maximal)
 
-		// together with _cex_inserted: average
-		std::size_t _sum_of_conflict_gaps = 0; // conflict gap: number of events whose standby states are no longer valid after cex generation
-		std::size_t _sum_of_catchup_gaps = 0; // catch-up gap: number of events from last valid standby state until actual standby state
-
 		constexpr std::uint8_t kind_index(por::event::event_kind kind) const noexcept {
 			switch(kind) {
 				case por::event::event_kind::local:
@@ -224,17 +220,16 @@ namespace por {
 		void stats_inc_configuration() noexcept {
 			++_configurations;
 		}
-		void stats_inc_sum_of_conflict_gaps(std::size_t inc) noexcept {
-			_sum_of_conflict_gaps += inc;
-		}
-		void stats_inc_sum_of_catchup_gaps(std::size_t inc) noexcept {
-			_sum_of_catchup_gaps += inc;
-		}
 
 		void print_statistics() {
 			std::cout << "\n\n";
 			std::cout << "== UNFOLDING STATISTICS ==\n";
-			std::cout << "Events created:\n";
+			std::cout << "Events created: ";
+			std::size_t created_events = 0;
+			for (std::size_t count : _events_created) {
+				created_events += count;
+			}
+			std::cout << created_events << "\n";
 			std::cout << "  local: " << _events_created[kind_index(por::event::event_kind::local)] << "\n";
 			std::cout << "  program_init: " << _events_created[kind_index(por::event::event_kind::program_init)] << "\n";
 			std::cout << "  thread_create: " << _events_created[kind_index(por::event::event_kind::thread_create)] << "\n";
@@ -251,29 +246,32 @@ namespace por {
 			std::cout << "  wait2: " << _events_created[kind_index(por::event::event_kind::wait2)] << "\n";
 			std::cout << "  signal: " << _events_created[kind_index(por::event::event_kind::signal)] << "\n";
 			std::cout << "  broadcast: " << _events_created[kind_index(por::event::event_kind::broadcast)] << "\n";
-			std::cout << "Unique Events:\n";
-			std::cout << "  local: " << _unique_events[kind_index(por::event::event_kind::local)] << "\n";
-			std::cout << "  program_init: " << _unique_events[kind_index(por::event::event_kind::program_init)] << "\n";
-			std::cout << "  thread_create: " << _unique_events[kind_index(por::event::event_kind::thread_create)] << "\n";
-			std::cout << "  thread_join: " << _unique_events[kind_index(por::event::event_kind::thread_join)] << "\n";
-			std::cout << "  thread_init: " << _unique_events[kind_index(por::event::event_kind::thread_init)] << "\n";
-			std::cout << "  thread_exit: " << _unique_events[kind_index(por::event::event_kind::thread_exit)] << "\n";
-			std::cout << "  lock_create: " << _unique_events[kind_index(por::event::event_kind::lock_create)] << "\n";
-			std::cout << "  lock_destroy: " << _unique_events[kind_index(por::event::event_kind::lock_destroy)] << "\n";
-			std::cout << "  lock_acquire: " << _unique_events[kind_index(por::event::event_kind::lock_acquire)] << "\n";
-			std::cout << "  lock_release: " << _unique_events[kind_index(por::event::event_kind::lock_release)] << "\n";
-			std::cout << "  condition_variable_create: " << _unique_events[kind_index(por::event::event_kind::condition_variable_create)] << "\n";
-			std::cout << "  condition_variable_destroy: " << _unique_events[kind_index(por::event::event_kind::condition_variable_destroy)] << "\n";
-			std::cout << "  wait1: " << _unique_events[kind_index(por::event::event_kind::wait1)] << "\n";
-			std::cout << "  wait2: " << _unique_events[kind_index(por::event::event_kind::wait2)] << "\n";
-			std::cout << "  signal: " << _unique_events[kind_index(por::event::event_kind::signal)] << "\n";
-			std::cout << "  broadcast: " << _unique_events[kind_index(por::event::event_kind::broadcast)] << "\n";
+			std::cout << "Unique Events: ";
+			std::size_t unique_events = 0;
+			for (std::size_t count : _unique_events) {
+				unique_events += count;
+			}
+			std::cout << unique_events << "\n";
+			std::cout << ". local: " << _unique_events[kind_index(por::event::event_kind::local)] << "\n";
+			std::cout << ". program_init: " << _unique_events[kind_index(por::event::event_kind::program_init)] << "\n";
+			std::cout << ". thread_create: " << _unique_events[kind_index(por::event::event_kind::thread_create)] << "\n";
+			std::cout << ". thread_join: " << _unique_events[kind_index(por::event::event_kind::thread_join)] << "\n";
+			std::cout << ". thread_init: " << _unique_events[kind_index(por::event::event_kind::thread_init)] << "\n";
+			std::cout << ". thread_exit: " << _unique_events[kind_index(por::event::event_kind::thread_exit)] << "\n";
+			std::cout << ". lock_create: " << _unique_events[kind_index(por::event::event_kind::lock_create)] << "\n";
+			std::cout << ". lock_destroy: " << _unique_events[kind_index(por::event::event_kind::lock_destroy)] << "\n";
+			std::cout << ". lock_acquire: " << _unique_events[kind_index(por::event::event_kind::lock_acquire)] << "\n";
+			std::cout << ". lock_release: " << _unique_events[kind_index(por::event::event_kind::lock_release)] << "\n";
+			std::cout << ". condition_variable_create: " << _unique_events[kind_index(por::event::event_kind::condition_variable_create)] << "\n";
+			std::cout << ". condition_variable_destroy: " << _unique_events[kind_index(por::event::event_kind::condition_variable_destroy)] << "\n";
+			std::cout << ". wait1: " << _unique_events[kind_index(por::event::event_kind::wait1)] << "\n";
+			std::cout << ". wait2: " << _unique_events[kind_index(por::event::event_kind::wait2)] << "\n";
+			std::cout << ". signal: " << _unique_events[kind_index(por::event::event_kind::signal)] << "\n";
+			std::cout << ". broadcast: " << _unique_events[kind_index(por::event::event_kind::broadcast)] << "\n";
 			std::cout << "Events deduplicated: " << std::to_string(_events_deduplicated) << "\n";
 			std::cout << "CEX created: " << std::to_string(_cex_created) << "\n";
 			std::cout << "CEX inserted: " << std::to_string(_cex_inserted) << "\n";
 			std::cout << "Configurations: " << std::to_string(_configurations) << "\n";
-			std::cout << "Sum of conflict gaps: " << std::to_string(_sum_of_conflict_gaps) << "\n";
-			std::cout << "Sum of catch-up gaps: " << std::to_string(_sum_of_catchup_gaps) << "\n";
 			std::cout << "==========================\n";
 		}
 	};
