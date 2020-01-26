@@ -37,6 +37,7 @@ target_sources(libpor PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/cone.h"
 	"${CMAKE_CURRENT_LIST_DIR}/configuration.h"
 	"${CMAKE_CURRENT_LIST_DIR}/csd.h"
+	"${CMAKE_CURRENT_LIST_DIR}/erv.h"
 	"${CMAKE_CURRENT_LIST_DIR}/node.h"
 	"${CMAKE_CURRENT_LIST_DIR}/thread_id.h"
 	"${CMAKE_CURRENT_LIST_DIR}/unfolding.h"
