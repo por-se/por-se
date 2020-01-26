@@ -10,6 +10,7 @@
 #include "por/configuration.h"
 #include "por/event/event.h"
 #include "por/node.h"
+#include "por/erv.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
@@ -24,6 +25,11 @@ namespace {
   DebugEventRegistration("debug-event-registration",
                          llvm::cl::init(false),
                          llvm::cl::cat(DebugCat));
+
+  llvm::cl::opt<bool>
+  UseAdequateOrder("use-adequate-order",
+                   llvm::cl::desc("Use adequate total order [ERV02] for determining cutoff events (default=true)"),
+                   llvm::cl::init(true));
 
   enum class StandbyStatePolicy { Minimal, Half, Third, All };
 
@@ -605,7 +611,14 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   std::size_t eventSize = event.local_configuration_size();
   std::size_t otherSize = other.local_configuration_size();
 
-  if (eventSize > otherSize) {
+  bool isCutoff;
+  if (UseAdequateOrder) {
+    isCutoff = por::compare_adequate_total_order(other, event);
+  } else {
+    isCutoff = otherSize < eventSize;
+  }
+
+  if (isCutoff) {
     // state is at cutoff event
 
     if (DebugStatePruning) {
@@ -621,6 +634,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     }
 
     ++stats::cutoffEvents;
+    state.porNode->configuration().unfolding()->stats_inc_cutoff_event(event.kind());
     event.mark_as_cutoff();
   }
 }
