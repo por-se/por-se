@@ -31,26 +31,11 @@ namespace {
                    llvm::cl::desc("Use adequate total order [ERV02] for determining cutoff events (default=true)"),
                    llvm::cl::init(true));
 
-  enum class StandbyStatePolicy { Minimal, Half, Third, All };
-
-  llvm::cl::opt<StandbyStatePolicy> StandbyStates(
-    "standby-states",
-    llvm::cl::desc("Specify the standby state policy"),
-    llvm::cl::values(
-        clEnumValN(
-          StandbyStatePolicy::Minimal, "minimal",
-          "Only record standby states for thread_init of the main thread and any condition_variable_create."),
-        clEnumValN(
-          StandbyStatePolicy::Half, "half",
-          "Only record standby states for at most every second event (per configuration)."),
-        clEnumValN(
-          StandbyStatePolicy::Third, "third",
-          "Only record standby states for at most every third event (per configuration)."),
-        clEnumValN(
-          StandbyStatePolicy::All, "all",
-          "Record standby states for all events (default).")
-        KLEE_LLVM_CL_VAL_END),
-    llvm::cl::init(StandbyStatePolicy::All));
+  llvm::cl::opt<unsigned>
+  StandbyStates("standby-states",
+    llvm::cl::desc("Controls the number of standby states created, use n to attach one to every nth exploration node. "
+      "Use 0 for only one standby state and 1 to create a standby state for all nodes possible.  (default=1)"),
+    llvm::cl::init(1));
 }
 
 std::string PorEventManager::getNameOfEvent(por_event_t kind) {
@@ -105,20 +90,14 @@ void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por_eve
 }
 
 bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind) {
-  bool result = true;
-  if (StandbyStates == StandbyStatePolicy::Minimal) {
-    if (state.threads.size() == 1 && kind == por_thread_init) {
-      return true;
-    }
-  } else if (StandbyStates != StandbyStatePolicy::All) {
-    auto dist = state.porNode->distance_to_last_standby_state();
-    if (StandbyStates == StandbyStatePolicy::Half) {
-      result = (dist >= 2);
-    } else if (StandbyStates == StandbyStatePolicy::Third) {
-      result = (dist >= 3);
-    }
+  bool result = (state.threads.size() == 1 && kind == por_thread_init);
+  if (StandbyStates == 0) {
+    return result;
+  } else if (StandbyStates == 1) {
+    return true;
   }
-  return result;
+  auto dist = state.porNode->distance_to_last_standby_state();
+  return result || (dist >= StandbyStates);
 }
 
 std::shared_ptr<const ExecutionState> PorEventManager::createStandbyState(const ExecutionState &s, por_event_t kind) {
