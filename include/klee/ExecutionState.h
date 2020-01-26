@@ -145,6 +145,8 @@ public:
   // The numbers of times this state has run through Executor::stepInstruction
   std::uint64_t steppedInstructions;
 
+  std::uint64_t threadsCreated;
+
 private:
   void popFrameOfThread(Thread &thread);
 

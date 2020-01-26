@@ -315,7 +315,8 @@ private:
   unsigned m_numTotalTests;     // Number of tests received from the interpreter
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsExplored; // number of paths explored so far
-  unsigned m_statesPruned; // number of states pruned
+  std::uint64_t m_maxThreadsCreated = 0; // maximum number of threads created per path
+  std::uint64_t m_maxConcurrentThreads = 0; // maximum number of concurrently active threads
 
   // used for writing .ktest files
   int m_argc;
@@ -330,8 +331,14 @@ public:
   unsigned getNumTestCases() { return m_numGeneratedTests; }
   unsigned getNumPathsExplored() { return m_pathsExplored; }
   void incPathsExplored() { m_pathsExplored++; }
-  unsigned getNumStatesPruned() { return m_statesPruned; }
-  void incStatesPruned() override { m_statesPruned++; }
+  std::uint64_t getNumMaxThreadsCreated() { return m_maxThreadsCreated; }
+  std::uint64_t getNumMaxConcurrentThreads() { return m_maxConcurrentThreads; }
+  void updateMaxThreadsCreated(std::uint64_t count) {
+    m_maxThreadsCreated = std::max(count, m_maxThreadsCreated);
+  }
+  void updateMaxConcurrentThreads(std::uint64_t count) {
+    m_maxConcurrentThreads = std::max(count, m_maxConcurrentThreads);
+  }
 
   void setInterpreter(Interpreter *i);
 
@@ -357,7 +364,7 @@ public:
 KleeHandler::KleeHandler(int argc, char **argv)
     : m_interpreter(0), m_pathWriter(0), m_symPathWriter(0),
       m_outputDirectory(), m_numTotalTests(0), m_numGeneratedTests(0),
-      m_pathsExplored(0), m_statesPruned(0), m_argc(argc), m_argv(argv) {
+      m_pathsExplored(0), m_argc(argc), m_argv(argv) {
 
   // create output directory (OutputDir or "klee-out-<i>")
   bool dir_given = OutputDir != "";
@@ -1593,8 +1600,10 @@ int main(int argc, char **argv, char **envp) {
         << instructions << "\n";
   stats << "KLEE: done: completed paths = "
         << handler->getNumPathsExplored() << "\n";
-  stats << "KLEE: done: pruned states = "
-        << handler->getNumStatesPruned() << "\n";
+  stats << "KLEE: done: max number of threads created = "
+        << handler->getNumMaxThreadsCreated() << "\n";
+  stats << "KLEE: done: max number of concurrent threads = "
+        << handler->getNumMaxConcurrentThreads() << "\n";
   stats << "KLEE: done: generated tests = "
         << handler->getNumTestCases() << "\n";
 

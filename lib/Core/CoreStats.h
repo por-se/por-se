@@ -50,6 +50,12 @@ namespace stats {
   extern Statistic catchUpInstructions;
   extern Statistic standbyStates;
   extern Statistic maxConfigurations;
+  extern Statistic cutoffEvents;
+  extern Statistic deadlockedExecutions;
+  extern Statistic cutoffConfigurations;
+  extern Statistic exitedConfigurations;
+  extern Statistic errorConfigurations;
+  extern Statistic dataraceConfigurations;
 }
 }
 

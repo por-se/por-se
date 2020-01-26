@@ -620,6 +620,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
       state.cutoffThread();
     }
 
+    ++stats::cutoffEvents;
     event.mark_as_cutoff();
   }
 }

@@ -3672,6 +3672,8 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
     if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
       //klee_warning("Context Switch Degree of conflicting extension above limit.");
       cfg.unfolding()->remove_event(*cex);
+    } else {
+      cfg.unfolding()->stats_inc_cex_inserted();
     }
   }
 
@@ -3997,6 +3999,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
 
   updateStatesJSON(nullptr, state, ktest, TerminateReasonNames[termReason]);
   terminateState(state);
+
+  ++stats::errorConfigurations;
 
   if (shouldExitOn(termReason))
     haltExecution = true;
@@ -4865,6 +4869,13 @@ void Executor::runFunctionAsMain(Function *f,
     llvm::outs() << "KLEE: done: instructions during catch-up = " << stats::catchUpInstructions << "\n";
     llvm::outs() << "KLEE: done: standby states = " << stats::standbyStates << "\n";
     llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
+    llvm::outs() << "KLEE: done: cutoff events = " << stats::cutoffEvents << "\n";
+    llvm::outs() << "KLEE: done: deadlocked executions = " << stats::deadlockedExecutions << "\n";
+    llvm::outs() << "KLEE: done: cutoff executions = " << stats::cutoffConfigurations << "\n";
+    llvm::outs() << "KLEE: done: exited executions = " << stats::exitedConfigurations << "\n";
+    llvm::outs() << "KLEE: done: error executions = " << stats::errorConfigurations << "\n";
+    llvm::outs() << "KLEE: done: datarace executions = " << stats::dataraceConfigurations << "\n";
+    llvm::outs() << "KLEE: done: states: " << states.size() << "\n";
   }
 }
 
@@ -5156,6 +5167,10 @@ bool Executor::createThread(ExecutionState &state,
     terminateStateSilently(state);
     return false;
   }
+
+  interpreterHandler->updateMaxThreadsCreated(state.threadsCreated);
+  interpreterHandler->updateMaxConcurrentThreads(state.threads.size());
+
   return true;
 }
 
@@ -5301,6 +5316,8 @@ Executor::terminateStateOnUnsafeMemAccess(ExecutionState &state, const MemoryObj
     << " (assembly.ll:" << state.prevPc()->info->assemblyLine << ")"
     << "\n";
 
+  ++stats::dataraceConfigurations;
+
   terminateStateOnError(state, "thread unsafe memory access",
                         UnsafeMemoryAccess, nullptr, os.str());
 }
@@ -5312,6 +5329,8 @@ void Executor::terminateStateOnDeadlock(ExecutionState &state) {
   state.dumpSchedulingInfo(os);
   os << "Traces:\n";
   state.dumpAllThreadStacks(os);
+
+  ++stats::deadlockedExecutions;
 
   terminateStateOnError(state, "all non-exited threads are waiting on resources",
                         Deadlock, nullptr, os.str());
@@ -5451,6 +5470,11 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
     }
 
     if (allExited || cutoffPresent || state.calledExit) {
+      if (cutoffPresent) {
+        ++stats::cutoffConfigurations;
+      } else if (allExited) {
+        ++stats::exitedConfigurations;
+      }
       terminateStateOnExit(state);
     } else {
       terminateStateOnDeadlock(state);

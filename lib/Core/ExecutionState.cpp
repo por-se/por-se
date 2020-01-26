@@ -63,7 +63,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
     forkDisabled(false),
     ptreeNode(0),
     memoryState(this),
-    steppedInstructions(0)
+    steppedInstructions(0),
+    threadsCreated(0)
 {
     auto result = threads.emplace(std::piecewise_construct,
                                   std::forward_as_tuple(mainThreadId),
@@ -123,7 +124,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     arrayNames(state.arrayNames),
     memoryState(state.memoryState, this),
     catchUp(state.catchUp),
-    steppedInstructions(state.steppedInstructions)
+    steppedInstructions(state.steppedInstructions),
+    threadsCreated(state.threadsCreated)
 {
   current = &threads.at(state.tid());
 
@@ -177,6 +179,8 @@ Thread &ExecutionState::createThread(KFunction *kf, ref<Expr> runtimeStructPtr) 
 
   Thread &newThread = result.first->second;
   newThread.runtimeStructPtr = runtimeStructPtr;
+
+  ++threadsCreated;
 
   return newThread;
 }
