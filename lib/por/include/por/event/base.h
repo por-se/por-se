@@ -168,6 +168,8 @@ namespace por::event {
 
 		bool is_cutoff() const noexcept { return _is_cutoff; }
 
+		mutable std::size_t _lc_size = 0;
+
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
 		depth_t depth() const noexcept { return _depth; }
@@ -185,7 +187,8 @@ namespace por::event {
 		, _fingerprint_set(that._fingerprint_set)
 		, _fingerprint(std::move(that._fingerprint))
 		, _thread_delta(std::move(that._thread_delta))
-		, _is_cutoff(that._is_cutoff) {
+		, _is_cutoff(that._is_cutoff)
+		, _lc_size(that._lc_size) {
 			assert(!has_successors());
 		}
 
@@ -479,7 +482,10 @@ namespace por::event {
 		}
 
 		std::size_t local_configuration_size() const noexcept {
-			return std::distance(local_configuration_begin(true), local_configuration_end(true));
+			if(!_lc_size) {
+				_lc_size = local_configuration().size();
+			}
+			return _lc_size;
 		}
 
 		event_iterator causes_begin(bool include_program_init=true) const noexcept {
