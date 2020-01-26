@@ -1316,6 +1316,7 @@ namespace por {
 				libpor_check(!dedup.event.is_cutoff());
 				result.emplace_back(dedup);
 			});
+			_unfolding->stats_inc_cex_created(result.size());
 			return result;
 		}
 
