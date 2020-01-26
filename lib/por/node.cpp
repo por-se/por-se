@@ -98,7 +98,9 @@ node* node::catch_up(std::function<node::registration_t(por::configuration&)> fu
 
 	auto [event, standby_state] = func(copy);
 
-	assert(next == event);
+	if(next != event) {
+		return nullptr;
+	}
 
 	node* n = this;
 	while(n->_event != event && n->_event != nullptr) {
