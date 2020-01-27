@@ -1304,17 +1304,21 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     if (current.needsCatchUp()) {
       auto decision = current.peekDecision();
 
+      if (decision.expr != condition) {
+        // FIXME: incompleteness
+        klee_warning("Could not catch-up fork!");
+        return StatePair(nullptr, nullptr);
+      }
+
       // add constraints
       if (decision.branch) {
         assert(decision.branch == 1);
-        assert(decision.expr == condition);
         current.addConstraint(condition);
         current.addDecision(decision);
         return StatePair(&current, nullptr);
       } else {
         auto invCond = Expr::createIsZero(condition);
         assert(decision.branch == 0);
-        assert(decision.expr == condition);
         current.addConstraint(invCond);
         current.addDecision(decision);
         return StatePair(nullptr, &current);
