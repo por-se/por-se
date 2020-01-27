@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "klee/klee.h"
 #include "klee/runtime/pthread.h"
@@ -6,6 +7,20 @@
 #include "../kpr/internal.h"
 
 static int detect_init_pattern(pthread_internal_t* obj, size_t size) {
+  // FIXME: find a better way to do this
+  // We have to make sure that we never use a symbolic pointer here,
+  // since we later on will pass one `address` of this object as a
+  // lock id. But the por cannot handle symbolic lock ids
+  uint64_t ptr = (uint64_t) obj;
+  while (klee_is_symbolic(ptr)) {
+    uint64_t con = klee_get_value_i64(ptr);
+
+    if (ptr == con) {
+      ptr = con;
+      break;
+    }
+  }
+
   klee_check_memory_access(obj, size);
 
   if (obj->magic == PTHREAD_INTERNAL_MAGIC_VALUE) {
