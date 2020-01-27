@@ -572,6 +572,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   if (event.is_cutoff()) {
     if (!state.needsCatchUp()) {
       state.cutoffThread();
+      ++stats::cutoffThreads;
     }
     return;
   }
@@ -611,6 +612,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     assert(state.tid() == event.tid());
     if (!state.needsCatchUp()) {
       state.cutoffThread();
+      ++stats::cutoffThreads;
     }
 
     ++stats::cutoffEvents;
