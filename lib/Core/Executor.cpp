@@ -163,6 +163,11 @@ cl::opt<bool> DumpThreadSegmentsConfiguration(
     cl::desc("Ouput the heap and stack memory regions of each created thread (default=true)"),
     cl::cat(TestGenCat));
 
+cl::opt<bool> ComputeCsdOnError(
+    "compute-csd-on-error", cl::init(false),
+    cl::desc("Compute context switch degree on error (default=false)"),
+    cl::cat(TestGenCat));
+
 /* Constraint solving options */
 
 cl::opt<unsigned> MaxSymArraySize(
@@ -3979,7 +3984,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
     auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(timeToError) - seconds;
     msg << "Time to error: " << seconds.count() << "." << milliseconds.count() << " seconds\n";
 
-    if (state.porNode || state.lastPorNode) {
+    if (ComputeCsdOnError && (state.porNode || state.lastPorNode)) {
       const por::node *n = state.porNode ? state.porNode : state.lastPorNode;
       if (n && n->last_included_event()) {
         por::event::event const& event = *n->last_included_event();
@@ -4000,8 +4005,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
           llvm::errs() << "CSD: " << csd << "\n";
           assert(por::is_above_csd_limit(event, csd - 1));
           assert(!por::is_above_csd_limit(event, csd));
-        } else {
-          llvm::errs() << "Oo\n";
         }
       }
     }
