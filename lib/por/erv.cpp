@@ -28,14 +28,9 @@ namespace {
 		}
 	}
 
-	// < 0: a < b => -1
-	// = 0: a == b
-	// > 0: a > b => 1
 	int comp_event_total_order(por::event::event const* a, por::event::event const* b) {
 		if(a == b) {
 			return 0;
-		} else if(a->depth() != b->depth()) {
-			return a->depth() < b->depth() ? -1 : 1;
 		} else if(a->kind() != b->kind()) {
 			return a->kind() < b->kind() ? -1 : 1;
 		} else if(a->lid() != b->lid()) {
@@ -44,18 +39,6 @@ namespace {
 			return a->cid() < b->cid() ? -1 : 1;
 		} else if(a->tid() != b->tid()) {
 			return a->tid() < b->tid() ? -1 : 1;
-		} else if(a->predecessors().size() != a->predecessors().size()) {
-			return a->predecessors().size() < b->predecessors().size() ? -1 : 1;
-		} else {
-			auto aimm = a->immediate_predecessors();
-			auto bimm = b->immediate_predecessors();
-			int res = lex_compare(
-				aimm.begin(), aimm.end(),
-				bimm.begin(), bimm.end(),
-				comp_event_total_order);
-			if(res != 0) {
-				return res;
-			}
 		}
 		// memory address as tie breaker: total order
 		return a < b ? -1 : 1; // we already checked a == b
@@ -99,7 +82,7 @@ namespace {
 	public:
 		foata_normal_form(parikh_vector const& pv) {
 			por::comb C(pv.begin(), pv.end());
-			assert(C.is_sorted());
+			C.sort();
 
 			fnf.reserve(pv.size());
 
