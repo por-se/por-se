@@ -37,3 +37,6 @@ Statistic stats::cutoffConfigurations("CutoffConfigurations", "coConf");
 Statistic stats::exitedConfigurations("ExitedConfigurations", "eConf");
 Statistic stats::errorConfigurations("ErrorConfigurations", "errConf");
 Statistic stats::dataraceConfigurations("DataraceConfigurations", "drConf");
+Statistic stats::cexAboveCsdLimit("CexAboveCsdLimit", "cexCsd");
+Statistic stats::csdThreads("CsdThreads", "csdTh");
+Statistic stats::cutoffThreads("CsdThreads", "coTh");

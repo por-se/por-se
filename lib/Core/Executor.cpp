@@ -3680,6 +3680,7 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   for (por::event::event const *cex : conflicting_extensions) {
     assert(!cex->is_cutoff());
     if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
+      ++stats::cexAboveCsdLimit;
       //klee_warning("Context Switch Degree of conflicting extension above limit.");
       cfg.unfolding()->remove_event(*cex);
     } else {
@@ -4911,6 +4912,9 @@ void Executor::runFunctionAsMain(Function *f,
     llvm::outs() << "KLEE: done: exited executions = " << stats::exitedConfigurations << "\n";
     llvm::outs() << "KLEE: done: error executions = " << stats::errorConfigurations << "\n";
     llvm::outs() << "KLEE: done: datarace executions = " << stats::dataraceConfigurations << "\n";
+    llvm::outs() << "KLEE: done: cex above csd limit = " << stats::cexAboveCsdLimit << "\n";
+    llvm::outs() << "KLEE: done: threads above csd = " << stats::csdThreads << "\n";
+    llvm::outs() << "KLEE: done: cutoff threads = " << stats::cutoffThreads << "\n";
     llvm::outs() << "KLEE: done: states: " << states.size() << "\n";
   }
 }

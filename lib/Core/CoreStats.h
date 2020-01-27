@@ -56,6 +56,9 @@ namespace stats {
   extern Statistic exitedConfigurations;
   extern Statistic errorConfigurations;
   extern Statistic dataraceConfigurations;
+  extern Statistic cexAboveCsdLimit;
+  extern Statistic csdThreads;
+  extern Statistic cutoffThreads;
 }
 }
 

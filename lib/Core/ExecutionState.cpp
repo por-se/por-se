@@ -20,6 +20,7 @@
 #include "klee/StatePruningCmdLine.h"
 #include "klee/Thread.h"
 
+#include "CoreStats.h"
 #include "Memory.h"
 #include "MemoryState.h"
 #include "MemoryManager.h"
@@ -297,8 +298,14 @@ std::set<ThreadId> ExecutionState::runnableThreads() {
   for (auto &[tid, thread] : threads) {
     if (thread.isRunnable(cfg)) {
       bool overCsd = MaxContextSwitchDegree && por::is_above_csd_limit(*cfg.last_of_tid(tid), MaxContextSwitchDegree);
-      if (cfg.last_of_tid(tid)->is_cutoff() || overCsd) {
+      bool isCutoff = cfg.last_of_tid(tid)->is_cutoff();
+      if (isCutoff || overCsd) {
         if (!needsCatchUp()) {
+          if (overCsd) {
+            ++stats::csdThreads;
+          } else if (isCutoff) {
+            ++stats::cutoffThreads;
+          }
           cutoffThread(thread);
         }
       } else {
