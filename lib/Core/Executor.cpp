@@ -465,6 +465,11 @@ cl::opt<bool>ExploreSchedules(
       cl::desc("Explore alternative thread schedules (default=true)"),
       cl::init(true));
 
+cl::opt<std::uint64_t> ExploreSchedulesInstructions(
+    "explore-schedules-instructions",
+    cl::desc("Explore Schedules after this many instructions (0 to disable, default=10000)"),
+    cl::init(10000));
+
 cl::opt<bool> DebugAlternatives(
   "debug-alternative-schedules",
   cl::init(false),
@@ -3625,7 +3630,7 @@ void Executor::run(ExecutionState &initialState) {
 
     updateStates(&state);
 
-    if (stats::instructions % 10000 == 0) {
+    if (ExploreSchedulesInstructions && stats::instructions % ExploreSchedulesInstructions == 0) {
       exploreSchedules(state);
       updateStates(nullptr);
     }
