@@ -139,6 +139,9 @@ public:
   // node for Partial Order Reduction based exploration
   por::node* porNode = nullptr;
 
+  // FIXME: solve in a better way
+  por::node* lastPorNode = nullptr;
+
   // sequence of events that need to be caught up
   std::deque<por::event::event const *> catchUp;
 

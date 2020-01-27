@@ -123,6 +123,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
     memoryState(state.memoryState, this),
+    lastPorNode(state.porNode),
     catchUp(state.catchUp),
     steppedInstructions(state.steppedInstructions),
     threadsCreated(state.threadsCreated)
