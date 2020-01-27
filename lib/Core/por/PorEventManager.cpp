@@ -176,6 +176,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       return false;
     }
     if (s->hasUnregisteredDecisions()) {
+      s->porNode = n; // needed for distance calculation in shouldRegisterStandbyState
       s->porNode = n->make_right_local_child(
           [this, &s, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
         auto path = std::move(s->unregisteredDecisions());
