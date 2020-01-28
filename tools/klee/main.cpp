@@ -316,7 +316,7 @@ private:
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsExplored; // number of paths explored so far
   std::uint64_t m_maxThreadsCreated = 0; // maximum number of threads created per path
-  std::uint64_t m_maxConcurrentThreads = 0; // maximum number of concurrently active threads
+  std::uint64_t m_maxConcurrentThreads = 1; // maximum number of concurrently active threads
 
   // used for writing .ktest files
   int m_argc;
