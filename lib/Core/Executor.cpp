@@ -2108,10 +2108,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     
     if (state.stackFrameIndex() == 0) {
       assert(!caller && "caller set on initial stack frame");
-      // only happens without uClibC or POSIX runtime;
-      // hence exit() is called implicitly return from main
-      assert(kmodule->module->getFunction("__klee_posix_wrapped_main") == nullptr
-             && kmodule->module->getFunction("__uClibc_main") == nullptr);
       if (!exitCurrentThread(state, true)) {
         break;
       }
