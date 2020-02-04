@@ -5498,7 +5498,7 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
   if (runnable.empty()) {
     if (disabledThread && !wasEmpty) {
       klee_warning("Disabled all threads because of porNode->D(). Terminating State.");
-      terminateState(state);
+      terminateStateSilently(state);
       return {};
     }
 
