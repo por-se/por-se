@@ -330,6 +330,7 @@ namespace por {
 			auto& thread_event = thread_it->second;
 			assert(thread_event->kind() != por::event::event_kind::thread_exit && "Thread must not yet be exited");
 			assert(thread_event->kind() != por::event::event_kind::wait1 && "Thread must not be blocked");
+			assert(can_acquire_lock(lock));
 			auto lock_it = _lock_heads.find(lock);
 			if constexpr(optional_creation_events) {
 				if(lock_it == _lock_heads.end()) {
