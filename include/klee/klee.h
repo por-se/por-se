@@ -153,7 +153,8 @@ extern "C" {
 
   void klee_create_thread(void (*start_routine)(void*), void *runtime_struct);
 
-  void klee_exit_thread(void* lock_to_release) __attribute__ ((__noreturn__));
+  /* Atomically release lock_to_release and exit current thread. */
+  void klee_exit_thread(klee_sync_primitive_t *lock_to_release) __attribute__ ((__noreturn__));
 
   // Should only be used internally to find the correct thread
   void klee_por_thread_join(void *runtime_struct);
