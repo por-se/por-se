@@ -25,7 +25,22 @@ bool unfolding::compare_events(por::event::event const& a, por::event::event con
 	if(a.kind() != b.kind())
 		return false;
 
-	if(a.kind() == por::event::event_kind::local) {
+	if(a.lid() != b.lid())
+		return false;
+
+	if(a.cid() != b.cid())
+		return false;
+
+	if(a.atomic_predecessor() != b.atomic_predecessor())
+		return false;
+
+	if(a.kind() == por::event::event_kind::thread_create) {
+		auto create_a = static_cast<por::event::thread_create const*>(&a);
+		auto create_b = static_cast<por::event::thread_create const*>(&b);
+		if(create_a->created_tid() != create_b->created_tid()) {
+			return false;
+		}
+	} else if(a.kind() == por::event::event_kind::local) {
 		if(!a.has_same_local_path(b)) {
 			return false;
 		}
