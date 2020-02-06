@@ -738,7 +738,7 @@ void SpecialFunctionHandler::handleDisableMemoryState(ExecutionState &state,
                                                             &arguments) {
   if (PruneStates) {
     state.memoryState.disable();
-    klee_warning_once(target, "disabling memory state of infinite loop detection");
+    klee_warning_once(target, "disabling memory state");
   }
 }
 
@@ -748,7 +748,7 @@ void SpecialFunctionHandler::handleEnableMemoryState(ExecutionState &state,
                                                             &arguments) {
   if (PruneStates) {
     state.memoryState.enable();
-    klee_warning_once(target, "enabling memory state of infinite loop detection");
+    klee_warning_once(target, "enabling memory state");
   }
 }
 
