@@ -418,10 +418,6 @@ int __fgetc_unlocked(FILE *f) {
   return fgetc_unlocked(f);
 }
 
-int klee_get_errno() {
-  return errno;
-}
-
 void klee_warning(char *name) {
   fprintf(stderr, "KLEE-REPLAY: klee_warning: %s\n", name);
 }

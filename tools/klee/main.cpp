@@ -804,7 +804,6 @@ static const char *modelledExternals[] = {
   "klee_disable_memory_state",
   "klee_dump_memory_trace",
   "klee_define_fixed_object",
-  "klee_get_errno",
   "klee_get_valuef",
   "klee_get_valued",
   "klee_get_valuel",

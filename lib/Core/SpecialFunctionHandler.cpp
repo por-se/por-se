@@ -97,7 +97,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_get_value_i64", handleGetValue, true),
   add("klee_define_fixed_object", handleDefineFixedObject, false),
   add("klee_get_obj_size", handleGetObjSize, true),
-  add("klee_get_errno", handleGetErrno, true),
 #ifndef __APPLE__
   add("__errno_location", handleErrnoLocation, true),
 #else
@@ -598,21 +597,6 @@ void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state,
   }
 }
 
-void SpecialFunctionHandler::handleGetErrno(ExecutionState &state,
-                                            KInstruction *target,
-                                            std::vector<ref<Expr> > &arguments) {
-  // XXX should type check args
-  assert(arguments.size()==0 &&
-         "invalid number of arguments to klee_get_errno");
-
-  // Retrieve the memory object of the errno variable
-  const MemoryObject* thErrno = state.errnoMo();
-  const ObjectState* errValue = state.addressSpace.findObject(thErrno);
-
-  assert(errValue != nullptr && "errno should be created for every thread");
-
-  executor.bindLocal(target, state, errValue->read(0, thErrno->size * 8));
-}
 
 void SpecialFunctionHandler::handleErrnoLocation(
     ExecutionState &state, KInstruction *target,

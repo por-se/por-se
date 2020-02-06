@@ -151,9 +151,6 @@ extern "C" {
   /* Print range for given argument and tagged with name */
   void klee_print_range(const char * name, int arg );
 
-  /* Get errno value of the current state */
-  int klee_get_errno(void);
-
   void klee_create_thread(void (*start_routine)(void*), void *runtime_struct);
 
   void klee_exit_thread(void* lock_to_release) __attribute__ ((__noreturn__));
