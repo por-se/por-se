@@ -12,29 +12,15 @@ using namespace klee;
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
     const llvm::Function *f, ref<ConstantExpr> addr)
-    : type(ReferencedType::Function), value(f), address(addr), size(0) {}
+    : type(ReferencedType::Function), value(f), address(std::move(addr)), size(0) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
     const llvm::GlobalAlias *a, ref<ConstantExpr> addr)
-    : type(ReferencedType::Alias), value(a), address(addr), size(0) {}
+    : type(ReferencedType::Alias), value(a), address(std::move(addr)), size(0) {}
 
 GlobalObjectsMap::GlobalObjectReference::GlobalObjectReference(
     const llvm::GlobalVariable *v, std::size_t size)
     : type(ReferencedType::Data), value(v), address(0), size(size) {}
-
-GlobalObjectsMap::GlobalObjectReference::~GlobalObjectReference() {
-  if (type == ReferencedType::Data) {
-    // FIXME: it should not be our job to clean this up ...
-    for (auto &[_tid, mo] : threadLocalMemory) {
-      assert(mo->_refCount.refCount > 0);
-      --mo->_refCount.refCount;
-
-      if (mo->_refCount.refCount == 0) {
-        delete mo;
-      }
-    }
-  }
-}
 
 const llvm::Function *GlobalObjectsMap::GlobalObjectReference::getFunction() {
   assert(type == ReferencedType::Function && "Calling on invalid type");
@@ -58,7 +44,7 @@ GlobalObjectsMap::GlobalObjectReference::getMemoryObject(const ThreadId &tid) {
 
   auto it = threadLocalMemory.find(tid);
   if (it != threadLocalMemory.end()) {
-    return it->second;
+    return it->second.get();
   }
 
   return nullptr;
@@ -72,14 +58,14 @@ void GlobalObjectsMap::registerFunction(const llvm::Function *func,
                                         ref<ConstantExpr> addr) {
   assert(findObject(func) == nullptr);
 
-  globalObjects.emplace(func, GlobalObjectReference(func, addr));
+  globalObjects.emplace(func, GlobalObjectReference(func, std::move(addr)));
 }
 
 void GlobalObjectsMap::registerAlias(const llvm::GlobalAlias *alias,
                                      ref<ConstantExpr> addr) {
   assert(findObject(alias) == nullptr);
 
-  globalObjects.emplace(alias, GlobalObjectReference(alias, addr));
+  globalObjects.emplace(alias, GlobalObjectReference(alias, std::move(addr)));
 }
 
 const MemoryObject *
@@ -93,7 +79,6 @@ GlobalObjectsMap::registerGlobalData(MemoryManager *manager,
   // For the main thread we create the memory object directly
   auto mo = manager->allocateGlobal(size, gv, ExecutionState::mainThreadId,
                                     alignment);
-  ++mo->_refCount.refCount;
   reference.threadLocalMemory.emplace(ExecutionState::mainThreadId, mo);
 
   if (!gv->isThreadLocal() && mo != nullptr) {
@@ -120,19 +105,18 @@ GlobalObjectsMap::lookupGlobalMemoryObject(MemoryManager *manager,
   // Now we have to check whether the value is actually depending on the thread
   // that is calling
   if (!gv->isThreadLocal()) {
-    return globalObject->threadLocalMemory[ExecutionState::mainThreadId];
+    return globalObject->threadLocalMemory[ExecutionState::mainThreadId].get();
   }
 
   // Now we have to check if we actually have already created the object for
   // this specific thread
   auto it = globalObject->threadLocalMemory.find(byTid);
   if (it != globalObject->threadLocalMemory.end()) {
-    return it->second;
+    return it->second.get();
   }
 
   auto mo = manager->allocateGlobal(globalObject->size, gv, byTid,
                                     gv->getAlignment());
-  ++mo->_refCount.refCount;
   globalObject->threadLocalMemory.emplace(byTid, mo);
   return mo;
 }

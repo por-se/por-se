@@ -29,17 +29,11 @@ namespace klee {
 
         ref<ConstantExpr> address;
         std::size_t size;
-        std::map<const ThreadId, MemoryObject*> threadLocalMemory;
+        std::map<const ThreadId, ref<MemoryObject>> threadLocalMemory;
 
         GlobalObjectReference(const llvm::Function* f, ref<ConstantExpr> addr);
         GlobalObjectReference(const llvm::GlobalAlias* a, ref<ConstantExpr> addr);
         GlobalObjectReference(const llvm::GlobalVariable* v, std::size_t size);
-
-        GlobalObjectReference(GlobalObjectReference const&) = delete;
-        GlobalObjectReference& operator=(GlobalObjectReference const&) = delete;
-        GlobalObjectReference(GlobalObjectReference&&) = default;
-        GlobalObjectReference& operator=(GlobalObjectReference&&) = default;
-        ~GlobalObjectReference();
 
         const llvm::Function* getFunction();
         const llvm::GlobalAlias* getAlias();

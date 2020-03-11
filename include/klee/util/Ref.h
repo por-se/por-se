@@ -52,7 +52,6 @@ class ref;
 class ReferenceCounter {
   template<class T>
   friend class ref;
-  friend class GlobalObjectsMap; // FIXME: this should not be necessary
 
   /// Count how often the object has been referenced.
   unsigned refCount = 0;
