@@ -7,6 +7,25 @@
 //
 //===----------------------------------------------------------------------===//
 
+/**
+ * @file Ref.h
+ * @brief Implements smart-pointer ref<> used by KLEE.
+ *
+ * ## Basic usage:
+ *
+ * Add the following to your struct/class to enable ref<> pointer usage
+ * @code{.cpp}
+ *
+ * struct MyStruct{
+ *   ...
+ *   /// @brief Required by klee::ref-managed objects
+ *   class ReferenceCounter _refCount;
+ *   ...
+ * }
+ * @endcode
+ *
+ */
+
 #ifndef KLEE_REF_H
 #define KLEE_REF_H
 
@@ -17,14 +36,54 @@ using llvm::cast_or_null;
 using llvm::dyn_cast;
 using llvm::dyn_cast_or_null;
 
-#include <assert.h>
-#include <iosfwd> // FIXME: Remove this!!!
+#include <cassert>
+#include <iosfwd> // FIXME: Remove this when LLVM 4.0 support is removed!!!
 
 namespace llvm {
   class raw_ostream;
-}
+} // namespace llvm
 
 namespace klee {
+
+template<class T>
+class ref;
+
+/// Reference counter to be used as part of a ref-managed struct or class
+class ReferenceCounter {
+  template<class T>
+  friend class ref;
+  friend class GlobalObjectsMap; // FIXME: this should not be necessary
+
+  /// Count how often the object has been referenced.
+  unsigned refCount = 0;
+
+public:
+  ReferenceCounter() = default;
+  ~ReferenceCounter() = default;
+
+  // Explicitly initialise reference counter with 0 again
+  // As this object is part of another object, the copy-constructor
+  // might be invoked as part of the other one.
+  ReferenceCounter(const ReferenceCounter& ) {}
+
+  /// Returns the number of parallel references of this objects
+  /// \return number of references on this object
+  unsigned getCount() {return refCount;}
+
+  // Copy assignment operator
+  ReferenceCounter &operator=(const ReferenceCounter &a) {
+    if (this == &a)
+      return *this;
+    // The new copy won't be referenced
+    refCount = 0;
+    return *this;
+  }
+
+  // Do not allow move operations for the reference counter
+  // as otherwise, references become incorrect.
+  ReferenceCounter(ReferenceCounter &&r) noexcept = delete;
+  ReferenceCounter &operator=(ReferenceCounter &&other) noexcept = delete;
+};
 
 template<class T>
 class ref {
@@ -32,17 +91,17 @@ class ref {
 
 public:
   // default constructor: create a NULL reference
-  ref() : ptr(0) { }
+  ref() : ptr(nullptr) {}
   ~ref () { dec (); }
 
 private:
   void inc() const {
     if (ptr)
-      ++ptr->refCount;
+      ++ptr->_refCount.refCount;
   }
 
   void dec() const {
-    if (ptr && --ptr->refCount == 0)
+    if (ptr && --ptr->_refCount.refCount == 0)
       delete ptr;
   }
 
@@ -65,6 +124,14 @@ public:
     inc();
   }
 
+  // normal move constructor: invoke the move assignment operator
+  ref(ref<T> &&r) noexcept : ptr(nullptr) { *this = std::move(r); }
+
+  // conversion move constructors: invoke the move assignment operator
+  template <class U> ref(ref<U> &&r) noexcept : ptr(nullptr) {
+    *this = std::move(r);
+  }
+
   // pointer operations
   T *get () const {
     return ptr;
@@ -74,17 +141,71 @@ public:
    * despite a redundant template. */
   ref<T> &operator= (const ref<T> &r) {
     r.inc();
+    // Create a copy of the pointer as the
+    // referenced object might get destroyed by the following dec(),
+    // like in the following example:
+    // ````````````````````````
+    //    Expr {
+    //        ref<Expr> next;
+    //    }
+    //
+    //    ref<Expr> root;
+    //    root = root->next;
+    // ````````````````````````
+    T *saved_ptr = r.ptr;
     dec();
-    ptr = r.ptr;
+    ptr = saved_ptr;
 
     return *this;
   }
 
   template<class U> ref<T> &operator= (const ref<U> &r) {
     r.inc();
+    // Create a copy of the pointer as the currently
+    // referenced object might get destroyed by the following dec(),
+    // like in the following example:
+    // ````````````````````````
+    //    Expr {
+    //        ref<Expr> next;
+    //    }
+    //
+    //    ref<Expr> root;
+    //    root = root->next;
+    // ````````````````````````
+
+    U *saved_ptr = r.ptr;
+    dec();
+    ptr = saved_ptr;
+
+    return *this;
+  }
+
+  // Move assignment operator
+  ref<T> &operator=(ref<T> &&r) noexcept {
+    if (this == &r)
+      return *this;
     dec();
     ptr = r.ptr;
+    r.ptr = nullptr;
+    return *this;
+  }
 
+  // Move assignment operator
+  template <class U> ref<T> &operator=(ref<U> &&r) noexcept {
+    if (static_cast<void *>(this) == static_cast<void *>(&r))
+      return *this;
+
+    // Do not swap as the types might be not compatible
+    // Decrement local counter to not hold reference anymore
+    dec();
+
+    // Assign to this ref
+    ptr = cast_or_null<T>(r.ptr);
+
+    // Invalidate old ptr
+    r.ptr = nullptr;
+
+    // Return this pointer
     return *this;
   }
 
@@ -96,7 +217,7 @@ public:
     return ptr;
   }
 
-  bool isNull() const { return ptr == 0; }
+  bool isNull() const { return ptr == nullptr; }
 
   // assumes non-null arguments
   int compare(const ref &rhs) const {
@@ -133,7 +254,7 @@ namespace llvm {
   // isNull semantics, which doesn't seem like a good idea.
 template<typename T>
 struct simplify_type<const ::klee::ref<T> > {
-  typedef T* SimpleType;
+  using SimpleType = T *;
   static SimpleType getSimplifiedValue(const ::klee::ref<T> &Ref) {
     return Ref.get();
   }
@@ -142,6 +263,6 @@ struct simplify_type<const ::klee::ref<T> > {
 template<typename T>
 struct simplify_type< ::klee::ref<T> >
   : public simplify_type<const ::klee::ref<T> > {};
-}
+}  // namespace llvm
 
 #endif /* KLEE_REF_H */

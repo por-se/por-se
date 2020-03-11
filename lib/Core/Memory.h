@@ -41,10 +41,13 @@ class MemoryObject {
   friend class ExecutionState;
   friend class Thread;
   friend class GlobalObjectsMap;
+  friend class ref<MemoryObject>;
+  friend class ref<const MemoryObject>;
 
 private:
   static uint64_t counter;
-  mutable unsigned refCount;
+  /// @brief Required by klee::ref-managed objects
+  mutable class ReferenceCounter _refCount;
 
   /// id of thread and index of stack frame in which this memory object was allocated.
   std::pair<ThreadId, std::size_t> allocationStackFrame{};
@@ -86,9 +89,8 @@ public:
   // XXX this is just a temp hack, should be removed
   explicit
   MemoryObject(uint64_t _address) 
-    : refCount(0),
-      allocationStackFrame({}),
-      id(counter++), 
+    : allocationStackFrame({}),
+      id(counter++),
       address(_address),
       size(0),
       isFixed(true),
@@ -100,8 +102,7 @@ public:
   MemoryObject(uint64_t _address, unsigned _size, unsigned _alignment, bool _isLocal, bool _isGlobal, bool _isFixed, bool _isThreadLocal,
                const llvm::Value *_allocSite, std::pair<ThreadId, std::size_t> _allocationStackFrame,
                MemoryManager *_parent)
-    : refCount(0),
-      allocationStackFrame(_allocationStackFrame),
+    : allocationStackFrame(_allocationStackFrame),
       id(counter++),
       address(_address),
       size(_size),
@@ -168,17 +169,38 @@ public:
   const std::pair<ThreadId, std::size_t> &getAllocationStackFrame() const {
     return allocationStackFrame;
   }
+
+  /// Compare this object with memory object b.
+  /// \param b memory object to compare with
+  /// \return <0 if this is smaller, 0 if both are equal, >0 if b is smaller
+  int compare(const MemoryObject &b) const {
+    // Short-cut with id
+    if (id == b.id)
+      return 0;
+    if (address != b.address)
+      return (address < b.address ? -1 : 1);
+
+    if (size != b.size)
+      return (size < b.size ? -1 : 1);
+
+    if (allocSite != b.allocSite)
+      return (allocSite < b.allocSite ? -1 : 1);
+
+    return 0;
+  }
 };
 
 class ObjectState {
 private:
   friend class AddressSpace;
+  friend class ref<ObjectState>;
+
   unsigned copyOnWriteOwner; // exclusively for AddressSpace
 
-  friend class ObjectHolder;
-  unsigned refCount;
+  /// @brief Required by klee::ref-managed objects
+  class ReferenceCounter _refCount;
 
-  const MemoryObject *object;
+  ref<const MemoryObject> object;
 
   uint8_t *concreteStore;
 
@@ -211,7 +233,7 @@ public:
   ObjectState(const ObjectState &os);
   ~ObjectState();
 
-  const MemoryObject *getObject() const { return object; }
+  const MemoryObject *getObject() const { return object.get(); }
 
   void setReadOnly(bool ro) { readOnly = ro; }
 

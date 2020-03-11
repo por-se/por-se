@@ -82,15 +82,6 @@ ExecutionState::ExecutionState(const std::vector<ref<Expr> > &assumptions)
       memoryState(this) {}
 
 ExecutionState::~ExecutionState() {
-  for (unsigned int i=0; i<symbolics.size(); i++)
-  {
-    const MemoryObject *mo = symbolics[i].first;
-    assert(mo->refCount > 0);
-    mo->refCount--;
-    if (mo->refCount == 0)
-      delete mo;
-  }
-
   // We have to clean up all stack frames of all threads
   for (auto& [_, thread] : threads) {
     while (!thread.stack.empty()) {
@@ -132,8 +123,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
 {
   current = &threads.at(state.tid());
 
-  for (unsigned int i=0; i<symbolics.size(); i++)
-    symbolics[i].first->refCount++;
 }
 
 ExecutionState::ExecutionState(const por::leaf &leaf) : ExecutionState(*leaf.start->standby_state()) {
@@ -317,9 +306,8 @@ std::set<ThreadId> ExecutionState::runnableThreads() {
   return runnable;
 }
 
-void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) { 
-  mo->refCount++;
-  symbolics.emplace_back(mo, array);
+void ExecutionState::addSymbolic(const MemoryObject *mo, const Array *array) {
+  symbolics.emplace_back(std::make_pair(ref<const MemoryObject>(mo), array));
 }
 
 /**/
@@ -329,9 +317,9 @@ llvm::raw_ostream &klee::operator<<(llvm::raw_ostream &os, const MemoryMap &mm) 
   MemoryMap::iterator it = mm.begin();
   MemoryMap::iterator ie = mm.end();
   if (it!=ie) {
-    os << "MO" << it->first->id << ":" << it->second;
+    os << "MO" << it->first->id << ":" << it->second.get();
     for (++it; it!=ie; ++it)
-      os << ", MO" << it->first->id << ":" << it->second;
+      os << ", MO" << it->first->id << ":" << it->second.get();
   }
   os << "}";
   return os;
@@ -370,6 +358,7 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
     out << "\n";
   }
 }
+
 
 void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const {
   unsigned idx = 0;

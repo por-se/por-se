@@ -11,7 +11,6 @@
 
 #include "Context.h"
 #include "MemoryManager.h"
-#include "ObjectHolder.h"
 
 #include "klee/Expr/ArrayCache.h"
 #include "klee/Expr/Expr.h"
@@ -38,27 +37,6 @@ namespace {
                     cl::desc("Use constant arrays instead of updates when possible (default=true)\n"),
                     cl::init(true),
                     cl::cat(SolvingCat));
-}
-
-/***/
-
-ObjectHolder::ObjectHolder(const ObjectHolder &b) : os(b.os) { 
-  if (os) ++os->refCount; 
-}
-
-ObjectHolder::ObjectHolder(ObjectState *_os) : os(_os) { 
-  if (os) ++os->refCount; 
-}
-
-ObjectHolder::~ObjectHolder() { 
-  if (os && --os->refCount==0) delete os; 
-}
-  
-ObjectHolder &ObjectHolder::operator=(const ObjectHolder &b) {
-  if (b.os) ++b.os->refCount;
-  if (os && --os->refCount==0) delete os;
-  os = b.os;
-  return *this;
 }
 
 /***/
@@ -96,7 +74,6 @@ void MemoryObject::getAllocInfo(std::string &result) const {
 
 ObjectState::ObjectState(const MemoryObject *mo)
   : copyOnWriteOwner(0),
-    refCount(0),
     object(mo),
     concreteStore(new uint8_t[mo->size]),
     concreteMask(0),
@@ -105,7 +82,6 @@ ObjectState::ObjectState(const MemoryObject *mo)
     updates(0, 0),
     size(mo->size),
     readOnly(false) {
-  mo->refCount++;
   if (!UseConstantArrays) {
     static unsigned id = 0;
     const Array *array =
@@ -118,7 +94,6 @@ ObjectState::ObjectState(const MemoryObject *mo)
 
 ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
   : copyOnWriteOwner(0),
-    refCount(0),
     object(mo),
     concreteStore(new uint8_t[mo->size]),
     concreteMask(0),
@@ -127,14 +102,12 @@ ObjectState::ObjectState(const MemoryObject *mo, const Array *array)
     updates(array, 0),
     size(mo->size),
     readOnly(false) {
-  mo->refCount++;
   makeSymbolic();
   memset(concreteStore, 0, size);
 }
 
 ObjectState::ObjectState(const ObjectState &os) 
   : copyOnWriteOwner(0),
-    refCount(0),
     object(os.object),
     concreteStore(new uint8_t[os.size]),
     concreteMask(os.concreteMask ? new BitArray(*os.concreteMask, os.size) : 0),
@@ -144,9 +117,6 @@ ObjectState::ObjectState(const ObjectState &os)
     size(os.size),
     readOnly(false) {
   assert(!os.readOnly && "no need to copy read only object?");
-  if (object)
-    object->refCount++;
-
   if (os.knownSymbolics) {
     knownSymbolics = new ref<Expr>[size];
     for (unsigned i=0; i<size; i++)
@@ -161,20 +131,10 @@ ObjectState::~ObjectState() {
   delete flushMask;
   delete[] knownSymbolics;
   delete[] concreteStore;
-
-  if (object) {
-    assert(object->refCount > 0);
-
-    // Now clear the internal stuff
-    object->refCount--;
-    if (object->refCount == 0) {
-      delete object;
-    }
-  }
 }
 
 ArrayCache *ObjectState::getArrayCache() const {
-  assert(object && "object was NULL");
+  assert(!object.isNull() && "object was NULL");
   return object->parent->getArrayCache();
 }
 
@@ -188,10 +148,10 @@ const UpdateList &ObjectState::getUpdates() const {
     // FIXME: We should be able to do this more efficiently, we just need to be
     // careful to get the interaction with the cache right. In particular we
     // should avoid creating UpdateNode instances we never use.
-    unsigned NumWrites = updates.head ? updates.head->getSize() : 0;
+    unsigned NumWrites = updates.head.isNull() ? 0 : updates.head->getSize();
     std::vector< std::pair< ref<Expr>, ref<Expr> > > Writes(NumWrites);
-    const UpdateNode *un = updates.head;
-    for (unsigned i = NumWrites; i != 0; un = un->next) {
+    const auto *un = updates.head.get();
+    for (unsigned i = NumWrites; i != 0; un = un->next.get()) {
       --i;
       Writes[i] = std::make_pair(un->index, un->value);
     }
@@ -257,7 +217,7 @@ void ObjectState::makeConcrete() {
 }
 
 void ObjectState::makeSymbolic() {
-  assert(!updates.head &&
+  assert(updates.head.isNull() &&
          "XXX makeSymbolic of objects with symbolic values is unsupported");
 
   // XXX simplify this, can just delete various arrays I guess
@@ -612,7 +572,7 @@ void ObjectState::print() const {
   }
 
   llvm::errs() << "\tUpdates:\n";
-  for (const UpdateNode *un=updates.head; un; un=un->next) {
+  for (const auto *un = updates.head.get(); un; un = un->next.get()) {
     llvm::errs() << "\t\t[" << un->index << "] = " << un->value << "\n";
   }
 }

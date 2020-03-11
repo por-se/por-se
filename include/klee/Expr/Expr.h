@@ -174,7 +174,8 @@ public:
     CmpKindLast=Sge
   };
 
-  unsigned refCount;
+  /// @brief Required by klee::ref-managed objects
+  class ReferenceCounter _refCount;
 
 protected:  
   unsigned hashValue;
@@ -204,7 +205,7 @@ protected:
   virtual int compareContents(const Expr &b) const = 0;
 
 public:
-  Expr() : refCount(0) { Expr::count++; }
+  Expr() { Expr::count++; }
   virtual ~Expr() { Expr::count--; } 
 
   virtual Kind getKind() const = 0;
@@ -449,23 +450,24 @@ public:
 
 /// Class representing a byte update of an array.
 class UpdateNode {
-  friend class UpdateList;  
+  friend class UpdateList;
 
-  mutable unsigned refCount;
   // cache instead of recalc
   unsigned hashValue;
 
 public:
-  const UpdateNode *next;
+  const ref<UpdateNode> next;
   ref<Expr> index, value;
-  
+
+  /// @brief Required by klee::ref-managed objects
+  mutable class ReferenceCounter _refCount;
+
 private:
   /// size of this update sequence, including this update
   unsigned size;
   
 public:
-  UpdateNode(const UpdateNode *_next, 
-             const ref<Expr> &_index, 
+  UpdateNode(const ref<UpdateNode> &_next, const ref<Expr> &_index,
              const ref<Expr> &_value);
 
   unsigned getSize() const { return size; }
@@ -473,9 +475,8 @@ public:
   int compare(const UpdateNode &b) const;  
   unsigned hash() const { return hashValue; }
 
-private:
-  UpdateNode() : refCount(0) {}
-  ~UpdateNode();
+  UpdateNode() = delete;
+  ~UpdateNode() = default;
 
   unsigned computeHash();
 };
@@ -543,24 +544,24 @@ public:
   const Array *root;
   
   /// pointer to the most recent update node
-  const UpdateNode *head;
-  
+  ref<UpdateNode> head;
+
 public:
-  UpdateList(const Array *_root, const UpdateNode *_head);
-  UpdateList(const UpdateList &b);
-  ~UpdateList();
-  
-  UpdateList &operator=(const UpdateList &b);
+  UpdateList(const Array *_root, const ref<UpdateNode> &_head);
+  UpdateList(const UpdateList &b) = default;
+  ~UpdateList() = default;
+
+  UpdateList &operator=(const UpdateList &b) = default;
 
   /// size of this update list
-  unsigned getSize() const { return (head ? head->getSize() : 0); }
-  
+  unsigned getSize() const {
+    return (head.get() != nullptr ? head->getSize() : 0);
+  }
+
   void extend(const ref<Expr> &index, const ref<Expr> &value);
 
   int compare(const UpdateList &b) const;
   unsigned hash() const;
-private:
-  void tryFreeNodes();
 };
 
 /// Class representing a one byte read from an array. 

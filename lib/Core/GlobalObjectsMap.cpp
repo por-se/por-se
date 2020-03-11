@@ -26,10 +26,10 @@ GlobalObjectsMap::GlobalObjectReference::~GlobalObjectReference() {
   if (type == ReferencedType::Data) {
     // FIXME: it should not be our job to clean this up ...
     for (auto &[_tid, mo] : threadLocalMemory) {
-      assert(mo->refCount > 0);
-      --mo->refCount;
+      assert(mo->_refCount.refCount > 0);
+      --mo->_refCount.refCount;
 
-      if (mo->refCount == 0) {
+      if (mo->_refCount.refCount == 0) {
         delete mo;
       }
     }
@@ -93,7 +93,7 @@ GlobalObjectsMap::registerGlobalData(MemoryManager *manager,
   // For the main thread we create the memory object directly
   auto mo = manager->allocateGlobal(size, gv, ExecutionState::mainThreadId,
                                     alignment);
-  ++mo->refCount;
+  ++mo->_refCount.refCount;
   reference.threadLocalMemory.emplace(ExecutionState::mainThreadId, mo);
 
   if (!gv->isThreadLocal() && mo != nullptr) {
@@ -132,7 +132,7 @@ GlobalObjectsMap::lookupGlobalMemoryObject(MemoryManager *manager,
 
   auto mo = manager->allocateGlobal(globalObject->size, gv, byTid,
                                     gv->getAlignment());
-  ++mo->refCount;
+  ++mo->_refCount.refCount;
   globalObject->threadLocalMemory.emplace(byTid, mo);
   return mo;
 }

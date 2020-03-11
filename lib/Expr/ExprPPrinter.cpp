@@ -90,7 +90,8 @@ private:
     if (isVerySimple(e)) {
       return true;
     } else if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
-      return isVerySimple(re->index) && isVerySimpleUpdate(re->updates.head);
+      return isVerySimple(re->index) &&
+             isVerySimpleUpdate(re->updates.head.get());
     } else {
       Expr *ep = e.get();
       for (unsigned i=0; i<ep->getNumKids(); i++)
@@ -111,7 +112,7 @@ private:
     // FIXME: This needs to be non-recursive.
     if (un) {
       if (couldPrintUpdates.insert(un).second) {
-        scanUpdate(un->next);
+        scanUpdate(un->next.get());
         scan1(un->index);
         scan1(un->value);
       } else {
@@ -128,7 +129,7 @@ private:
           scan1(ep->getKid(i));
         if (const ReadExpr *re = dyn_cast<ReadExpr>(e)) {
           usedArrays.insert(re->updates.root);
-          scanUpdate(re->updates.head);
+          scanUpdate(re->updates.head.get());
         }
       } else {
         shouldPrint.insert(e);
@@ -137,10 +138,10 @@ private:
   }
 
   void printUpdateList(const UpdateList &updates, PrintContext &PC) {
-    const UpdateNode *head = updates.head;
+    auto head = updates.head;
 
     // Special case empty list.
-    if (!head) {
+    if (head.isNull()) {
       // FIXME: We need to do something (assert, mangle, etc.) so that printing
       // distinct arrays with the same name doesn't fail.
       PC << updates.root->name;
@@ -155,22 +156,22 @@ private:
     // We only have to print the most recent update for each index
     std::vector<ref<Expr>> prevUpdate;
 
-    for (const UpdateNode *un = head; un; un = un->next) {
+    for (auto un = head; !un.isNull(); un = un->next) {
       if (std::count(prevUpdate.begin(), prevUpdate.end(), un->index) == 0) {
         // We are done if we hit the cache.
-        auto it = updateBindings.find(un);
+        auto it = updateBindings.find(un.get());
         if (it != updateBindings.end()) {
           if (openedList)
             PC << "] @ ";
           PC << "U" << it->second;
           return;
-        } else if (!hasScan || shouldPrintUpdates.count(un)) {
+      } else if (!hasScan || shouldPrintUpdates.count(un.get())) {
           if (openedList)
             PC << "] @";
           if (un != head)
             PC.breakLine(outerIndent);
-          PC << "U" << updateCounter << ":";
-          updateBindings.insert(std::make_pair(un, updateCounter++));
+        PC << "U" << updateCounter << ":"; 
+        updateBindings.insert(std::make_pair(un.get(), updateCounter++));
           openedList = nextShouldBreak = false;
         }
 
