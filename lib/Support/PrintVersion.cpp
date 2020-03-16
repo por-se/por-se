@@ -16,7 +16,6 @@
 #include "klee/Config/CompileTimeInfo.h"
 
 #include "por/version.h"
-#include "pseudoalloc/version.h"
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(6, 0)
 void klee::printVersion(llvm::raw_ostream &OS)
@@ -43,7 +42,6 @@ void klee::printVersion()
 
   OS << "Libraries: \n";
   OS << "          POR revision: " << POR_BUILD_REVISION << "\n";
-  OS << "  pseudoalloc revision: " << PSEUDOALLOC_BUILD_REVISION << "\n";
 
   // Show LLVM version information
   OS << "\n";

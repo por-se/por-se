@@ -25,4 +25,4 @@ set(LLVM_COMPONENTS
   support
 )
 klee_get_llvm_libs(LLVM_LIBS ${LLVM_COMPONENTS})
-target_link_libraries(kleeSupport PUBLIC ${LLVM_LIBS} libpor libpseudoalloc)
+target_link_libraries(kleeSupport PUBLIC ${LLVM_LIBS} libpor)

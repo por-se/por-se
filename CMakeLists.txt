@@ -359,20 +359,6 @@ else()
 endif()
 
 ################################################################################
-# Support for deterministic allocations (via pseudoalloc library)
-################################################################################
-
-if (PSEUDOALLOC_DIR)
-  include("${PSEUDOALLOC_DIR}/libpseudoalloc-targets.cmake")
-  set(TARGET_LIBS ${TARGET_LIBS} libpseudoalloc)
-  message(STATUS "Pseudoalloc Library included: ${PSEUDOALLOC_DIR}")
-else()
-  message(FATAL_ERROR
-    "pseudoalloc is required but could not be found."
-    "Please set PSEUDOALLOC_DIR!")
-endif()
-
-################################################################################
 # Partial Order Reduction Library (from Simulator)
 ################################################################################
 

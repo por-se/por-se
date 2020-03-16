@@ -28,7 +28,6 @@ test:
     - rm -rf /workspace/porse
     - cp -r . /workspace/porse
     - git -C /workspace/simulator pull --ff-only
-    - git -C /workspace/pseudoalloc pull --ff-only
     - git -C /workspace/klee-uclibc pull --ff-only
     - rm -rf /workspace/.build/klee-uclibc-*
     - /workspace/ws build >build.log 2>&1
