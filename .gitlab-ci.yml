@@ -18,7 +18,7 @@ stages:
 
 test:
   stage: test
-  image: registry.comsys.rwth-aachen.de/symbiosys-projects-concurrent-symbolic-execution-workspace:latest-prebuilt
+  image: laboratory.comsys.rwth-aachen.de:5050/symbiosys/projects/concurrent-symbolic-execution/workspace:latest-prebuilt
   artifacts:
     when: always
     paths:
