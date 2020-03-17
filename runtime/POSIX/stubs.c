@@ -551,8 +551,14 @@ int settimeofday(const struct timeval *tv, const struct timezone *tz) {
   return -1;
 }
 
+#if __GLIBC_PREREQ(2, 31)
+int gettimeofday(struct timeval *restrict tv, void *restrict _tz) __attribute__((weak));
+int gettimeofday(struct timeval *restrict tv, void *restrict _tz) {
+  struct timezone *tz = (struct timezone *)_tz;
+#else
 int gettimeofday(struct timeval *restrict tv, struct timezone *restrict tz) __attribute__((weak));
 int gettimeofday(struct timeval *restrict tv, struct timezone *restrict tz) {
+#endif
   if(tz) {
     klee_warning("Behavior is UB if tz is not NULL: ignoring tz");
     tz->tz_minuteswest = 0;
