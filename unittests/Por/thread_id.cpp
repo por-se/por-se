@@ -1,36 +1,38 @@
-#include <iostream>
-#include <cassert>
+#include "por/thread_id.h"
 
-#include <por/thread_id.h>
+#include "gtest/gtest.h"
+
+#include <iostream>
 
 using namespace por;
 
+namespace {
 //
 // Basic functions
 //
-static void testBasicFunctions() {
+TEST(ThreadIdTest, BasicFunctions) {
 	thread_id empty{};
 	thread_id singleLayer(thread_id(), 1);
 	thread_id doubleLayer(singleLayer, 2);
 
-	assert(empty.empty() && empty.size() == 0);
-	assert(!singleLayer.empty() && singleLayer.size() == 1);
-	assert(!doubleLayer.empty() && doubleLayer.size() == 2);
+	ASSERT_TRUE(empty.empty() && empty.size() == 0);
+	ASSERT_TRUE(!singleLayer.empty() && singleLayer.size() == 1);
+	ASSERT_TRUE(!doubleLayer.empty() && doubleLayer.size() == 2);
 
-	assert(singleLayer.ids()[0] == 1);
-	assert(doubleLayer.ids()[0] == 1 && doubleLayer.ids()[1] == 2);
+	ASSERT_EQ(singleLayer.ids()[0], 1);
+	ASSERT_TRUE(doubleLayer.ids()[0] == 1 && doubleLayer.ids()[1] == 2);
 }
 
 //
 // Operator overloads
 //
-static void testOperatorOverloads() {
-	assert(thread_id(thread_id(), 1));
-	assert(!thread_id());
+TEST(ThreadIdTest, OperatorOverloads) {
+	ASSERT_TRUE(thread_id(thread_id(), 1));
+	ASSERT_TRUE(!thread_id());
 
-	assert(thread_id(thread_id(), 1)[0] == 1);
+	ASSERT_EQ(thread_id(thread_id(), 1)[0], 1);
 
-	assert(thread_id(thread_id(thread_id(), 1), 2)[1] == 2);
+	ASSERT_EQ(thread_id(thread_id(thread_id(), 1), 2)[1], 2);
 
 	// Special test that goes deeper into the hierarchy
 	thread_id tid(thread_id(), 1);
@@ -38,7 +40,7 @@ static void testOperatorOverloads() {
 		tid = thread_id(tid, i + 2);
 
 		for(int j = 0; j <= i + 1; j++) {
-			assert(tid[j] == j + 1);
+			ASSERT_EQ(tid[j], j + 1);
 		}
 	}
 }
@@ -46,13 +48,13 @@ static void testOperatorOverloads() {
 //
 // Formatting of thread ids
 //
-static void testFormattingOfThreadIds() {
-	assert(thread_id(thread_id(), 1).to_string() == "1");
-	assert(thread_id(thread_id(thread_id(), 1), 1).to_string() == "1,1");
-	assert(thread_id(thread_id(thread_id(), 1), 10000).to_string() == "1,10000");
+TEST(ThreadIdTest, Formatting) {
+	ASSERT_EQ(thread_id(thread_id(), 1).to_string(), "1");
+	ASSERT_EQ(thread_id(thread_id(thread_id(), 1), 1).to_string(), "1,1");
+	ASSERT_EQ(thread_id(thread_id(thread_id(), 1), 10000).to_string(), "1,10000");
 
 	// special case
-	assert(thread_id().to_string() == "");
+	ASSERT_EQ(thread_id().to_string(), "");
 }
 
 //
@@ -99,15 +101,11 @@ static void testParsingOfThreadIds() {
 	// Invalid local ids
 	testParsing("1,1,1,1,0,1", false); // 0 is not allowed
 	testParsing("1,123123121", false); // simple overflow
+
+	exit(0);
 }
 
-int main() {
-	testBasicFunctions();
-
-	testOperatorOverloads();
-
-	testFormattingOfThreadIds();
-	testParsingOfThreadIds();
-
-	return 0;
+TEST(ThreadIdDeathTest, Parsing) {
+	ASSERT_EXIT(testParsingOfThreadIds(), ::testing::ExitedWithCode(0), "");
 }
+} // namespace

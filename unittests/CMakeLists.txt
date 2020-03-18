@@ -171,6 +171,7 @@ add_subdirectory(TreeStream)
 add_subdirectory(DiscretePDF)
 add_subdirectory(Time)
 add_subdirectory(pseudoalloc)
+add_subdirectory(Por)
 
 # Set up lit configuration
 set (UNIT_TEST_EXE_SUFFIX "Test")
