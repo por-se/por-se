@@ -1,4 +1,4 @@
-#include "include/por/configuration.h"
+#include "por/configuration.h"
 
 using namespace por;
 

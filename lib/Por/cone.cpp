@@ -1,8 +1,8 @@
-#include "include/por/cone.h"
+#include "por/cone.h"
 
-#include "include/por/configuration.h"
-#include "include/por/comb.h"
-#include "include/por/event/event.h"
+#include "por/configuration.h"
+#include "por/comb.h"
+#include "por/event/event.h"
 
 #include "util/check.h"
 

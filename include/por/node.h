@@ -12,22 +12,16 @@
 #include <utility>
 #include <vector>
 
-#ifdef LIBPOR_KLEE
 namespace klee {
 	class ExecutionState;
 }
-#endif
 
 namespace por {
 	class configuration;
 	class node;
 	class unfolding;
 
-#ifdef LIBPOR_KLEE
 	using state = klee::ExecutionState;
-#else
-	struct state {};
-#endif
 
 	namespace event {
 		class event;

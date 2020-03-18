@@ -358,18 +358,6 @@ else()
   set(HAS_VERIFIED_FINGERPRINTS_ENABLED 0) # For lit.site.cfg.in only!
 endif()
 
-################################################################################
-# Partial Order Reduction Library (from Simulator)
-################################################################################
-
-if (POR_SIMULATOR_DIR)
-  include("${POR_SIMULATOR_DIR}/libpor-targets.cmake")
-  set(TARGET_LIBS ${TARGET_LIBS} libpor)
-  message(STATUS "Partial Order Reduction Library included: ${POR_SIMULATOR_DIR}")
-else()
-  message(FATAL_ERROR "POR_SIMULATOR_DIR not set!")
-endif()
-
 ###############################################################################
 # Exception handling
 ###############################################################################

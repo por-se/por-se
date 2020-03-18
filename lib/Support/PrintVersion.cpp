@@ -15,8 +15,6 @@
 
 #include "klee/Config/CompileTimeInfo.h"
 
-#include "por/version.h"
-
 #if LLVM_VERSION_CODE >= LLVM_VERSION(6, 0)
 void klee::printVersion(llvm::raw_ostream &OS)
 #else
@@ -39,9 +37,6 @@ void klee::printVersion()
   OS << "unknown\n";
 #endif
   OS << "\n";
-
-  OS << "Libraries: \n";
-  OS << "          POR revision: " << POR_BUILD_REVISION << "\n";
 
   // Show LLVM version information
   OS << "\n";

@@ -1,7 +1,7 @@
-#include "include/por/unfolding.h"
+#include "por/unfolding.h"
 
-#include "include/por/configuration.h"
-#include "include/por/event/event.h"
+#include "por/configuration.h"
+#include "por/event/event.h"
 
 #include <algorithm>
 

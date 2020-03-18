@@ -1,5 +1,5 @@
-#include "include/por/comb.h"
-#include "include/por/event/event.h"
+#include "por/comb.h"
+#include "por/event/event.h"
 
 #include "util/check.h"
 

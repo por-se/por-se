@@ -1,7 +1,7 @@
-#include "include/por/cone.h"
-#include "include/por/csd.h"
-#include "include/por/thread_id.h"
-#include "include/por/event/event.h"
+#include "por/cone.h"
+#include "por/csd.h"
+#include "por/thread_id.h"
+#include "por/event/event.h"
 
 #include <deque>
 #include <map>

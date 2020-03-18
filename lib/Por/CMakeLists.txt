@@ -6,11 +6,19 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_subdirectory(Basic)
-add_subdirectory(Support)
-add_subdirectory(Expr)
-add_subdirectory(Solver)
-add_subdirectory(Module)
-add_subdirectory(Fingerprint)
-add_subdirectory(Core)
-add_subdirectory(Por)
+
+klee_add_component(kleePor
+  cone.cpp
+  configuration.cpp
+  comb.cpp
+  csd.cpp
+  erv.cpp
+  event.cpp
+  node.cpp
+  unfolding.cpp
+)
+
+target_link_libraries(kleePor PRIVATE
+  kleeCore
+  kleeFingerprint
+)

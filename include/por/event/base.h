@@ -1,5 +1,8 @@
 #pragma once
 
+#include "klee/Fingerprint/MemoryFingerprintDelta.h"
+#include "klee/Fingerprint/MemoryFingerprintValue.h"
+
 #include "por/cone.h"
 #include "por/thread_id.h"
 
@@ -13,11 +16,6 @@
 #include <string>
 #include <variant>
 #include <vector>
-
-#ifdef LIBPOR_KLEE
-#include "klee/Fingerprint/MemoryFingerprintDelta.h"
-#include "klee/Fingerprint/MemoryFingerprintValue.h"
-#endif
 
 namespace por {
 	class unfolding;
@@ -47,13 +45,8 @@ namespace por::event {
 		broadcast,
 	};
 
-#ifdef LIBPOR_KLEE
 	using fingerprint_delta_t = klee::MemoryFingerprintDelta;
 	using fingerprint_value_t = klee::MemoryFingerprintValue;
-#else
-	using fingerprint_delta_t = std::uint64_t;
-	using fingerprint_value_t = std::uint64_t;
-#endif
 
 	class event;
 

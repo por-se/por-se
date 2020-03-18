@@ -1,7 +1,0 @@
-// @AUTO_GEN_MSG@
-#ifndef POR_VERSION_H
-#define POR_VERSION_H
-
-#define POR_BUILD_REVISION "@POR_GIT_SHA1HASH@"
-
-#endif /* POR_VERSION_H */
