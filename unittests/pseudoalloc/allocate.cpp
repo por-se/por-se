@@ -1,11 +1,19 @@
 #include "pseudoalloc/pseudoalloc.h"
 
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+#include "gtest/gtest.h"
+#endif
+
 #include <cassert>
 #include <deque>
 #include <iomanip>
 #include <iostream>
 
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+int allocate_sample_test() {
+#else
 int main() {
+#endif
 	// initialize a mapping and an associated allocator (using the location "0" gives an OS-assigned location)
 	pseudoalloc::mapping_t mapping(static_cast<std::size_t>(1) << 12);
 	pseudoalloc::allocator_t allocator(mapping, 0); /// allocator without a quarantine zone
@@ -31,4 +39,12 @@ int main() {
 		          << (static_cast<char*>(p) - static_cast<char*>(mapping.begin())) << "\n";
 		allocator.free(p, 4);
 	}
+
+	exit(0);
 }
+
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+TEST(PseudoallocDeathTest, AllocateSample) {
+	ASSERT_EXIT(allocate_sample_test(), ::testing::ExitedWithCode(0), "");
+}
+#endif
