@@ -6,11 +6,10 @@
 # License. See LICENSE.TXT for details.
 #
 #===------------------------------------------------------------------------===#
-add_subdirectory(gen-bout)
-add_subdirectory(gen-random-bout)
-add_subdirectory(kleaver)
-add_subdirectory(klee)
-add_subdirectory(klee-replay)
-add_subdirectory(klee-stats)
-add_subdirectory(ktest-tool)
-add_subdirectory(random-graph)
+add_executable(random-graph
+  main.cpp
+)
+
+target_link_libraries(random-graph kleePor)
+
+install(TARGETS klee RUNTIME DESTINATION bin)

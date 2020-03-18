@@ -1,5 +1,7 @@
-#include <por/configuration.h>
-#include <por/thread_id.h>
+#include "por/configuration.h"
+#include "por/thread_id.h"
+
+#include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
@@ -10,8 +12,6 @@
 #include <iomanip>
 #include <set>
 #include <sstream>
-
-#include <util/sso_array.h>
 
 namespace {
 	por::event::thread_id_t choose_thread(por::configuration const& configuration, std::mt19937_64& gen) {
@@ -401,9 +401,7 @@ int main(int argc, char** argv){
 		for(auto e : icfl) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
 			auto e_icfl = e->immediate_conflicts();
-			for(auto c : e_icfl) {
-				assert(std::find(e_icfl.begin(), e_icfl.end(), entry) != icfl.end());
-			}
+			assert(std::find(e_icfl.begin(), e_icfl.end(), entry) != icfl.end());
 		}
 		std::cerr << "\n";
 	}

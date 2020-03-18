@@ -1,9 +1,0 @@
-/debug
-/release
-/sanitized
-/profile
-/build
-/cmake-*
-
-.vscode
-.idea
