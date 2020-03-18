@@ -1,0 +1,36 @@
+before_script:
+  - | # setup netrc for usage in container
+      echo -e "machine laboratory.comsys.rwth-aachen.de\nlogin gitlab-ci-token\npassword ${CI_JOB_TOKEN}" >> ~/.netrc
+      chmod 0600 ~/.netrc
+  - | # derive and print WS_JOBS
+      export WS_JOBS=${CI_RUNNER_DESCRIPTION##*-j} # strip the longest match of *-j from the front of the description
+      if [[ "$WS_JOBS" = "$CI_RUNNER_DESCRIPTION" ]] ; then # check if no match happened
+        WS_JOBS=0
+      else
+        case "${WS_JOBS}" in
+          ''|*[!0-9]*) WS_JOBS=0 ;; # check if remaining value is not a number
+        esac
+      fi
+      echo "WS_JOBS=${WS_JOBS}"
+
+stages:
+  - test
+
+test:
+  stage: test
+  image: registry.comsys.rwth-aachen.de/symbiosys-projects-concurrent-symbolic-execution-workspace:latest-prebuilt
+  artifacts:
+    when: always
+    paths:
+      - build.log
+    expire_in: 1 day
+  script:
+    - rm -rf /workspace/simulator
+    - cp -r . /workspace/simulator
+    - git -C /workspace/porse pull --ff-only
+    - /workspace/ws build --until simulator >build.log 2>&1
+    - |
+        /workspace/ws run -- bash -c 'set -e ; set -u ; set -o pipefail
+          cd "$(dirname "$(which random-graph)")/../.."
+          cmake --build . --target check -j ${WS_JOBS}
+        '
