@@ -38,7 +38,6 @@ void configuration::to_dotgraph(std::ostream& os) const noexcept {
 
 	for(por::event::event const* event : *this) {
 		por::event::thread_id_t const& tid = event->tid();
-		por::event::event const* thread_pred = event->thread_predecessor();
 		bool first = true;
 		for(por::event::event const* predecessor : event->predecessors()) {
 			if(tid != predecessor->tid()) {

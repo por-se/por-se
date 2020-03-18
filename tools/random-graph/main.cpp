@@ -340,7 +340,7 @@ int main(int argc, char** argv){
 						break;
 				}
 				if(cid) {
-					auto lid = 0;
+					por::event::lock_id_t lid = 0;
 					for(auto& e : configuration.lock_heads()) {
 						auto* l = e.second;
 						while(l != nullptr && wait1->is_less_than(*l)) {
@@ -429,7 +429,7 @@ int main(int argc, char** argv){
 		}
 	}
 
-	assert(visited.size() == std::distance(configuration.begin(), configuration.end()));
+	assert(visited.size() == static_cast<std::size_t>(std::distance(configuration.begin(), configuration.end())));
 	assert(visited.size() == configuration.size());
 
 #ifndef NDEBUG
@@ -442,7 +442,7 @@ int main(int argc, char** argv){
 		}
 		E.insert(t);
 	}
-	assert(E.size() == std::distance(configuration.begin(), configuration.end()));
+	assert(E.size() == static_cast<std::size_t>(std::distance(configuration.begin(), configuration.end())));
 	assert(E.size() == configuration.size());
 
 	// check event_iterator for all events (and for all its options)
@@ -489,7 +489,7 @@ int main(int argc, char** argv){
 		por::event::event_iterator causes_no_root_it(*e, false, false);
 		por::event::event_iterator causes_no_root_ie(*e, false, false, true);
 
-		assert(causes_no_root.size() == std::distance(causes_no_root_it, causes_no_root_ie));
+		assert(causes_no_root.size() == static_cast<std::size_t>(std::distance(causes_no_root_it, causes_no_root_ie)));
 		std::set<por::event::event const*> causes_no_root_set(causes_no_root.begin(), causes_no_root.end());
 		std::set<por::event::event const*> causes_no_root_it_set(causes_no_root_it, causes_no_root_ie);
 		assert(causes_no_root_set == causes_no_root_it_set);
@@ -499,7 +499,7 @@ int main(int argc, char** argv){
 		por::event::event_iterator causes_it(*e, true, false);
 		por::event::event_iterator causes_ie(*e, true, false, true);
 
-		assert(causes.size() == std::distance(causes_it, causes_ie));
+		assert(causes.size() == static_cast<std::size_t>(std::distance(causes_it, causes_ie)));
 		std::set<por::event::event const*> causes_set(causes.begin(), causes.end());
 		std::set<por::event::event const*> causes_it_set(causes_it, causes_ie);
 		assert(causes_set == causes_it_set);
@@ -509,7 +509,7 @@ int main(int argc, char** argv){
 		por::event::event_iterator configuration_it(*e, true, true);
 		por::event::event_iterator configuration_ie(*e, true, true, true);
 
-		assert(configuration.size() == std::distance(configuration_it, configuration_ie));
+		assert(configuration.size() == static_cast<std::size_t>(std::distance(configuration_it, configuration_ie)));
 		std::set<por::event::event const*> configuration_set(configuration.begin(), configuration.end());
 		std::set<por::event::event const*> configuration_it_set(configuration_it, configuration_ie);
 		assert(configuration_set == configuration_it_set);
@@ -519,7 +519,7 @@ int main(int argc, char** argv){
 		por::event::event_iterator configuration_no_root_it(*e, false, true);
 		por::event::event_iterator configuration_no_root_ie(*e, false, true, true);
 
-		assert(configuration_no_root.size() == std::distance(configuration_no_root_it, configuration_no_root_ie));
+		assert(configuration_no_root.size() == static_cast<std::size_t>(std::distance(configuration_no_root_it, configuration_no_root_ie)));
 		std::set<por::event::event const*> configuration_no_root_set(configuration_no_root.begin(), configuration_no_root.end());
 		std::set<por::event::event const*> configuration_no_root_it_set(configuration_no_root_it, configuration_no_root_ie);
 		assert(configuration_no_root_set == configuration_no_root_it_set);
