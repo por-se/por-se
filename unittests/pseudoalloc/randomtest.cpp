@@ -1,6 +1,10 @@
 #include "pseudoalloc/pseudoalloc.h"
 #include "xoshiro.h"
 
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+#include "gtest/gtest.h"
+#endif
+
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -17,7 +21,7 @@ namespace {
 
 #if defined(USE_PSEUDOALLOC)
 		pseudoalloc::mapping_t mapping;
-		pseudoalloc::stack_allocator_t allocator;
+		pseudoalloc::allocator_t allocator;
 #endif
 
 		std::vector<std::pair<void*, std::size_t>> allocations;
@@ -33,7 +37,7 @@ namespace {
 		RandomTest(std::mt19937_64::result_type seed = 0x31337)
 		  : rng(seed)
 #if defined(USE_PSEUDOALLOC)
-		  , mapping(static_cast<std::size_t>(1) << 44)
+		  , mapping(static_cast<std::size_t>(1) << 40)
 		  , allocator(mapping, 0) /// allocator without a quarantine zone
 #endif
 		  , allocation_bin_distribution(0.3)
@@ -41,7 +45,6 @@ namespace {
 		}
 
 		void run(std::uint64_t const iterations) {
-			allocations.reserve((iterations * 7) / 10);
 			std::uniform_int_distribution<std::uint32_t> choice(0, 999);
 			for(std::uint64_t i = 0; i < iterations; ++i) {
 				auto chosen = choice(rng);
@@ -61,11 +64,13 @@ namespace {
 
 		void cleanup() {
 			while(!allocations.empty()) {
+				auto choice = std::uniform_int_distribution<std::size_t>(0, allocations.size() - 1)(rng);
 #if defined(USE_PSEUDOALLOC)
-				allocator.free(allocations.back().first, allocations.back().second);
+				allocator.free(allocations[choice].first, allocations[choice].second);
 #else
-				free(allocations.back().first);
+				free(allocations[choice].first);
 #endif
+				allocations[choice] = allocations.back();
 				allocations.pop_back();
 			}
 		}
@@ -109,17 +114,23 @@ namespace {
 			if(allocations.empty()) {
 				return;
 			}
+			auto choice = std::uniform_int_distribution<std::size_t>(0, allocations.size() - 1)(rng);
 #if defined(USE_PSEUDOALLOC)
-			allocator.free(allocations.back().first, allocations.back().second);
+			allocator.free(allocations[choice].first, allocations[choice].second);
 #else
-			free(allocations.back().first);
+			free(allocations[choice].first);
 #endif
+			allocations[choice] = allocations.back();
 			allocations.pop_back();
 		}
 	};
 } // namespace
 
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+int random_test() {
+#else
 int main() {
+#endif
 #if defined(USE_PSEUDOALLOC)
 	std::cout << "Using pseudoalloc" << (pseudoalloc::checked_build ? " (checked)" : " (unchecked)") << "\n";
 #else
@@ -128,7 +139,7 @@ int main() {
 	auto start = std::chrono::steady_clock::now();
 
 	RandomTest tester;
-	tester.run(50'000'000);
+	tester.run(10'000'000);
 
 	auto stop = std::chrono::steady_clock::now();
 	std::cout << std::dec << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms\n";
@@ -137,4 +148,12 @@ int main() {
 	std::cout << "Allocations: " << tester.allocation_count << "\n";
 	std::cout << "Deallocations: " << tester.deallocation_count << "\n";
 	std::cout << "Maximum concurrent allocations: " << tester.maximum_concurrent_allocations << "\n";
+
+	exit(0);
 }
+
+#if defined(USE_GTEST_INSTEAD_OF_MAIN)
+TEST(PseudoallocDeathTest, Random) {
+	ASSERT_EXIT(random_test(), ::testing::ExitedWithCode(0), "");
+}
+#endif
