@@ -1,10 +1,8 @@
 #ifndef KLEE_MEMORYFINGERPRINTVALUE_H
 #define KLEE_MEMORYFINGERPRINTVALUE_H
 
-#ifndef KLEE_OUTSIDE_BUILD_TREE
 // for ENABLE_VERIFIED_FINGERPRINTS
 #include "klee/Config/config.h"
-#endif
 
 #include <algorithm>
 #include <array>
