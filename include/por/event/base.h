@@ -39,10 +39,10 @@ namespace por::event {
 		using color_t = std::size_t;
 
 	private:
-		depth_t _depth;
-		por::cone _cone; // maximal predecessor per thread (excl. program_init)
-		thread_id_t _tid;
-		event_kind _kind;
+		thread_id_t const _tid;
+		event_kind const _kind;
+		por::cone const _cone; // maximal predecessor per thread (excl. program_init)
+		depth_t const _depth;
 
 		mutable color_t _color = 0;
 
@@ -106,10 +106,10 @@ namespace por::event {
 		auto const& cone() const noexcept { return _cone; }
 
 		event(event&& that)
-		: _depth(that._depth)
-		, _cone(std::move(that._cone))
-		, _tid(std::move(that._tid))
+		: _tid(std::move(that._tid))
 		, _kind(that._kind)
+		, _cone(std::move(that._cone))
+		, _depth(that._depth)
 		, _color(that._color)
 		, _imm_cfl_color(that._imm_cfl_color)
 		, _successors(std::move(that._successors))
@@ -135,19 +135,19 @@ namespace por::event {
 		std::vector<event const*> immediate_predecessors_from_cone() const noexcept;
 
 		event(event_kind kind, thread_id_t tid)
-		: _depth(0)
-		, _tid(tid)
+		: _tid(tid)
 		, _kind(kind)
+		, _depth(0)
 		{
 			// otherwise, depth is wrong
 			assert(kind == event_kind::program_init);
 		}
 
 		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor)
-		: _depth(immediate_predecessor._depth + 1)
-		, _cone(immediate_predecessor)
-		, _tid(tid)
+		: _tid(tid)
 		, _kind(kind)
+		, _cone(immediate_predecessor)
+		, _depth(immediate_predecessor._depth + 1)
 		, _is_cutoff(immediate_predecessor._is_cutoff)
 		{
 			assert(immediate_predecessor._depth < _depth);
@@ -155,19 +155,16 @@ namespace por::event {
 		}
 
 		event(event_kind kind, thread_id_t tid, event const& immediate_predecessor, event const* single_other_predecessor, util::iterator_range<event const* const*> other_predecessors)
-		: _cone(immediate_predecessor, single_other_predecessor, other_predecessors)
-		, _tid(tid)
+		: _tid(tid)
 		, _kind(kind)
+		, _cone(immediate_predecessor, single_other_predecessor, other_predecessors)
+		, _depth((*std::max_element(_cone.events_begin(), _cone.events_end(), [](event const* a, event const* b) { return a->depth() < b->depth(); }))->depth() + 1)
 		{
-			std::size_t max_depth = 0;
-			for(auto& c : _cone) {
-				auto& event = c.second;
-				max_depth = std::max(max_depth, event->_depth);
+			for(auto& event : _cone.events()) {
 				if(event->_is_cutoff) {
 					_is_cutoff = true;
 				}
 			}
-			_depth = max_depth + 1;
 
 			assert(immediate_predecessor._depth < _depth);
 			libpor_check(_cone.size() >= immediate_predecessor._cone.size());
