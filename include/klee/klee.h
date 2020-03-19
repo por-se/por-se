@@ -13,7 +13,6 @@
 #include "stdint.h"
 #include "stddef.h"
 
-#include "por/events.h"
 #include "runtime/klee_types.h"
 
 #ifdef __cplusplus

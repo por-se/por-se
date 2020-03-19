@@ -17,8 +17,6 @@
 #include "klee/ExecutionState.h"
 #include "klee/Thread.h"
 
-#include "klee/por/events.h"
-
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/Debug.h"

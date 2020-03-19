@@ -2,7 +2,6 @@
 #define KLEE_POREVENTMANAGER_H
 
 #include "klee/Thread.h"
-#include "klee/por/events.h"
 
 #include "por/node.h"
 #include "por/event/event.h"
@@ -17,10 +16,10 @@ namespace klee {
       bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
 
     private:
-      static std::string getNameOfEvent(por_event_t kind);
-      bool shouldRegisterStandbyState(const ExecutionState &state, por_event_t kind);
-      std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por_event_t kind);
-      void logEventThreadAndKind(const ExecutionState &state, por_event_t kind);
+      static std::string getNameOfEvent(por::event::event_kind kind);
+      bool shouldRegisterStandbyState(const ExecutionState &state, por::event::event_kind kind);
+      std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por::event::event_kind kind);
+      void logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind);
       bool extendPorNode(ExecutionState&, std::function<por::node::registration_t(por::configuration&)>&&);
 
     public:

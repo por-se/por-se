@@ -23,7 +23,6 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/Interpreter.h"
 
-#include "klee/por/events.h"
 #include "por/PorEventManager.h"
 
 #include "llvm/Support/raw_ostream.h"
