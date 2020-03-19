@@ -1,5 +1,8 @@
 #pragma once
 
+#include "iterator.h"
+#include "kind.h"
+
 #include "klee/Fingerprint/MemoryFingerprintDelta.h"
 #include "klee/Fingerprint/MemoryFingerprintValue.h"
 
@@ -25,72 +28,8 @@ namespace por::event {
 	using thread_id_t = por::thread_id;
 	using lock_id_t = std::uint64_t;
 	using cond_id_t = std::uint64_t;
-
-	enum class event_kind : std::uint8_t {
-		local,
-		program_init,
-		thread_create,
-		thread_join,
-		thread_init,
-		thread_exit,
-		lock_create,
-		lock_destroy,
-		lock_acquire,
-		lock_release,
-		condition_variable_create,
-		condition_variable_destroy,
-		wait1,
-		wait2,
-		signal,
-		broadcast,
-	};
-
 	using fingerprint_delta_t = klee::MemoryFingerprintDelta;
 	using fingerprint_value_t = klee::MemoryFingerprintValue;
-
-	class event;
-
-	class event_iterator {
-		event const* _lc = nullptr;
-		por::cone::const_reverse_iterator _thread;
-		event const* _event = nullptr;
-		bool _with_root = true; // include program_init event
-
-	public:
-		using value_type = event const*;
-		using difference_type = std::ptrdiff_t;
-		using pointer = event const* const*;
-		using reference = event const* const&;
-
-		using iterator_category = std::forward_iterator_tag;
-
-		event_iterator() = default;
-
-		// this iterator supports different modes:
-		// with_root =  true, with_event =  true => [e] (local configuration of e)
-		// with_root = false, with_event =  true => [e] \ {program_init} (local configuration without root event)
-		// with_root =  true, with_event = false => ⌈e⌉ := [e] \ {e} (causes of e)
-		// with_root = false, with_event = false => ⌈e⌉ \ {program_init} (causes of e without root event)
-		explicit event_iterator(event const& event, bool with_root=true, bool with_event=true, bool end=false);
-
-		reference operator*() const noexcept { return _event; }
-		pointer operator->() const noexcept { return &_event; }
-
-		event_iterator& operator++() noexcept;
-		event_iterator operator++(int) noexcept {
-			event_iterator tmp = *this;
-			++(*this);
-			return tmp;
-		}
-
-		bool operator==(const event_iterator& rhs) const noexcept {
-			libpor_check(decltype(_thread)() == decltype(_thread)());
-			return _lc == rhs._lc && _thread == rhs._thread && _event == rhs._event && _with_root == rhs._with_root;
-		}
-		bool operator!=(const event_iterator& rhs) const noexcept {
-			return !(*this == rhs);
-		}
-	};
 
 	class event {
 		friend class por::unfolding; // for caching of immediate_conflicts
