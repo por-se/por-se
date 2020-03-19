@@ -16,7 +16,6 @@ namespace klee {
       bool registerLocal(ExecutionState &, const std::vector<ExecutionState *> &, bool snapshotsAllowed = true);
 
     private:
-      static std::string getNameOfEvent(por::event::event_kind kind);
       bool shouldRegisterStandbyState(const ExecutionState &state, por::event::event_kind kind);
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por::event::event_kind kind);
       void logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind);

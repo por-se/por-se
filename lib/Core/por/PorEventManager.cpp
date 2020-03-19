@@ -38,32 +38,6 @@ namespace {
     llvm::cl::init(1));
 }
 
-std::string PorEventManager::getNameOfEvent(por::event::event_kind kind) {
-  switch (kind) {
-    case por::event::event_kind::local: return "local";
-    case por::event::event_kind::program_init: return "program_init";
-
-    case por::event::event_kind::thread_create: return "thread_create";
-    case por::event::event_kind::thread_init: return "thread_init";
-    case por::event::event_kind::thread_join: return "thread_join";
-    case por::event::event_kind::thread_exit: return "thread_exit";
-
-    case por::event::event_kind::lock_create: return "lock_create";
-    case por::event::event_kind::lock_destroy: return "lock_destroy";
-    case por::event::event_kind::lock_release: return "lock_release";
-    case por::event::event_kind::lock_acquire: return "lock_acquire";
-
-    case por::event::event_kind::condition_variable_create: return "condition_variable_create";
-    case por::event::event_kind::condition_variable_destroy: return "condition_variable_destroy";
-    case por::event::event_kind::signal: return "signal";
-    case por::event::event_kind::broadcast: return "broadcast";
-    case por::event::event_kind::wait1: return "wait1";
-    case por::event::event_kind::wait2: return "wait2";
-
-    default: return "undefined";
-  }
-}
-
 bool PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
   if (state.needsCatchUp()) {
     state.porNode = state.porNode->catch_up(std::move(callback), state.peekCatchUp());
@@ -86,7 +60,7 @@ bool PorEventManager::extendPorNode(ExecutionState& state, std::function<por::no
 
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind) {
   llvm::errs() << "[state id: " << state.id << "] ";
-  llvm::errs() << "registering " << getNameOfEvent(kind) << " with current thread " << state.tid();
+  llvm::errs() << "registering " << kind << " with current thread " << state.tid();
 }
 
 bool PorEventManager::shouldRegisterStandbyState(const ExecutionState &state, por::event::event_kind kind) {

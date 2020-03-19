@@ -79,7 +79,7 @@ void DataRaceDetection::trackAccess(const por::node& node, const MemoryOperation
   }
 
   if (DebugDrd) {
-    llvm::errs() << "DRD: @" << evtIt->second->to_string()
+    llvm::errs() << "DRD: @" << evtIt->second->kind()
                  << " track> mo=" << getDebugInfo(op.object)
                  << " tid=" << op.tid
                  << " type=" << op.getTypeString()
