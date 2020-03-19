@@ -563,14 +563,11 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
 
   const por::event::event &other = *it->second;
 
-  std::size_t eventSize = event.local_configuration_size();
-  std::size_t otherSize = other.local_configuration_size();
-
   bool isCutoff;
   if (UseAdequateOrder) {
     isCutoff = por::compare_adequate_total_order(other, event);
   } else {
-    isCutoff = otherSize < eventSize;
+    isCutoff = other.local_configuration_size() < event.local_configuration_size();
   }
 
   if (isCutoff) {

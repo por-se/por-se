@@ -107,9 +107,9 @@ namespace por {
 		// IMPORTANT: assumes no conflict between this and rhs
 		bool is_gte_for_all_of(cone const& rhs) const noexcept;
 
-		std::vector<por::event::event const*> max() const noexcept;
-
 		void extend_unchecked_single(por::event::event const& event) noexcept;
+
+		std::vector<por::event::event const*> max() const noexcept;
 
 		por::comb setminus(cone const& rhs) const noexcept;
 	};
