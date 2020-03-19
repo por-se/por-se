@@ -497,7 +497,7 @@ bool PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   assert(thread && "no thread with given id found");
 
   MemoryFingerprint copy;
-  auto delta = state.memoryState.getThreadDelta(*thread);
+  auto delta = thread->get().getFingerprintDelta();
   copy.addDelta(delta);
 
   for (auto &[tid, c] : event.cone()) {

@@ -109,6 +109,54 @@ bool Thread::isRunnable(const por::configuration &configuration) const noexcept 
   }
 }
 
+MemoryFingerprintDelta Thread::getFingerprintDelta() const {
+  MemoryFingerprint copy = fingerprint;
+
+  if (state != ThreadState::Exited) {
+    copy.updateProgramCounterFragment(getThreadId(),
+                                      stack.size() - 1,
+                                      pc->inst);
+    copy.addToFingerprint();
+
+    copy.updateThreadStateFragment(getThreadId(), static_cast<std::uint8_t>(state));
+    copy.addToFingerprint();
+
+    const ThreadId &threadId = getThreadId();
+    if (std::visit([&copy, &threadId](auto&& w) -> bool {
+      using T = std::decay_t<decltype(w)>;
+      if constexpr (std::is_same_v<T, Thread::wait_lock_t>) {
+        copy.updateThreadWaitingOnLockFragment(threadId, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_1_t>) {
+        copy.updateThreadWaitingOnCV_1Fragment(threadId, w.cond, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_cv_2_t>) {
+        copy.updateThreadWaitingOnCV_2Fragment(threadId, w.cond, w.lock);
+      } else if constexpr (std::is_same_v<T, Thread::wait_join_t>) {
+        copy.updateThreadWaitingOnJoinFragment(threadId, w.thread);
+      } else {
+        return false;
+      }
+      return true;
+    }, waiting)) {
+      copy.addToFingerprint();
+    }
+
+    // include live locals in current stack frame
+    if (liveSet != nullptr) {
+      for (const KInstruction *ki : *liveSet) {
+        assert(ki->inst->getFunction() == stack.back().kf->function);
+        ref<Expr> value = stack.back().locals[ki->dest].value;
+        if (value.isNull())
+          continue;
+
+        copy.updateLocalFragment(getThreadId(), stack.size() - 1, ki->inst, value);
+        copy.addToFingerprint();
+      }
+    }
+  }
+
+  return copy.getFingerprintAsDelta();
+}
+
 void Thread::popStackFrame() {
   stack.pop_back();
 }

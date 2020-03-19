@@ -70,7 +70,6 @@ namespace klee {
   class Thread {
     friend class Executor;
     friend class ExecutionState;
-    friend class MemoryState;
     friend class MemoryManager;
 
     public:
@@ -151,6 +150,8 @@ namespace klee {
         }
         return std::nullopt;
       }
+
+      MemoryFingerprintDelta getFingerprintDelta() const;
 
       void dumpLiveSet(llvm::raw_ostream &os) const noexcept;
 

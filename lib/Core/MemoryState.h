@@ -168,8 +168,6 @@ public:
 
   void registerAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid);
   void unregisterAcquiredLock(por::event::lock_id_t lock_id, const ThreadId &tid);
-
-  MemoryFingerprintDelta getThreadDelta(const Thread &thread) const;
 };
 }
 
