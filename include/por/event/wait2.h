@@ -18,6 +18,8 @@ namespace por::event {
 		cond_id_t _cid;
 		lock_id_t _lid;
 
+		mutable bool _all_cex_known = false;
+
 	protected:
 		wait2(thread_id_t tid,
 			cond_id_t cid,
@@ -145,9 +147,12 @@ namespace por::event {
 			return util::make_iterator_range<event const* const*>(_predecessors.data(), _predecessors.data() + 2);
 		}
 
+		event const* notifying_predecessor() const noexcept { return _predecessors[1]; }
+
 		lock_id_t lid() const noexcept override { return _lid; }
 		cond_id_t cid() const noexcept override { return _cid; }
 
-		event const* notifying_predecessor() const noexcept { return _predecessors[1]; }
+		bool all_cex_known() const noexcept { return _all_cex_known; }
+		void mark_all_cex_known() const noexcept { _all_cex_known = true; }
 	};
 }

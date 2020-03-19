@@ -16,6 +16,8 @@ namespace por::event {
 
 		lock_id_t _lid;
 
+		mutable bool _all_cex_known = false;
+
 	protected:
 		lock_acquire(thread_id_t tid, lock_id_t lid, event const& thread_predecessor, event const* lock_predecessor)
 			: event(event_kind::lock_acquire, tid, thread_predecessor, lock_predecessor)
@@ -118,5 +120,8 @@ namespace por::event {
 		event const* lock_predecessor() const noexcept override { return _predecessors[1]; }
 
 		lock_id_t lid() const noexcept override { return _lid; }
+
+		bool all_cex_known() const noexcept { return _all_cex_known; }
+		void mark_all_cex_known() const noexcept { _all_cex_known = true; }
 	};
 }

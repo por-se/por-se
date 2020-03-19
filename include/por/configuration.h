@@ -1326,15 +1326,25 @@ namespace por {
 			std::vector<por::event::event const*> result;
 			for(auto* e : *this) {
 				std::vector<por::unfolding::deduplication_result> candidates;
-				if(e->all_cex_found()) {
-					continue;
-				}
 				switch(e->kind()) {
-					case por::event::event_kind::lock_acquire:
-					case por::event::event_kind::wait2:
+					case por::event::event_kind::lock_acquire: {
+						auto acq = static_cast<por::event::lock_acquire const*>(e);
+						if(acq->all_cex_known()) {
+							continue;
+						}
 						candidates = cex_acquire(*e);
-						e->mark_all_cex_found();
+						acq->mark_all_cex_known();
 						break;
+					}
+					case por::event::event_kind::wait2: {
+						auto w2 = static_cast<por::event::wait2 const*>(e);
+						if(w2->all_cex_known()) {
+							continue;
+						}
+						candidates = cex_acquire(*e);
+						w2->mark_all_cex_known();
+						break;
+					}
 					case por::event::event_kind::wait1:
 						candidates = cex_wait1(*e);
 						break;

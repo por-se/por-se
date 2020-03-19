@@ -44,8 +44,6 @@ namespace por::event {
 		thread_id_t _tid;
 		event_kind _kind;
 
-		mutable bool _all_cex_found = false;
-
 		mutable color_t _color = 0;
 
 		// distinct color for compute_immediate_conflicts()
@@ -474,9 +472,6 @@ namespace por::event {
 		std::vector<event const*> const& immediate_conflicts() const noexcept {
 			return _immediate_conflicts;
 		}
-
-		bool all_cex_found() const noexcept { return _all_cex_found; }
-		void mark_all_cex_found() const noexcept { _all_cex_found = true; }
 
 		color_t color() const noexcept { return _color; }
 		[[nodiscard]] static color_t new_color() noexcept {
