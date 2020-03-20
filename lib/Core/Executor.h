@@ -335,7 +335,8 @@ private:
                               bool isWrite,
                               ref<Expr> address,
                               ref<Expr> value /* undef if read */,
-                              KInstruction *target /* undef if write */);
+                              KInstruction *target /* undef if write */,
+                              bool isAtomic = false);
 
   void executeMakeSymbolic(ExecutionState &state,
                            ref<Expr> address,

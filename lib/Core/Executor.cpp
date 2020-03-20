@@ -2672,13 +2672,13 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
   case Instruction::Load: {
     ref<Expr> base = eval(ki, 0, state).value;
-    executeMemoryOperation(state, false, base, 0, ki);
+    executeMemoryOperation(state, false, base, 0, ki, i->isAtomic());
     break;
   }
   case Instruction::Store: {
     ref<Expr> base = eval(ki, 1, state).value;
     ref<Expr> value = eval(ki, 0, state).value;
-    executeMemoryOperation(state, true, base, value, 0);
+    executeMemoryOperation(state, true, base, value, 0, i->isAtomic());
     break;
   }
 
@@ -4629,7 +4629,8 @@ void Executor::executeMemoryOperation(ExecutionState &state,
                                       bool isWrite,
                                       ref<Expr> address,
                                       ref<Expr> value /* undef if read */,
-                                      KInstruction *target /* undef if write */) {
+                                      KInstruction *target /* undef if write */,
+                                      bool isAtomic) {
 
   Expr::Width width = 0;
   if (isWrite) {
@@ -4650,11 +4651,25 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     }
   }
 
+  if (isAtomic) {
+    if (!porEventManager.registerLockAcquire(state, memRegion->first->getId(), false)) {
+      terminateStateSilently(state);
+      return;
+    }
+  }
+
   if (isWrite) {
     executeMemoryWrite(state, memRegion.value(), address, value);
   } else {
     auto res = executeMemoryRead(state, memRegion.value(), width);
     bindLocal(target, state, res);
+  }
+
+  if (isAtomic) {
+    if (!porEventManager.registerLockRelease(state, memRegion->first->getId(), true, true)) {
+      terminateStateSilently(state);
+      return;
+    }
   }
 }
 
