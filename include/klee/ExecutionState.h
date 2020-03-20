@@ -20,6 +20,7 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "../../lib/Core/RaceDetection/DataRaceDetection.h"
 #include "../../lib/Core/MemoryState.h"
+#include "../../lib/Core/por/DelayedFreesContainer.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
 #include <functional>
@@ -67,6 +68,8 @@ private:
 
   /// @brief tracks and checks all memory accesses
   DataRaceDetection raceDetection;
+
+  DelayedFreesContainer delayedFrees;
 
 public:
   // Execution - Control Flow specific
@@ -316,6 +319,10 @@ public:
       return nullptr;
     }
     return catchUp.front();
+  }
+
+  DelayedFreesContainer& delayedFreesContainer() {
+    return delayedFrees;
   }
 
   void dumpStack(llvm::raw_ostream &out) const;

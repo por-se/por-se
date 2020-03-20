@@ -311,6 +311,8 @@ private:
   void executeFree(ExecutionState &state,
                    ref<Expr> address,
                    KInstruction *target = 0);
+
+  void performAllocatorFree(ExecutionState &state, const MemoryObject* mo);
   
   void executeCall(ExecutionState &state, 
                    KInstruction *ki,

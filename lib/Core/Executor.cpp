@@ -4463,10 +4463,18 @@ void Executor::executeFree(ExecutionState &state,
         if (PruneStates)
           it->second->memoryState.unregisterWrite(*mo, *os);
 
-        auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
-        assert(thread.has_value() && "MemoryObject created by thread that is not known");
+        const auto& allocatorTid = mo->getAllocationStackFrame().first;
 
-        mo->parent->deallocate(mo, thread.value().get());
+        if (allocatorTid == state.tid()) {
+          performAllocatorFree(state, mo);
+        } else {
+          // So this was not allocated by our own thread. Therefore, we want to delay the
+          // free to the correct thread
+          state.delayedFreesContainer().registerFree(state.tid(), mo);
+        }
+
+        // We want to always unbind the memory object from the addressspace in order to detect
+        // used after free errors.
         it->second->addressSpace.unbindObject(mo);
 
         if (target)
@@ -4474,6 +4482,12 @@ void Executor::executeFree(ExecutionState &state,
       }
     }
   }
+}
+
+void Executor::performAllocatorFree(ExecutionState &state, const MemoryObject* mo) {
+  auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
+  assert(thread.has_value() && "MemoryObject created by thread that is not known");
+  mo->parent->deallocate(mo, thread.value().get());
 }
 
 void Executor::resolveExact(ExecutionState &state,
