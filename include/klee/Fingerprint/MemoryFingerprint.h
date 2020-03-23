@@ -152,7 +152,8 @@ public:
                               ref<Expr> value);
   bool updateProgramCounterFragment(const ThreadId &threadID,
                                     std::uint64_t sfIndex,
-                                    const llvm::Instruction *i);
+                                    const llvm::Instruction *i,
+                                    std::uint8_t step = 0);
   bool updateFunctionFragment(const ThreadId &threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);

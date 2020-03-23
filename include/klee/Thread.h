@@ -96,6 +96,8 @@ namespace klee {
       /// @brief Pointer to instruction which is currently executed
       KInstIterator prevPc;
 
+      bool pcAfterAtomic = false;
+
       /// @brief During executeInstruction(ki): set of live locals
       /// in current stack frame *after* ki has been executed.
       /// If ki is (not the last) PHI node: live after previous BB

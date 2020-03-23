@@ -117,7 +117,8 @@ MemoryFingerprintDelta Thread::getFingerprintDelta() const {
   if (state != ThreadState::Exited) {
     copy.updateProgramCounterFragment(getThreadId(),
                                       stack.size() - 1,
-                                      pc->inst);
+                                      pc->inst,
+                                      (pcAfterAtomic ? 1 : 0));
     copy.addToFingerprint();
 
     copy.updateThreadStateFragment(getThreadId(), static_cast<std::uint8_t>(state));

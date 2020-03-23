@@ -3238,10 +3238,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Every AtomicRMW returns the old value
     bindLocal(ki, state, oldValue);
 
+    state.thread().pcAfterAtomic = true;
     if (!porEventManager.registerLockRelease(state, memLoc->first->getId(), true, true)) {
       terminateStateSilently(state);
       break;
     }
+    state.thread().pcAfterAtomic = false;
     break;
   }
 
@@ -3289,10 +3291,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // FIXME: this is totally broken, but there is no easy fix at the moment
     bindLocal(ki, state, ConcatExpr::create(equal, oldValue));
 
+    state.thread().pcAfterAtomic = true;
     if (!porEventManager.registerLockRelease(state, src->first->getId(), true, true)) {
       terminateStateSilently(state);
       break;
     }
+    state.thread().pcAfterAtomic = false;
     break;
   }
 
@@ -4695,10 +4699,12 @@ void Executor::executeMemoryOperation(ExecutionState &state,
   }
 
   if (isAtomic) {
+    state.thread().pcAfterAtomic = true;
     if (!porEventManager.registerLockRelease(state, memRegion->first->getId(), true, true)) {
       terminateStateSilently(state);
       return;
     }
+    state.thread().pcAfterAtomic = false;
   }
 }
 
