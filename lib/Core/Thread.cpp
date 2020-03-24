@@ -10,7 +10,9 @@
 
 #include "llvm/IR/Instructions.h"
 
+#include <algorithm>
 #include <sstream>
+#include <vector>
 
 using namespace llvm;
 using namespace klee;
@@ -175,15 +177,25 @@ std::string Thread::local_event_t::path_string() const noexcept {
 }
 
 void Thread::dumpLiveSet(llvm::raw_ostream &os) const noexcept {
+  std::vector<const Value *> values;
+  for (auto const *ki : *liveSet) {
+    values.push_back(ki->inst);
+  }
+  std::sort(values.begin(), values.end(), [](const Value *a, const Value *b) {
+    if (!a->hasName())
+      return false;
+    if (b->hasName())
+      return a->getName() < b->getName();
+    return true;
+  });
   os << "liveSet: {";
   bool first = true;
-  for (auto &ki : *liveSet) {
+  for (auto *inst : values) {
     if (!first) {
       os << " ";
     } else {
       first = false;
     }
-    auto inst = ki->inst;
     os << "%";
     if (inst->hasName()) {
       os << inst->getName();
