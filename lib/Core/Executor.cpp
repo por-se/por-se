@@ -501,6 +501,12 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
           "Pick a random thread (default).")
         KLEE_LLVM_CL_VAL_END),
     cl::init(ThreadSchedulingPolicy::Random));
+
+cl::opt<bool> DebugLiveSet(
+  "debug-live-set",
+  cl::init(false),
+  cl::cat(DebugCat));
+
   constexpr void printPadding(llvm::raw_ostream& os, size_t count, char character) {
     while (count--) os << character;
   }
@@ -3497,7 +3503,18 @@ void Executor::run(ExecutionState &initialState) {
       KInstruction *ki = state.pc();
       stepInstruction(state);
 
+      if (DebugLiveSet) {
+        llvm::errs() << "[before executeInstruction()] ";
+        state.thread().dumpLiveSet(llvm::errs());
+      }
+
       executeInstruction(state, ki);
+
+      if (DebugLiveSet) {
+        llvm::errs() << "[before executeInstruction()] ";
+        state.thread().dumpLiveSet(llvm::errs());
+      }
+
       timers.invoke();
       if (::dumpStates) dumpStates();
       if (::dumpPTree) dumpPTree();
@@ -3546,10 +3563,20 @@ void Executor::run(ExecutionState &initialState) {
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc();
 
-    // we will execute a new instruction and therefore we have to reset the flag
     stepInstruction(state);
 
+    if (DebugLiveSet) {
+      llvm::errs() << "[before executeInstruction()] ";
+      state.thread().dumpLiveSet(llvm::errs());
+    }
+
     executeInstruction(state, ki);
+
+    if (DebugLiveSet) {
+      llvm::errs() << "[ after executeInstruction()] ";
+      state.thread().dumpLiveSet(llvm::errs());
+    }
+
     timers.invoke();
     if (firstInstruction && statesJSONFile) {
       (*statesJSONFile) << "    \"functionlists_length\": "
