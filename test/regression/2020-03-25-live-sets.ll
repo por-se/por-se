@@ -1,6 +1,14 @@
 ; RUN: %klee -debug-print-instructions=all:stderr -debug-live-set %s 2>&1 | FileCheck %s
-; test program copied from test/Passes/LiveRegister/phi-multi.ll
-; FIMXE: test live sets with function call and return
+; test program originally copied from test/Passes/LiveRegister/phi-multi.ll
+; but extended to test live sets with function call and return
+
+define i64 @add(i64 %d, i64 %e) {
+entry:
+  %g = add i64 %d, %e
+  %h = add i64 %e, 6
+  %i = sub i64 %h, %d
+  ret i64 %g
+}
 
 define void @main() {
 entry:
@@ -22,10 +30,25 @@ a:
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3}
   %p3 = phi i64 [ 0, %entry ], [ 1, %a ], [ %x, %b ], [ %z, %c ]
-; CHECK: %y = add
+; CHECK: %y = call
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y}
+; CHECK-NEXT:  after {{.*}} liveSet: {}
+  %y = call i64 @add(i64 %p3, i64 5)
+; going into @add()
+
+; CHECK: %g = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: %h = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g %h}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g %h}
+; CHECK: %i = sub
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: ret i64
+; CHECK-NEXT: before {{.*}} liveSet: {}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3 %y}
-  %y = add i64 %p3, 5
+
 ; CHECK: %z = add
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y %z}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3 %y %z}
@@ -49,8 +72,20 @@ a:
 ; CHECK: %p3 = phi
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3}
-; CHECK: %y = add
+; CHECK: %y = call
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y}
+; CHECK-NEXT:  after {{.*}} liveSet: {}
+; CHECK: %g = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: %h = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g %h}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g %h}
+; CHECK: %i = sub
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: ret i64
+; CHECK-NEXT: before {{.*}} liveSet: {}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3 %y}
 ; CHECK: %z = add
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y %z}
@@ -96,8 +131,20 @@ c:
 ; CHECK: %p3 = phi
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3}
-; CHECK: %y = add
+; CHECK: %y = call
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y}
+; CHECK-NEXT:  after {{.*}} liveSet: {}
+; CHECK: %g = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: %h = add
+; CHECK-NEXT: before {{.*}} liveSet: {%g %h}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g %h}
+; CHECK: %i = sub
+; CHECK-NEXT: before {{.*}} liveSet: {%g}
+; CHECK-NEXT:  after {{.*}} liveSet: {%g}
+; CHECK: ret i64
+; CHECK-NEXT: before {{.*}} liveSet: {}
 ; CHECK-NEXT:  after {{.*}} liveSet: {%p1 %p2 %p3 %y}
 ; CHECK: %z = add
 ; CHECK-NEXT: before {{.*}} liveSet: {%p1 %p2 %p3 %y %z}
