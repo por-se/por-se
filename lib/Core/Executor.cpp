@@ -1680,18 +1680,19 @@ void Executor::stepInstruction(ExecutionState &state) {
   if(state.needsCatchUp())
     ++stats::catchUpInstructions;
 
-  Thread &thread = state.thread();
-
-  if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
-    if (thread.prevPc->inst->getFunction() == thread.pc->inst->getFunction()) {
-      thread.liveSet = &thread.prevPc->info->getLiveLocals();
-    }
-  }
-
   ++stats::instructions;
   ++state.steppedInstructions;
+
+  Thread &thread = state.thread();
+  // stepInstruction() is called before executeInstruction(thread.pc)
+  // thus, thread.pc is the (about to be) currently executed instruction
   thread.prevPc = thread.pc;
   ++thread.pc;
+  // and now, thread.prevPc is the (about to be) currently executed instruction
+
+  if (!isa<PHINode>(thread.prevPc->inst) || !isa<PHINode>(thread.pc->inst)) {
+    thread.liveSet = &thread.prevPc->info->getLiveLocals();
+  }
 
   if (stats::instructions == MaxInstructions)
     haltExecution = true;
@@ -1977,10 +1978,11 @@ void Executor::transferToBasicBlock(BasicBlock *dst, BasicBlock *src,
   unsigned entry = kf->basicBlockEntry[dst];
   thread.pc = &kf->instructions[entry];
   if (thread.pc->inst->getOpcode() == Instruction::PHI) {
+    // set incomingBBIndex (only needed for PHI-Nodes)
     PHINode *first = static_cast<PHINode*>(thread.pc->inst);
     thread.incomingBBIndex = first->getBasicBlockIndex(src);
-    thread.liveSet = &thread.prevPc->info->getLiveLocals();
   } else {
+    // more precise information of what is live after this instruction
     thread.liveSet = kf->getLiveLocals(dst);
   }
 }

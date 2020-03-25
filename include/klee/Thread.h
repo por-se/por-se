@@ -96,7 +96,10 @@ namespace klee {
       /// @brief Pointer to instruction which is currently executed
       KInstIterator prevPc;
 
-      /// @brief Set of live locals at current stage of execution
+      /// @brief During executeInstruction(ki): set of live locals
+      /// in current stack frame *after* ki has been executed.
+      /// If ki is (not the last) PHI node: live after previous BB
+      // FIXME: provide liveSet() that returns superset for PHI nodes
       const std::vector<const KInstruction *> *liveSet = nullptr;
 
       /// @brief Stack representing the current instruction stream
