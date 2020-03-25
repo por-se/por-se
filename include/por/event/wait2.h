@@ -4,8 +4,8 @@
 
 #include "por/unfolding.h"
 
-#include <cassert>
 #include <array>
+#include <cassert>
 
 namespace por::event {
 	class wait2 final : public event {

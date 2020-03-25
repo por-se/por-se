@@ -4,7 +4,7 @@
 
 #include "por/unfolding.h"
 
-#include <util/sso_array.h>
+#include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
