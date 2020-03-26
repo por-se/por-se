@@ -2,6 +2,10 @@
 
 using namespace por;
 
+por::event::event const* extension::commit(por::configuration& cfg) && {
+	return cfg.commit(std::move(*this));
+}
+
 configuration_iterator::configuration_iterator(por::configuration const& configuration, bool end) {
 	_configuration = &configuration;
 	if(!end && !configuration.thread_heads().empty()) {

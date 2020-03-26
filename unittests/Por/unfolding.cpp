@@ -13,8 +13,8 @@ namespace {
 		auto thread1 = configuration1.thread_heads().begin()->second->tid();
 		ASSERT_EQ(thread1, configuration2.thread_heads().begin()->second->tid());
 
-		auto acq1 = configuration1.acquire_lock(thread1, 1);
-		auto acq2 = configuration2.acquire_lock(thread1, 2);
+		auto acq1 = configuration1.acquire_lock(thread1, 1).commit(configuration1);
+		auto acq2 = configuration2.acquire_lock(thread1, 2).commit(configuration2);
 		ASSERT_NE(acq1, acq2);
 	}
 }

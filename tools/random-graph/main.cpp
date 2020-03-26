@@ -178,28 +178,28 @@ int main(int argc, char** argv){
 			auto source = choose_thread(configuration, gen);
 			std::uint16_t local_id = ++thread_spawns[source];
 			auto tid = por::thread_id(source, local_id);
-			configuration.create_thread(source, tid);
-			configuration.init_thread(tid, source);
+			configuration.create_thread(source, tid).commit(configuration);
+			configuration.init_thread(tid, source).commit(configuration);
 			std::cout << "+T " << tid << " (" << source << ")\n";
 		} else if(roll < 60) {
 			// join thread
 			auto tid = choose_thread(configuration, gen);
 			auto join_tid = choose_suitable_thread(configuration, gen, rare_choice, por::event::event_kind::thread_exit);
 			if(tid && join_tid) {
-				configuration.join_thread(tid, join_tid);
+				configuration.join_thread(tid, join_tid).commit(configuration);
 				std::cout << "jT " << tid << " " << join_tid << "\n";
 				break;
 			}
 		} else if(roll < 100) {
 			// kill old thread
 			auto tid = choose_thread(configuration, gen);
-			configuration.exit_thread(tid);
+			configuration.exit_thread(tid).commit(configuration);
 			std::cout << "-T " << tid << "\n";
 		} else if(roll < 200) {
 			// spawn new lock
 			auto tid = choose_thread(configuration, gen);
 			auto lid = next_lock_id++;
-			configuration.create_lock(tid, lid);
+			configuration.create_lock(tid, lid).commit(configuration);
 			std::cout << "+L " << lid << " (" << tid << ")\n";
 		} else if(roll < 300) {
 			// destroy lock, if one exists
@@ -220,7 +220,7 @@ int main(int argc, char** argv){
 					}
 				}
 				if(no_block_on_lock) {
-					configuration.destroy_lock(tid, lid);
+					configuration.destroy_lock(tid, lid).commit(configuration);
 					std::cout << "-L " << lid << " (" << tid << ")\n";
 				}
 			}
@@ -229,7 +229,7 @@ int main(int argc, char** argv){
 			auto lid = choose_suitable_lock(configuration, gen, rare_choice, true);
 			auto tid = choose_thread(configuration, gen);
 			if(lid && tid) {
-				configuration.acquire_lock(tid, lid);
+				configuration.acquire_lock(tid, lid).commit(configuration);
 				std::cout << " L+ " << lid << " (" << tid << ")\n";
 			}
 		} else if(roll < 500) {
@@ -238,7 +238,7 @@ int main(int argc, char** argv){
 			if(lid) {
 				auto const tid = configuration.lock_heads().find(lid)->second->tid();
 				if(configuration.thread_heads().find(tid)->second->kind() != por::event::event_kind::wait1) {
-					configuration.release_lock(tid, lid);
+					configuration.release_lock(tid, lid).commit(configuration);
 					std::cout << " L- " << lid << " (" << tid << ")\n";
 				}
 			}
@@ -258,7 +258,7 @@ int main(int argc, char** argv){
 					}
 				}
 				if(cid) {
-					configuration.wait1(tid, cid, lid);
+					configuration.wait1(tid, cid, lid).commit(configuration);
 					std::cout << " C+ " << cid << ", " <<  lid << " (" << tid << ")\n";
 				}
 			}
@@ -274,7 +274,7 @@ int main(int argc, char** argv){
 					blocked_tid = w->tid();
 					break;
 				}
-				configuration.signal_thread(tid, cid, blocked_tid);
+				configuration.signal_thread(tid, cid, blocked_tid).commit(configuration);
 				std::cout << "sT " << cid << ", " <<  blocked_tid << " (" << tid << ")\n";
 			}
 		} else if(roll < 750) {
@@ -282,7 +282,7 @@ int main(int argc, char** argv){
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
 			if(tid && cid) {
-				configuration.signal_thread(tid, cid, {});
+				configuration.signal_thread(tid, cid, {}).commit(configuration);
 				std::cout << "sT " << cid << ", " <<  0 << " (" << tid << ")\n";
 			}
 		} else if(roll < 800) {
@@ -297,7 +297,7 @@ int main(int argc, char** argv){
 					blocked_tids.push_back(w->tid());
 					break;
 				}
-				configuration.broadcast_threads(tid, cid, blocked_tids);
+				configuration.broadcast_threads(tid, cid, blocked_tids).commit(configuration);
 				std::cout << "bT " << cid << ", " <<  blocked_tids.size() << " threads (" << tid << ")\n";
 			}
 		} else if(roll < 850) {
@@ -305,7 +305,7 @@ int main(int argc, char** argv){
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
 			if(tid && cid) {
-				configuration.broadcast_threads(tid, cid, {});
+				configuration.broadcast_threads(tid, cid, {}).commit(configuration);
 				std::cout << "bT " << cid << ", {} (" << tid << ")\n";
 			}
 		} else if(roll < 900) {
@@ -359,7 +359,7 @@ int main(int argc, char** argv){
 						if(cond_lock_pairs[cid].second == 0) {
 							cond_lock_pairs.erase(cid);
 						}
-						configuration.wait2(tid, cid, lid);
+						configuration.wait2(tid, cid, lid).commit(configuration);
 						std::cout << "wT " << cid << ", " <<  lid << " (" << tid << ")\n";
 					}
 				}
@@ -368,19 +368,19 @@ int main(int argc, char** argv){
 			// spawn new cond
 			auto tid = choose_thread(configuration, gen);
 			auto cid = next_cond_id++;
-			configuration.create_cond(tid, cid);
+			configuration.create_cond(tid, cid).commit(configuration);
 			std::cout << "+C " << cid << " (" << tid << ")\n";
 		} else if(roll < 970) {
 			// destroy cond, if one exists
 			auto tid = choose_thread(configuration, gen);
 			auto cid = choose_suitable_cond(configuration, gen, rare_choice, false);
 			if(cid) {
-				configuration.destroy_cond(tid, cid);
+				configuration.destroy_cond(tid, cid).commit(configuration);
 				std::cout << "-C " << cid << " (" << tid << ")\n";
 			}
 		} else if(roll < 1000) {
 			auto tid = choose_thread(configuration, gen);
-			configuration.local<std::uint64_t>(tid, {});
+			configuration.local<std::uint64_t>(tid, {}).commit(configuration);
 			std::cout << " . (" << tid << ")\n";
 		} else {
 			assert(false && "Unexpected random choice for event to introduce");
