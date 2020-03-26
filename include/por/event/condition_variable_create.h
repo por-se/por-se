@@ -2,10 +2,9 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include <array>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class condition_variable_create final : public event {
@@ -30,13 +29,12 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor
 		) {
-			return unfolding.deduplicate(condition_variable_create{
+			return std::make_unique<condition_variable_create>(condition_variable_create{
 				tid,
 				cid,
 				thread_predecessor

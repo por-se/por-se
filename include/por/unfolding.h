@@ -41,14 +41,9 @@ namespace por {
 		// NOTE: do not use for other purposes, only compares pointers of predecessors
 		bool compare_events(por::event::event const& a, por::event::event const& b);
 
-		template<typename T, typename = std::enable_if<std::is_base_of<por::event::event, T>::value>>
-		por::event::event const* store_event(T&& event) {
-			static_assert(std::is_rvalue_reference<decltype(event)>::value);
-			static_assert(std::is_move_constructible_v<std::remove_reference_t<decltype(event)>>);
-
-			key_t key = std::make_tuple(event.tid(), event.depth(), event.kind());
-			auto ptr = std::make_unique<T>(std::forward<T>(event));
-			return _events[std::move(key)].emplace_back(std::move(ptr)).get();
+		por::event::event const* store_event(std::unique_ptr<por::event::event>&& event) {
+			key_t key = std::make_tuple(event->tid(), event->depth(), event->kind());
+			return _events[std::move(key)].emplace_back(std::move(event)).get();
 		}
 
 	public:
@@ -86,14 +81,13 @@ namespace por {
 			}
 		}
 
-		template<typename T, typename = std::enable_if<std::is_base_of_v<por::event::event, T>>>
-		deduplication_result deduplicate(T&& e) {
-			auto it = _events.find(std::make_tuple(e.tid(), e.depth(), e.kind()));
+		deduplication_result deduplicate(std::unique_ptr<por::event::event>&& e) {
+			auto it = _events.find(std::make_tuple(e->tid(), e->depth(), e->kind()));
 			if(it != _events.end()) {
 				for(auto& v : it->second) {
-					if(compare_events(e, *v.get())) {
+					if(compare_events(*e.get(), *v.get())) {
 						stats_inc_event_deduplicated();
-						if(e.is_cutoff()) {
+						if(e->is_cutoff()) {
 							v->mark_as_cutoff();
 						}
 						return {false, *v.get()};
@@ -101,9 +95,9 @@ namespace por {
 				}
 			}
 			// new event
-			stats_inc_unique_event(e.kind());
+			stats_inc_unique_event(e->kind());
 			++_size;
-			auto ptr = store_event(std::forward<T>(e));
+			auto ptr = store_event(std::move(e));
 			ptr->add_to_successors();
 
 			ptr->_immediate_conflicts = ptr->compute_immediate_conflicts();

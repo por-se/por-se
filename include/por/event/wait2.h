@@ -2,10 +2,9 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include <array>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class wait2 final : public event {
@@ -69,8 +68,7 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			lock_id_t lid,
@@ -78,7 +76,7 @@ namespace por::event {
 			event const& lock_predecessor,
 			event const& condition_variable_predecessor
 		) {
-			return unfolding.deduplicate(wait2{
+			return std::make_unique<wait2>(wait2{
 				tid,
 				cid,
 				lid,

@@ -2,12 +2,11 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class condition_variable_destroy final : public event {
@@ -64,8 +63,7 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
@@ -73,7 +71,7 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(condition_variable_destroy{
+			return std::make_unique<condition_variable_destroy>(condition_variable_destroy{
 				tid,
 				cid,
 				thread_predecessor,

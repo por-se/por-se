@@ -2,12 +2,11 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class signal final : public event {
@@ -112,14 +111,13 @@ namespace por::event {
 
 	public:
 		// notifying signal
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
 			event const& notified_thread_predecessor
 		) {
-			return unfolding.deduplicate(signal{
+			return std::make_unique<signal>(signal{
 				tid,
 				cid,
 				thread_predecessor,
@@ -128,8 +126,7 @@ namespace por::event {
 		}
 
 		// lost signal
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
@@ -137,7 +134,7 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(signal{
+			return std::make_unique<signal>(signal{
 				tid,
 				cid,
 				thread_predecessor,

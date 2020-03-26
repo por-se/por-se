@@ -4,11 +4,12 @@
 #include "por/event/event.h"
 
 #include <algorithm>
+#include <memory>
 
 using namespace por;
 
 unfolding::unfolding() {
-	_root = store_event(por::event::program_init{});
+	_root = store_event(std::make_unique<por::event::program_init>(por::event::program_init{}));
 }
 
 // NOTE: do not use for other purposes, only compares pointers of predecessors

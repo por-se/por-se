@@ -2,12 +2,11 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
+#include <memory>
 
 namespace {
 	// defined in signal.h
@@ -140,8 +139,7 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			event const& thread_predecessor,
@@ -149,7 +147,7 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(broadcast{
+			return std::make_unique<broadcast>(broadcast{
 				tid,
 				cid,
 				thread_predecessor,

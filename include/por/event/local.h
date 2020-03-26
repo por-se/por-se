@@ -2,10 +2,9 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include <array>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	template<typename D>
@@ -33,13 +32,12 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			event const& thread_predecessor,
 			path_t path
 		) {
-			return unfolding.deduplicate(local{
+			return std::make_unique<local>(local{
 				tid,
 				thread_predecessor,
 				std::move(path)

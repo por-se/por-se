@@ -2,10 +2,9 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include <array>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class lock_release final : public event {
@@ -56,15 +55,14 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			lock_id_t lid,
 			event const& thread_predecessor,
 			event const& lock_predecessor,
 			bool atomic = false
 		) {
-			return unfolding.deduplicate(lock_release{
+			return std::make_unique<lock_release>(lock_release{
 				tid,
 				lid,
 				thread_predecessor,

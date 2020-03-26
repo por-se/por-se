@@ -2,10 +2,9 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include <array>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class thread_init final : public event {
@@ -32,12 +31,11 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			event const& creation_predecessor
 		) {
-			return unfolding.deduplicate(thread_init{
+			return std::make_unique<thread_init>(thread_init{
 				tid,
 				creation_predecessor
 			});

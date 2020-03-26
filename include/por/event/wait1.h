@@ -2,12 +2,11 @@
 
 #include "base.h"
 
-#include "por/unfolding.h"
-
 #include "util/sso_array.h"
 
 #include <algorithm>
 #include <cassert>
+#include <memory>
 
 namespace por::event {
 	class wait1 final : public event {
@@ -73,8 +72,7 @@ namespace por::event {
 		}
 
 	public:
-		static por::unfolding::deduplication_result alloc(
-			unfolding& unfolding,
+		static std::unique_ptr<por::event::event> alloc(
 			thread_id_t tid,
 			cond_id_t cid,
 			lock_id_t lid,
@@ -84,7 +82,7 @@ namespace por::event {
 		) {
 			std::sort(cond_predecessors.begin(), cond_predecessors.end());
 
-			return unfolding.deduplicate(wait1{
+			return std::make_unique<wait1>(wait1{
 				tid,
 				cid,
 				lid,
