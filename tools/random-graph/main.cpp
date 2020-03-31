@@ -400,8 +400,6 @@ int main(int argc, char** argv){
 		auto icfl = entry->immediate_conflicts();
 		for(auto e : icfl) {
 			std::cerr << "\t" << e->to_string(true) << " @ " << e << "\n";
-			auto e_icfl = e->immediate_conflicts();
-			assert(std::find(e_icfl.begin(), e_icfl.end(), entry) != icfl.end());
 		}
 		std::cerr << "\n";
 	}
