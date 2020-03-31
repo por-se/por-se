@@ -38,26 +38,6 @@ namespace {
     llvm::cl::init(1));
 }
 
-bool PorEventManager::extendPorNode(ExecutionState& state, std::function<por::node::registration_t(por::configuration&)>&& callback) {
-  if (state.needsCatchUp()) {
-    state.porNode = state.porNode->catch_up(std::move(callback), state.peekCatchUp());
-    if (state.porNode == nullptr) {
-      return false;
-    }
-    bool success = attachFingerprintToEvent(state, *state.peekCatchUp());
-    state.catchUp.pop_front();
-    return success;
-  }
-
-  auto oldNode = state.porNode;
-  state.porNode = state.porNode->make_left_child(std::move(callback));
-  if (attachFingerprintToEvent(state, *oldNode->event())) {
-    findNewCutoff(state);
-    return true;
-  }
-  return false;
-}
-
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind) {
   llvm::errs() << "[state id: " << state.id << "] ";
   llvm::errs() << "registering " << kind << " with current thread " << state.tid();
@@ -83,6 +63,58 @@ std::shared_ptr<const ExecutionState> PorEventManager::createStandbyState(const 
   return nullptr;
 }
 
+bool PorEventManager::registerNonLocal(ExecutionState &state, por::extension &&ex, bool snapshotsAllowed) {
+  if (DebugEventRegistration) {
+    llvm::errs() << "[state id: " << state.id << "] ";
+    llvm::errs() << "POR event: " << ex.event->to_string(true) << "\n";
+  }
+
+  assert(!state.hasUnregisteredDecisions());
+
+  state.needsThreadScheduling = true;
+
+  // attach metadata
+  attachFingerprintToEvent(state, *ex.event.get());
+  const por::event::metadata newMetadata = ex.event->metadata();
+
+  // create standby state
+  std::shared_ptr<const ExecutionState> standby;
+  if (snapshotsAllowed) {
+    standby = createStandbyState(state, ex.event->kind());
+  }
+
+  // deduplicate events, update porNode
+  bool catchingUp = state.needsCatchUp();
+  if (catchingUp) {
+    state.porNode = state.porNode->catch_up(std::move(ex), std::move(standby), state.peekCatchUp());
+    if (state.porNode == nullptr) {
+      return false;
+    }
+    state.catchUp.pop_front();
+  } else {
+    state.porNode = state.porNode->make_left_child(std::move(ex), std::move(standby));
+  }
+
+  // compare metadata after deduplication
+  auto event = state.porNode->parent()->event();
+  bool res = event->metadata() == newMetadata;
+
+  if (!res) {
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+    llvm::errs() << MemoryFingerprint::toString(event->metadata().fingerprint.diff(newMetadata.fingerprint)) << "\n";
+    llvm::errs() << "\n";
+    llvm::errs() << MemoryFingerprint::toString(event->metadata().thread_delta.diff(newMetadata.thread_delta)) << "\n";
+#endif
+    return false;
+  }
+
+  // identify new cutoff events
+  if (!catchingUp) {
+    findNewCutoff(state);
+  }
+
+  return true;
+}
 
 bool PorEventManager::registerLocal(ExecutionState &state,
                                     const std::vector<ExecutionState *> &addedStates,
@@ -108,41 +140,79 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
   if (state.needsCatchUp()) {
     assert(addedStates.empty());
-    state.porNode = state.porNode->catch_up(
-    [this, &state, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
-      auto path = std::move(state.unregisteredDecisions());
-      state.unregisteredDecisions() = {};
-      por::extension ex = cfg.local(state.tid(), std::move(path));
-      por::event::event const* e = cfg.commit(std::move(ex));
-      success = attachFingerprintToEvent(state, *e);
-      if (snapshotsAllowed) {
-        auto standby = createStandbyState(state, por::event::event_kind::local);
-        return std::make_pair(e, std::move(standby));
-      }
-      return std::make_pair(e, nullptr);
-    }, state.peekCatchUp());
+
+    auto path = std::move(state.unregisteredDecisions());
+    state.unregisteredDecisions() = {};
+
+    por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
+
+    // attach metadata
+    attachFingerprintToEvent(state, *ex.event.get());
+    const por::event::metadata newMetadata = ex.event->metadata();
+
+    // create standby state
+    std::shared_ptr<const ExecutionState> standby;
+    if (snapshotsAllowed) {
+      standby = createStandbyState(state, por::event::event_kind::local);
+    }
+
+    // deduplicate events, update porNode
+    state.porNode = state.porNode->catch_up(std::move(ex), std::move(standby), state.peekCatchUp());
     if (state.porNode == nullptr) {
       return false;
     }
     state.catchUp.pop_front();
 
-    return success;
+    // compare metadata after deduplication
+    auto event = state.porNode->parent()->event();
+    success = event->metadata() == newMetadata;
+
+    if (!success) {
+  #ifdef ENABLE_VERIFIED_FINGERPRINTS
+      llvm::errs() << MemoryFingerprint::toString(event->metadata().fingerprint.diff(newMetadata.fingerprint)) << "\n";
+      llvm::errs() << "\n";
+      llvm::errs() << MemoryFingerprint::toString(event->metadata().thread_delta.diff(newMetadata.thread_delta)) << "\n";
+  #endif
+      return false;
+    }
+
+    return true;
   }
 
   por::node *n = state.porNode;
-  state.porNode = state.porNode->make_left_child(
-      [this, &state, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
-    auto path = std::move(state.unregisteredDecisions());
-    state.unregisteredDecisions() = {};
-    por::extension ex = cfg.local(state.tid(), std::move(path));
-    por::event::event const* e = cfg.commit(std::move(ex));
-    success = attachFingerprintToEvent(state, *e);
-    if (snapshotsAllowed) {
-      auto standby = createStandbyState(state, por::event::event_kind::local);
-      return std::make_pair(e, std::move(standby));
-    }
-    return std::make_pair(e, nullptr);
-  });
+
+  auto path = std::move(state.unregisteredDecisions());
+  state.unregisteredDecisions() = {};
+
+  por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
+
+  // attach metadata
+  attachFingerprintToEvent(state, *ex.event.get());
+  const por::event::metadata newMetadata = ex.event->metadata();
+
+  // create standby state
+  std::shared_ptr<const ExecutionState> standby;
+  if (snapshotsAllowed) {
+    standby = createStandbyState(state, por::event::event_kind::local);
+  }
+
+  // deduplicate events, update porNode
+  state.porNode = state.porNode->make_left_child(std::move(ex), std::move(standby));
+
+  // compare metadata after deduplication
+  auto event = state.porNode->parent()->event();
+  success = event->metadata() == newMetadata;
+
+  if (!success) {
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+    llvm::errs() << MemoryFingerprint::toString(event->metadata().fingerprint.diff(newMetadata.fingerprint)) << "\n";
+    llvm::errs() << "\n";
+    llvm::errs() << MemoryFingerprint::toString(event->metadata().thread_delta.diff(newMetadata.thread_delta)) << "\n";
+#endif
+    return false;
+  }
+
+  // identify new cutoff events
   findNewCutoff(state);
 
   assert(state.porNode->parent() == n);
@@ -153,19 +223,38 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     }
     if (s->hasUnregisteredDecisions()) {
       s->porNode = n; // needed for distance calculation in shouldRegisterStandbyState
-      s->porNode = n->make_right_local_child(
-          [this, &s, &snapshotsAllowed, &success](por::configuration& cfg) -> por::node::registration_t {
-        auto path = std::move(s->unregisteredDecisions());
-        s->unregisteredDecisions() = {};
-        por::extension ex = cfg.local(s->tid(), std::move(path));
-        por::event::event const* e = cfg.commit(std::move(ex));
-        success = attachFingerprintToEvent(*s, *e);
-        if (snapshotsAllowed) {
-          auto standby = createStandbyState(*s, por::event::event_kind::local);
-          return std::make_pair(e, std::move(standby));
-        }
-        return std::make_pair(e, nullptr);
-      });
+
+      auto path = std::move(s->unregisteredDecisions());
+      s->unregisteredDecisions() = {};
+
+      por::extension ex = n->configuration().local(s->tid(), std::move(path));
+
+      // attach metadata
+      attachFingerprintToEvent(*s, *ex.event.get());
+      const por::event::metadata newMetadata = ex.event->metadata();
+
+      // create standby state
+      std::shared_ptr<const ExecutionState> standby;
+      if (snapshotsAllowed) {
+        standby = createStandbyState(*s, por::event::event_kind::local);
+      }
+
+      // deduplicate events, update porNode
+      s->porNode = n->make_right_local_child(std::move(ex), std::move(standby));
+
+      // compare metadata after deduplication
+      auto event = s->porNode->parent()->event();
+      bool res = event->metadata() == newMetadata;
+
+      if (!res) {
+#ifdef ENABLE_VERIFIED_FINGERPRINTS
+        llvm::errs() << MemoryFingerprint::toString(event->metadata().fingerprint.diff(newMetadata.fingerprint)) << "\n";
+        llvm::errs() << "\n";
+        llvm::errs() << MemoryFingerprint::toString(event->metadata().thread_delta.diff(newMetadata.thread_delta)) << "\n";
+#endif
+        success = false;
+      }
+
       n = s->porNode->parent();
     }
   }
@@ -181,15 +270,8 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
     llvm::errs() << " and created thread " << tid << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
-    por::extension ex = cfg.create_thread(state.tid(), tid);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    return std::make_pair(e, nullptr);
-  });
+  por::extension ex = state.porNode->configuration().create_thread(state.tid(), tid);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &tid) {
@@ -199,29 +281,29 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
     llvm::errs() << " and initialized thread " << tid << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  bool success;
+  bool success = true;
   if (tid == ExecutionState::mainThreadId) {
     // event already present in configuration
-    state.porNode = state.porNode->make_left_child([this, &tid, &state, &success](por::configuration& cfg) {
-      auto it = cfg.thread_heads().find(tid);
-      assert(it != cfg.thread_heads().end());
-      por::event::event const* e = it->second;
-      auto standby = createStandbyState(state, por::event::event_kind::thread_init);
-      success = attachFingerprintToEvent(state, *e);
-      return std::make_pair(e, std::move(standby));
-    });
+    assert(!state.hasUnregisteredDecisions());
+    state.needsThreadScheduling = true;
+
+    // update porNode
+    state.porNode = state.porNode->make_left_child(createStandbyState(state, por::event::event_kind::thread_init));
+
+    // retrieve already present event
+    auto event = const_cast<por::event::event*>(state.porNode->last_included_event());
+    assert(event->kind() == por::event::event_kind::thread_init && event->tid() == ExecutionState::mainThreadId);
+
+    if (DebugEventRegistration) {
+      llvm::errs() << "[state id: " << state.id << "] ";
+      llvm::errs() << "POR event: " << event->to_string(true) << "\n";
+    }
+
+    attachFingerprintToEvent(state, *event);
   } else {
     assert(state.tid() != tid);
-    success = extendPorNode(state, [this, &state, &tid](por::configuration& cfg) {
-      por::extension ex = cfg.init_thread(tid, state.tid());
-      por::event::event const* e = cfg.commit(std::move(ex));
-      auto standby = createStandbyState(state, por::event::event_kind::thread_init);
-      return std::make_pair(e, standby);
-    });
+    por::extension ex = state.porNode->configuration().init_thread(tid, state.tid());
+    success = registerNonLocal(state, std::move(ex));
   }
 
   return success;
@@ -243,18 +325,8 @@ bool PorEventManager::registerThreadExit(ExecutionState &state, const ThreadId &
     assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  bool success = extendPorNode(state,
-  [this, &state, &tid, &atomic](por::configuration& cfg) -> por::node::registration_t {
-    por::extension ex = cfg.exit_thread(tid, atomic);
-    por::event::event const* e = cfg.commit(std::move(ex));
-
-    auto standby = createStandbyState(state, por::event::event_kind::thread_exit);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().exit_thread(tid, atomic);
+  bool success = registerNonLocal(state, std::move(ex));
 
   if (atomic) {
     assert(pred == state.porNode->last_included_event()->thread_predecessor());
@@ -270,16 +342,8 @@ bool PorEventManager::registerThreadJoin(ExecutionState &state, const ThreadId &
     llvm::errs() << " and joined thread " << joinedThread << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &joinedThread](por::configuration& cfg) {
-    por::extension ex = cfg.join_thread(state.tid(), joinedThread);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::thread_join);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().join_thread(state.tid(), joinedThread);
+  return registerNonLocal(state, std::move(ex));
 }
 
 
@@ -290,16 +354,8 @@ bool PorEventManager::registerLockCreate(ExecutionState &state, std::uint64_t mI
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
-    por::extension ex = cfg.create_lock(state.tid(), mId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::lock_create);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().create_lock(state.tid(), mId);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t mId) {
@@ -309,16 +365,8 @@ bool PorEventManager::registerLockDestroy(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &mId](por::configuration& cfg) {
-    por::extension ex = cfg.destroy_lock(state.tid(), mId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::lock_destroy);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().destroy_lock(state.tid(), mId);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t mId, bool snapshotsAllowed) {
@@ -328,18 +376,8 @@ bool PorEventManager::registerLockAcquire(ExecutionState &state, std::uint64_t m
     llvm::errs() << " on mutex " << mId << "\n";
   }
 
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state,
-  [this, &state, &mId, &snapshotsAllowed](por::configuration& cfg) -> por::node::registration_t {
-    por::extension ex = cfg.acquire_lock(state.tid(), mId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    if (snapshotsAllowed) {
-      auto standby = createStandbyState(state, por::event::event_kind::lock_acquire);
-      return std::make_pair(e, std::move(standby));
-    }
-    return std::make_pair(e, nullptr);
-  });
+  por::extension ex = state.porNode->configuration().acquire_lock(state.tid(), mId);
+  return registerNonLocal(state, std::move(ex), snapshotsAllowed);
 }
 
 bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t mId, bool snapshot, bool atomic) {
@@ -358,20 +396,8 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
     assert(state.porNode->distance_to_last_standby_state() > 0);
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  bool success = extendPorNode(state,
-  [this, &state, &mId, &snapshot, &atomic](por::configuration& cfg) -> por::node::registration_t {
-    por::extension ex = cfg.release_lock(state.tid(), mId, atomic);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    if (snapshot) {
-      auto standby = createStandbyState(state, por::event::event_kind::lock_release);
-      return std::make_pair(e, std::move(standby));
-    }
-    return std::make_pair(e, nullptr);
-  });
+  por::extension ex = state.porNode->configuration().release_lock(state.tid(), mId, atomic);
+  bool success = registerNonLocal(state, std::move(ex), snapshot);
 
   if (atomic) {
     assert(pred == state.porNode->last_included_event()->thread_predecessor());
@@ -388,16 +414,8 @@ bool PorEventManager::registerCondVarCreate(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
-    por::extension ex = cfg.create_cond(state.tid(), cId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::condition_variable_create);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().create_cond(state.tid(), cId);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_t cId) {
@@ -407,16 +425,8 @@ bool PorEventManager::registerCondVarDestroy(ExecutionState &state, std::uint64_
     llvm::errs() << " on cond. var " << cId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId](por::configuration& cfg) {
-    por::extension ex = cfg.destroy_cond(state.tid(), cId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::condition_variable_destroy);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().destroy_cond(state.tid(), cId);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t cId, const ThreadId& notifiedThread) {
@@ -426,16 +436,8 @@ bool PorEventManager::registerCondVarSignal(ExecutionState &state, std::uint64_t
     llvm::errs() << " on cond. var " << cId << " and signalled thread " << notifiedThread << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId, &notifiedThread](por::configuration& cfg) {
-    por::extension ex = cfg.signal_thread(state.tid(), cId, notifiedThread);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::signal);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().signal_thread(state.tid(), cId, notifiedThread);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint64_t cId,
@@ -450,16 +452,8 @@ bool PorEventManager::registerCondVarBroadcast(ExecutionState &state, std::uint6
     llvm::errs() << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId, &threads](por::configuration& cfg) {
-    por::extension ex = cfg.broadcast_threads(state.tid(), cId, threads);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::broadcast);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().broadcast_threads(state.tid(), cId, threads);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
@@ -469,16 +463,8 @@ bool PorEventManager::registerCondVarWait1(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
-    por::extension ex = cfg.wait1(state.tid(), cId, mId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::wait1);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().wait1(state.tid(), cId, mId);
+  return registerNonLocal(state, std::move(ex));
 }
 
 bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId) {
@@ -488,26 +474,13 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
     llvm::errs() << " on cond. var " << cId << " and mutex " << mId << "\n";
   }
 
-  assert(!state.hasUnregisteredDecisions());
-
-  state.needsThreadScheduling = true;
-
-  return extendPorNode(state, [this, &state, &cId, &mId](por::configuration& cfg) {
-    por::extension ex = cfg.wait2(state.tid(), cId, mId);
-    por::event::event const* e = cfg.commit(std::move(ex));
-    auto standby = createStandbyState(state, por::event::event_kind::wait2);
-    return std::make_pair(e, std::move(standby));
-  });
+  por::extension ex = state.porNode->configuration().wait2(state.tid(), cId, mId);
+  return registerNonLocal(state, std::move(ex));
 }
 
-bool PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por::event::event &event) {
+void PorEventManager::attachFingerprintToEvent(ExecutionState &state, por::event::event &event) {
   if (!PruneStates) {
-    return true;
-  }
-
-  if (DebugEventRegistration) {
-    llvm::errs() << "[state id: " << state.id << "] ";
-    llvm::errs() << "POR event: " << event.to_string(true) << "\n";
+    return;
   }
 
   auto thread = state.getThreadById(event.tid());
@@ -519,7 +492,7 @@ bool PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
 
   for (auto &[tid, c] : event.cone()) {
     if (tid != event.tid()) {
-      copy.addDelta(c->thread_delta());
+      copy.addDelta(c->metadata().thread_delta);
     }
   }
 
@@ -536,19 +509,11 @@ bool PorEventManager::attachFingerprintToEvent(ExecutionState &state, const por:
   }
 
   auto fingerprint = copy.getFingerprint(expressions);
-  bool res = event.set_fingerprint(fingerprint, delta);
+  event.set_metadata({fingerprint, delta});
 
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
-  if (!res) {
-    llvm::errs() << MemoryFingerprint::toString(event.fingerprint().diff(fingerprint)) << "\n";
-    llvm::errs() << "\n";
-    llvm::errs() << MemoryFingerprint::toString(event.thread_delta().diff(delta)) << "\n";
-  }
-
-  assert(MemoryFingerprint::validateFingerprint(event.fingerprint()));
+  assert(MemoryFingerprint::validateFingerprint(event.metadata().fingerprint));
 #endif
-
-  return res;
 }
 
 
@@ -568,13 +533,9 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     return;
   }
 
-  if (!event.has_fingerprint()) {
-    return;
-  }
-
-  auto it = fingerprints.find(event.fingerprint());
+  auto it = fingerprints.find(event.metadata().fingerprint);
   if (it == fingerprints.end()) {
-    fingerprints.emplace(event.fingerprint(), &event);
+    fingerprints.emplace(event.metadata().fingerprint, &event);
     return;
   }
 
@@ -592,9 +553,9 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
 
     if (DebugStatePruning) {
       llvm::errs() << "[state id: " << state.id << "] corresponding: " << other.to_string(true)
-                  << " with fingerprint: " << MemoryFingerprint::toString(other.fingerprint()) << "\n";
+                  << " with fingerprint: " << MemoryFingerprint::toString(other.metadata().fingerprint) << "\n";
       llvm::errs() << "[state id: " << state.id << "]        cutoff: " << event.to_string(true) << "\n"
-                  << " with fingerprint: " << MemoryFingerprint::toString(event.fingerprint()) << "\n";
+                  << " with fingerprint: " << MemoryFingerprint::toString(event.metadata().fingerprint) << "\n";
     }
 
     assert(state.tid() == event.tid());

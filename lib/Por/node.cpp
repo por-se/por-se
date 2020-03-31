@@ -37,21 +37,35 @@ namespace {
 	}
 }
 
-node* node::make_left_child(std::function<registration_t(por::configuration*)> func) {
+node* node::make_left_child(por::event::event const* event) {
 	assert(!_left && "node already has left child");
 	assert(!_event && "node must not have an event yet");
 
 	_left = allocate_left_child();
-	std::shared_ptr<state const> standby_state;
+	_left->_C.reset();
+	_event = event;
 
-	if(_left->_C) {
-		std::tie(_event, standby_state) = func(_left->_C.get());
-	} else {
-		std::tie(_event, standby_state) = func(nullptr);
-	}
+	libpor_check(std::find(_D.begin(), _D.end(), _event) == _D.end());
 
-	if(standby_state) {
-		_left->_standby_state = std::move(standby_state);
+	// propagate sweep bit
+	_left->_is_sweep_node = _is_sweep_node;
+	_is_sweep_node = false;
+
+	return _left.get();
+}
+
+node* node::make_left_child(por::extension&& ex, std::shared_ptr<state const>&& standby) {
+	assert(!_left && "node already has left child");
+	assert(!_event && "node must not have an event yet");
+
+	_left = allocate_left_child();
+	assert(_left->_C);
+	assert(ex.configuration == _C.get());
+	ex.configuration = _left->_C.get();
+	_event = _left->_C->commit(std::move(ex));
+
+	if(standby) {
+		_left->_standby_state = std::move(standby);
 	}
 
 	libpor_check(std::find(_D.begin(), _D.end(), _event) == _D.end());
@@ -63,19 +77,31 @@ node* node::make_left_child(std::function<registration_t(por::configuration*)> f
 	return _left.get();
 }
 
-node* node::make_left_child(std::function<registration_t(por::configuration&)> func) {
+node* node::make_left_child(std::shared_ptr<state const>&& standby) {
+	// for thread_init of main thread
+	assert(!_left && "node already has left child");
+	assert(!_event && "node must not have an event yet");
+
 	assert(_C);
-	return make_left_child([&func](por::configuration* cfg) {
-		return func(*cfg);
-	});
+	assert(_C->size() == 2);
+	assert(_D.empty());
+
+	_left = allocate_left_child();
+	assert(_left->_C->size() == 2);
+	_event = _C->thread_heads().begin()->second;
+	assert(_event->kind() == por::event::event_kind::thread_init);
+
+	_left->_standby_state = std::move(standby);
+
+	return _left.get();
 }
 
-node* node::make_right_local_child(std::function<registration_t(por::configuration&)> func) {
+node* node::make_right_local_child(por::extension&& ex, std::shared_ptr<state const>&& standby) {
 	assert(_event);
 	assert(_event->kind() == por::event::event_kind::local);
 
 	node* n = make_right_child();
-	return n->make_left_child(std::move(func));
+	return n->make_left_child(std::move(ex), std::move(standby));
 }
 
 node* node::make_right_child() {
@@ -91,10 +117,11 @@ node* node::make_right_child() {
 	return _right.get();
 }
 
-node* node::catch_up(std::function<node::registration_t(por::configuration&)> func, por::event::event const* next) {
+node* node::catch_up(por::extension&& ex, std::shared_ptr<state const>&& standby, por::event::event const* next) {
 	por::configuration copy = *_C;
 
-	auto [event, standby_state] = func(copy);
+	ex.configuration = &copy;
+	por::event::event const* event = copy.commit(std::move(ex));
 
 	if(next != event) {
 		return nullptr;
@@ -119,8 +146,8 @@ node* node::catch_up(std::function<node::registration_t(por::configuration&)> fu
 	}
 	libpor_check(std::find(n->_D.begin(), n->_D.end(), event) == n->_D.end());
 
-	if(standby_state && !n->_standby_state) {
-		n->_standby_state = standby_state;
+	if(standby && !n->_standby_state) {
+		n->_standby_state = standby;
 	}
 
 	return n;
@@ -170,11 +197,8 @@ por::leaf node::make_right_branch(por::comb A) {
 		}
 
 		for(por::event::event const* a : min) {
-			n = n->make_left_child([&a, &n](por::configuration*) {
-				return std::make_pair(a, nullptr);
-			});
+			n = n->make_left_child(a);
 			assert(n->parent()->_event == a);
-			n->_C.reset();
 			catch_up.push_back(a);
 		}
 

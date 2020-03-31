@@ -21,7 +21,7 @@ namespace por {
 
 	struct extension {
 		std::unique_ptr<por::event::event> event;
-		por::configuration const* const configuration;
+		por::configuration const* configuration;
 		std::size_t extension_index;
 
 		por::event::event const* commit(por::configuration& cfg) &&;
@@ -224,9 +224,7 @@ namespace por {
 		}
 
 		por::event::event const* commit(por::extension&& ex) {
-			if(ex.configuration != this || ex.extension_index != _last_extension) {
-				return nullptr;
-			}
+			assert(ex.configuration == this && ex.extension_index == _last_extension);
 
 			por::event::event const* event = _unfolding->deduplicate(std::move(ex.event));
 

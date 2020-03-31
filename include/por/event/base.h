@@ -2,6 +2,7 @@
 
 #include "iterator.h"
 #include "kind.h"
+#include "metadata.h"
 
 #include "klee/Fingerprint/MemoryFingerprintDelta.h"
 #include "klee/Fingerprint/MemoryFingerprintValue.h"
@@ -28,8 +29,6 @@ namespace por::event {
 	using thread_id_t = por::thread_id;
 	using lock_id_t = std::uint64_t;
 	using cond_id_t = std::uint64_t;
-	using fingerprint_delta_t = klee::MemoryFingerprintDelta;
-	using fingerprint_value_t = klee::MemoryFingerprintValue;
 
 	class event {
 		friend class por::unfolding; // for caching of immediate_conflicts
@@ -67,38 +66,21 @@ namespace por::event {
 			_immediate_conflicts.erase(it);
 		}
 
-		mutable bool _fingerprint_set = false;
-		mutable fingerprint_value_t _fingerprint;
-		mutable fingerprint_delta_t _thread_delta;
+		por::event::metadata _metadata{};
 
 	public:
-		bool has_fingerprint() const noexcept { return _fingerprint_set; }
-
-		fingerprint_value_t const& fingerprint() const noexcept {
-			assert(has_fingerprint());
-			return _fingerprint;
+		void set_metadata(por::event::metadata&& md) {
+			_metadata = std::move(md);
+		}
+		por::event::metadata const& metadata() const noexcept {
+			return _metadata;
 		}
 
-		fingerprint_delta_t const& thread_delta() const noexcept {
-			assert(has_fingerprint());
-			return _thread_delta;
-		}
-
-		bool set_fingerprint(fingerprint_value_t fingerprint, fingerprint_delta_t thread_delta) const noexcept {
-			if(has_fingerprint()) {
-				return thread_delta == _thread_delta && fingerprint == _fingerprint;
-			}
-			_fingerprint_set = true;
-			_thread_delta = thread_delta;
-			_fingerprint = fingerprint;
-			return true;
-		}
-
-		mutable bool _is_cutoff = false;
+		mutable bool _is_cutoff = false; // FIXME: make private
 
 		bool is_cutoff() const noexcept { return _is_cutoff; }
 
-		mutable std::size_t _lc_size = 0;
+		mutable std::size_t _lc_size = 0; // FIXME: make private
 
 		event_kind kind() const noexcept { return _kind; }
 		thread_id_t const& tid() const noexcept { return _tid; }
@@ -114,9 +96,7 @@ namespace por::event {
 		, _imm_cfl_color(that._imm_cfl_color)
 		, _successors(std::move(that._successors))
 		, _immediate_conflicts(std::move(that._immediate_conflicts))
-		, _fingerprint_set(that._fingerprint_set)
-		, _fingerprint(std::move(that._fingerprint))
-		, _thread_delta(std::move(that._thread_delta))
+		, _metadata(std::move(that._metadata))
 		, _is_cutoff(that._is_cutoff)
 		, _lc_size(that._lc_size) {
 			assert(!has_successors());

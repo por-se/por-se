@@ -217,19 +217,18 @@ namespace por {
 			return _standby_state.get();
 		}
 
-		using registration_t = std::pair<por::event::event const*, std::shared_ptr<por::state const>>;
-
 	private:
-		node* make_left_child(std::function<registration_t(por::configuration*)>);
+		node* make_left_child(por::event::event const*);
 
 	public:
-		node* make_left_child(std::function<registration_t(por::configuration&)>);
+		node* make_left_child(por::extension&&, std::shared_ptr<state const>&&);
+		node* make_left_child(std::shared_ptr<state const>&&); // for thread_init of main thread
 
-		node* make_right_local_child(std::function<registration_t(por::configuration&)>);
+		node* make_right_local_child(por::extension&&, std::shared_ptr<state const>&&);
 
 		static std::vector<leaf> create_right_branches(std::vector<node*>);
 
-		node* catch_up(std::function<registration_t(por::configuration&)>, por::event::event const*);
+		node* catch_up(por::extension&& ex, std::shared_ptr<state const>&& standby, por::event::event const*);
 
 		void backtrack();
 

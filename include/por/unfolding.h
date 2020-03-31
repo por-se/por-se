@@ -90,6 +90,9 @@ namespace por {
 						if(e->is_cutoff()) {
 							v->mark_as_cutoff();
 						}
+						if(v->metadata() == por::event::metadata{}) {
+							v->set_metadata(std::move(e->_metadata)); // FIXME: improve this
+						}
 						return {false, *v.get()};
 					}
 				}
