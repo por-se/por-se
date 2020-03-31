@@ -74,7 +74,7 @@ bool PorEventManager::registerNonLocal(ExecutionState &state, por::extension &&e
   state.needsThreadScheduling = true;
 
   // attach metadata
-  attachMetadata(state, *ex.event.get());
+  attachMetadata(state, *ex.event.get(), true);
   const por::event::metadata newMetadata = ex.event->metadata();
 
   // create standby state
@@ -147,7 +147,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
 
     // attach metadata
-    attachMetadata(state, *ex.event.get());
+    attachMetadata(state, *ex.event.get(), false);
     const por::event::metadata newMetadata = ex.event->metadata();
 
     // create standby state
@@ -187,7 +187,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
 
   // attach metadata
-  attachMetadata(state, *ex.event.get());
+  attachMetadata(state, *ex.event.get(), false);
   const por::event::metadata newMetadata = ex.event->metadata();
 
   // create standby state
@@ -230,7 +230,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       por::extension ex = n->configuration().local(s->tid(), std::move(path));
 
       // attach metadata
-      attachMetadata(*s, *ex.event.get());
+      attachMetadata(*s, *ex.event.get(), false);
       const por::event::metadata newMetadata = ex.event->metadata();
 
       // create standby state
@@ -299,7 +299,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
       llvm::errs() << "POR event: " << event->to_string(true) << "\n";
     }
 
-    attachMetadata(state, *event);
+    attachMetadata(state, *event, true);
   } else {
     assert(state.tid() != tid);
     por::extension ex = state.porNode->configuration().init_thread(tid, state.tid());
@@ -478,10 +478,21 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
   return registerNonLocal(state, std::move(ex));
 }
 
-void PorEventManager::attachMetadata(const ExecutionState &state, por::event::event &event) {
+void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &event, bool synchronization) {
   if (!PruneStates) {
     return;
   }
+
+  if (synchronization) {
+    auto& con = state.delayedFreesContainer();
+
+    con.drainFrees(event, [&state](const MemoryObject* mo) {
+      state.performAllocatorFree(mo);
+    });
+
+    con.registerPorEvent(event);
+  }
+
 
   MemoryFingerprintValue fingerprint;
   MemoryFingerprintDelta delta;

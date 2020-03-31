@@ -44,8 +44,8 @@ namespace klee {
 
       void registerFree(const ThreadId& tid, const MemoryObject* freedObject);
 
-      void registerPorEvent(const por::event::event* evt);
+      void registerPorEvent(const por::event::event &event);
 
-      void drainFrees(const por::event::event* newEvt, FreeCallback callback);
+      void drainFrees(const por::event::event &newEvt, FreeCallback callback);
   };
 }

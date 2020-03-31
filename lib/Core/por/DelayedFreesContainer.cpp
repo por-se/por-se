@@ -15,11 +15,11 @@ void DelayedFreesContainer::registerFree(const ThreadId& tid, const MemoryObject
   freeList.emplace_back(freedObject);
 }
 
-void DelayedFreesContainer::registerPorEvent(const por::event::event* evt) {
+void DelayedFreesContainer::registerPorEvent(const por::event::event &event) {
   // Clear our pending data
   std::map<ThreadId, FreeList> sortedByThread;
 
-  auto it = pending.find(evt->tid());
+  auto it = pending.find(event.tid());
   if (it == pending.end()) {
     return;
   }
@@ -30,23 +30,23 @@ void DelayedFreesContainer::registerPorEvent(const por::event::event* evt) {
   }
 
   pending.clear();
-  data.emplace(evt, sortedByThread);
+  data.emplace(&event, sortedByThread);
 }
 
-void DelayedFreesContainer::drainFrees(const por::event::event* newEvt, FreeCallback callback) {
+void DelayedFreesContainer::drainFrees(const por::event::event &newEvt, FreeCallback callback) {
   // So we want to find all events (except from events that we triggered) and
   // check if their are any frees we have to perform
 
-  if (newEvt->kind() == por::event::event_kind::thread_init) {
+  if (newEvt.kind() == por::event::event_kind::thread_init) {
     // So we only init the current thread, therefore, their cannot
     // be any memory objects that we had created before
     return;
   }
 
-  auto& checkedThreads = alreadyDone[newEvt->tid()];
+  auto& checkedThreads = alreadyDone[newEvt.tid()];
 
-  for (const auto& it : newEvt->cone()) {
-    if (it.first == newEvt->tid()) {
+  for (const auto& it : newEvt.cone()) {
+    if (it.first == newEvt.tid()) {
       continue;
     }
 
@@ -62,7 +62,7 @@ void DelayedFreesContainer::drainFrees(const por::event::event* newEvt, FreeCall
       auto& delayedFreesPerThread = evtIt->second;
 
       // Check if there is something for this thread
-      auto it = delayedFreesPerThread.find(newEvt->tid());
+      auto it = delayedFreesPerThread.find(newEvt.tid());
       if (it == delayedFreesPerThread.end()) {
         continue;
       }
