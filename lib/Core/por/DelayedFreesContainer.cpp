@@ -15,13 +15,14 @@ void DelayedFreesContainer::registerFree(const ThreadId& tid, const MemoryObject
   freeList.emplace_back(freedObject);
 }
 
-void DelayedFreesContainer::registerPorEvent(const por::event::event &event) {
-  // Clear our pending data
+[[nodiscard]]
+std::map<ThreadId, std::vector<const klee::MemoryObject*>>
+DelayedFreesContainer::flushUnregistredFrees(const por::event::event &event) {
   std::map<ThreadId, FreeList> sortedByThread;
 
   auto it = pending.find(event.tid());
   if (it == pending.end()) {
-    return;
+    return {};
   }
 
   for (const auto* mo : it->second) {
@@ -30,7 +31,7 @@ void DelayedFreesContainer::registerPorEvent(const por::event::event &event) {
   }
 
   pending.clear();
-  data.emplace(&event, sortedByThread);
+  return sortedByThread;
 }
 
 void DelayedFreesContainer::drainFrees(const por::event::event &newEvt, FreeCallback callback) {
@@ -54,12 +55,7 @@ void DelayedFreesContainer::drainFrees(const por::event::event &newEvt, FreeCall
 
     const auto* cur = it.second;
     for (; cur != nullptr && (checked == nullptr || checked->is_less_than(*cur)); cur = cur->thread_predecessor()) {
-      auto evtIt = data.find(cur);
-      if (evtIt == data.end()) {
-        continue;
-      }
-
-      auto& delayedFreesPerThread = evtIt->second;
+      auto& delayedFreesPerThread = cur->metadata().pending_frees;
 
       // Check if there is something for this thread
       auto it = delayedFreesPerThread.find(newEvt.tid());

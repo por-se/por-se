@@ -21,16 +21,6 @@ namespace klee {
     private:
       using FreeList = std::vector<const MemoryObject*>;
 
-      // TODO: append this data directly to the 'event' in order to avoid
-      //       performing additional lookups
-      std::map<
-        const por::event::event*,
-        std::map<
-          ThreadId, // thread that has to perform the 'actual frees'
-          FreeList // list of the memory objects to free
-        >
-      > data;
-
       // List of frees that could not yet be registered to events, since the event
       // is not yet known
       /// @brief map of thread to the list of delayed frees performed by the thread
@@ -44,7 +34,9 @@ namespace klee {
 
       void registerFree(const ThreadId& tid, const MemoryObject* freedObject);
 
-      void registerPorEvent(const por::event::event &event);
+      [[nodiscard]]
+      std::map<ThreadId, std::vector<const MemoryObject*>>
+      flushUnregistredFrees(const por::event::event &event);
 
       void drainFrees(const por::event::event &newEvt, FreeCallback callback);
   };

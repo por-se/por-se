@@ -3,11 +3,21 @@
 #include "klee/Fingerprint/MemoryFingerprintDelta.h"
 #include "klee/Fingerprint/MemoryFingerprintValue.h"
 
+#include "por/thread_id.h"
+
+#include <map>
+#include <vector>
+
+namespace klee {
+	class MemoryObject;
+}
+
 namespace por {
 	namespace event {
 		struct metadata {
 			klee::MemoryFingerprintValue fingerprint;
 			klee::MemoryFingerprintDelta thread_delta;
+			std::map<por::thread_id, std::vector<const klee::MemoryObject*>> pending_frees;
 		};
 
 		inline bool operator==(metadata const& a, metadata const& b) noexcept {

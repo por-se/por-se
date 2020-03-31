@@ -483,22 +483,22 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
     return;
   }
 
-  if (synchronization) {
-    auto& con = state.delayedFreesContainer();
+  auto& con = state.delayedFreesContainer();
 
+  if (synchronization) {
     con.drainFrees(event, [&state](const MemoryObject* mo) {
       state.performAllocatorFree(mo);
     });
-
-    con.registerPorEvent(event);
   }
 
+  auto frees = con.flushUnregistredFrees(event);
+  assert(synchronization || frees.empty());
 
   MemoryFingerprintValue fingerprint;
   MemoryFingerprintDelta delta;
   std::tie(fingerprint, delta) = computeFingerprintAndDelta(state, event);
 
-  event.set_metadata({std::move(fingerprint), std::move(delta)});
+  event.set_metadata({std::move(fingerprint), std::move(delta), std::move(frees)});
 }
 
 std::pair<MemoryFingerprintValue, MemoryFingerprintDelta>
