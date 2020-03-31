@@ -4466,7 +4466,7 @@ void Executor::executeFree(ExecutionState &state,
         const auto& allocatorTid = mo->getAllocationStackFrame().first;
 
         if (allocatorTid == state.tid()) {
-          performAllocatorFree(state, mo);
+          state.performAllocatorFree(mo);
         } else {
           // So this was not allocated by our own thread. Therefore, we want to delay the
           // free to the correct thread
@@ -4482,12 +4482,6 @@ void Executor::executeFree(ExecutionState &state,
       }
     }
   }
-}
-
-void Executor::performAllocatorFree(ExecutionState &state, const MemoryObject* mo) {
-  auto thread = state.getThreadById(mo->getAllocationStackFrame().first);
-  assert(thread.has_value() && "MemoryObject created by thread that is not known");
-  mo->parent->deallocate(mo, thread.value().get());
 }
 
 void Executor::resolveExact(ExecutionState &state,

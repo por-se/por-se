@@ -325,6 +325,8 @@ public:
     return delayedFrees;
   }
 
+  void performAllocatorFree(const MemoryObject* mo);
+
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
   void dumpAllThreadStacks(llvm::raw_ostream &out) const;

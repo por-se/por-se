@@ -359,6 +359,11 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
   }
 }
 
+void ExecutionState::performAllocatorFree(const MemoryObject* mo) {
+  auto thread = getThreadById(mo->getAllocationStackFrame().first);
+  assert(thread.has_value() && "MemoryObject created by thread that is not known");
+  mo->parent->deallocate(mo, thread.value().get());
+}
 
 void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const {
   unsigned idx = 0;

@@ -92,7 +92,6 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
-  friend class PorEventManager;
 
 public:
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
@@ -311,8 +310,6 @@ private:
   void executeFree(ExecutionState &state,
                    ref<Expr> address,
                    KInstruction *target = 0);
-
-  void performAllocatorFree(ExecutionState &state, const MemoryObject* mo);
   
   void executeCall(ExecutionState &state, 
                    KInstruction *ki,
