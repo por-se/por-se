@@ -221,10 +221,12 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
   }
   case 7: {
     std::uint64_t sfid;
+    std::uint8_t step;
     std::uintptr_t ptr;
 
     std::string tid = decodeTid(item);
     item >> sfid;
+    item >> step;
     item >> ptr;
     llvm::Instruction *i = reinterpret_cast<llvm::Instruction *>(ptr);
 
@@ -233,6 +235,9 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
     os << i;
     os << " in ";
     os << i->getFunction()->getName();
+    if (step > 0) {
+      os << "(step " << step << ")";
+    }
 
     result.output = true;
     break;
