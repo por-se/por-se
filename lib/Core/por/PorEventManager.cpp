@@ -74,7 +74,7 @@ bool PorEventManager::registerNonLocal(ExecutionState &state, por::extension &&e
   state.needsThreadScheduling = true;
 
   // attach metadata
-  attachFingerprintToEvent(state, *ex.event.get());
+  attachMetadata(state, *ex.event.get());
   const por::event::metadata newMetadata = ex.event->metadata();
 
   // create standby state
@@ -147,7 +147,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
 
     // attach metadata
-    attachFingerprintToEvent(state, *ex.event.get());
+    attachMetadata(state, *ex.event.get());
     const por::event::metadata newMetadata = ex.event->metadata();
 
     // create standby state
@@ -187,7 +187,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
   por::extension ex = state.porNode->configuration().local(state.tid(), std::move(path));
 
   // attach metadata
-  attachFingerprintToEvent(state, *ex.event.get());
+  attachMetadata(state, *ex.event.get());
   const por::event::metadata newMetadata = ex.event->metadata();
 
   // create standby state
@@ -230,7 +230,7 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       por::extension ex = n->configuration().local(s->tid(), std::move(path));
 
       // attach metadata
-      attachFingerprintToEvent(*s, *ex.event.get());
+      attachMetadata(*s, *ex.event.get());
       const por::event::metadata newMetadata = ex.event->metadata();
 
       // create standby state
@@ -299,7 +299,7 @@ bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &
       llvm::errs() << "POR event: " << event->to_string(true) << "\n";
     }
 
-    attachFingerprintToEvent(state, *event);
+    attachMetadata(state, *event);
   } else {
     assert(state.tid() != tid);
     por::extension ex = state.porNode->configuration().init_thread(tid, state.tid());
@@ -478,10 +478,21 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
   return registerNonLocal(state, std::move(ex));
 }
 
-void PorEventManager::attachFingerprintToEvent(ExecutionState &state, por::event::event &event) {
+void PorEventManager::attachMetadata(const ExecutionState &state, por::event::event &event) {
   if (!PruneStates) {
     return;
   }
+
+  MemoryFingerprintValue fingerprint;
+  MemoryFingerprintDelta delta;
+  std::tie(fingerprint, delta) = computeFingerprintAndDelta(state, event);
+
+  event.set_metadata({std::move(fingerprint), std::move(delta)});
+}
+
+std::pair<MemoryFingerprintValue, MemoryFingerprintDelta>
+PorEventManager::computeFingerprintAndDelta(const ExecutionState &state, const por::event::event &event) {
+  assert(PruneStates);
 
   auto thread = state.getThreadById(event.tid());
   assert(thread && "no thread with given id found");
@@ -509,11 +520,12 @@ void PorEventManager::attachFingerprintToEvent(ExecutionState &state, por::event
   }
 
   auto fingerprint = copy.getFingerprint(expressions);
-  event.set_metadata({fingerprint, delta});
 
 #ifdef ENABLE_VERIFIED_FINGERPRINTS
   assert(MemoryFingerprint::validateFingerprint(event.metadata().fingerprint));
 #endif
+
+  return {fingerprint, delta};
 }
 
 

@@ -1,6 +1,8 @@
 #ifndef KLEE_POREVENTMANAGER_H
 #define KLEE_POREVENTMANAGER_H
 
+#include "klee/Fingerprint/MemoryFingerprintDelta.h"
+#include "klee/Fingerprint/MemoryFingerprintValue.h"
 #include "klee/Thread.h"
 
 #include "por/node.h"
@@ -20,6 +22,8 @@ namespace klee {
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por::event::event_kind kind);
       void logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind);
       bool registerNonLocal(ExecutionState &, por::extension &&, bool snapshotsAllowed = true);
+      std::pair<MemoryFingerprintValue, MemoryFingerprintDelta> computeFingerprintAndDelta(const ExecutionState &, const por::event::event &);
+      void attachMetadata(const ExecutionState &state, por::event::event &event);
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
@@ -39,7 +43,6 @@ namespace klee {
       bool registerCondVarWait1(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
       bool registerCondVarWait2(ExecutionState &state, std::uint64_t cId, std::uint64_t mId);
 
-      void attachFingerprintToEvent(ExecutionState &state, por::event::event &event);
       void findNewCutoff(ExecutionState &state);
   };
 };
