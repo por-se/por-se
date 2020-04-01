@@ -1,5 +1,6 @@
 add_klee_unit_test(PorTest
   csd.cpp
+  event.cpp
   thread_id.cpp
   unfolding.cpp)
 target_link_libraries(PorTest PRIVATE kleeCore kleeFingerprint)

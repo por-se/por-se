@@ -7,6 +7,7 @@
 #include "klee/Fingerprint/MemoryFingerprintDelta.h"
 #include "klee/Fingerprint/MemoryFingerprintValue.h"
 
+#include "por/comb.h"
 #include "por/cone.h"
 #include "por/thread_id.h"
 
@@ -405,6 +406,18 @@ namespace por::event {
 
 		auto causes(bool include_program_init=true) const noexcept {
 			return util::make_iterator_range(causes_begin(include_program_init), causes_end(include_program_init));
+		}
+
+		// returns comb of events not synchronized as of the preceding event on this thread
+		// i.e. returns ([e] \setminus {e}) \setminus [et]
+		// does not include program_init
+		// only valid for events with thread predecessor
+		por::comb synchronized_events() const noexcept {
+			assert(thread_predecessor());
+			por::comb res = _cone.setminus(thread_predecessor()->cone());
+			res.remove(*thread_predecessor());
+			assert(!res.has(_tid));
+			return res;
 		}
 
 		virtual lock_id_t lid() const noexcept { return 0; }
