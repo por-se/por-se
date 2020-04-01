@@ -483,15 +483,15 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
     return;
   }
 
-  auto& con = state.delayedFreesContainer();
-
   if (synchronization) {
+    auto& con = state.delayedFreesContainer();
+
     con.drainFrees(event, [&state](const MemoryObject* mo) {
       state.performAllocatorFree(mo);
     });
   }
 
-  auto frees = con.flushUnregistredFrees(event);
+  auto frees = state.thread().flushUnsynchronizedFrees();
   assert(synchronization || frees.empty());
 
   MemoryFingerprintValue fingerprint;

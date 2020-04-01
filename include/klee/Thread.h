@@ -12,10 +12,12 @@
 #include "pseudoalloc/pseudoalloc.h"
 #include "por/event/event.h"
 
+#include <map>
 #include <optional>
 #include <variant>
 #include <vector>
 #include <unordered_map>
+#include <utility>
 
 namespace por {
   namespace event {
@@ -137,6 +139,10 @@ namespace klee {
 
       MemoryFingerprint fingerprint;
 
+      /// @brief maps allocation thread to list of memory object which were allocated
+      /// on other threads but freed on this thread since the last thread synchronization
+      std::map<ThreadId, std::vector<const klee::MemoryObject*>> unsynchronizedFrees;
+
     public:
       Thread() = delete;
       Thread(const Thread &thread);
@@ -157,6 +163,10 @@ namespace klee {
       }
 
       MemoryFingerprintDelta getFingerprintDelta() const;
+
+      [[nodiscard]] auto flushUnsynchronizedFrees() {
+        return std::exchange(unsynchronizedFrees, {});
+      }
 
       void dumpLiveSet(llvm::raw_ostream &os) const noexcept;
 
