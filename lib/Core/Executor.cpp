@@ -4465,12 +4465,12 @@ void Executor::executeFree(ExecutionState &state,
 
         const auto& allocatorTid = mo->getAllocationStackFrame().first;
 
-        if (allocatorTid == state.tid()) {
-          state.performAllocatorFree(mo);
+        if (allocatorTid == it->second->tid()) {
+          it->second->performAllocatorFree(mo);
         } else {
           // So this was not allocated by our own thread. Therefore, we want to delay the
           // free to the correct thread
-          state.thread().unsynchronizedFrees[allocatorTid].emplace_back(mo);
+          it->second->thread().unsynchronizedFrees[allocatorTid].emplace_back(mo);
         }
 
         // We want to always unbind the memory object from the addressspace in order to detect
