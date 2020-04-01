@@ -23,7 +23,7 @@ namespace klee {
       void logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind);
       bool registerNonLocal(ExecutionState &, por::extension &&, bool snapshotsAllowed = true);
       std::pair<MemoryFingerprintValue, MemoryFingerprintDelta> computeFingerprintAndDelta(const ExecutionState &, const por::event::event &);
-      void attachMetadata(ExecutionState &state, por::event::event &event, bool synchronization);
+      void attachMetadata(ExecutionState &state, por::event::event &event);
 
     public:
       bool registerThreadCreate(ExecutionState &state, const ThreadId &tid);
