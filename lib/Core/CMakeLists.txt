@@ -28,7 +28,6 @@ set(CORE_COMPONENTS
   Thread.cpp
   TimingSolver.cpp
   UserSearcher.cpp
-  por/DelayedFreesContainer.cpp
   por/PorEventManager.cpp
   RaceDetection/DataRaceDetection.cpp
   RaceDetection/ObjectAccesses.cpp

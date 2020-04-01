@@ -31,6 +31,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "por/event/event.h"
 #include "por/csd.h"
 #include "por/node.h"
 
@@ -363,6 +364,28 @@ void ExecutionState::performAllocatorFree(const MemoryObject* mo) {
   auto thread = getThreadById(mo->getAllocationStackFrame().first);
   assert(thread.has_value() && "MemoryObject created by thread that is not known");
   mo->parent->deallocate(mo, thread.value().get());
+}
+
+void ExecutionState::performAllocatorFree(const por::event::event &event) {
+  // So we want to find all events (except from events that we triggered) and
+  // check if there are any frees we have to perform
+
+  if (event.kind() == por::event::event_kind::thread_init) {
+    // So we only init the current thread, therefore, there cannot
+    // be any memory objects that we had created before
+    return;
+  }
+
+  for (const auto *pred : event.synchronized_events()) {
+    auto& delayedFreesPerThread = pred->metadata().pending_frees;
+    // Check if there is something for this thread
+    auto it = delayedFreesPerThread.find(event.tid());
+    if (it != delayedFreesPerThread.end()) {
+      for (const auto* mo : it->second) {
+        performAllocatorFree(mo);
+      }
+    }
+  }
 }
 
 void ExecutionState::dumpStackOfThread(llvm::raw_ostream &out, const Thread* thread) const {

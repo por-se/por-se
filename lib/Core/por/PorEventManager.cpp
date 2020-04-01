@@ -484,11 +484,7 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
   }
 
   if (synchronization) {
-    auto& con = state.delayedFreesContainer();
-
-    con.drainFrees(event, [&state](const MemoryObject* mo) {
-      state.performAllocatorFree(mo);
-    });
+    state.performAllocatorFree(event);
   }
 
   auto frees = state.thread().flushUnsynchronizedFrees();

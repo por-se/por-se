@@ -20,7 +20,6 @@
 #include "../../lib/Core/AddressSpace.h"
 #include "../../lib/Core/RaceDetection/DataRaceDetection.h"
 #include "../../lib/Core/MemoryState.h"
-#include "../../lib/Core/por/DelayedFreesContainer.h"
 #include "klee/Internal/Module/KInstIterator.h"
 
 #include <functional>
@@ -32,6 +31,9 @@
 namespace por {
   class leaf;
   class node;
+  namespace event {
+    class event;
+  }
 };
 
 namespace klee {
@@ -68,8 +70,6 @@ private:
 
   /// @brief tracks and checks all memory accesses
   DataRaceDetection raceDetection;
-
-  DelayedFreesContainer delayedFrees;
 
 public:
   // Execution - Control Flow specific
@@ -321,11 +321,8 @@ public:
     return catchUp.front();
   }
 
-  DelayedFreesContainer& delayedFreesContainer() {
-    return delayedFrees;
-  }
-
   void performAllocatorFree(const MemoryObject* mo);
+  void performAllocatorFree(const por::event::event &event);
 
   void dumpStack(llvm::raw_ostream &out) const;
   void dumpSchedulingInfo(llvm::raw_ostream &out) const;
