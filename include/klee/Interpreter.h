@@ -76,16 +76,7 @@ public:
 
   /// InterpreterOptions - Options varying the runtime behavior during
   /// interpretation.
-  struct InterpreterOptions {
-    /// A frequency at which to make concrete reads return constrained
-    /// symbolic values. This is used to test the correctness of the
-    /// symbolic execution on concrete programs.
-    unsigned MakeConcreteSymbolic;
-
-    InterpreterOptions()
-      : MakeConcreteSymbolic(false)
-    {}
-  };
+  struct InterpreterOptions { };
 
 protected:
   const InterpreterOptions interpreterOpts;

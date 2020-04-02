@@ -272,14 +272,6 @@ namespace {
              cl::cat(SeedingCat));
 
   cl::opt<unsigned>
-  MakeConcreteSymbolic("make-concrete-symbolic",
-                       cl::desc("Probabilistic rate at which to make concrete reads symbolic, "
-				"i.e. approximately 1 in n concrete reads will be made symbolic (0=off, 1=all).  "
-				"Used for testing (default=0)"),
-                       cl::init(0),
-                       cl::cat(DebugCat));
-
-  cl::opt<unsigned>
   MaxTests("max-tests",
            cl::desc("Stop execution after generating the given number of tests. Extra tests corresponding to partially explored paths will also be dumped.  Set to 0 to disable (default=0)"),
            cl::init(0),
@@ -1400,7 +1392,6 @@ int main(int argc, char **argv, char **envp) {
   }
 
   Interpreter::InterpreterOptions IOpts;
-  IOpts.MakeConcreteSymbolic = MakeConcreteSymbolic;
   KleeHandler *handler = new KleeHandler(pArgc, pArgv);
   Interpreter *interpreter =
     theInterpreter = Interpreter::create(ctx, IOpts, handler);

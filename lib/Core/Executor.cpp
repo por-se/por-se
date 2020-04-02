@@ -4242,33 +4242,6 @@ void Executor::callExternalFunction(ExecutionState &state,
 
 /***/
 
-ref<Expr> Executor::replaceReadWithSymbolic(ExecutionState &state, 
-                                            ref<Expr> e) {
-  unsigned n = interpreterOpts.MakeConcreteSymbolic;
-  if (!n || replayKTest || replayPath)
-    return e;
-
-  // right now, we don't replace symbolics (is there any reason to?)
-  if (!isa<ConstantExpr>(e))
-    return e;
-
-  if (n != 1 && random() % n)
-    return e;
-
-  // create a new fresh location, assert it is equal to concrete value in e
-  // and return it.
-  
-  static unsigned id;
-  const Array *array =
-      arrayCache.CreateArray("rrws_arr" + llvm::utostr(++id),
-                             Expr::getMinBytesForWidth(e->getWidth()));
-  ref<Expr> res = Expr::createTempRead(array, e->getWidth());
-  ref<Expr> eq = NotOptimizedExpr::create(EqExpr::create(e, res));
-  llvm::errs() << "Making symbolic: " << eq << "\n";
-  addConstraint(state, eq);
-  return res;
-}
-
 ObjectState *Executor::bindObjectInState(ExecutionState &state, 
                                          const MemoryObject *mo,
                                          bool isLocal,
@@ -4674,10 +4647,6 @@ ref<Expr> Executor::executeMemoryRead(ExecutionState& state,
 
   ref<Expr> result = os->read(offset, bitWidth);
   processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
-
-  if (interpreterOpts.MakeConcreteSymbolic) {
-    result = replaceReadWithSymbolic(state, result);
-  }
 
   return result;
 }

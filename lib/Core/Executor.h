@@ -362,10 +362,6 @@ private:
   /// validity checks, and seed patching.
   void addConstraint(ExecutionState &state, ref<Expr> condition, bool alreadyInPath = false);
 
-  // Called on [for now] concrete reads, replaces constant with a symbolic
-  // Used for testing.
-  ref<Expr> replaceReadWithSymbolic(ExecutionState &state, ref<Expr> e);
-
   const Cell& eval(KInstruction *ki, unsigned index, 
                    ExecutionState &state);
 
