@@ -497,7 +497,8 @@ namespace pseudoalloc {
 
 			void deallocate(void* ptr, std::size_t size) {
 				auto quantized_size = util::round_up_to_multiple_of_4096(size);
-				traceln("Quarantining ", ptr, " with size ", size, " (", quantized_size, ") for ", _quarantine.capacity(), " deallocations");
+				traceln("Quarantining ", ptr, " with size ", size, " (", quantized_size, ") for ", _quarantine.capacity(),
+				        " deallocations");
 				_pa_check(may_deallocate(ptr, size) && "Invalid free");
 
 				std::tie(ptr, size) = _quarantine.deallocate(std::make_pair(ptr, size));
@@ -615,33 +616,35 @@ namespace pseudoalloc {
 		};
 	} // namespace suballocators
 
-	/// Wraps a mapping that is shared with other allocators that are required to return
-	/// identical addresses. The bins are maintained in the following layout in the mapping:
-	///
-	/// +--------------------------------------+
-	/// | 4 | 8 | 16 | ... | 2048 | 4096 | LOH |
-	/// +--------------------------------------+
+	/// Wraps a mapping that is shared with other allocators.
 	class allocator_t : public util::tagged_logger_t<allocator_t> {
-		static const std::size_t number_of_bins = 12; /// including the LOH
+		static constexpr const std::array _meta = {
+		  1u,    // bool
+		  4u,    // int
+		  8u,    // pointer size
+		  16u,   // double
+		  32u,   // compound types #1
+		  64u,   // compound types #2
+		  256u,  // compound types #3
+		  1024u, // compound types #4
+		  4096u  // the LOH can only manage objects larger than 4096 bytes
+		};
 
 	public:
 		static const std::uint32_t unlimited_quarantine = util::quarantine_base_t::unlimited;
 
 	private:
 		mapping_t* _mapping = nullptr;
-		std::array<suballocators::sized_heap_t, number_of_bins - 1> _sized_bins;
+		std::array<suballocators::sized_heap_t, _meta.size()> _sized_bins;
 		suballocators::large_object_heap_t _loh;
 
-		[[nodiscard]] static inline int size2bin(std::size_t size) noexcept {
-			if(size <= 4) {
-				return 0;
-			} else if(size > 4096) {
-				return number_of_bins - 1;
-			} else {
-				int result = (std::numeric_limits<std::size_t>::digits - 2) - util::clz(size - 1);
-				_pa_check(result > 0 && result < number_of_bins - 1);
-				return result;
+		[[nodiscard]] static inline int size2bin(std::size_t const size) noexcept {
+			for(std::size_t i = 0; i < _meta.size(); ++i) {
+				if(_meta[i] >= size) {
+					return i;
+				}
 			}
+			return _meta.size();
 		}
 
 	public:
@@ -652,19 +655,19 @@ namespace pseudoalloc {
 		allocator_t(mapping_t& mapping, std::uint32_t const quarantine_size)
 		  : _mapping(&mapping) {
 			assert(mapping && "Invalid mapping");
-			assert(mapping.size() > number_of_bins && "Mapping is *far* to small");
+			assert(mapping.size() > _meta.size() + 1 && "Mapping is *far* to small");
 
-			auto bin_size = static_cast<std::size_t>(1)
-			                << (std::numeric_limits<std::size_t>::digits - 1 - util::clz(_mapping->size() / number_of_bins));
+			auto bin_size = static_cast<std::size_t>(1) << (std::numeric_limits<std::size_t>::digits - 1 -
+			                                                util::clz(_mapping->size() / (_meta.size() + 1)));
 			char* const base = static_cast<char*>(_mapping->begin());
-			std::size_t slot_size = 4;
 			std::size_t total_size = 0;
-			for(auto& bin : _sized_bins) {
-				bin.initialize(base + total_size, bin_size, slot_size, quarantine_size);
+			for(std::size_t i = 0; i < _meta.size(); ++i) {
+				static_assert(_meta.size() == std::tuple_size_v<decltype(_sized_bins)>);
+
+				_sized_bins[i].initialize(base + total_size, bin_size, _meta[i], quarantine_size);
 
 				total_size += bin_size;
 				assert(total_size <= _mapping->size() && "Mapping too small");
-				slot_size *= 2;
 			}
 
 			auto loh_size = mapping.size() - total_size;
