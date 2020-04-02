@@ -82,6 +82,24 @@ int main() {
 		assert(a == d);
 	}
 
+	std::cout << "\n\n";
+
+	{
+		static const std::size_t size = 8;
+		std::cout << "size = " << size << " quarantine unlimited\n";
+		auto allocator = pseudoalloc::allocator_t(mapping, pseudoalloc::allocator_t::unlimited_quarantine);
+
+		static const std::size_t iterations = 10'000;
+		std::unordered_set<void*> allocations;
+		allocations.reserve(iterations);
+		for(std::size_t i = 0; i < iterations; ++i) {
+			auto* ptr = allocator.allocate(size);
+			allocator.free(ptr, 8);
+			auto [it, success] = allocations.emplace(ptr);
+			assert(success);
+		}
+	}
+
 	std::exit(0);
 }
 

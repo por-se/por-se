@@ -9,6 +9,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <set>
 #include <utility>
 #include <vector>
@@ -26,7 +27,11 @@
 #	define _pa_check(expr) ((void)0)
 #endif
 
-#if defined(PSEUDOALLOC_TRACE)
+#ifndef PSEUDOALLOC_TRACE
+#	define PSEUDOALLOC_TRACE 0
+#endif
+
+#if PSEUDOALLOC_TRACE >= 1
 #	include <iostream>
 #endif
 
@@ -76,7 +81,9 @@ namespace pseudoalloc {
 
 		mapping_t(mapping_t const&) = delete;
 		mapping_t& operator=(mapping_t const&) = delete;
-		mapping_t(mapping_t&& other) : _begin(other._begin), _size(other._size) {
+		mapping_t(mapping_t&& other)
+		  : _begin(other._begin)
+		  , _size(other._size) {
 			other._begin = MAP_FAILED;
 			other._size = 0;
 		}
@@ -102,9 +109,7 @@ namespace pseudoalloc {
 			assert(rc == 0 && "madvise failed");
 		}
 
-		explicit operator bool() const noexcept {
-			return _begin != MAP_FAILED;
-		}
+		explicit operator bool() const noexcept { return _begin != MAP_FAILED; }
 
 		~mapping_t() {
 			if(*this) {
@@ -149,8 +154,23 @@ namespace pseudoalloc {
 			return ((x - 1) | static_cast<std::size_t>(4096 - 1)) + 1;
 		}
 
-		class quarantine_t {
-			std::unique_ptr<void*[]> _data;
+		template <typename C> class tagged_logger_t {
+		protected:
+			template <typename... T> inline void traceln(T&&... args) const noexcept {
+#if PSEUDOALLOC_TRACE >= 1
+				(static_cast<C const*>(this)->log_tag(std::cout) << ... << std::forward<T>(args)) << "\n";
+#else
+				(static_cast<void>(std::forward<T>(args)), ..., static_cast<void>(0)); // ignore all arguments
+#endif
+			}
+		};
+
+		struct quarantine_base_t {
+			static const std::uint32_t unlimited = static_cast<std::uint32_t>(-1);
+		};
+
+		template <typename T> class quarantine_t : public quarantine_base_t {
+			std::unique_ptr<T[]> _data;
 			std::uint32_t _capacity = 0;
 			std::uint32_t _pos = 0;
 
@@ -159,8 +179,10 @@ namespace pseudoalloc {
 			quarantine_t(quarantine_t const& rhs)
 			  : _capacity(rhs._capacity)
 			  , _pos(rhs._pos) {
-				if(_capacity > 0 && rhs._data) {
-					_data.reset(new void*[_capacity]);
+				if(rhs._data) {
+					_pa_check(_capacity > 0);
+					_pa_check(_capacity != unlimited);
+					_data.reset(new T[_capacity]);
 					for(std::size_t i = 0; i < _capacity; ++i) {
 						_data[i] = rhs._data[i];
 					}
@@ -168,18 +190,21 @@ namespace pseudoalloc {
 			}
 			quarantine_t& operator=(quarantine_t const& rhs) {
 				if(this != &rhs) {
-					if(_capacity < rhs._capacity) {
-						_data.reset();
-					}
-					_pos = rhs._pos;
-					_capacity = rhs._capacity;
-					if(_capacity > 0 && rhs._data) {
-						if(!_data) {
-							_data.reset(new void*[_capacity]);
+					if(rhs._data) {
+						_pa_check(rhs._capacity > 0);
+						_pa_check(rhs._capacity != unlimited);
+						if(_capacity != rhs._capacity) {
+							_capacity = rhs._capacity;
+							_data.reset(new T[_capacity]);
 						}
+						_pos = rhs._pos;
 						for(std::size_t i = 0; i < _capacity; ++i) {
 							_data[i] = rhs._data[i];
 						}
+					} else {
+						_capacity = rhs._capacity;
+						_pos = rhs._pos;
+						_data.reset();
 					}
 				}
 				return *this;
@@ -195,20 +220,23 @@ namespace pseudoalloc {
 				_capacity = capacity;
 			}
 
-			std::uint32_t capacity() const noexcept { return _capacity; }
+			constexpr std::uint32_t capacity() const noexcept { return _capacity; }
 
-			void* deallocate(void* const ptr) {
+			T deallocate(T const ptr) {
 				if(_capacity == 0) {
-					return nullptr;
+					return ptr;
+				}
+				if(_capacity == unlimited) {
+					return T{};
 				}
 
 				if(!_data) {
-					_data.reset(new void*[_capacity]());
-					_pa_check(std::all_of(_data.get(), _data.get() + _capacity, [](void* ptr) { return ptr == nullptr; }));
+					_pa_check(_pos == 0);
+					_data.reset(new T[_capacity]());
+					_pa_check(std::all_of(_data.get(), _data.get() + _capacity, [](T ptr) { return ptr == T{}; }));
 				}
 
-				void* const result = _data[_pos];
-				_data[_pos] = ptr;
+				auto const result = std::exchange(_data[_pos], std::move(ptr));
 				++_pos;
 				if(_pos == _capacity) {
 					_pos = 0;
@@ -216,81 +244,18 @@ namespace pseudoalloc {
 
 				return result;
 			}
-		};
 
-		class sized_quarantine_t {
-			std::unique_ptr<std::pair<void*, std::size_t>[]> _data;
-			std::uint32_t _capacity = 0;
-			std::uint32_t _pos = 0;
-
-		public:
-			sized_quarantine_t() = default;
-			sized_quarantine_t(sized_quarantine_t const& rhs)
-			  : _capacity(rhs._capacity)
-			  , _pos(rhs._pos) {
-				if(_capacity > 0 && rhs._data) {
-					_data.reset(new std::pair<void*, std::size_t>[_capacity]);
-					for(std::size_t i = 0; i < _capacity; ++i) {
-						_data[i] = rhs._data[i];
-					}
-				}
-			}
-			sized_quarantine_t& operator=(sized_quarantine_t const& rhs) {
-				if(this != &rhs) {
-					if(_capacity < rhs._capacity) {
-						_data.reset();
-					}
-					_pos = rhs._pos;
-					_capacity = rhs._capacity;
-					if(_capacity > 0 && rhs._data) {
-						if(!_data) {
-							_data.reset(new std::pair<void*, std::size_t>[_capacity]);
-						}
-						for(std::size_t i = 0; i < _capacity; ++i) {
-							_data[i] = rhs._data[i];
-						}
-					}
-				}
-				return *this;
-			}
-			sized_quarantine_t(sized_quarantine_t&&) = default;
-			sized_quarantine_t& operator=(sized_quarantine_t&&) = default;
-
-			void initialize(std::uint32_t const capacity) {
-				_pa_check(!_data);
-				_pa_check(!_capacity);
-				_pa_check(!_pos);
-
-				_capacity = capacity;
-			}
-
-			std::uint32_t capacity() const noexcept { return _capacity; }
-
-			std::pair<void*, std::size_t> deallocate(void* const ptr, std::size_t const size) {
-				if(_capacity == 0) {
-					return {nullptr, 0};
-				}
-
+			template <typename F> bool any_of(F predicate) const {
 				if(!_data) {
-					_data.reset(new std::pair<void*, std::size_t>[_capacity]());
-					_pa_check(std::all_of(_data.get(), _data.get() + _capacity,
-					                      [](auto p) { return p.first == nullptr && p.second == 0; }));
+					return false;
 				}
-
-				std::pair<void*, std::size_t> const result = _data[_pos];
-				_data[_pos] = {ptr, size};
-				++_pos;
-				if(_pos == _capacity) {
-					_pos = 0;
-				}
-
-				return result;
+				return std::any_of(_data.get(), _data.get() + _capacity, predicate);
 			}
 		};
 	} // namespace util
 
 	namespace suballocators {
-		class sized_heap_t {
+		class sized_heap_t : public util::tagged_logger_t<sized_heap_t> {
 			std::vector<std::uint64_t> _bitmap; /// stores the *free* locations as one bits
 			std::size_t _finger = 0;
 
@@ -298,7 +263,7 @@ namespace pseudoalloc {
 			std::size_t _size = 0;
 			std::size_t _slot_size = 0;
 
-			util::quarantine_t _quarantine;
+			util::quarantine_t<void*> _quarantine;
 
 			[[nodiscard]] inline std::size_t index2pos(std::size_t index) const {
 				index += 1;
@@ -321,6 +286,8 @@ namespace pseudoalloc {
 			}
 
 		public:
+			inline std::ostream& log_tag(std::ostream& out) const noexcept { return out << "[" << _slot_size << "] "; }
+
 			void initialize(void* const base, std::size_t const size, std::size_t const slot_size,
 			                std::uint32_t const quarantine_size) noexcept {
 				_pa_check(size > 0 && (size & (size - 1)) == 0 && "Sizes of sized bins must be powers of two");
@@ -330,13 +297,18 @@ namespace pseudoalloc {
 				_slot_size = slot_size;
 
 				_quarantine.initialize(quarantine_size);
+
+				traceln("Initialization complete");
 			}
 
 			[[nodiscard]] void* allocate() {
-				_pa_check(_finger <= _bitmap.size());
+				traceln("Allocating ", _slot_size, " bytes");
+				trace_contents();
+
 				while(_finger < _bitmap.size() && _bitmap[_finger] == 0) {
 					++_finger;
 				}
+
 				if(_finger < _bitmap.size()) {
 					auto shift = util::ctz(_bitmap[_finger]);
 					auto mask = static_cast<::std::uint64_t>(1) << shift;
@@ -345,24 +317,46 @@ namespace pseudoalloc {
 					_bitmap[_finger] ^= mask;
 					return _base + index2pos(_finger * 64 + shift);
 				} else {
+					_pa_check(_finger == _bitmap.size());
 					_bitmap.emplace_back(~static_cast<::std::uint64_t>(1));
 					return _base + index2pos(_finger * 64 + 0);
 				}
 			}
 
+			[[nodiscard]] bool may_deallocate(void* ptr) const {
+				_pa_check(ptr >= _base && ptr < _base + _size);
+				auto const pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
+				_pa_check(pos < _size);
+
+				auto const index = pos2index(pos);
+				auto const loc = index / 64;
+				auto const shift = index % 64;
+				if(_quarantine.any_of([ptr](void* entry) { return ptr == entry; })) {
+					return false;
+				}
+				return loc < _bitmap.size() && (_bitmap[loc] & (static_cast<std::uint64_t>(1) << shift)) == 0;
+			}
+
 			void deallocate(void* ptr) {
+				traceln("Quarantining ", ptr, " for ", _quarantine.capacity(), " deallocations");
+				_pa_check(may_deallocate(ptr) && "Invalid free");
 				ptr = _quarantine.deallocate(ptr);
+
+				traceln("Deallocating ", ptr);
 				if(!ptr) {
 					return;
 				}
+				trace_contents();
 
-				auto pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
+				auto const pos = static_cast<std::size_t>(static_cast<char*>(ptr) - _base);
 				_pa_check(pos < _size);
-				auto index = pos2index(pos);
-				auto loc = index / 64;
-				auto shift = index % 64;
+
+				auto const index = pos2index(pos);
+				auto const loc = index / 64;
+				auto const shift = index % 64;
 				assert(loc < _bitmap.size() && (_bitmap[loc] & (static_cast<std::uint64_t>(1) << shift)) == 0 &&
-				       "Invalid free");
+				       "Invalid free. (Possibly delayed due to quarantine. Enable expensive checks with PSEUDOALLOC_CHECKED to "
+				       "detect invalid frees immediately.)");
 				if(loc < _finger) {
 					_finger = loc;
 				}
@@ -375,7 +369,28 @@ namespace pseudoalloc {
 					while(!_bitmap.empty() && _bitmap.back() == ~static_cast<::std::uint64_t>(0)) {
 						_bitmap.pop_back();
 					}
-					_finger = _bitmap.size();
+				}
+			}
+
+			void trace_contents() const noexcept {
+				if(_bitmap.empty()) {
+					traceln("bitmap is empty");
+				} else {
+#if PSEUDOALLOC_TRACE >= 2
+					traceln("bitmap:");
+					for(std::size_t i = 0; i < _bitmap.size(); ++i) {
+						auto mask = static_cast<std::uint64_t>(1);
+						if(~_bitmap[i] != 0) {
+							for(std::size_t j = 0; j < 64; ++j) {
+								if((_bitmap[i] & (static_cast<std::uint64_t>(1) << j)) == 0) {
+									traceln("  ", i * 64 + j, " ", static_cast<void*>(_base + index2pos(i * 64 + j)));
+								}
+							}
+						}
+					}
+#else
+					traceln("bitmap contains ", _bitmap.size(), " elements (64-bit words)");
+#endif
 				}
 			}
 		};
@@ -383,7 +398,7 @@ namespace pseudoalloc {
 		/// The large object heap is implemented as what amounts to as a bi-directional mapping between the position of
 		/// each unallocated region and its actual size. The implemented algorithm performs allocations in the middle of
 		/// the largest available unallocated region. Allocations are guaranteed to be aligned to 4096 bytes.
-		class large_object_heap_t {
+		class large_object_heap_t : public util::tagged_logger_t<large_object_heap_t> {
 			/// The first direction of the mapping, `map1`, maps the size of each free region to its location. It is inversely
 			/// sorted by size, so that `map1.begin()` always returns the largest free region.
 			/// As it is possible that two free ranges have the same size, there is a need to provide a deterministic
@@ -396,29 +411,28 @@ namespace pseudoalloc {
 			/// following unallocated region.
 			std::map<char*, std::size_t> map2;
 
-			util::sized_quarantine_t _quarantine;
+			util::quarantine_t<std::pair<void*, std::size_t>> _quarantine;
 
 		public:
+			inline std::ostream& log_tag(std::ostream& out) const noexcept { return out << "[LOH] "; }
+
 			void initialize(void* base, std::size_t size, std::uint32_t const quarantine_size) {
 				map1.emplace(size, std::initializer_list<char*>{static_cast<char*>(base)});
 				map2.emplace(static_cast<char*>(base), size);
 
 				_quarantine.initialize(quarantine_size);
 
-#if defined(PSEUDOALLOC_TRACE)
-				::std::cout << "[LOH] Initialization complete.\n";
-				trace();
-#endif
+				traceln("Initialization complete");
+				trace_contents();
 			}
 
 			[[nodiscard]] void* allocate(std::size_t size) {
-#if defined(PSEUDOALLOC_TRACE)
-				::std::cout << "[LOH] Allocating " << size << " (" << util::round_up_to_multiple_of_4096(size) << ") bytes\n";
-				trace();
-#endif
-
+				auto const quantized_size = util::round_up_to_multiple_of_4096(size);
+				traceln("Allocating ", size, " (", quantized_size, ") bytes");
 				_pa_check(size > 4096);
-				size = util::round_up_to_multiple_of_4096(size);
+				trace_contents();
+
+				size = quantized_size;
 
 				_pa_check(!map1.empty());
 				auto largest_free_range_it = map1.begin();
@@ -470,30 +484,33 @@ namespace pseudoalloc {
 				return range_pos + offset;
 			}
 
-			void deallocate(void* ptr, std::size_t size) {
-#if defined(PSEUDOALLOC_TRACE)
-				::std::cout << "[LOH] Qurantining " << ptr << " with size " << size << " ("
-				            << util::round_up_to_multiple_of_4096(size) << ")\n";
-				trace();
-#endif
-
+			[[nodiscard]] bool may_deallocate(void* ptr, std::size_t size) {
 				{
-					auto pair = _quarantine.deallocate(ptr, size);
-					ptr = pair.first;
-					size = pair.second;
-					if(!ptr) {
-						return;
-					}
+					auto last = map2.cend();
+					--last;
+					_pa_check(ptr >= map2.cbegin()->first && ptr < last->first + last->second);
+				}
+				_pa_check(size > 4096);
+
+				return true; // FIXME: not yet implemented!
+			}
+
+			void deallocate(void* ptr, std::size_t size) {
+				auto quantized_size = util::round_up_to_multiple_of_4096(size);
+				traceln("Quarantining ", ptr, " with size ", size, " (", quantized_size, ") for ", _quarantine.capacity(), " deallocations");
+				_pa_check(may_deallocate(ptr, size) && "Invalid free");
+
+				std::tie(ptr, size) = _quarantine.deallocate(std::make_pair(ptr, size));
+				quantized_size = util::round_up_to_multiple_of_4096(size);
+				traceln("Deallocating ", ptr, " with size ", size, " (", quantized_size, ")");
+
+				if(!ptr) {
+					return;
 				}
 
-#if defined(PSEUDOALLOC_TRACE)
-				::std::cout << "[LOH] Freeing " << ptr << " with size " << size << " ("
-				            << util::round_up_to_multiple_of_4096(size) << ")\n";
-				trace();
-#endif
-
 				_pa_check(size > 4096);
-				size = util::round_up_to_multiple_of_4096(size);
+				size = quantized_size;
+				trace_contents();
 
 				auto right_it = map2.upper_bound(static_cast<char*>(ptr));
 				auto left_it = std::prev(right_it);
@@ -565,59 +582,82 @@ namespace pseudoalloc {
 				map2.erase(right_it);
 			}
 
-#if defined(PSEUDOALLOC_TRACE)
-			void trace() {
-				::std::cout << "[LOH] map1:\n";
-				for(auto const& x : map1) {
-					::std::cout << "      " << x.first << "\n";
-					for(auto const& y : x.second) {
-						::std::cout << "        " << static_cast<void*>(y) << "\n";
+			void trace_contents() const noexcept {
+				if(map1.empty()) {
+					traceln("map1 is empty");
+				} else {
+#if PSEUDOALLOC_TRACE >= 2
+					traceln("map1:");
+					for(auto const& x : map1) {
+						traceln("  ", x.first);
+						for(auto const& y : x.second) {
+							traceln("    ", static_cast<void*>(y));
+						}
 					}
+#else
+					traceln("map1 has ", map1.size(), " entries");
+#endif
 				}
-				::std::cout << "[LOH] map2:\n";
-				for(auto const& x : map2) {
-					::std::cout << "      " << static_cast<void*>(x.first) << " " << x.second << "\n";
+
+				if(map2.empty()) {
+					traceln("map2 is empty");
+				} else {
+#if PSEUDOALLOC_TRACE >= 2
+					traceln("map2:");
+					for(auto const& x : map2) {
+						traceln("  ", static_cast<void*>(x.first), x.second);
+					}
+#else
+					traceln("map2 has ", map2.size(), " entries");
+#endif
 				}
 			}
-#endif
 		};
 	} // namespace suballocators
 
 	/// Wraps a mapping that is shared with other allocators that are required to return
 	/// identical addresses. The bins are maintained in the following layout in the mapping:
 	///
-	/// +---------------------------------------------------+
-	/// | 4 | 8 | 16 | ... | 2048 | 4096 | large object bin |
-	/// +---------------------------------------------------+
-	class allocator_t {
+	/// +--------------------------------------+
+	/// | 4 | 8 | 16 | ... | 2048 | 4096 | LOH |
+	/// +--------------------------------------+
+	class allocator_t : public util::tagged_logger_t<allocator_t> {
+		static const std::size_t number_of_bins = 12; /// including the LOH
+
+	public:
+		static const std::uint32_t unlimited_quarantine = util::quarantine_base_t::unlimited;
+
+	private:
 		mapping_t* _mapping = nullptr;
-		std::array<suballocators::sized_heap_t, 11> _sized_bins;
+		std::array<suballocators::sized_heap_t, number_of_bins - 1> _sized_bins;
 		suballocators::large_object_heap_t _loh;
 
 		[[nodiscard]] static inline int size2bin(std::size_t size) noexcept {
 			if(size <= 4) {
 				return 0;
 			} else if(size > 4096) {
-				return 11;
+				return number_of_bins - 1;
 			} else {
 				int result = (std::numeric_limits<std::size_t>::digits - 2) - util::clz(size - 1);
-				_pa_check(result > 0 && result < 11);
+				_pa_check(result > 0 && result < number_of_bins - 1);
 				return result;
 			}
 		}
 
 	public:
+		std::ostream& log_tag(std::ostream& out) const noexcept { return out << "[alloc] "; }
+
 		allocator_t() = default;
 
 		allocator_t(mapping_t& mapping, std::uint32_t const quarantine_size)
 		  : _mapping(&mapping) {
 			assert(mapping && "Invalid mapping");
-			assert(mapping.size() > (_sized_bins.size() + 1) && "Mapping is *far* to small");
+			assert(mapping.size() > number_of_bins && "Mapping is *far* to small");
 
-			auto bin_size = static_cast<std::size_t>(1) << (std::numeric_limits<std::size_t>::digits - 1 -
-			                                                util::clz(_mapping->size() / (_sized_bins.size() + 1)));
+			auto bin_size = static_cast<std::size_t>(1)
+			                << (std::numeric_limits<std::size_t>::digits - 1 - util::clz(_mapping->size() / number_of_bins));
 			char* const base = static_cast<char*>(_mapping->begin());
-			std::size_t slot_size = 8;
+			std::size_t slot_size = 4;
 			std::size_t total_size = 0;
 			for(auto& bin : _sized_bins) {
 				bin.initialize(base + total_size, bin_size, slot_size, quarantine_size);
@@ -637,24 +677,32 @@ namespace pseudoalloc {
 		allocator_t(allocator_t&&) = default;
 		allocator_t& operator=(allocator_t&&) = default;
 
-		explicit operator bool() const noexcept {
-			return _mapping != nullptr;
-		}
+		explicit operator bool() const noexcept { return _mapping != nullptr; }
 
 		[[nodiscard]] void* allocate(std::size_t size) {
 			assert(*this && "Invalid allocator");
-			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
-				return _sized_bins[bin].allocate();
+
+			auto const bin = size2bin(size);
+			traceln("Allocating ", size, " bytes in bin ", bin);
+
+			void* result = nullptr;
+			if(bin < static_cast<int>(_sized_bins.size())) {
+				result = _sized_bins[bin].allocate();
 			} else {
-				return _loh.allocate(size);
+				result = _loh.allocate(size);
 			}
+			traceln("Allocated ", result);
+			return result;
 		}
 
 		void free(void* ptr, std::size_t size) {
 			assert(*this && "Invalid allocator");
 			assert(ptr && "Freeing nullptrs is not supported"); // we are not ::free!
 
-			if(auto bin = size2bin(size); bin < static_cast<int>(_sized_bins.size())) {
+			auto const bin = size2bin(size);
+			traceln("Freeing ", ptr, " of size ", size, " in bin ", bin);
+
+			if(bin < static_cast<int>(_sized_bins.size())) {
 				return _sized_bins[bin].deallocate(ptr);
 			} else {
 				return _loh.deallocate(ptr, size);
