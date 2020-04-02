@@ -1,6 +1,7 @@
 add_klee_unit_test(PseudoallocTest
   allocate.cpp
   randomtest.cpp
+  reuse.cpp
   sample.cpp
   stacktest.cpp)
 target_compile_definitions(PseudoallocTest PUBLIC "-DPSEUDOALLOC_CHECKED" "-DUSE_PSEUDOALLOC" "-DUSE_GTEST_INSTEAD_OF_MAIN")
