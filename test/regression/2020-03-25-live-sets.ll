@@ -1,4 +1,4 @@
-; RUN: %klee -debug-print-instructions=all:stderr -debug-live-set %s 2>&1 | FileCheck %s
+; RUN: %klee -output-dir=%t.klee-out -debug-print-instructions=all:stderr -debug-live-set %s 2>&1 | FileCheck %s
 ; test program originally copied from test/Passes/LiveRegister/phi-multi.ll
 ; but extended to test live sets with function call and return
 
