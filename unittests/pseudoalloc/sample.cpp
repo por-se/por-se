@@ -1,7 +1,7 @@
 #include "pseudoalloc/pseudoalloc.h"
 
 #if defined(USE_GTEST_INSTEAD_OF_MAIN)
-#include "gtest/gtest.h"
+	#include "gtest/gtest.h"
 #endif
 
 #include <cassert>
@@ -45,7 +45,5 @@ int main() {
 }
 
 #if defined(USE_GTEST_INSTEAD_OF_MAIN)
-TEST(PseudoallocDeathTest, Sample) {
-	ASSERT_EXIT(sample_test(), ::testing::ExitedWithCode(0), "");
-}
+TEST(PseudoallocDeathTest, Sample) { ASSERT_EXIT(sample_test(), ::testing::ExitedWithCode(0), ""); }
 #endif

@@ -1,15 +1,15 @@
 ---
 BasedOnStyle: LLVM
-Standard: Cpp11
+Standard: Cpp11 # FIXME: set to Cpp17 for LLVM 10
 SpaceBeforeParens: Never
-# SpaceInEmptyBlock: true  # ENABLE ASAP!
+# SpaceInEmptyBlock: true # FIXME: enable for LLVM 10
 AllowShortBlocksOnASingleLine: true
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: false
-# AllowShortLambdasOnASingleLine: true
+AllowShortLambdasOnASingleLine: true
 IndentCaseLabels: true
-IndentPPDirectives: AfterHash  # CHANGE THIS TO BeforeHash ASAP!
+IndentPPDirectives: BeforeHash
 NamespaceIndentation: All
 UseTab: ForIndentation
 AccessModifierOffset: -2

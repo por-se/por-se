@@ -2,7 +2,7 @@
 #include "xoshiro.h"
 
 #if defined(USE_GTEST_INSTEAD_OF_MAIN)
-#include "gtest/gtest.h"
+	#include "gtest/gtest.h"
 #endif
 
 #include <cassert>
@@ -153,7 +153,5 @@ int main() {
 }
 
 #if defined(USE_GTEST_INSTEAD_OF_MAIN)
-TEST(PseudoallocDeathTest, Random) {
-	ASSERT_EXIT(random_test(), ::testing::ExitedWithCode(0), "");
-}
+TEST(PseudoallocDeathTest, Random) { ASSERT_EXIT(random_test(), ::testing::ExitedWithCode(0), ""); }
 #endif
