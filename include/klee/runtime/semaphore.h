@@ -1,8 +1,14 @@
 #ifndef _SEMAPHORE_H
 #define _SEMAPHORE_H
 
+#if defined(_PORSE_PURE_HEADER)
+#warning "Using pure PORSE runtime headers"
+#endif
+
+#if !defined(_PORSE_PURE_HEADER)
 #include <time.h>
 #include <stdint.h>
+#endif
 
 #include "pthread.h"
 #include "klee_types.h"
@@ -20,7 +26,7 @@ typedef struct {
   int value;
   const char* name;
 
-  size_t waitingCount;
+  unsigned long waitingCount;
 
   klee_sync_primitive_t mutex;
   klee_sync_primitive_t cond;
