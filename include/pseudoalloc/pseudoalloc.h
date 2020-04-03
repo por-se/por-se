@@ -18,21 +18,21 @@
 #include <unistd.h>
 
 #if defined(__linux)
-#	include <linux/version.h>
+	#include <linux/version.h>
 #endif
 
 #if defined(PSEUDOALLOC_CHECKED)
-#	define _pa_check(expr) (assert(expr))
+	#define _pa_check(expr) (assert(expr))
 #else
-#	define _pa_check(expr) ((void)0)
+	#define _pa_check(expr) ((void)0)
 #endif
 
 #ifndef PSEUDOALLOC_TRACE
-#	define PSEUDOALLOC_TRACE 0
+	#define PSEUDOALLOC_TRACE 0
 #endif
 
 #if PSEUDOALLOC_TRACE >= 1
-#	include <iostream>
+	#include <iostream>
 #endif
 
 namespace pseudoalloc {
@@ -59,11 +59,11 @@ namespace pseudoalloc {
 #if defined(__APPLE__)
 				flags |= MAP_FIXED;
 #else
-#	if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
 				flags |= MAP_FIXED_NOREPLACE;
-#	else
+	#else
 				flags |= MAP_FIXED;
-#	endif
+	#endif
 #endif
 			}
 
