@@ -1,10 +1,6 @@
 #ifndef _SEMAPHORE_H
 #define _SEMAPHORE_H
 
-#if defined(_PORSE_PURE_HEADER)
-#warning "Using pure PORSE runtime headers"
-#endif
-
 #if !defined(_PORSE_PURE_HEADER)
 #include <time.h>
 #include <stdint.h>

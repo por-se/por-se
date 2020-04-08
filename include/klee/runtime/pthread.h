@@ -1,13 +1,13 @@
 #ifndef _PTHREAD_H
 #define _PTHREAD_H
 
-#if defined(_PORSE_PURE_HEADER)
-#warning "Using pure PORSE runtime headers"
-#endif
-
 #if !defined(_PORSE_PURE_HEADER)
 #include <sched.h>
 #include <time.h>
+#endif
+
+#ifndef _PORSE_CLOCK_ID_TYPE
+#define _PORSE_CLOCK_ID_TYPE clockid_t
 #endif
 
 #include "kpr/list-types.h"
@@ -230,7 +230,8 @@ typedef struct {
 
 typedef struct {
   int pshared;
-  clockid_t clock;
+
+  _PORSE_CLOCK_ID_TYPE clock;
 } pthread_condattr_t;
 
 typedef struct {
@@ -360,11 +361,12 @@ int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared);
 
 // Condition variable attributes
 int pthread_condattr_destroy(pthread_condattr_t *attr);
-int pthread_condattr_getclock(const pthread_condattr_t *attr, clockid_t *clock);
 int pthread_condattr_getpshared(const pthread_condattr_t *attr, int *pshared);
 int pthread_condattr_init(pthread_condattr_t *attr);
-int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock);
 int pthread_condattr_setpshared(pthread_condattr_t *attr, int pshared);
+
+int pthread_condattr_getclock(const pthread_condattr_t *attr, _PORSE_CLOCK_ID_TYPE *clock);
+int pthread_condattr_setclock(pthread_condattr_t *attr, _PORSE_CLOCK_ID_TYPE clock);
 
 // Mutex attributes
 int pthread_mutexattr_init(pthread_mutexattr_t *attr);
