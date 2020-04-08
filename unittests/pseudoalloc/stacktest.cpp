@@ -136,7 +136,7 @@ int main() {
 	auto start = std::chrono::steady_clock::now();
 
 	RandomTest tester;
-	tester.run(50'000'000);
+	tester.run(10'000'000);
 
 	auto stop = std::chrono::steady_clock::now();
 	std::cout << std::dec << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count() << " ms\n";
