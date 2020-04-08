@@ -4729,6 +4729,10 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
   // Create a new object state for the memory object (instead of a copy).
   if (!replayKTest) {
 
+    if (!processMemoryAccess(state, mo, ConstantExpr::alloc(0, Expr::Int64), mo->size, MemoryOperation::Type::WRITE)) {
+      return;
+    }
+
     // Find a unique name for this array.  First try the original name,
     // or if that fails try adding a unique identifier.
     unsigned id = 0;
