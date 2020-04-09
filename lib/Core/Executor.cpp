@@ -3606,7 +3606,7 @@ void Executor::run(ExecutionState &initialState) {
 
     updateStates(&state);
 
-    if (ExploreSchedulesInstructions && stats::instructions % ExploreSchedulesInstructions == 0) {
+    if (ExploreSchedulesInstructions && (stats::instructions - stats::catchUpInstructions) % ExploreSchedulesInstructions == 0) {
       exploreSchedules(state);
       updateStates(nullptr);
     }
