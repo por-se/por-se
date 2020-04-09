@@ -212,8 +212,7 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
   if (arraysReferenced.empty())
     return fingerprintValue;
 
-  std::sort(expressions.begin(), expressions.end(),
-            [](const ref<Expr> &a, const ref<Expr> &b) {
+  auto exprSort = [](const ref<Expr> &a, const ref<Expr> &b) {
               auto aHash = a->hash();
               auto bHash = b->hash();
               if (aHash != bHash) {
@@ -221,7 +220,9 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
               } else {
                 return a < b;
               }
-            });
+            };
+
+  std::sort(expressions.begin(), expressions.end(), exprSort);
 
   // just needed to count array references using ExprPPrinter
   std::string tmpString;
@@ -273,7 +274,9 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
       if (it == constraintsMap.end()) {
         continue;
       }
-      for (const ref<Expr> &expr : it->second) {
+      std::vector<ref<Expr>> set(it->second.begin(), it->second.end());
+      std::sort(set.begin(), set.end(), exprSort);
+      for (const ref<Expr> &expr : set) {
         llvm::raw_ostream &os = getDerived().updateOstream();
         ExprPPrinter::printSingleExpr(os, expr);
         os.flush();
