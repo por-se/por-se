@@ -4128,7 +4128,7 @@ void Executor::callExternalFunction(ExecutionState &state,
     llvm::raw_string_ostream os(TmpStr);
     os << "calling external: ";
     DebugPrinter::printCall(os, function, arguments);
-    os << ") at " << state.pc()->getSourceLocation();
+    os << " at " << state.pc()->getSourceLocation();
 
     if (AllExternalWarnings)
       klee_warning("%s", os.str().c_str());
