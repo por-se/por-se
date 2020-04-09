@@ -22,7 +22,7 @@ namespace klee {
       std::shared_ptr<const ExecutionState> createStandbyState(const ExecutionState &state, por::event::event_kind kind);
       void logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind);
       bool registerNonLocal(ExecutionState &, por::extension &&, bool snapshotsAllowed = true);
-      std::pair<MemoryFingerprintValue, MemoryFingerprintDelta> computeFingerprintAndDelta(const ExecutionState &, const por::event::event &);
+      std::pair<MemoryFingerprintValue, MemoryFingerprintDelta> computeFingerprintAndDelta(ExecutionState &, const por::event::event &);
       void attachMetadata(ExecutionState &state, por::event::event &event);
 
     public:

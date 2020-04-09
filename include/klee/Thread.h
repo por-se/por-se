@@ -98,7 +98,9 @@ namespace klee {
       /// @brief Pointer to instruction which is currently executed
       KInstIterator prevPc;
 
-      bool pcAfterAtomic = false;
+      /// @brief This needs to be incremented if multiple events are
+      /// registered before advancing the program counter
+      std::uint8_t pcFingerprintStep = 0;
 
       /// @brief During executeInstruction(ki): set of live locals
       /// in current stack frame *after* ki has been executed.
@@ -163,6 +165,9 @@ namespace klee {
       }
 
       MemoryFingerprintDelta getFingerprintDelta() const;
+
+      std::uint8_t getPcFingerprintStep() const noexcept { return pcFingerprintStep; }
+      void incPcFingerprintStep() noexcept { assert(pcFingerprintStep < 254); ++pcFingerprintStep; }
 
       [[nodiscard]] auto flushUnsynchronizedFrees() {
         return std::exchange(unsynchronizedFrees, {});

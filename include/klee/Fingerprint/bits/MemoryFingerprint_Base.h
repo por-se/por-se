@@ -384,11 +384,11 @@ template <typename D, std::size_t S, typename V>
 bool MemoryFingerprintT<D, S, V>::updateProgramCounterFragment(const ThreadId &threadID,
                                                                std::uint64_t sfIndex,
                                                                const llvm::Instruction *i,
-                                                               std::uint8_t step) {
+                                                               std::uint64_t step) {
   getDerived().updateUint8(7);
   updateThreadId(threadID);
   getDerived().updateUint64(sfIndex);
-  getDerived().updateUint8(step);
+  getDerived().updateUint64(step);
   getDerived().updateUint64(reinterpret_cast<std::uintptr_t>(i));
   return false;
 }

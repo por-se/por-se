@@ -72,6 +72,7 @@ Thread::Thread(ThreadId tid, KFunction *entry) : pc(entry->instructions), prevPc
 Thread::Thread(const Thread &t)
         : pc(t.pc),
           prevPc(t.prevPc),
+          pcFingerprintStep(t.pcFingerprintStep),
           liveSet(t.liveSet),
           stack(t.stack),
           tid(t.tid),
@@ -118,7 +119,7 @@ MemoryFingerprintDelta Thread::getFingerprintDelta() const {
     copy.updateProgramCounterFragment(getThreadId(),
                                       stack.size() - 1,
                                       pc->inst,
-                                      (pcAfterAtomic ? 1 : 0));
+                                      pcFingerprintStep);
     copy.addToFingerprint();
 
     copy.updateThreadStateFragment(getThreadId(), static_cast<std::uint8_t>(state));

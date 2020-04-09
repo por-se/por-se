@@ -153,7 +153,7 @@ public:
   bool updateProgramCounterFragment(const ThreadId &threadID,
                                     std::uint64_t sfIndex,
                                     const llvm::Instruction *i,
-                                    std::uint8_t step = 0);
+                                    std::uint64_t step);
   bool updateFunctionFragment(const ThreadId &threadID, std::uint64_t sfIndex,
                               const KFunction *callee,
                               const KInstruction *caller);

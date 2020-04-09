@@ -399,6 +399,7 @@ bool PorEventManager::registerLockRelease(ExecutionState &state, std::uint64_t m
   [[maybe_unused]] auto pred = state.porNode->last_included_event();
   if (atomic) {
     assert(state.porNode->distance_to_last_standby_state() > 0);
+    assert(state.thread().getPcFingerprintStep() > 0);
   }
 
   por::extension ex = state.porNode->configuration().release_lock(state.tid(), mId, atomic);
@@ -496,7 +497,7 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
 }
 
 std::pair<MemoryFingerprintValue, MemoryFingerprintDelta>
-PorEventManager::computeFingerprintAndDelta(const ExecutionState &state, const por::event::event &event) {
+PorEventManager::computeFingerprintAndDelta(ExecutionState &state, const por::event::event &event) {
   assert(EnableCutoffEvents);
 
   auto thread = state.getThreadById(event.tid());
@@ -505,6 +506,9 @@ PorEventManager::computeFingerprintAndDelta(const ExecutionState &state, const p
   MemoryFingerprint copy;
   auto delta = thread->get().getFingerprintDelta();
   copy.addDelta(delta);
+
+  // prevent same fingerprint for multiple events with same pc
+  thread->get().incPcFingerprintStep();
 
   for (auto &[tid, c] : event.cone()) {
     if (tid != event.tid()) {
@@ -569,7 +573,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
     // state is at cutoff event
 
     if (DebugCutoffEvents) {
-      llvm::errs() << "[state id: " << state.id << "] corresponding: " << other.to_string(true)
+      llvm::errs() << "[state id: " << state.id << "] corresponding: " << other.to_string(true) << "\n"
                   << " with fingerprint: " << MemoryFingerprint::toString(other.metadata().fingerprint) << "\n";
       llvm::errs() << "[state id: " << state.id << "]        cutoff: " << event.to_string(true) << "\n"
                   << " with fingerprint: " << MemoryFingerprint::toString(event.metadata().fingerprint) << "\n";

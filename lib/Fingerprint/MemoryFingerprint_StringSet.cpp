@@ -221,7 +221,7 @@ MemoryFingerprint_StringSet::decodeAndPrintFragment(llvm::raw_ostream &os,
   }
   case 7: {
     std::uint64_t sfid;
-    std::uint8_t step;
+    std::uint64_t step;
     std::uintptr_t ptr;
 
     std::string tid = decodeTid(item);
