@@ -114,7 +114,7 @@ bool PorEventManager::registerNonLocal(ExecutionState &state, por::extension &&e
   }
 
   // identify new cutoff events
-  if (!catchingUp) {
+  if (!state.needsCatchUp()) {
     findNewCutoff(state);
   }
 
@@ -179,6 +179,10 @@ bool PorEventManager::registerLocal(ExecutionState &state,
       llvm::errs() << MemoryFingerprint::toString(event->metadata().thread_delta.diff(newMetadata.thread_delta)) << "\n";
   #endif
       return false;
+    }
+
+    if (!state.needsCatchUp()) {
+      findNewCutoff(state);
     }
 
     return true;
