@@ -290,7 +290,7 @@ public:
     return thread().pathSincePorLocal;
   }
 
-  void addDecision(Thread::decision_t decision) noexcept {
+  void addDecision(Thread::decision_branch_t decision) noexcept {
     assert(std::none_of(threads.begin(), threads.end(), [this](auto& it) {
       const Thread &thread = it.second;
       if (thread.tid == current->tid) {

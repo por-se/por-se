@@ -1056,7 +1056,9 @@ void Executor::branch(ExecutionState &state,
   assert(N);
 
   if (state.needsCatchUp()) {
-    auto decision = state.peekDecision();
+    auto d = state.peekDecision();
+    assert(std::holds_alternative<Thread::decision_branch_t>(d));
+    auto decision = std::get<Thread::decision_branch_t>(d);
     bool feasible = false;
 
     for (auto const &[choice, cond] : conditions) {
@@ -1321,7 +1323,9 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     return StatePair(0, &current);
   } else {
     if (current.needsCatchUp()) {
-      auto decision = current.peekDecision();
+      auto d = current.peekDecision();
+      assert(std::holds_alternative<Thread::decision_branch_t>(d));
+      auto decision = std::get<Thread::decision_branch_t>(d);
 
       if (decision.expr != condition) {
         // FIXME: incompleteness
@@ -1458,7 +1462,9 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition, bool al
 
   if (!alreadyInPath) {
     if (state.needsCatchUp()) {
-      auto decision = state.peekDecision();
+      auto d = state.peekDecision();
+      assert(std::holds_alternative<Thread::decision_branch_t>(d));
+      auto decision = std::get<Thread::decision_branch_t>(d);
       assert(decision.branch == 0);
       assert(decision.expr == condition);
     }

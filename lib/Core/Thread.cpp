@@ -173,8 +173,9 @@ void Thread::pushFrame(KInstIterator caller, KFunction *kf) {
 template<>
 std::string Thread::local_event_t::path_string() const noexcept {
   std::stringstream os;
-  for (auto &[branch, expr] : path()) {
-    os << branch;
+  for (auto &d : path()) {
+    assert(std::holds_alternative<Thread::decision_branch_t>(d));
+    os << std::get<Thread::decision_branch_t>(d).branch;
   }
   return os.str();
 }

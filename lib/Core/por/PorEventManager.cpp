@@ -128,8 +128,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     logEventThreadAndKind(state, por::event::event_kind::local);
 
     llvm::errs() << " and path ";
-    for (auto &[b, _] : state.unregisteredDecisions()) {
-      llvm::errs() << b << " ";
+    for (auto &d : state.unregisteredDecisions()) {
+      assert(std::holds_alternative<Thread::decision_branch_t>(d));
+      llvm::errs() << std::get<Thread::decision_branch_t>(d).branch << " ";
     }
 
     llvm::errs() << "\n";
@@ -527,8 +528,9 @@ PorEventManager::computeFingerprintAndDelta(ExecutionState &state, const por::ev
     }
 
     auto local = static_cast<const Thread::local_event_t *>(e);
-    for (auto &[branch, expr] : local->path()) {
-      expressions.push_back(expr);
+    for (auto &d : local->path()) {
+      assert(std::holds_alternative<Thread::decision_branch_t>(d));
+      expressions.push_back(std::get<Thread::decision_branch_t>(d).expr);
     }
   }
 
