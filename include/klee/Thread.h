@@ -81,8 +81,11 @@ namespace klee {
         std::uint64_t branch;
         ref<Expr> expr;
       };
+      struct decision_constraint_t {
+        ref<Expr> expr;
+      };
 
-      using decision_t = std::variant<decision_branch_t>;
+      using decision_t = std::variant<decision_branch_t,decision_constraint_t>;
 
       struct wait_none_t { };
       struct wait_lock_t { por::event::lock_id_t lock; };
@@ -194,6 +197,9 @@ namespace klee {
 
   inline bool operator==(const Thread::decision_branch_t &a, const Thread::decision_branch_t &b) noexcept {
     return a.branch == b.branch && a.expr == b.expr;
+  }
+  inline bool operator==(const Thread::decision_constraint_t &a, const Thread::decision_constraint_t &b) noexcept {
+    return a.expr == b.expr;
   }
 }
 

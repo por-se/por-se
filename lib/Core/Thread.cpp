@@ -174,8 +174,16 @@ template<>
 std::string Thread::local_event_t::path_string() const noexcept {
   std::stringstream os;
   for (auto &d : path()) {
-    assert(std::holds_alternative<Thread::decision_branch_t>(d));
-    os << std::get<Thread::decision_branch_t>(d).branch;
+    std::visit([&os](auto&& decision) {
+      using T = std::decay_t<decltype(decision)>;
+      if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+        os << decision.branch;
+      } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
+        os << "C";
+      } else {
+        assert(0 && "unknown decision type");
+      }
+    }, d);
   }
   return os.str();
 }

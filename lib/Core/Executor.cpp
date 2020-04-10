@@ -1463,12 +1463,10 @@ void Executor::addConstraint(ExecutionState &state, ref<Expr> condition, bool al
   if (!alreadyInPath) {
     if (state.needsCatchUp()) {
       auto d = state.peekDecision();
-      assert(std::holds_alternative<Thread::decision_branch_t>(d));
-      auto decision = std::get<Thread::decision_branch_t>(d);
-      assert(decision.branch == 0);
-      assert(decision.expr == condition);
+      assert(std::holds_alternative<Thread::decision_constraint_t>(d));
+      assert(std::get<Thread::decision_constraint_t>(d).expr == condition);
     }
-    state.addDecision(0, condition);
+    state.addDecision(condition);
   }
 
   if (ivcEnabled)

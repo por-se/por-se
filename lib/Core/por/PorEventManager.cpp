@@ -129,8 +129,16 @@ bool PorEventManager::registerLocal(ExecutionState &state,
 
     llvm::errs() << " and path ";
     for (auto &d : state.unregisteredDecisions()) {
-      assert(std::holds_alternative<Thread::decision_branch_t>(d));
-      llvm::errs() << std::get<Thread::decision_branch_t>(d).branch << " ";
+      std::visit([&os=llvm::errs()](auto&& decision) {
+        using T = std::decay_t<decltype(decision)>;
+        if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+          os << decision.branch << " ";
+        } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
+          os << "C ";
+        } else {
+          assert(0 && "unknown decision type");
+        }
+      }, d);
     }
 
     llvm::errs() << "\n";
@@ -529,8 +537,16 @@ PorEventManager::computeFingerprintAndDelta(ExecutionState &state, const por::ev
 
     auto local = static_cast<const Thread::local_event_t *>(e);
     for (auto &d : local->path()) {
-      assert(std::holds_alternative<Thread::decision_branch_t>(d));
-      expressions.push_back(std::get<Thread::decision_branch_t>(d).expr);
+      std::visit([&expressions](auto&& decision) {
+        using T = std::decay_t<decltype(decision)>;
+        if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+          expressions.emplace_back(decision.expr);
+        } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
+          expressions.emplace_back(decision.expr);
+        } else {
+          assert(0 && "unknown decision type");
+        }
+      }, d);
     }
   }
 

@@ -290,7 +290,7 @@ public:
     return thread().pathSincePorLocal;
   }
 
-  void addDecision(Thread::decision_branch_t decision) noexcept {
+  void addDecision(Thread::decision_t decision) noexcept {
     assert(std::none_of(threads.begin(), threads.end(), [this](auto& it) {
       const Thread &thread = it.second;
       if (thread.tid == current->tid) {
@@ -301,7 +301,14 @@ public:
     }));
     thread().pathSincePorLocal.emplace_back(decision);
   }
-  void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept { addDecision({branch, expr}); }
+
+  void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept {
+    addDecision(Thread::decision_branch_t{branch, std::move(expr)});
+  }
+
+  void addDecision(ref<Expr> expr) noexcept {
+    addDecision(Thread::decision_constraint_t{std::move(expr)});
+  }
 
   auto peekDecision() const noexcept {
     assert(peekCatchUp() && peekCatchUp()->kind() == por::event::event_kind::local);
