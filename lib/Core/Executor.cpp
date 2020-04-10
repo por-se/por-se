@@ -5294,7 +5294,7 @@ bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
 }
 
 bool
-Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref<Expr> &offset,
+Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref<Expr> offset,
                               std::size_t numBytes, MemoryOperation::Type type) {
   if (!EnableDataRaceDetection || state.threads.size() == 1) {
     // These accesses are always safe and do not need to be tracked
@@ -5303,14 +5303,14 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
 
   MemoryOperation operation{};
   operation.object = mo;
-  operation.offset = offset;
+  operation.offset = std::move(offset);
   operation.numBytes = numBytes;
   operation.tid = state.tid();
   operation.instruction = state.prevPc();
   operation.type = type;
 
-  if (!operation.isAlloc() && !operation.isFree() && offset->getKind() == ConstantExpr::kind) {
-    operation.offsetConst = dyn_cast<ConstantExpr>(offset.get())->getZExtValue();
+  if (!operation.isAlloc() && !operation.isFree() && operation.offset->getKind() == ConstantExpr::kind) {
+    operation.offsetConst = dyn_cast<ConstantExpr>(operation.offset.get())->getZExtValue();
   }
 
   StateBoundTimingSolver solv(state, *solver, coreSolverTimeout);
