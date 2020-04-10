@@ -5309,6 +5309,10 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, con
   operation.instruction = state.prevPc();
   operation.type = type;
 
+  if (!operation.isAlloc() && !operation.isFree() && offset->getKind() == ConstantExpr::kind) {
+    operation.offsetConst = dyn_cast<ConstantExpr>(offset.get())->getZExtValue();
+  }
+
   StateBoundTimingSolver solv(state, *solver, coreSolverTimeout);
 
   auto result = state.raceDetection.isDataRace(*state.porNode, solv, operation);

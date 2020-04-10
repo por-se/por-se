@@ -215,9 +215,11 @@ DataRaceDetection::SolverPath(const por::node& node,
           // was that the accesses are not overlapping, then we do not
           // have to check this combination with the solver
           auto inBounds = operation.isOverlappingWith(access);
-          if (inBounds.has_value() && !inBounds.value()) {
+          if (inBounds == AccessMetaData::OverlapResult::NO_OVERLAP) {
             continue;
           }
+
+          assert(inBounds == AccessMetaData::OverlapResult::UNKNOWN);
 
           accessesToCheck.emplace_back(tid, access);
         }
@@ -338,8 +340,8 @@ DataRaceDetection::FastPath(const por::node& node,
     assert(evt != nullptr);
 
     for (; evt != nullptr; evt = evt->thread_predecessor()) {
-      auto memAccesses = getAccessesAfter(*evt);
-      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
+      const auto& memAccesses = getAccessesAfter(*evt);
+      if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
           // We race with every other access, therefore simply pick the first
           result.racingInstruction = accessed->isAllocOrFree()
@@ -358,8 +360,8 @@ DataRaceDetection::FastPath(const por::node& node,
             continue;
           }
 
-          if (auto isOverlapping = operation.isOverlappingWith(op); isOverlapping.has_value()) {
-            if (isOverlapping.value()) {
+          if (auto isOverlapping = operation.isOverlappingWith(op); isOverlapping != AccessMetaData::OverlapResult::UNKNOWN) {
+            if (isOverlapping == AccessMetaData::OverlapResult::OVERLAP) {
               result.racingInstruction = op.instruction;
               result.racingThread = tid;
               result.isRace = true;
