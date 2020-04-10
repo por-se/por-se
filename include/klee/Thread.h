@@ -131,7 +131,7 @@ namespace klee {
       const MemoryObject* errnoMo;
 
       /// @brief Contains true / false for each decision since last por_local registration
-      std::vector<std::pair<std::uint64_t, ref<Expr>>> pathSincePorLocal;
+      std::vector<decision_t> pathSincePorLocal;
 
       /// @brief counts how many threads this thread already created
       std::uint16_t spawnedThreads = 0;
@@ -179,17 +179,20 @@ namespace klee {
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
 
-      decision_t getNextDecisionFromLocal(const por::event::event *event) noexcept {
+      const decision_t &getNextDecisionFromLocal(const por::event::event *event) noexcept {
         assert(event->kind() == por::event::event_kind::local);
         auto local = static_cast<const Thread::local_event_t *>(event);
         std::size_t nextIndex = pathSincePorLocal.size();
         assert(local->path().size() > nextIndex);
-        auto pair = local->path()[nextIndex];
-        return {pair.first, pair.second};
+        return local->path()[nextIndex];
       }
 
     friend class por::event::local<decltype(pathSincePorLocal)::value_type>;
   };
+
+  inline bool operator==(const Thread::decision_t &a, const Thread::decision_t &b) noexcept {
+    return a.branch == b.branch && a.expr == b.expr;
+  }
 }
 
 #endif // KLEE_THREAD_H

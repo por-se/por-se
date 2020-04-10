@@ -299,7 +299,7 @@ public:
         return !thread.pathSincePorLocal.empty();
       }
     }));
-    thread().pathSincePorLocal.emplace_back(decision.branch, decision.expr);
+    thread().pathSincePorLocal.emplace_back(decision);
   }
   void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept { addDecision({branch, expr}); }
 
