@@ -77,6 +77,9 @@ namespace klee {
     public:
       typedef std::vector<StackFrame> stack_ty;
 
+      struct decision_array_t {
+        const Array *array = nullptr;
+      };
       struct decision_branch_t {
         std::uint64_t branch;
         ref<Expr> expr;
@@ -85,7 +88,7 @@ namespace klee {
         ref<Expr> expr;
       };
 
-      using decision_t = std::variant<decision_branch_t,decision_constraint_t>;
+      using decision_t = std::variant<decision_array_t,decision_branch_t,decision_constraint_t>;
 
       struct wait_none_t { };
       struct wait_lock_t { por::event::lock_id_t lock; };
@@ -195,6 +198,9 @@ namespace klee {
     friend class por::event::local<decltype(pathSincePorLocal)::value_type>;
   };
 
+  inline bool operator==(const Thread::decision_array_t &a, const Thread::decision_array_t &b) noexcept {
+    return a.array == b.array;
+  }
   inline bool operator==(const Thread::decision_branch_t &a, const Thread::decision_branch_t &b) noexcept {
     return a.branch == b.branch && a.expr == b.expr;
   }

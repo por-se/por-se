@@ -302,6 +302,10 @@ public:
     thread().pathSincePorLocal.emplace_back(decision);
   }
 
+  void addDecision(const Array *array) noexcept {
+    addDecision(Thread::decision_array_t{array});
+  }
+
   void addDecision(std::uint64_t branch, ref<Expr> expr) noexcept {
     addDecision(Thread::decision_branch_t{branch, std::move(expr)});
   }

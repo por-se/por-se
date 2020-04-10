@@ -131,7 +131,9 @@ bool PorEventManager::registerLocal(ExecutionState &state,
     for (auto &d : state.unregisteredDecisions()) {
       std::visit([&os=llvm::errs()](auto&& decision) {
         using T = std::decay_t<decltype(decision)>;
-        if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+        if constexpr (std::is_same_v<T, Thread::decision_array_t>) {
+          os << "A ";
+        } else if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
           os << decision.branch << " ";
         } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
           os << "C ";
@@ -539,7 +541,9 @@ PorEventManager::computeFingerprintAndDelta(ExecutionState &state, const por::ev
     for (auto &d : local->path()) {
       std::visit([&expressions](auto&& decision) {
         using T = std::decay_t<decltype(decision)>;
-        if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+        if constexpr (std::is_same_v<T, Thread::decision_array_t>) {
+          // do nothing
+        } else if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
           expressions.emplace_back(decision.expr);
         } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
           expressions.emplace_back(decision.expr);

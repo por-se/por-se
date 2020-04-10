@@ -176,7 +176,9 @@ std::string Thread::local_event_t::path_string() const noexcept {
   for (auto &d : path()) {
     std::visit([&os](auto&& decision) {
       using T = std::decay_t<decltype(decision)>;
-      if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
+      if constexpr (std::is_same_v<T, Thread::decision_array_t>) {
+        os << "A";
+      } else if constexpr (std::is_same_v<T, Thread::decision_branch_t>) {
         os << decision.branch;
       } else if constexpr (std::is_same_v<T, Thread::decision_constraint_t>) {
         os << "C";
