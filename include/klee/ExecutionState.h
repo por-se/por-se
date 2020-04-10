@@ -305,7 +305,7 @@ public:
 
   auto peekDecision() const noexcept {
     assert(peekCatchUp() && peekCatchUp()->kind() == por::event::event_kind::local);
-    auto decision = thread().getNextDecisionFromLocal(peekCatchUp());
+    auto decision = thread().getNextDecisionFromLocal(*peekCatchUp());
     return decision;
   }
 

@@ -179,9 +179,9 @@ namespace klee {
       void popStackFrame();
       void pushFrame(KInstIterator caller, KFunction *kf);
 
-      const decision_t &getNextDecisionFromLocal(const por::event::event *event) noexcept {
-        assert(event->kind() == por::event::event_kind::local);
-        auto local = static_cast<const Thread::local_event_t *>(event);
+      const decision_t &getNextDecisionFromLocal(const por::event::event &event) noexcept {
+        assert(event.kind() == por::event::event_kind::local);
+        auto local = static_cast<const Thread::local_event_t *>(&event);
         std::size_t nextIndex = pathSincePorLocal.size();
         assert(local->path().size() > nextIndex);
         return local->path()[nextIndex];
