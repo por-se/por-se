@@ -29,13 +29,15 @@ namespace {
   llvm::cl::opt<bool>
   UseAdequateOrder("use-adequate-order",
                    llvm::cl::desc("Use adequate total order [ERV02] for determining cutoff events (default=true)"),
-                   llvm::cl::init(true));
+                   llvm::cl::init(true),
+                   llvm::cl::cat(MultithreadingCat));
 
   llvm::cl::opt<unsigned>
   StandbyStates("standby-states",
     llvm::cl::desc("Controls the number of standby states created, use n to attach one to every nth exploration node. "
       "Use 0 for only one standby state and 1 to create a standby state for all nodes possible.  (default=1)"),
-    llvm::cl::init(1));
+    llvm::cl::init(1),
+    llvm::cl::cat(MultithreadingCat));
 }
 
 void PorEventManager::logEventThreadAndKind(const ExecutionState &state, por::event::event_kind kind) {

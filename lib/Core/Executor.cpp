@@ -117,6 +117,11 @@ cl::OptionCategory
 cl::OptionCategory TestGenCat("Test generation options",
                               "These options impact test generation.");
 
+cl::OptionCategory MultithreadingCat("Multithreading options",
+                                     "These are options that impact the exploration of multithreaded programs, "
+                                     "along with partial order reduction and fingerprinting.");
+
+
 cl::opt<std::string> MaxTime(
     "max-time",
     cl::desc("Halt execution after the specified duration.  "
@@ -410,7 +415,8 @@ llvm::cl::opt<bool> DebugPrintPorStats("debug-print-por-statistics", cl::init(fa
 
 cl::opt<bool> EnableDataRaceDetection("data-race-detection",
     cl::init(true),
-    cl::desc("Check memory accesses for races between threads"));
+    cl::desc("Check memory accesses for races between threads"),
+    cl::cat(MultithreadingCat));
 
 /// The different query logging solvers that can switched on/off
 enum PrintDebugInstructionsType {
@@ -464,12 +470,14 @@ cl::opt<bool> DebugCheckForImpliedValues(
 cl::opt<bool>ExploreSchedules(
       "explore-schedules",
       cl::desc("Explore alternative thread schedules (default=true)"),
-      cl::init(true));
+      cl::init(true),
+      cl::cat(MultithreadingCat));
 
 cl::opt<std::uint64_t> ExploreSchedulesInstructions(
     "explore-schedules-instructions",
     cl::desc("Explore Schedules after this many instructions (0 to disable, default=10000)"),
-    cl::init(10000));
+    cl::init(10000),
+    cl::cat(MultithreadingCat));
 
 cl::opt<bool> DebugAlternatives(
   "debug-alternative-schedules",
@@ -500,7 +508,8 @@ cl::opt<ThreadSchedulingPolicy> ThreadScheduling(
           ThreadSchedulingPolicy::Random, "random",
           "Pick a random thread (default).")
         KLEE_LLVM_CL_VAL_END),
-    cl::init(ThreadSchedulingPolicy::Random));
+    cl::init(ThreadSchedulingPolicy::Random),
+    cl::cat(MultithreadingCat));
 
 cl::opt<bool> DebugLiveSet(
   "debug-live-set",

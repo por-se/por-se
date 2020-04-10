@@ -1,5 +1,7 @@
 #include "DataRaceDetection.h"
 
+#include "klee/OptionCategories.h"
+
 #include "por/event/event.h"
 #include "por/node.h"
 
@@ -14,7 +16,8 @@ using namespace klee;
 namespace {
   llvm::cl::opt<bool> DebugDrd("debug-drd",
                                llvm::cl::desc("Outputs debug info on stderr about the data race detection"),
-                               llvm::cl::init(false));
+                               llvm::cl::init(false),
+                               llvm::cl::cat(DebugCat));
 
   DataRaceDetection::Stats globalStats;
 }
