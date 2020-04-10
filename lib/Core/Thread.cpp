@@ -84,7 +84,8 @@ Thread::Thread(const Thread &t)
           pathSincePorLocal(t.pathSincePorLocal),
           spawnedThreads(t.spawnedThreads),
           fingerprint(t.fingerprint),
-          unsynchronizedFrees(t.unsynchronizedFrees) {
+          unsynchronizedFrees(t.unsynchronizedFrees),
+          symArrayIndex(t.symArrayIndex) {
 
   threadHeapAlloc = std::make_unique<pseudoalloc::allocator_t>(*t.threadHeapAlloc);
   threadStackAlloc = std::make_unique<pseudoalloc::stack_allocator_t>(*t.threadStackAlloc);

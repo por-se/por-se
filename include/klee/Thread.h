@@ -153,6 +153,10 @@ namespace klee {
       /// on other threads but freed on this thread since the last thread synchronization
       std::map<ThreadId, std::vector<const klee::MemoryObject*>> unsynchronizedFrees;
 
+      /// @brief maps each symbolic array name to an index position (in Executor::symArrays)
+      /// indicating the next correponding unique id
+      std::map<std::string, std::size_t> symArrayIndex;
+
     public:
       Thread() = delete;
       Thread(const Thread &thread);

@@ -197,6 +197,14 @@ private:
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 
+  /// @brief for each symbolic array name:
+  /// maps a thread id to a sequence of ids exclusive for this tid (across all states)
+  /// i.e. such an id can only ever be used by a single tid to form a unique array name
+  std::map<std::string, std::map<ThreadId, std::vector<std::size_t>>> symArrays;
+
+  /// @brief maps each symbolic array name to the next (previously unused) id
+  std::map<std::string, std::size_t> nextSymArrayId;
+
   /// File to print executed instructions to
   std::unique_ptr<llvm::raw_ostream> debugInstFile;
 

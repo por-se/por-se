@@ -115,7 +115,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     coveredLines(state.coveredLines),
     ptreeNode(state.ptreeNode),
     symbolics(state.symbolics),
-    arrayNames(state.arrayNames),
     memoryState(state.memoryState, this),
     lastPorNode(state.porNode),
     catchUp(state.catchUp),

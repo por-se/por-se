@@ -24,13 +24,13 @@ int main() {
   klee_make_symbolic(arr, sizeof(arr), "arr");
   
   
-  char a = arr[2];  // (ReadExpr 2 arr)
-  //CHECK: arr[2]:(Read w8 2 arr)
+  char a = arr[2];  // (ReadExpr 2 arr_0)
+  //CHECK: arr[2]:(Read w8 2 arr_0)
   klee_print_expr("arr[2]", arr[2]);
   arr[1] = 0;
-  char b = arr[symbolic];  // (ReadExpr symbolic [1=0]@arr)
-  //CHECK: arr[2]:(Read w8 2 arr)
-  //CHECK-NOT: arr[2]:(Read w8 2 [1=0]@arr)
+  char b = arr[symbolic];  // (ReadExpr symbolic [1=0]@arr_0)
+  //CHECK: arr[2]:(Read w8 2 arr_0)
+  //CHECK-NOT: arr[2]:(Read w8 2 [1=0]@arr_0)
   klee_print_expr("arr[2]", arr[2]);
   
   if(a == b) printf("Equal!\n");

@@ -4717,17 +4717,34 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       return;
     }
 
-    // Find a unique name for this array.  First try the original name,
-    // or if that fails try adding a unique identifier.
-    unsigned id = 0;
-    std::string uniqueName = name;
-    while (!state.arrayNames.insert(uniqueName).second) {
-      uniqueName = name + "_" + llvm::utostr(++id);
+    const Array *array;
+    if (state.needsCatchUp()) {
+      assert(state.peekCatchUp()->kind() == por::event::event_kind::local);
+      auto d = state.peekDecision();
+      assert(std::holds_alternative<Thread::decision_array_t>(d));
+      array = std::get<Thread::decision_array_t>(d).array;
+      assert(array);
+    } else {
+      // Find a unique name for this array.
+      std::size_t &index = state.thread().symArrayIndex[name];
+      std::size_t id;
+      auto &arrayIds = symArrays[name][state.tid()];
+      if (index == arrayIds.size()) {
+        // new id (and corresponding entry) needed
+        id = nextSymArrayId[name]++;
+        arrayIds.push_back(id);
+      } else {
+        // reusing existing unique name
+        id = arrayIds.at(index);
+      }
+      ++index;
+      std::string uniqueName = name + "_" + llvm::utostr(id);
+      array = arrayCache.CreateArray(uniqueName, mo->size);
     }
-    const Array *array = arrayCache.CreateArray(uniqueName, mo->size);
     newOs = bindObjectInState(state, mo, false, array);
     state.addSymbolic(mo, array);
-    
+    state.addDecision(array);
+
     std::map< ExecutionState*, std::vector<SeedInfo> >::iterator it = 
       seedMap.find(&state);
     if (it!=seedMap.end()) { // In seed mode we need to add this as a
