@@ -4,7 +4,7 @@
 #include "EpochMemoryAccesses.h"
 
 #include <deque>
-#include <unordered_map>
+#include <map>
 
 namespace por {
   namespace event {
@@ -29,7 +29,7 @@ namespace klee {
       };
 
     private:
-      std::unordered_map<const por::event::event*, EpochMemoryAccesses> accesses;
+      std::map<ThreadId, std::deque<std::pair<const por::event::event*, EpochMemoryAccesses>>> accesses;
 
       Stats stats;
 
@@ -59,16 +59,18 @@ namespace klee {
       FastPath(const por::node& node,
                const MemoryOperation& operation);
 
-      EpochMemoryAccesses& getAccessesAfter(const por::event::event& evt) {
-        auto it = accesses.find(&evt);
-        if (it != accesses.end()) {
-          return it->second;
+      auto& getAccessListOfThread(const ThreadId& tid) {
+        return accesses[tid];
+      }
+
+      auto& getAccessesAfter(const ThreadId& tid, por::event::event const* ev) {
+        auto& accessList = accesses[tid];
+        if (accessList.empty() || accessList.back().first != ev) {
+          accessList.emplace_back(ev, EpochMemoryAccesses{});
         }
 
-        auto insertIt = accesses.emplace(&evt, EpochMemoryAccesses{});
-        assert(insertIt.second);
-        return insertIt.first->second;
-      };
+        return accessList.back().second;
+      }
   };
 
   llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const DataRaceDetection::Stats &stats);

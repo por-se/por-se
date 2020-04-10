@@ -15,9 +15,6 @@ namespace klee {
       std::unordered_map<std::uint64_t, ObjectAccesses> memoryOperations;
 
     public:
-      EpochMemoryAccesses() = default;
-      EpochMemoryAccesses(const EpochMemoryAccesses& t) = default;
-
       void trackMemoryOperation(const MemoryOperation& op);
 
       void pruneDataForMemoryObject(const MemoryObject* obj);

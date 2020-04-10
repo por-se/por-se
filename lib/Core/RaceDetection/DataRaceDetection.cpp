@@ -68,7 +68,7 @@ void DataRaceDetection::trackAccess(const por::node& node, const MemoryOperation
   auto evtIt = node.configuration().thread_heads().find(op.tid);
   assert(evtIt != node.configuration().thread_heads().end());
 
-  auto& acc = getAccessesAfter(*evtIt->second);
+  auto& acc = getAccessesAfter(op.tid, evtIt->second);
 
   // in the case that a memory object is freed by KLEE, then we will not receive
   // any further operations on that object since the object won't be found (out of bound access)
@@ -183,7 +183,7 @@ DataRaceDetection::SolverPath(const por::node& node,
   const auto& threadsToCheck = node.configuration().thread_heads();
   auto it = threadsToCheck.find(operation.tid);
   assert(it != threadsToCheck.end());
-  auto& curEventOfOperatingThread = it->second;
+  auto* curEventOfOperatingThread = it->second;
 
   std::vector<std::pair<ThreadId, const AccessMetaData&>> accessesToCheck;
 
@@ -195,38 +195,46 @@ DataRaceDetection::SolverPath(const por::node& node,
 
     por::event::event const *evt = pair.second;
     assert(evt != nullptr);
+    // The `succ` event has the `evt` as the thread predecessor.
+    // -> It is the direct thread successor of `evt`.
+    por::event::event const *succ = nullptr;
 
-    for (; evt != nullptr; evt = evt->thread_predecessor()) {
-      auto memAccesses = getAccessesAfter(*evt);
-      if (auto accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
+    const auto& accessList = getAccessListOfThread(tid);
+    for (auto accessListIt = accessList.rbegin(), accessListEnd = accessList.rend(); accessListIt != accessListEnd; ++accessListIt) {
+      // skip all events that do not have any registered memory accesses
+      while (evt != nullptr && evt != accessListIt->first) {
+        succ = evt;
+        evt = evt->thread_predecessor();
+      }
+      if (evt == nullptr) {
+        break;
+      }
+
+      // Since accesses are associated with the event that happened *before* they did, the memory accesses associated with
+      // the first event that is less than the one we are looking at still need to be checked. Any accesses happening even
+      // before that are synchronized.
+      if (succ && succ->is_less_than(*curEventOfOperatingThread)) {
+        break;
+      }
+
+      const auto& memAccesses = accessListIt->second;
+
+      if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         assert(!accessed->isAllocOrFree() && "Would have been tested in the fastpath");
 
         for (auto& access : accessed->getAccesses()) {
-          // check early since this is an easy pair
-          if (operation.isConstantOffset() && access.isConstantOffset()) {
+          // is checked in the fastpath
+          if ((operation.isConstantOffset() && access.isConstantOffset()) || operation.offset == access.offset) {
             continue;
           }
 
+          // not a data race
           if (access.isRead() && operation.isRead()) {
             continue;
           }
 
-          // So if we could actually make a bounds check and the result
-          // was that the accesses are not overlapping, then we do not
-          // have to check this combination with the solver
-          auto inBounds = operation.isOverlappingWith(access);
-          if (inBounds == AccessMetaData::OverlapResult::NO_OVERLAP) {
-            continue;
-          }
-
-          assert(inBounds == AccessMetaData::OverlapResult::UNKNOWN);
-
           accessesToCheck.emplace_back(tid, access);
         }
-      }
-
-      if (evt->is_less_than(*curEventOfOperatingThread)) {
-        break;
       }
     }
   }
@@ -338,9 +346,30 @@ DataRaceDetection::FastPath(const por::node& node,
 
     por::event::event const *evt = pair.second;
     assert(evt != nullptr);
+    // The `succ` event has the `evt` as the thread predecessor.
+    // -> It is the direct thread successor of `evt`.
+    por::event::event const *succ = nullptr;
 
-    for (; evt != nullptr; evt = evt->thread_predecessor()) {
-      const auto& memAccesses = getAccessesAfter(*evt);
+    auto& accessList = getAccessListOfThread(tid);
+    for (auto accessListIt = accessList.rbegin(), accessListEnd = accessList.rend(); accessListIt != accessListEnd; ++accessListIt) {
+      // skip all events that do not have any registered memory accesses
+      while (evt != nullptr && evt != accessListIt->first) {
+        succ = evt;
+        evt = evt->thread_predecessor();
+      }
+      if (evt == nullptr) {
+        break;
+      }
+
+      // Since accesses are associated with the event that happened *before* they did, the memory accesses associated with
+      // the first event that is less than the one we are looking at still need to be checked. Any accesses happening even
+      // before that are synchronized.
+      if (succ && succ->is_less_than(*curEventOfOperatingThread)) {
+        break;
+      }
+
+      const auto& memAccesses = accessListIt->second;
+
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
           // We race with every other access, therefore simply pick the first
@@ -355,29 +384,27 @@ DataRaceDetection::FastPath(const por::node& node,
         }
 
         // So we now know for sure that only standard accesses are inside here
-        for (auto const& op : accessed->getAccesses()) {
-          if (operation.isRead() && op.isRead()) {
+        for (auto const& access : accessed->getAccesses()) {
+          if (operation.isRead() && access.isRead()) {
             continue;
           }
 
-          if (auto isOverlapping = operation.isOverlappingWith(op); isOverlapping != AccessMetaData::OverlapResult::UNKNOWN) {
+          if (auto isOverlapping = operation.isOverlappingWith(access); isOverlapping != AccessMetaData::OverlapResult::UNKNOWN) {
             if (isOverlapping == AccessMetaData::OverlapResult::OVERLAP) {
-              result.racingInstruction = op.instruction;
+              result.racingInstruction = access.instruction;
               result.racingThread = tid;
               result.isRace = true;
               result.canBeSafe = false;
               return result;
             }
           } else {
+            assert(!((operation.isConstantOffset() && access.isConstantOffset()) || operation.offset == access.offset)
+              && "solverpath assumes condition that does not hold");
             // We cannot give a definite result if during the check we encounter
             // a symbolic offset that is not matching and has to be checked by the solver.
             return {};
           }
         }
-      }
-
-      if (evt->is_less_than(*curEventOfOperatingThread)) {
-        break;
       }
     }
   }
