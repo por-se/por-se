@@ -521,8 +521,11 @@ Array::~Array() {
 }
 
 unsigned Array::computeHash() {
-  unsigned res = 0;
-  res = (res * Expr::MAGIC_HASH_CONSTANT) + size;
+  unsigned res = size * Expr::MAGIC_HASH_CONSTANT;
+  for (auto e : constantValues) {
+    res <<= 1;
+    res ^= e->hash() * Expr::MAGIC_HASH_CONSTANT;
+  }
   res = (res * Expr::MAGIC_HASH_CONSTANT) + domain;
   res = (res * Expr::MAGIC_HASH_CONSTANT) + range;
   hashValueWithoutName = res;
