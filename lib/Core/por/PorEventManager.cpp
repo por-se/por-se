@@ -291,7 +291,7 @@ bool PorEventManager::registerThreadCreate(ExecutionState &state, const ThreadId
   }
 
   por::extension ex = state.porNode->configuration().create_thread(state.tid(), tid);
-  return registerNonLocal(state, std::move(ex));
+  return registerNonLocal(state, std::move(ex), false);
 }
 
 bool PorEventManager::registerThreadInit(ExecutionState &state, const ThreadId &tid) {

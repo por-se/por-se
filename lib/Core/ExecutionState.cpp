@@ -287,6 +287,7 @@ std::set<ThreadId> ExecutionState::runnableThreads() {
   std::set<ThreadId> runnable;
   for (auto &[tid, thread] : threads) {
     if (thread.isRunnable(cfg)) {
+      assert(cfg.last_of_tid(tid));
       bool overCsd = MaxContextSwitchDegree && por::is_above_csd_limit(*cfg.last_of_tid(tid), MaxContextSwitchDegree);
       bool isCutoff = cfg.last_of_tid(tid)->is_cutoff();
       if (isCutoff || overCsd) {
