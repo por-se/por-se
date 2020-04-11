@@ -177,10 +177,9 @@ const UpdateList &ObjectState::getUpdates() const {
       Contents[Index->getZExtValue()] = Value;
     }
 
-    static unsigned id = 0;
     const Array *array = getArrayCache()->CreateArray(
-        "const_arr" + llvm::utostr(++id), size, &Contents[0],
-        &Contents[0] + Contents.size());
+        "const_arr" + llvm::utostr(getArrayCache()->nextConcreteArrayId()),
+        size, &Contents[0], &Contents[0] + Contents.size());
     updates = UpdateList(array, 0);
 
     // Apply the remaining (non-constant) writes.

@@ -4,13 +4,11 @@ namespace klee {
 
 ArrayCache::~ArrayCache() {
   // Free Allocated Array objects
-  for (ArrayHashMap::iterator ai = cachedSymbolicArrays.begin(),
-                              e = cachedSymbolicArrays.end();
+  for (auto ai = cachedSymbolicArrays.begin(), e = cachedSymbolicArrays.end();
        ai != e; ++ai) {
     delete *ai;
   }
-  for (ArrayPtrVec::iterator ai = concreteArrays.begin(),
-                             e = concreteArrays.end();
+  for (auto ai = cachedConcreteArrays.begin(), e = cachedConcreteArrays.end();
        ai != e; ++ai) {
     delete *ai;
   }
@@ -25,22 +23,27 @@ ArrayCache::CreateArray(const std::string &_name, uint64_t _size,
   const Array *array = new Array(_name, _size, constantValuesBegin,
                                  constantValuesEnd, _domain, _range);
   if (array->isSymbolicArray()) {
-    std::pair<ArrayHashMap::const_iterator, bool> success =
-        cachedSymbolicArrays.insert(array);
-    if (success.second) {
+    auto [it, success] = cachedSymbolicArrays.insert(array);
+    if (success) {
       // Cache miss
       return array;
     }
     // Cache hit
     delete array;
-    array = *(success.first);
+    array = *it;
     assert(array->isSymbolicArray() &&
            "Cached symbolic array is no longer symbolic");
     return array;
   } else {
-    // Treat every constant array as distinct so we never cache them
     assert(array->isConstantArray());
-    concreteArrays.push_back(array); // For deletion later
+    auto [it, success] = cachedConcreteArrays.insert(array);
+    if (success) {
+      // Cache miss
+      return array;
+    }
+    // Cache hit
+    delete array;
+    array = *it;
     return array;
   }
 }

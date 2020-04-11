@@ -15,11 +15,26 @@
 
 #include <string>
 #include <unordered_set>
-#include <vector>
 
 namespace klee {
+struct ConcreteArrayEquivCmpFn {
+  bool operator()(const Array *array1, const Array *array2) const {
+    if (array1 == NULL || array2 == NULL)
+      return false;
+    return (array1->size == array2->size)
+      && (array1->domain == array2->domain)
+      && (array1->range == array2->range)
+      && (
+        std::equal(array1->constantValues.begin(), array1->constantValues.end(),
+                   array2->constantValues.begin(), array2->constantValues.end(),
+                   [](ref<ConstantExpr> a, ref<ConstantExpr> b) {
+                     return a->getZExtValue() == b->getZExtValue();
+                   })
+      );
+  }
+};
 
-struct EquivArrayCmpFn {
+struct SymArrayEquivCmpFn {
   bool operator()(const Array *array1, const Array *array2) const {
     if (array1 == NULL || array2 == NULL)
       return false;
@@ -59,13 +74,11 @@ public:
                            Expr::Width _domain = Expr::Int32,
                            Expr::Width _range = Expr::Int8);
 
+  std::size_t nextConcreteArrayId() const noexcept { return cachedConcreteArrays.size(); }
+
 private:
-  typedef std::unordered_set<const Array *, klee::ArrayHashFn,
-                             klee::EquivArrayCmpFn>
-      ArrayHashMap;
-  ArrayHashMap cachedSymbolicArrays;
-  typedef std::vector<const Array *> ArrayPtrVec;
-  ArrayPtrVec concreteArrays;
+  std::unordered_set<const Array *, klee::ArrayHashFn, klee::SymArrayEquivCmpFn> cachedSymbolicArrays;
+  std::unordered_set<const Array*, klee::ArrayHashWithoutNameFn, klee::ConcreteArrayEquivCmpFn> cachedConcreteArrays;
 };
 }
 
