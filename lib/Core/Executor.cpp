@@ -4159,6 +4159,13 @@ void Executor::callExternalFunction(ExecutionState &state,
         return false;
       }
 
+      // The next check is a data race detection check, but since we have to check
+      // manually which areas have changed, we want to skip this check whenever possible.
+      // One such situation is, if there is only one thread (e.g. single threaded program)
+      if (!EnableDataRaceDetection || state.threads.size() == 1) {
+        return true;
+      }
+
       // So we already know that the object was modified, now check each byte
       // range for actual changes to determine if there was potentially any data
       // race
@@ -5305,7 +5312,7 @@ bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
 bool
 Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, const ref<Expr> &offset,
                               std::size_t numBytes, MemoryOperation::Type type) {
-  if (!EnableDataRaceDetection) {
+  if (!EnableDataRaceDetection || state.threads.size() == 1) {
     // These accesses are always safe and do not need to be tracked
     return true;
   }
