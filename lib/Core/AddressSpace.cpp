@@ -306,21 +306,6 @@ void AddressSpace::copyOutConcretes() {
   }
 }
 
-bool AddressSpace::copyInConcretes(ExecutionState &state) {
-  for (auto &obj : objects) {
-    const MemoryObject *mo = obj.first;
-
-    if (!mo->isUserSpecified) {
-      const auto &os = obj.second;
-
-      if (!copyInConcrete(state, mo, os.get(), mo->address))
-        return false;
-    }
-  }
-
-  return true;
-}
-
 bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
                                   const ObjectState *os, uint64_t src_address) {
   auto address = reinterpret_cast<std::uint8_t*>(src_address);
@@ -341,7 +326,8 @@ bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
   return true;
 }
 
-bool AddressSpace::checkChangedConcreteObjects(std::function<bool(const MemoryObject&,const std::uint8_t*)> func) {
+bool AddressSpace::checkAndCopyInConcretes(ExecutionState &state,
+  std::function<bool(const MemoryObject&, const std::uint8_t*, const ObjectState&)> func) {
   for (MemoryMap::iterator it = objects.begin(), ie = objects.end();
        it != ie; ++it) {
     const MemoryObject *mo = it->first;
@@ -356,13 +342,22 @@ bool AddressSpace::checkChangedConcreteObjects(std::function<bool(const MemoryOb
       continue;
     }
 
-    bool abort = func(*mo, os->concreteStore);
-    if (abort) {
-      return true;
+    bool valid = func(*mo, os->concreteStore, *os);
+    if (!valid) {
+      return false;
+    }
+
+    if (EnableCutoffEvents) {
+      state.memoryState.unregisterWrite(*mo, *os);
+    }
+    ObjectState *wos = getWriteable(mo, os.get());
+    std::memcpy(wos->concreteStore, address, mo->size);
+    if (EnableCutoffEvents) {
+      state.memoryState.registerWrite(*mo, *wos);
     }
   }
 
-  return false;
+  return true;
 }
 
 /***/

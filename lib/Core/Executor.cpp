@@ -4152,10 +4152,16 @@ void Executor::callExternalFunction(ExecutionState &state,
     return;
   }
 
-  bool failure = state.addressSpace.checkChangedConcreteObjects(
-    [this,&state](const MemoryObject& mo, const auto* store) -> bool {
+  bool successfulCopy = state.addressSpace.checkAndCopyInConcretes(state,
+    [this,&state](const MemoryObject& mo, const auto* store, const ObjectState& os) -> bool {
+      if (os.readOnly) {
+        terminateStateOnError(state, "external modified read-only object", External);
+        return false;
+      }
+
       // So we already know that the object was modified, now check each byte
-      // range for actual changes
+      // range for actual changes to determine if there was potentially any data
+      // race
       auto address = reinterpret_cast<std::uint8_t*>(mo.address);
 
       for (std::size_t i = 0; i < mo.size; i++) {
@@ -4179,21 +4185,15 @@ void Executor::callExternalFunction(ExecutionState &state,
         );
 
         if (!safe) {
-          return true;
+          return false;
         }
       }
 
-      return false;
+      return true;
     }
   );
 
-  if (failure) {
-    return;
-  }
-
-  if (!state.addressSpace.copyInConcretes(state)) {
-    terminateStateOnError(state, "external modified read-only object",
-                          External);
+  if (!successfulCopy) {
     return;
   }
 

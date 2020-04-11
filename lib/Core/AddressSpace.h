@@ -127,17 +127,6 @@ namespace klee {
     /// actual system memory location they were allocated at.
     void copyOutConcretes();
 
-    /// Copy the concrete values of all managed ObjectStates back from
-    /// the actual system memory location they were allocated
-    /// at. ObjectStates will only be written to (and thus,
-    /// potentially copied) if the memory values are different from
-    /// the current concrete values.
-    ///
-    /// \param state The state this address space is part of
-    /// \retval true The copy succeeded. 
-    /// \retval false The copy failed because a read-only object was modified.
-    bool copyInConcretes(ExecutionState &state);
-
     /// Updates the memory object with the raw memory from the address
     ///
     /// @param state The state this address space is part of
@@ -148,8 +137,19 @@ namespace klee {
     bool copyInConcrete(ExecutionState &state, const MemoryObject *mo,
                         const ObjectState *os, uint64_t src_address);
 
-    bool checkChangedConcreteObjects(
-      std::function<bool(const MemoryObject&, const std::uint8_t*)> func
+    /// Copy the concrete values of all managed ObjectStates back from
+    /// the actual system memory location they were allocated
+    /// at. ObjectStates will only be written to (and thus,
+    /// potentially copied) if the memory values are different from
+    /// the current concrete values.
+    /// Before any actual copy operation is performed, the check_func
+    /// is called and if false is returned from it, the copying is aborted
+    ///
+    /// @param state The state this address space is part of
+    /// @returns true if the copy succeeded and no verification failed, false otherwise
+    bool checkAndCopyInConcretes(
+      ExecutionState &state,
+      std::function<bool(const MemoryObject&, const std::uint8_t*, const ObjectState&)> func
     );
   };
 } // End klee namespace
