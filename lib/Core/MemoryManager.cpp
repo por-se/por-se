@@ -67,9 +67,16 @@ llvm::cl::opt<std::string> ThreadSegmentsFile(
 
 llvm::cl::opt<std::uint32_t> QuarantineSize(
       "allocate-quarantine",
-      llvm::cl::desc("Size of quarantine queues in allocator (default=8)"),
+      llvm::cl::desc("Size of quarantine queues in allocator (default=8, also see -allocate-quarantine-unlimited)"),
       llvm::cl::init(8), llvm::cl::cat(MemoryCat));
+
+llvm::cl::opt<bool> UnlimitedQuarantine(
+      "allocate-quarantine-unlimited",
+      llvm::cl::desc("Never reuse free'd addresses. (default=off)"),
+      llvm::cl::init(false), llvm::cl::cat(MemoryCat));
 } // namespace
+
+std::uint32_t MemoryManager::quarantine;
 
 /***/
 MemoryManager::MemoryManager(ArrayCache *_arrayCache)
@@ -103,8 +110,16 @@ MemoryManager::MemoryManager(ArrayCache *_arrayCache)
     globalROMemorySegment = createMapping(globalROSegmentSize, 0);
   }
 
-  globalAllocator = pseudoalloc::allocator_t(globalMemorySegment, QuarantineSize);
-  globalROAllocator = pseudoalloc::allocator_t(globalROMemorySegment, QuarantineSize);
+  quarantine = UnlimitedQuarantine ? pseudoalloc::allocator_t::unlimited_quarantine : QuarantineSize;
+  if (quarantine == pseudoalloc::allocator_t::unlimited_quarantine) {
+    klee_message("Using unlimited quarantine for allocator.");
+    if (QuarantineSize.getNumOccurrences() > 0) {
+      klee_error("-allocate-quarantine cannot be used with -allocate-quarantine-unlimited");
+    }
+  }
+
+  globalAllocator = pseudoalloc::allocator_t(globalMemorySegment, quarantine);
+  globalROAllocator = pseudoalloc::allocator_t(globalROMemorySegment, quarantine);
 }
 
 MemoryManager::~MemoryManager() {
@@ -494,12 +509,12 @@ MemoryManager::ThreadMemorySegments& MemoryManager::getThreadSegments(const Thre
 
 std::unique_ptr<pseudoalloc::allocator_t> MemoryManager::createThreadHeapAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::allocator_t>(seg.heap, QuarantineSize);
+  return std::make_unique<pseudoalloc::allocator_t>(seg.heap, quarantine);
 }
 
 std::unique_ptr<pseudoalloc::stack_allocator_t> MemoryManager::createThreadStackAllocator(const ThreadId &tid) {
   auto& seg = getThreadSegments(tid);
-  return std::make_unique<pseudoalloc::stack_allocator_t>(seg.stack, QuarantineSize);
+  return std::make_unique<pseudoalloc::stack_allocator_t>(seg.stack, quarantine);
 }
 
 void MemoryManager::markMemoryRegionsAsUnneeded() {

@@ -60,6 +60,8 @@ private:
 
   std::unique_ptr<llvm::raw_fd_ostream> configOut;
 
+  static std::uint32_t quarantine;
+
   /**
    * Requested a memory mapping for `tid`.
    * If `reqHeap` or `reqStack` is unequal to `nullptr`, then the memory mapping is requested at
