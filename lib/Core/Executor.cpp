@@ -4941,6 +4941,9 @@ void Executor::runFunctionAsMain(Function *f,
   if (statsTracker)
     statsTracker->done();
 
+  llvm::errs().flush();
+  llvm::outs().flush();
+
   // FIXME: find a more appropriate place for this
   if (DebugPrintPorStats) {
     unfolding->print_statistics();
@@ -4958,6 +4961,7 @@ void Executor::runFunctionAsMain(Function *f,
     llvm::outs() << "KLEE: done: threads above csd = " << stats::csdThreads << "\n";
     llvm::outs() << "KLEE: done: cutoff threads = " << stats::cutoffThreads << "\n";
     llvm::outs() << "KLEE: done: states: " << states.size() << "\n";
+    llvm::outs().flush();
   }
 }
 

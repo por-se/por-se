@@ -224,6 +224,7 @@ namespace por {
 		}
 
 		void print_statistics() {
+			std::cout.flush();
 			std::cout << "\n\n";
 			std::cout << "== UNFOLDING STATISTICS ==\n";
 			std::cout << "Events created: ";
@@ -297,6 +298,7 @@ namespace por {
 			std::cout << "CEX inserted: " << std::to_string(_cex_inserted) << "\n";
 			std::cout << "Configurations: " << std::to_string(_configurations) << "\n";
 			std::cout << "==========================\n";
+			std::cout.flush();
 		}
 	};
 }
