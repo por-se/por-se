@@ -5,12 +5,12 @@
 
 #include "klee/ExecutionState.h"
 #include "klee/Expr/Expr.h"
-#include "klee/StatePruningCmdLine.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/ErrorHandling.h"
+#include "klee/PorCmdLine.h"
 
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/BasicBlock.h"
@@ -86,12 +86,12 @@ void MemoryState::initializeFunctionList(KModule *_kmodule,
   for (const char *name : functions) {
     llvm::Function *f = _kmodule->module->getFunction(name);
     if (f == nullptr) {
-      if (DebugStatePruning) {
+      if (DebugCutoffEvents) {
         llvm::errs() << "MemoryState: could not find function in module: "
                      << name << "\n";
       }
     } else {
-      if (DebugStatePruning) {
+      if (DebugCutoffEvents) {
         llvm::errs() << "MemoryState: found function in module: "
                      << name << "\n";
       }
@@ -104,7 +104,7 @@ void MemoryState::initializeFunctionList(KModule *_kmodule,
 
 
 void MemoryState::leaveListedFunction() {
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: leaving listed function: "
                  << listedFunction.function->getName() << "\n";
   }
@@ -120,7 +120,7 @@ bool MemoryState::enterLibraryFunction(llvm::Function *f) {
     return false;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: entering library function: "
                  << f->getName() << "\n";
   }
@@ -134,7 +134,7 @@ bool MemoryState::enterLibraryFunction(llvm::Function *f) {
 }
 
 void MemoryState::leaveLibraryFunction() {
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: leaving library function: "
                  << libraryFunction.function->getName() << "\n";
   }
@@ -154,7 +154,7 @@ bool MemoryState::enterMemoryFunction(llvm::Function *f,
     return false;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: entering memory function: "
                  << f->getName() << "\n";
   }
@@ -173,7 +173,7 @@ bool MemoryState::enterMemoryFunction(llvm::Function *f,
 }
 
 void MemoryState::leaveMemoryFunction() {
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: leaving memory function: "
                  << memoryFunction.function->getName() << "\n";
   }
@@ -204,7 +204,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
   if (std::binary_search(outputFunctionsWhitelist.begin(),
                          outputFunctionsWhitelist.end(),
                          f)) {
-    if (DebugStatePruning) {
+    if (DebugCutoffEvents) {
       llvm::errs() << "MemoryState: whitelisted output function call to "
                    << f->getName() << "()\n";
     }
@@ -212,7 +212,7 @@ void MemoryState::registerFunctionCall(llvm::Function *f,
   } else if (std::binary_search(libraryFunctionsList.begin(),
                                 libraryFunctionsList.end(),
                                 f)) {
-    if (DebugStatePruning) {
+    if (DebugCutoffEvents) {
       llvm::errs() << "MemoryState: library function call to "
                    << f->getName() << "()\n";
     }
@@ -262,7 +262,7 @@ void MemoryState::registerWrite(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     ref<ConstantExpr> base = mo.getBaseExpr();
     llvm::errs() << "MemoryState: registering "
                  << (mo.isLocal ? "local " : "global ")
@@ -281,7 +281,7 @@ void MemoryState::unregisterWrite(ref<Expr> address, const MemoryObject &mo,
     return;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     ref<ConstantExpr> base = mo.getBaseExpr();
     llvm::errs() << "MemoryState: unregistering "
                  << (mo.isLocal ? "local " : "global ")
@@ -297,7 +297,7 @@ void MemoryState::registerAcquiredLock(por::event::lock_id_t lock_id, const Thre
     return;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: registering acquired lock (" << lock_id <<  ")"
                  << " by thread " << tid << "\n";
   }
@@ -315,7 +315,7 @@ void MemoryState::unregisterAcquiredLock(por::event::lock_id_t lock_id, const Th
     return;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: unregistering acquired lock (" << lock_id <<  ")"
                  << " by thread " << tid << "\n";
   }
@@ -383,7 +383,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
       }
     }
 
-    if (DebugStatePruning) {
+    if (DebugCutoffEvents) {
       std::stringstream stream;
       stream << std::setw(std::floor(std::log10(end - 1)) + 1) << i;
       llvm::errs() << "[+" << stream.str() << "] ";
@@ -406,7 +406,7 @@ void MemoryState::applyWriteFragment(ref<Expr> address, const MemoryObject &mo,
       }
     }
   }
-  if (DebugStatePruning && endlineMissing) {
+  if (DebugCutoffEvents && endlineMissing) {
     llvm::errs() << "\n";
   }
 }
@@ -426,7 +426,7 @@ void MemoryState::registerArgument(const ThreadId &threadID,
   fingerprint.updateArgumentFragment(threadID, sfIndex, kf, index, value);
   fingerprint.addToFingerprintAndDelta(delta);
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     assert(kf->function->hasName());
     llvm::errs() << "MemoryState: adding argument " << index << " to function "
                  << kf->function->getName() << ": "
@@ -442,7 +442,7 @@ bool MemoryState::enterListedFunction(llvm::Function *f) {
     return false;
   }
 
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: entering listed function: "
                  << f->getName() << "\n";
   }
@@ -460,7 +460,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
                                     const KFunction *callee,
                                     const KInstruction *caller) {
   // IMPORTANT: has to be called after state.pushFrame()
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: PUSHFRAME\n";
   }
 
@@ -494,7 +494,7 @@ void MemoryState::registerPushFrame(const ThreadId &threadID,
 }
 
 void MemoryState::registerPopFrame(const StackFrame &sf) {
-  if (DebugStatePruning) {
+  if (DebugCutoffEvents) {
     llvm::errs() << "MemoryState: POPFRAME\n";
   }
 

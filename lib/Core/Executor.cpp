@@ -48,9 +48,9 @@
 #include "klee/Internal/System/Time.h"
 #include "klee/Interpreter.h"
 #include "klee/OptionCategories.h"
+#include "klee/PorCmdLine.h"
 #include "klee/Solver/SolverCmdLine.h"
 #include "klee/Solver/SolverStats.h"
-#include "klee/StatePruningCmdLine.h"
 #include "klee/TimerStatIncrementer.h"
 #include "klee/util/GetElementPtrTypeIterator.h"
 
@@ -737,7 +737,7 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
   Context::initialize(TD->isLittleEndian(),
                       (Expr::Width)TD->getPointerSizeInBits());
 
-  if (PruneStates)
+  if (EnableCutoffEvents)
     MemoryState::setKModule(kmodule.get());
 
   return kmodule->module.get();
@@ -773,7 +773,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     unsigned i, size = targetData->getTypeStoreSize(c->getType());
     for (i=0; i<size; i++)
       os->write8(offset+i, (uint8_t) 0);
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -808,7 +808,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
       C = C->ZExt(StoreBits);
 
     os->write(offset, C);
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -820,7 +820,7 @@ void Executor::initializeGlobalObject(ExecutionState &state, ObjectState *os,
     for (std::size_t i = 0; i < num; ++i)
       os->write8(offset + i, 0xAB); // like ObjectState::initializeToRandom()
 
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       const MemoryObject *mo = os->getObject();
       ref<ConstantExpr> address = mo->getBaseExpr();
       address = address->Add(ConstantExpr::alloc(offset, Expr::Int64));
@@ -839,7 +839,7 @@ MemoryObject * Executor::addExternalObject(ExecutionState &state,
   for (unsigned i = 0; i < size; i++) {
     os->write8(i, ((uint8_t*)addr)[i]);
   }
-  if (PruneStates && !isReadOnly) {
+  if (EnableCutoffEvents && !isReadOnly) {
     // NOTE: this assumes addExternalObject is only called for initialization
     state.memoryState.registerWrite(mo->getBaseExpr(), *mo, *os, size);
   }
@@ -976,7 +976,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
         for (unsigned offset=0; offset<mo->size; offset++) {
           os->write8(offset, ((unsigned char*)addr)[offset]);
         }
-        if (PruneStates) {
+        if (EnableCutoffEvents) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -993,7 +993,7 @@ void Executor::initializeGlobals(ExecutionState &state) {
 
       if (!i->hasInitializer()) {
         os->initializeToRandom();
-        if (PruneStates) {
+        if (EnableCutoffEvents) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -1533,7 +1533,7 @@ void Executor::bindArgument(KFunction *kf, unsigned index,
                             ExecutionState &state, ref<Expr> value) {
   assert(getArgumentCell(state, kf, index).value.isNull() &&
          "argument has previouly been set!");
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     // no need to unregister argument (can only be set once within the same stack frame)
     state.memoryState.registerArgument(state.tid(), state.stackFrameIndex(), kf, index, value);
   }
@@ -1733,7 +1733,7 @@ void Executor::executeCall(ExecutionState &state,
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.registerFunctionCall(f, arguments);
   }
 
@@ -1844,7 +1844,7 @@ void Executor::executeCall(ExecutionState &state,
     state.pushFrame(state.prevPc(), kf);
     thread.pc = kf->instructions;
     thread.liveSet = kf->getLiveLocals(&kf->function->front());
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       state.memoryState.registerPushFrame(state.tid(), state.stackFrameIndex(),
                                           kf, state.prevPc());
     }
@@ -1954,7 +1954,7 @@ void Executor::executeCall(ExecutionState &state,
 #endif
           }
         }
-        if (PruneStates) {
+        if (EnableCutoffEvents) {
           state.memoryState.registerWrite(*mo, *os);
         }
       }
@@ -2042,7 +2042,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
 
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       Function *callee = sf.kf->function;
       state.memoryState.registerFunctionRet(callee);
     }
@@ -4208,7 +4208,7 @@ void Executor::callExternalFunction(ExecutionState &state,
 
   // there is no new stack frame for external functions and thus no return
   // hence we have to immediately leave any function that is external call
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.registerFunctionRet(function);
   }
 
@@ -4324,7 +4324,7 @@ void Executor::executeAlloc(ExecutionState &state,
 
         processMemoryAccess(state, reallocatedObject, nullptr, 0, MemoryOperation::Type::FREE);
 
-        if (PruneStates) {
+        if (EnableCutoffEvents) {
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
         }
 
@@ -4332,7 +4332,7 @@ void Executor::executeAlloc(ExecutionState &state,
         state.addressSpace.unbindObject(reallocatedObject);
       }
 
-      if (PruneStates) {
+      if (EnableCutoffEvents) {
         // after realloc to let copied byted overwrite initialization
         state.memoryState.registerWrite(*mo, *os);
       }
@@ -4469,7 +4469,7 @@ void Executor::executeFree(ExecutionState &state,
           it->second->porNode = nullptr;
         }
 
-        if (PruneStates)
+        if (EnableCutoffEvents)
           it->second->memoryState.unregisterWrite(*mo, *os);
 
         const auto& allocatorTid = mo->getAllocationStackFrame().first;
@@ -4642,14 +4642,14 @@ void Executor::executeMemoryWrite(ExecutionState& state,
 
   auto* wos = state.addressSpace.getWriteable(mo, os);
 
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     // unregister previous value to avoid cancellation
     state.memoryState.unregisterWrite(address, *mo, *wos, bytes);
   }
 
   wos->write(offset, value);
 
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.registerWrite(address, *mo, *wos, bytes);
   }
 }
@@ -4730,7 +4730,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
                                    const MemoryObject *mo,
                                    const ObjectState *os,
                                    const std::string &name) {
-  if (PruneStates)
+  if (EnableCutoffEvents)
     state.memoryState.unregisterWrite(*mo, *os);
 
   ObjectState *newOs;
@@ -4813,7 +4813,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
       }
     }
   }
-  if (PruneStates)
+  if (EnableCutoffEvents)
     state.memoryState.registerWrite(*mo, *newOs);
 }
 
@@ -4924,7 +4924,7 @@ void Executor::runFunctionAsMain(Function *f,
         argvOS->write(i * NumPtrBytes, arg->getBaseExpr());
       }
     }
-    if (PruneStates) {
+    if (EnableCutoffEvents) {
       state->memoryState.registerWrite(*argvMO, *argvOS);
     }
   }
@@ -5218,7 +5218,7 @@ bool Executor::createThread(ExecutionState &state,
   // And initialize the errno
   ObjectState *errNoOs = bindObjectInState(state, thErrno, false);
   errNoOs->initializeToRandom();
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.registerWrite(*thErrno, *errNoOs);
   }
 
@@ -5290,7 +5290,7 @@ bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
 
       processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
 
-      if (PruneStates) {
+      if (EnableCutoffEvents) {
         auto os = state.addressSpace.findObject(mo);
         state.memoryState.unregisterWrite(*mo, *os);
       }

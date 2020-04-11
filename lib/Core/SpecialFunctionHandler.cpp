@@ -22,8 +22,8 @@
 #include "klee/Internal/Support/Debug.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/OptionCategories.h"
+#include "klee/PorCmdLine.h"
 #include "klee/Solver/SolverCmdLine.h"
-#include "klee/StatePruningCmdLine.h"
 
 #include "llvm/ADT/Twine.h"
 #include "llvm/IR/DataLayout.h"
@@ -735,7 +735,7 @@ void SpecialFunctionHandler::handleDisableMemoryState(ExecutionState &state,
                                                           KInstruction *target,
                                                           std::vector<ref<Expr>>
                                                             &arguments) {
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.disable();
     klee_warning_once(target, "disabling memory state");
   }
@@ -745,7 +745,7 @@ void SpecialFunctionHandler::handleEnableMemoryState(ExecutionState &state,
                                                           KInstruction *target,
                                                           std::vector<ref<Expr>>
                                                             &arguments) {
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     state.memoryState.enable();
     klee_warning_once(target, "enabling memory state");
   }
@@ -778,7 +778,7 @@ void SpecialFunctionHandler::handleDefineFixedObject(ExecutionState &state,
                                                     state.stackFrameIndex());
   ObjectState *os = executor.bindObjectInState(state, mo, false);
   mo->isUserSpecified = true; // XXX hack;
-  if (PruneStates)
+  if (EnableCutoffEvents)
     state.memoryState.registerWrite(*mo, *os);
 }
 

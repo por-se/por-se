@@ -5,7 +5,7 @@
 #include "klee/ExecutionState.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/OptionCategories.h"
-#include "klee/StatePruningCmdLine.h"
+#include "klee/PorCmdLine.h"
 
 #include "por/configuration.h"
 #include "por/event/event.h"
@@ -484,7 +484,7 @@ bool PorEventManager::registerCondVarWait2(ExecutionState &state, std::uint64_t 
 }
 
 void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &event) {
-  if (!PruneStates) {
+  if (!EnableCutoffEvents) {
     return;
   }
 
@@ -497,7 +497,7 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
 
 std::pair<MemoryFingerprintValue, MemoryFingerprintDelta>
 PorEventManager::computeFingerprintAndDelta(const ExecutionState &state, const por::event::event &event) {
-  assert(PruneStates);
+  assert(EnableCutoffEvents);
 
   auto thread = state.getThreadById(event.tid());
   assert(thread && "no thread with given id found");
@@ -535,7 +535,7 @@ PorEventManager::computeFingerprintAndDelta(const ExecutionState &state, const p
 
 
 void PorEventManager::findNewCutoff(ExecutionState &state) {
-  if (!state.porNode || !PruneStates) {
+  if (!state.porNode || !EnableCutoffEvents) {
     return;
   }
 
@@ -568,7 +568,7 @@ void PorEventManager::findNewCutoff(ExecutionState &state) {
   if (isCutoff) {
     // state is at cutoff event
 
-    if (DebugStatePruning) {
+    if (DebugCutoffEvents) {
       llvm::errs() << "[state id: " << state.id << "] corresponding: " << other.to_string(true)
                   << " with fingerprint: " << MemoryFingerprint::toString(other.metadata().fingerprint) << "\n";
       llvm::errs() << "[state id: " << state.id << "]        cutoff: " << event.to_string(true) << "\n"

@@ -1,6 +1,6 @@
 // RUN: %clang %s -emit-llvm %O0opt -g -c -o %t.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --exit-on-error --state-pruning=0 %t.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --exit-on-error --cutoff-events=0 %t.bc 2>&1 | FileCheck %s
 // RUN: rm -rf %t.klee-out
 // RUN: %klee --output-dir=%t.klee-out --exit-on-error --thread-scheduling=last %t.bc 2>&1 | FileCheck --check-prefix CHECK-LAST %s
 // RUN: rm -rf %t.klee-out

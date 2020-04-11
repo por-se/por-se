@@ -14,7 +14,7 @@
 
 #include "klee/ExecutionState.h"
 #include "klee/Expr/Expr.h"
-#include "klee/StatePruningCmdLine.h"
+#include "klee/PorCmdLine.h"
 #include "klee/TimerStatIncrementer.h"
 
 using namespace klee;
@@ -328,12 +328,12 @@ bool AddressSpace::copyInConcrete(ExecutionState &state, const MemoryObject *mo,
     if (os->readOnly) {
       return false;
     } else {
-      if (PruneStates) {
+      if (EnableCutoffEvents) {
         state.memoryState.unregisterWrite(*mo, *os);
       }
       ObjectState *wos = getWriteable(mo, os);
       memcpy(wos->concreteStore, address, mo->size);
-      if (PruneStates) {
+      if (EnableCutoffEvents) {
         state.memoryState.registerWrite(*mo, *wos);
       }
     }

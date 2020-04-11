@@ -18,7 +18,7 @@
 #include "klee/Internal/Module/KModule.h"
 #include "klee/Internal/Support/DebugPrinter.h"
 #include "klee/OptionCategories.h"
-#include "klee/StatePruningCmdLine.h"
+#include "klee/PorCmdLine.h"
 #include "klee/Thread.h"
 
 #include "CoreStats.h"
@@ -154,7 +154,7 @@ void ExecutionState::popFrameOfThread(Thread &thread) {
     addressSpace.unbindObject(mo);
   }
 
-  if (PruneStates && porNode) {
+  if (EnableCutoffEvents && porNode) {
     memoryState.registerPopFrame(sf);
   }
 

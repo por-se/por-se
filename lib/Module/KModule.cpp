@@ -21,7 +21,7 @@
 #include "klee/Internal/Support/ModuleUtil.h"
 #include "klee/Interpreter.h"
 #include "klee/OptionCategories.h"
-#include "klee/StatePruningCmdLine.h"
+#include "klee/PorCmdLine.h"
 
 #if LLVM_VERSION_CODE >= LLVM_VERSION(4, 0)
 #include "llvm/Bitcode/BitcodeWriter.h"
@@ -358,7 +358,7 @@ void KModule::manifest(InterpreterHandler *ih, bool forceSourceOutput) {
     llvm::errs() << "]\n";
   }
 
-  if (PruneStates) {
+  if (EnableCutoffEvents) {
     LiveRegisterPass lrp;
     for (auto &kf : functions) {
       lrp.runOnFunction(*kf->function);

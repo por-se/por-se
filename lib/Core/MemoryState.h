@@ -2,8 +2,9 @@
 #define KLEE_MEMORYSTATE_H
 
 #include "Memory.h"
+
 #include "klee/Fingerprint/MemoryFingerprint.h"
-#include "klee/StatePruningCmdLine.h"
+#include "klee/PorCmdLine.h"
 #include "klee/Thread.h"
 
 #include "por/event/event.h"
@@ -84,7 +85,7 @@ class MemoryState {
   void updateDisableMemoryState() {
     disableMemoryState = libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
 
-    if (DebugStatePruning) {
+    if (DebugCutoffEvents) {
       llvm::errs() << "MemoryState: updating disableMemoryState: "
                    << "(libraryFunction: " << libraryFunction.entered << " || "
                    << "memoryFunction: " << memoryFunction.entered << " || "

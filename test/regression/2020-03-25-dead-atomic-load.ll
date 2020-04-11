@@ -1,5 +1,5 @@
 ; RUN: rm -rf %t.klee-out
-; RUN: %klee -output-dir=%t.klee-out -debug-print-instructions=all:stderr -debug-live-set -debug-state-pruning %s 2>&1 | FileCheck %s
+; RUN: %klee -output-dir=%t.klee-out -debug-print-instructions=all:stderr -debug-live-set -debug-cutoff-events %s 2>&1 | FileCheck %s
 
 define i32 @main() {
 entry:
