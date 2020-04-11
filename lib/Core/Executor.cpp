@@ -1326,12 +1326,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       auto d = current.peekDecision();
       assert(std::holds_alternative<Thread::decision_branch_t>(d));
       auto decision = std::get<Thread::decision_branch_t>(d);
-
-      if (decision.expr != condition) {
-        // FIXME: incompleteness
-        klee_warning("Could not catch-up fork!");
-        return StatePair(nullptr, nullptr);
-      }
+      assert(decision.expr == condition && "Could not catch-up fork!");
 
       // add constraints
       if (decision.branch) {
