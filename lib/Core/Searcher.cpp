@@ -319,7 +319,7 @@ ExecutionState &BatchingSearcher::selectState() {
         (time::getWallTime() - lastStartTime) > timeBudget)) ||
       ((instructionBudget > 0) &&
        (stats::instructions - lastStartInstructions) > instructionBudget)) {
-    if (lastState) {
+    if (lastState && timeBudget.toSeconds() > 0) {
       time::Span delta = time::getWallTime() - lastStartTime;
       auto t = timeBudget;
       t *= 1.1;
@@ -329,7 +329,8 @@ ExecutionState &BatchingSearcher::selectState() {
       }
     }
     lastState = &baseSearcher->selectState();
-    lastStartTime = time::getWallTime();
+    if (timeBudget.toSeconds() > 0)
+      lastStartTime = time::getWallTime();
     lastStartInstructions = stats::instructions;
     return *lastState;
   } else {
