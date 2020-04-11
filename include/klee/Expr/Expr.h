@@ -500,6 +500,7 @@ public:
 
 private:
   unsigned hashValue;
+  unsigned hashValueWithoutName;
 
   // FIXME: Make =delete when we switch to C++11
   Array(const Array& array);
@@ -533,6 +534,7 @@ public:
   /// ComputeHash must take into account the name, the size, the domain, and the range
   unsigned computeHash();
   unsigned hash() const { return hashValue; }
+  unsigned hashWithoutName() const { return hashValueWithoutName; }
   friend class ArrayCache;
 };
 

@@ -18,19 +18,25 @@
 #include <unordered_map>
 
 namespace klee {
-  
-struct ArrayHashFn  {
+
+struct ArrayHashFn {
   unsigned operator()(const Array* array) const {
     return(array ? array->hash() : 0);
   }
 };
-    
+
+struct ArrayHashWithoutNameFn {
+  unsigned operator()(const Array* array) const {
+    return(array ? array->hashWithoutName() : 0);
+  }
+};
+
 struct ArrayCmpFn {
   bool operator()(const Array* array1, const Array* array2) const {
     return(array1 == array2);
   }
-};  
-  
+};
+
 struct UpdateNodeHashFn  {
   unsigned operator()(const UpdateNode* un) const {
     return(un ? un->hash() : 0);

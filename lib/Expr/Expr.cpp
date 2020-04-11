@@ -525,6 +525,7 @@ unsigned Array::computeHash() {
   res = (res * Expr::MAGIC_HASH_CONSTANT) + size;
   res = (res * Expr::MAGIC_HASH_CONSTANT) + domain;
   res = (res * Expr::MAGIC_HASH_CONSTANT) + range;
+  hashValueWithoutName = res;
   for (unsigned i = 0, e = name.size(); i != e; ++i)
     res = (res * Expr::MAGIC_HASH_CONSTANT) + name[i];
   hashValue = res;
