@@ -5318,7 +5318,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref
   auto result = state.raceDetection.isDataRace(*state.porNode, solv, operation);
   if (!result.has_value()) {
     klee_warning("Failure at determining whether an accesses races - assuming safe access");
-    state.raceDetection.trackAccess(*state.porNode, operation);
+    state.raceDetection.trackAccess(*state.porNode, std::move(operation));
     return true;
   }
 
@@ -5346,7 +5346,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref
         assert(safeState != nullptr);
         assert(safeState == &state);
         // So a constraint was added during fork that made the race only safe -> fake this correctly
-        state.raceDetection.trackAccess(*state.porNode, operation);
+        state.raceDetection.trackAccess(*state.porNode, std::move(operation));
 
         // No need to add the safe constraints as it was added during fork
         // TODO: maybe we actuall want to add it? Just to be sure?
@@ -5354,7 +5354,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref
       } else {
         terminateStateOnUnsafeMemAccess(*unsafeState, mo, result->racingThread, result->racingInstruction);
 
-        safeState->raceDetection.trackAccess(*state.porNode, operation);
+        safeState->raceDetection.trackAccess(*state.porNode, std::move(operation));
 
         return safeState == &state;
       }
@@ -5368,7 +5368,7 @@ Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref
       addConstraint(state, result->newConstraints);
     }
 
-    state.raceDetection.trackAccess(*state.porNode, operation);
+    state.raceDetection.trackAccess(*state.porNode, std::move(operation));
     return true;
   }
 }

@@ -17,8 +17,6 @@ namespace klee {
   };
 
   struct AccessMetaData {
-    static const std::size_t NO_CONST_OFFSET = static_cast<std::size_t>(-1);
-
     enum class OverlapResult : std::uint8_t {
       UNKNOWN = 0,
       OVERLAP = 1,
@@ -35,17 +33,18 @@ namespace klee {
       FREE
     };
 
+    using Offset = std::size_t;
+
+    static const Offset NO_CONST_OFFSET = static_cast<Offset>(-1);
+
     KInstruction* instruction = nullptr;
 
     Type type = Type::UNKNOWN;
 
     ref<Expr> offset;
-    std::size_t offsetConst = NO_CONST_OFFSET;
+    Offset offsetConst = NO_CONST_OFFSET;
 
-    std::size_t numBytes = 0;
-
-    AccessMetaData() = default;
-    AccessMetaData(const AccessMetaData& o) = default;
+    Offset numBytes = 0;
 
     [[nodiscard]] bool isConstantOffset() const {
       return offsetConst != NO_CONST_OFFSET;
@@ -120,7 +119,7 @@ namespace klee {
       // We have to subtract 1 from the num of bytes since we want to check the accessed bytes
       // numBytes == 1 -> only the byte at `offset` was accessed, therefore the last accessed one is:
       //   offset + (numBytes - 1) = offset
-      return AddExpr::create(offset, ConstantExpr::create(numBytes - 1, 64));
+      return AddExpr::create(Expr::createZExtToPointerWidth(offset), Expr::createPointer(numBytes - 1));
     };
 
     [[nodiscard]] bool isWrite() const {

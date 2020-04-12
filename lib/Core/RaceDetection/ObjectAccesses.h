@@ -2,7 +2,9 @@
 
 #include "CommonTypes.h"
 
+#include <map>
 #include <memory>
+#include <tuple>
 #include <vector>
 
 namespace klee {
@@ -11,21 +13,23 @@ namespace klee {
   class ObjectAccesses {
     private:
       struct OperationList {
-        std::vector<AccessMetaData> list;
+        class Acquisition;
+
+        std::map<AccessMetaData::Offset, AccessMetaData> concrete;
+        std::multimap<ref<Expr>, AccessMetaData> symbolic;
 
         const void* owner = nullptr;
-
-        OperationList() = default;
-        OperationList(const OperationList& o) = default;
 
         // Both methods receive a `from` parameter that indicates which @class{ObjectAccesses}
         // is accessing the list. If we have to make changes to the list and the owner and the
         // from field are not matching, then we have to make a copy of the list.
         // -> In that case we return a shared ptr to the copy/fork of the list with the updated data
 
-        std::shared_ptr<OperationList> registerMemoryOperation(const MemoryOperation& incoming, const void* from);
+        std::shared_ptr<OperationList> registerMemoryOperation(MemoryOperation&& incoming, const void* from);
 
-        std::shared_ptr<OperationList> replace(const MemoryOperation& op, const void* from, std::size_t at);
+      private:
+        static void registerConcreteMemoryOperation(Acquisition& self, MemoryOperation&& incoming);
+        static void registerSymbolicMemoryOperation(Acquisition& self, MemoryOperation&& incoming);
       };
 
       // Small optimization: we can save the whole overhead of maintaining the list and
@@ -39,23 +43,32 @@ namespace klee {
       std::shared_ptr<OperationList> accesses;
 
     public:
-      ObjectAccesses() = default;
-      ObjectAccesses(const ObjectAccesses& al) = default;
-
-      [[nodiscard]] bool isAllocOrFree() const {
+      [[nodiscard]] bool isAllocOrFree() const noexcept {
         return allocFreeInstruction != nullptr;
       };
 
-      [[nodiscard]] KInstruction* getAllocFreeInstruction() const {
+      [[nodiscard]] KInstruction* getAllocFreeInstruction() const noexcept {
         assert(allocFreeInstruction != nullptr);
         return allocFreeInstruction;
       };
 
-      [[nodiscard]] const std::vector<AccessMetaData>& getAccesses() const {
+      [[nodiscard]] const AccessMetaData& getAnyAccess() const noexcept {
         assert(allocFreeInstruction == nullptr);
-        return accesses->list;
+        assert(!accesses->concrete.empty() || !accesses->symbolic.empty());
+        return accesses->concrete.empty() ? accesses->symbolic.begin()->second : accesses->concrete.begin()->second;
       }
 
-      void trackMemoryOperation(const MemoryOperation& mop);
+
+      [[nodiscard]] const auto& getConcreteAccesses() const noexcept {
+        assert(allocFreeInstruction == nullptr);
+        return accesses->concrete;
+      }
+
+      [[nodiscard]] const auto& getSymbolicAccesses() const noexcept {
+        assert(allocFreeInstruction == nullptr);
+        return accesses->symbolic;
+      }
+
+      void trackMemoryOperation(MemoryOperation&& mop);
   };
 }

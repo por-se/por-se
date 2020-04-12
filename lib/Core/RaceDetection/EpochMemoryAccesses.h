@@ -15,7 +15,7 @@ namespace klee {
       std::unordered_map<std::uint64_t, ObjectAccesses> memoryOperations;
 
     public:
-      void trackMemoryOperation(const MemoryOperation& op);
+      void trackMemoryOperation(MemoryOperation&& op);
 
       void pruneDataForMemoryObject(const MemoryObject* obj);
 

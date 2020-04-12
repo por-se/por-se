@@ -4,12 +4,14 @@
 
 #include "por/event/event.h"
 #include "por/node.h"
+#include "util/iterator_range.h"
 
 #include "llvm/Support/CommandLine.h"
 
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <utility>
 
 using namespace klee;
 
@@ -58,7 +60,7 @@ const DataRaceDetection::Stats& DataRaceDetection::getStats() const {
   return stats;
 }
 
-void DataRaceDetection::trackAccess(const por::node& node, const MemoryOperation& op) {
+void DataRaceDetection::trackAccess(const por::node& node, MemoryOperation&& op) {
   assert(op.instruction != nullptr);
   assert(op.object != nullptr);
   assert(op.type != MemoryOperation::Type::UNKNOWN);
@@ -70,23 +72,23 @@ void DataRaceDetection::trackAccess(const por::node& node, const MemoryOperation
 
   auto& acc = getAccessesAfter(op.tid, evtIt->second);
 
-  // in the case that a memory object is freed by KLEE, then we will not receive
-  // any further operations on that object since the object won't be found (out of bound access)
-  // -> we can prune all data that we tracked for that object
-  if (op.isFree()) {
-    acc.pruneDataForMemoryObject(op.object);
-  } else {
-    acc.trackMemoryOperation(op);
-    stats.numTrackedAccesses++;
-    globalStats.numTrackedAccesses++;
-  }
-
   if (DebugDrd) {
     llvm::errs() << "DRD: @" << evtIt->second->kind()
                  << " track> mo=" << getDebugInfo(op.object)
                  << " tid=" << op.tid
                  << " type=" << op.getTypeString()
                  << "\n";
+  }
+
+  // in the case that a memory object is freed by KLEE, then we will not receive
+  // any further operations on that object since the object won't be found (out of bound access)
+  // -> we can prune all data that we tracked for that object
+  if (op.isFree()) {
+    acc.pruneDataForMemoryObject(op.object);
+  } else {
+    acc.trackMemoryOperation(std::move(op));
+    stats.numTrackedAccesses++;
+    globalStats.numTrackedAccesses++;
   }
 }
 
@@ -218,22 +220,47 @@ DataRaceDetection::SolverPath(const por::node& node,
       }
 
       const auto& memAccesses = accessListIt->second;
-
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
-        assert(!accessed->isAllocOrFree() && "Would have been tested in the fastpath");
+        assert(!accessed->isAllocOrFree() && "Should have caused a datarace on the fastpath");
 
-        for (auto& access : accessed->getAccesses()) {
-          // is checked in the fastpath
-          if ((operation.isConstantOffset() && access.isConstantOffset()) || operation.offset == access.offset) {
-            continue;
+        if (operation.isConstantOffset()) {
+          // Any operation that happens at a concrete offset will have been checked against all other concrete operations
+          // on the fastpath pass. Thus, we can omit iterating over `accessed->getConcreteAccesses`.
+
+          for (const auto& [offset, access] : accessed->getSymbolicAccesses()) {
+            // not a data race
+            if (operation.isRead() && access.isRead()) {
+              continue;
+            }
+
+            assert(operation.offset != access.offset && "operation has a concrete offset and access has a symbolic offset");
+
+            accessesToCheck.emplace_back(tid, access);
           }
+        } else {
+          for (const auto& [offset, access] : accessed->getConcreteAccesses()) {
+            // not a data race
+            if (operation.isRead() && access.isRead()) {
+              continue;
+            }
+            
+            assert(operation.offset != access.offset && "operation has a symbolic offset and access has a concrete offset");
 
-          // not a data race
-          if (access.isRead() && operation.isRead()) {
-            continue;
+            accessesToCheck.emplace_back(tid, access);
           }
+          for (const auto& [offset, access] : accessed->getSymbolicAccesses()) {
+            // not a data race
+            if (operation.isRead() && access.isRead()) {
+              continue;
+            }
 
-          accessesToCheck.emplace_back(tid, access);
+            // is checked in the fastpath
+            if (operation.offset == access.offset) {
+              continue;
+            }
+
+            accessesToCheck.emplace_back(tid, access);
+          }
         }
       }
     }
@@ -287,6 +314,7 @@ DataRaceDetection::SolverPath(const por::node& node,
   // First check if we race every time (e.g. there is no assignment to symbolic values where the offsets are unequal)
   const auto& canBeSafe = interface.mayBeTrue(queryIsSafeForAll);
   if (!canBeSafe.has_value()) {
+  assert(false);
     return {};
   }
 
@@ -322,6 +350,7 @@ DataRaceDetection::SolverPath(const por::node& node,
 
   // Fall through, so we cannot exactly tell if this is actually a race since the solver could not
   // tell us a second time whether there is a race
+  assert(false);
   return {};
 }
 
@@ -369,13 +398,12 @@ DataRaceDetection::FastPath(const por::node& node,
       }
 
       const auto& memAccesses = accessListIt->second;
-
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
           // We race with every other access, therefore simply pick the first
           result.racingInstruction = accessed->isAllocOrFree()
                                     ? accessed->getAllocFreeInstruction()
-                                    : accessed->getAccesses().front().instruction;
+                                    : accessed->getAnyAccess().instruction;
 
           result.racingThread = tid;
           result.isRace = true;
@@ -384,12 +412,50 @@ DataRaceDetection::FastPath(const por::node& node,
         }
 
         // So we now know for sure that only standard accesses are inside here
-        for (auto const& access : accessed->getAccesses()) {
-          if (operation.isRead() && access.isRead()) {
-            continue;
+        if (operation.isConstantOffset()) {
+          // for operations with concrete offset, we can only check against other concrete offsets
+          auto it = accessed->getConcreteAccesses().upper_bound(operation.offsetConst);
+          if (it != accessed->getConcreteAccesses().begin()) {
+            auto prev = std::prev(it);
+            if (operation.isWrite() || prev->second.isWrite()) {
+              // assert(prev->first < operation.offsetConst);
+              if(prev->first + prev->second.numBytes > operation.offsetConst) {
+                result.racingInstruction = prev->second.instruction;
+                result.racingThread = tid;
+                result.isRace = true;
+                result.canBeSafe = false;
+                return result;
+              }
+            }
+          }
+          for (; it != accessed->getConcreteAccesses().end()
+            && it->first < operation.offsetConst + operation.numBytes; ++it) {
+            // assert(it->first >= operation.offsetConst);
+            if (operation.isWrite() || it->second.isWrite()) {
+              result.racingInstruction = it->second.instruction;
+              result.racingThread = tid;
+              result.isRace = true;
+              result.canBeSafe = false;
+              return result;
+            }
           }
 
-          if (auto isOverlapping = operation.isOverlappingWith(access); isOverlapping != AccessMetaData::OverlapResult::UNKNOWN) {
+          if (!accessed->getSymbolicAccesses().empty()) {
+            return {};
+          }
+        } else {
+          auto [begin, end] = accessed->getSymbolicAccesses().equal_range(operation.offset);
+          // for operations with symbolic offset, we can only check against other symbolic offsets
+          for (const auto& [offset, access] : util::make_iterator_range(begin, end)) {
+            if (operation.isRead() && access.isRead()) {
+              continue;
+            }
+
+            auto isOverlapping = operation.isOverlappingWith(access);
+            // assert((operation.offset != access.offset || isOverlapping != AccessMetaData::OverlapResult::UNKNOWN)
+            //  && "solverpath assumes condition that does not hold: "
+            //    "symbolic/symbolic conflicts are always handled on the fastpath when the offsets are structurally equal");
+
             if (isOverlapping == AccessMetaData::OverlapResult::OVERLAP) {
               result.racingInstruction = access.instruction;
               result.racingThread = tid;
@@ -397,11 +463,12 @@ DataRaceDetection::FastPath(const por::node& node,
               result.canBeSafe = false;
               return result;
             }
-          } else {
-            assert(!((operation.isConstantOffset() && access.isConstantOffset()) || operation.offset == access.offset)
-              && "solverpath assumes condition that does not hold");
-            // We cannot give a definite result if during the check we encounter
-            // a symbolic offset that is not matching and has to be checked by the solver.
+          }
+          if (begin != accessed->getSymbolicAccesses().begin() || end != accessed->getSymbolicAccesses().end()) {
+            return {};
+          }
+
+          if (!accessed->getConcreteAccesses().empty()) {
             return {};
           }
         }

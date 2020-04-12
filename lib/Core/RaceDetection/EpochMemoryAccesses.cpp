@@ -6,8 +6,9 @@ void EpochMemoryAccesses::pruneDataForMemoryObject(const MemoryObject* obj) {
   memoryOperations.erase(obj->address);
 }
 
-void EpochMemoryAccesses::trackMemoryOperation(const MemoryOperation& op) {
-  memoryOperations[op.object->address].trackMemoryOperation(op);
+void EpochMemoryAccesses::trackMemoryOperation(MemoryOperation&& op) {
+  auto& accesses = memoryOperations[op.object->address];
+  accesses.trackMemoryOperation(std::move(op));
 }
 
 const ObjectAccesses* EpochMemoryAccesses::getMemoryAccessesOfThread(const MemoryObject* mo) const {

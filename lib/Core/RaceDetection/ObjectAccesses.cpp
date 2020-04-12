@@ -1,81 +1,307 @@
 #include "ObjectAccesses.h"
 
+#include <iterator>
+
 using namespace klee;
 
-std::shared_ptr<ObjectAccesses::OperationList> ObjectAccesses::OperationList::replace(
-        const MemoryOperation& op, const void* from, std::size_t at) {
-  assert(at < list.size());
+class ObjectAccesses::OperationList::Acquisition {
+  ObjectAccesses::OperationList* self;
+  const void* from;
+  std::shared_ptr<ObjectAccesses::OperationList> fork;
 
-  if (from == owner) {
-    auto& data = list[at];
+public:
+  Acquisition(ObjectAccesses::OperationList* self, const void* from)
+    : self(self), from(from)
+  { }
 
-    data.type = op.type;
-    data.instruction = op.instruction;
+  // Ensures that the resource is owned. Will return true when it is forked.
+  bool acquire() {
+    if (self->owner != from) {
+      fork = std::make_shared<OperationList>(*self);
+      fork->owner = from;
+      self = fork.get();
+      return true;
+    } else {
+      return false;
+    }
+  }
 
-    return nullptr;
+  template<typename F1>
+  Acquisition& acquire(F1 on_acquisition) {
+    if (self->owner != from) {
+      fork = std::make_shared<OperationList>(*self);
+      fork->owner = from;
+      self = fork.get();
+      on_acquisition(self);
+    }
+    return *this;
+  }
+
+  // The Acquisition object behaves as a smart pointer for const accesses.
+  // Note: const-ness is *not statically ensured*, otherwise all iterators to the underlying data
+  // structures also become const_iterators, which cannot be upcasted after acquisition.
+  [[nodiscard]] ObjectAccesses::OperationList* operator->() noexcept {
+    return self;
+  }
+
+  // The Acquisition object uses the `mut` function for mutable accesses to assert ownership.
+  [[nodiscard]] ObjectAccesses::OperationList* mut() noexcept {
+    assert(self->owner == from);
+    return self;
+  }
+
+  [[nodiscard]] std::shared_ptr<ObjectAccesses::OperationList> result() {
+    return std::move(fork);
+  }
+};
+
+void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
+        Acquisition& self, MemoryOperation &&incoming) {
+  if (self->concrete.empty()) {
+    self.acquire();
+    self.mut()->concrete.emplace(incoming.offsetConst, std::move(incoming));
+    return;
+  }
+
+  auto incomingBegin = incoming.offsetConst;
+  auto incomingEnd = incomingBegin + incoming.numBytes;
+  decltype(self->concrete)::node_type node;
+  auto it = self->concrete.lower_bound(incomingBegin);
+
+  if (it != self->concrete.end() && it->first == incomingBegin) {
+    // fastpath: exact offset match
+    auto itBegin = it->first;
+    auto itEnd = itBegin + it->second.numBytes;
+    if (it->second.isWrite() || incoming.isRead()) {
+      if (itEnd >= incomingEnd) {
+        return;
+      } else {
+        incomingBegin = itEnd;
+        ++it;
+      }
+    } else {
+      self.acquire([&it](auto* self) { it = self->concrete.find(it->first); });
+      if (itEnd == incomingEnd) {
+        it->second.instruction = incoming.instruction;
+        it->second.type = incoming.type;
+        return;
+      } else if (itEnd < incomingEnd) {
+        auto next = std::next(it);
+        node = self.mut()->concrete.extract(it);
+        it = std::move(next);
+      } else {
+        assert(itEnd > incomingEnd);
+        auto next = std::next(it);
+        node = self.mut()->concrete.extract(it);
+        self.mut()->concrete.emplace_hint(next, incomingBegin, std::move(incoming));
+        node.key() = incomingEnd;
+        node.mapped().offsetConst = incomingEnd;
+        node.mapped().offset = Expr::createPointer(incomingEnd);
+        self.mut()->concrete.insert(next, std::move(node));
+        return;
+      }
+    }
+  } else if (it != self->concrete.begin()) {
+    // deal with potential conflict to the left
+    auto prev = std::prev(it);
+    if (prev->first + prev->second.numBytes > incomingBegin) {
+      if (prev->second.isWrite() || incoming.isRead()) {
+        incomingBegin = prev->first + prev->second.numBytes;
+      } else {
+        self.acquire([&it, &prev](auto* self) { it = self->concrete.find(it->first); prev = std::prev(it); });
+        prev->second.numBytes = incomingBegin - prev->first;
+      }
+    }
+  }
+
+  assert(it == self->concrete.end() || it->first >= incomingBegin);
+
+  // deal with potential conflicts to the right
+  while (it != self->concrete.end() && it->first < incomingEnd) {
+    auto itBegin = it->first;
+    auto itEnd = itBegin + it->second.numBytes;
+
+    if (itBegin == incomingBegin) {
+      if (incoming.isRead() || it->second.isWrite()) {
+        if (itEnd >= incomingEnd) {
+          return;
+        } else {
+          incomingBegin = itEnd;
+          ++it;
+        }
+      } else {
+        self.acquire([&it](auto* self) { it = self->concrete.find(it->first); });
+        if (itEnd == incomingEnd) {
+          it->second.instruction = incoming.instruction;
+          it->second.type = incoming.type;
+          return;
+        } else if (itEnd < incomingEnd) {
+          auto next = std::next(it);
+          node = self.mut()->concrete.extract(it);
+          it = next;
+        } else {
+          assert(itEnd > incomingEnd);
+          if (incoming.offsetConst != incomingBegin) {
+            incoming.offsetConst = incomingBegin;
+            incoming.offset = Expr::createPointer(incomingBegin);
+            incoming.numBytes = incomingEnd - incomingBegin;
+          }
+          auto next = std::next(it);
+          auto node2 = self.mut()->concrete.extract(it);
+          if (node.empty()) {
+            self.mut()->concrete.emplace_hint(next, incomingBegin, std::move(incoming));
+          } else {
+            node.key() = incomingBegin;
+            node.mapped() = std::move(incoming);
+            self.mut()->concrete.insert(next, std::move(node));
+          }
+          node.key() = incomingEnd;
+          node.mapped().offsetConst = incomingEnd;
+          node.mapped().offset = Expr::createPointer(incomingEnd);
+          self.mut()->concrete.insert(next, std::move(node));
+          return;
+        }
+      }
+    } else {
+      assert(itBegin > incomingBegin);
+      if (incoming.isWrite() || it->second.isRead()) {
+        self.acquire([&it](auto* self) { it = self->concrete.find(it->first); });
+        if (itEnd <= incomingEnd) {
+          auto next = std::next(it);
+          node = self.mut()->concrete.extract(it);
+          it = next;
+        } else {
+          assert(itEnd > incomingEnd);
+          if (incoming.offsetConst != incomingBegin) {
+            incoming.offsetConst = incomingBegin;
+            incoming.offset = Expr::createPointer(incomingBegin);
+            incoming.numBytes = incomingEnd - incomingBegin;
+          }
+          if (node.empty()) {
+            self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(incoming));
+          } else {
+            node.key() = incomingBegin;
+            node.mapped() = std::move(incoming);
+            self.mut()->concrete.insert(it, std::move(node));
+          }
+          auto next = std::next(it);
+          node = self.mut()->concrete.extract(it);
+          node.key() = incomingEnd;
+          node.mapped().offsetConst = incomingEnd;
+          node.mapped().offset = Expr::createPointer(incomingEnd);
+          self.mut()->concrete.insert(next, std::move(node));
+          return;
+        }
+      } else {
+        if (itEnd >= incomingEnd) {
+          if (incoming.offsetConst != incomingBegin) {
+            incoming.offsetConst = incomingBegin;
+            incoming.offset = Expr::createPointer(incomingBegin);
+          }
+          incoming.numBytes = itBegin - incomingBegin;
+          if (node.empty()) {
+            self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(incoming));
+          } else {
+            node.key() = incomingBegin;
+            node.mapped() = std::move(incoming);
+            self.mut()->concrete.insert(it, std::move(node));
+          }
+          return;
+        } else {
+          auto acc = incoming;
+          if (acc.offsetConst != incomingBegin) {
+            acc.offsetConst = incomingBegin;
+            acc.offset = Expr::createPointer(incomingBegin);
+          }
+          acc.numBytes = itBegin - incomingBegin;
+          if (node.empty()) {
+            self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(acc));
+          } else {
+            node.key() = incomingBegin;
+            node.mapped() = std::move(acc);
+            self.mut()->concrete.insert(it, std::move(node));
+          }
+          incomingBegin = itEnd;
+          ++it;
+        }
+      }
+    }
+  }
+
+  if (incoming.offsetConst != incomingBegin) {
+    incoming.offsetConst = incomingBegin;
+    incoming.offset = Expr::createPointer(incomingBegin);
+    incoming.numBytes = incomingEnd - incomingBegin;
+  }
+  if (it == self->concrete.end()) {
+    self.acquire([&it](auto* self) { it = self->concrete.end(); });
   } else {
-    // So we are not the owner, ergo make a copy
-    auto fork = std::make_shared<OperationList>(*this);
-    fork->owner = from;
-    auto res = fork->replace(op, from, at);
-    assert(res == nullptr);
+    self.acquire([&it](auto* self) { it = self->concrete.find(it->first); });
+  }
+  if (node.empty()) {
+    self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(incoming));
+  } else {
+    node.key() = incomingBegin;
+    node.mapped() = std::move(incoming);
+    self.mut()->concrete.insert(it, std::move(node));
+  }
+}
 
-    // We do not have to clear the current owner of this list (e.g. to prevent changes)
-    // since all contents were copied. Further modifications do not touch the same
-    // objects
+void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
+        Acquisition& self, MemoryOperation &&incoming) {
+  decltype(self->symbolic)::node_type node;
+  auto [it, end] = self->symbolic.equal_range(incoming.offset);
+  while (it != end) {
+    assert(it->second.offset == incoming.offset && it->first == incoming.offset);
+    if (it->second.numBytes >= incoming.numBytes && (it->second.isWrite() || incoming.isRead())) {
+      return;
+    }
 
-    return fork;
+    if (it->second.numBytes <= incoming.numBytes && (it->second.isRead() || incoming.isWrite())) {
+      if (self.acquire()) {
+        // sadly, we need to restart iteration, as there is no reasonable way to translate the iterators
+        std::tie(it, end) = self->symbolic.equal_range(incoming.offset);
+      } else {
+        auto next = std::next(it);
+        node = self.mut()->symbolic.extract(it);
+        it = std::move(next);
+      }
+    } else {
+      ++it;
+    }
+  }
+
+  if (self.acquire()) {
+    assert(node.empty());
+    self.mut()->symbolic.emplace(incoming.offset, std::move(incoming));
+  } else {
+    if (node.empty()) {
+      auto offset = incoming.offset;
+      self.mut()->symbolic.emplace_hint(end, std::move(offset), std::move(incoming));
+    } else {
+      node.key() = incoming.offset;
+      node.mapped() = std::move(incoming);
+      self.mut()->symbolic.insert(end, std::move(node));
+    }
   }
 }
 
 std::shared_ptr<ObjectAccesses::OperationList> ObjectAccesses::OperationList::registerMemoryOperation(
-        const MemoryOperation &incoming, const void *from) {
+        MemoryOperation &&incoming, const void *from) {
+  assert(incoming.isRead() || incoming.isWrite());
 
-  assert(!incoming.isAlloc() && !incoming.isFree());
-  assert(incoming.type != MemoryOperation::Type::UNKNOWN);
-
-  // Test if the current access is mergeable with an older one
-  for (std::size_t i = 0; i < list.size(); i++) {
-    const auto& opData = list[i];
-
-    if (opData.type == incoming.type && opData.isEmbeddedIn(incoming)) {
-      return replace(incoming, from, i);
-    }
-
-    if (!opData.isExtendedBy(incoming)) {
-      continue;
-    }
-
-    if (opData.isWrite()) {
-      // This race type races with every other type -> tracking the incoming one does not add value
-      return nullptr;
-    }
-
-    // We know now for sure that the saved on is a read
-    if (incoming.isWrite()) {
-      // So the incoming one is racing with every type
-      return replace(incoming, from, i);
-    }
-
-    return nullptr;
-  }
-
-  // So the deduplication was not successful. Simply add it
-  AccessMetaData data(incoming); // NOLINT(cppcoreguidelines-slicing)
-
-  if (from == owner) {
-    list.emplace_back(data);
-    return nullptr;
+  Acquisition self(this, from);
+  if (incoming.isConstantOffset()) {
+    registerConcreteMemoryOperation(self, std::move(incoming));
   } else {
-    // So we are not the owner, ergo make a copy
-    auto fork = std::make_shared<OperationList>(*this);
-    fork->owner = from;
-    fork->list.emplace_back(data);
-    return fork;
+    registerSymbolicMemoryOperation(self, std::move(incoming));
   }
+  return self.result();
 }
 
-void ObjectAccesses::trackMemoryOperation(const MemoryOperation& mop) {
+void ObjectAccesses::trackMemoryOperation(MemoryOperation&& mop) {
+  assert(mop.type != AccessMetaData::Type::UNKNOWN);
+
   if (allocFreeInstruction != nullptr) {
     // No other access can be better than the one that we currently track
     return;
@@ -95,7 +321,7 @@ void ObjectAccesses::trackMemoryOperation(const MemoryOperation& mop) {
   }
 
   // So this is one standard r/w access and we track those
-  auto fork = accesses->registerMemoryOperation(mop, this);
+  auto fork = accesses->registerMemoryOperation(std::move(mop), this);
   if (fork) {
     accesses = fork;
   }
