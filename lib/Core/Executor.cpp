@@ -5491,7 +5491,7 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
   bool disabledThread = false;
   bool wasEmpty = runnable.empty();
 
-  if (!state.needsCatchUp() && !state.porNode->D().empty()) {
+  if (!wasEmpty && !state.needsCatchUp() && !state.porNode->D().empty()) {
     const por::configuration &C = state.porNode->configuration();
     std::map<ThreadId, std::deque<const por::event::event *>> D;
     for(auto &event : state.porNode->D()) {
@@ -5508,28 +5508,66 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
         continue; // go to next thread
       }
       for (auto &d : events) {
-        if (d->depth() <= C.thread_heads().at(tid)->depth()) {
+        if (d->depth() <= C.last_of_tid(tid)->depth()) {
           // d is justified, no need to exclude it anymore
           continue; // go to next event
         }
-        // d is excluded
+
+        // we only need to prevent d from happening as next event
+        // as this function gets called after each event registration
+
+        if (d->thread_predecessor() != C.last_of_tid(d->tid())) {
+          // will not happen as next event
+          continue; // go to next event
+        }
+
+        if (d->lid() && d->lock_predecessor() != C.last_of_lid(d->lid())) {
+          // there is only one possible lock predecessor
+          continue; // go to next event
+        }
+
         if (d->is_extension_of(C)) {
-          bool isJustified = false;
-          if (d->lid()) {
-            if (C.lock_heads().count(d->lid()) == 0 && d->lock_predecessor() != nullptr) {
-              isJustified = true;
-            } else if(C.lock_heads().count(d->lid())) {
-              if (d->lock_predecessor() != C.lock_heads().at(d->lid())) {
-                isJustified = true;
+          // d extension of C, but is it enabled?
+          std::unique_ptr<por::event::event> exEvent;
+          switch(d->kind()) {
+            case por::event::event_kind::lock_acquire: {
+              exEvent = std::move(C.acquire_lock(d->tid(), d->lid()).event);
+              break;
+            }
+            case por::event::event_kind::wait1: {
+              exEvent = std::move(C.wait1(d->tid(), d->cid(), d->lid()).event);
+              break;
+            }
+            case por::event::event_kind::wait2: {
+              exEvent = std::move(C.wait2(d->tid(), d->cid(), d->lid()).event);
+              break;
+            }
+            case por::event::event_kind::signal: {
+              auto sig = static_cast<const por::event::signal*>(d);
+              exEvent = std::move(C.signal_thread(d->tid(), d->cid(), sig->notified_thread()).event);
+              break;
+            }
+            case por::event::event_kind::broadcast: {
+              auto bro = static_cast<const por::event::broadcast*>(d);
+              std::vector<por::thread_id> notified;
+              notified.reserve(bro->num_notified());
+              for (const por::event::event *w1 : bro->wait_predecessors()) {
+                notified.emplace_back(w1->tid());
               }
+              exEvent = std::move(C.broadcast_threads(d->tid(), d->cid(), std::move(notified)).event);
+              break;
+            }
+            default: {
+              assert(0 && "unhandled event kind");
             }
           }
 
-          if (!isJustified) {
+          if (por::unfolding::compare_events(*d, *exEvent)) {
+            // d would be the next, disable thread for now
             if (runnable.erase(d->tid()) > 0) {
               disabledThread = true;
             }
-            break; // go to next thread
+            break; // continue with next thread
           }
         }
       }
@@ -5538,12 +5576,6 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
 
   // Another point of we cannot schedule any other thread
   if (runnable.empty()) {
-    if (disabledThread && !wasEmpty) {
-      klee_warning("Disabled all threads because of porNode->D(). Terminating State.");
-      terminateStateSilently(state);
-      return {};
-    }
-
     bool allExited = true;
     bool cutoffPresent = false;
 

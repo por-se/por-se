@@ -38,9 +38,6 @@ namespace por {
 
 		std::size_t _size;
 
-		// NOTE: do not use for other purposes, only compares pointers of predecessors
-		bool compare_events(por::event::event const& a, por::event::event const& b);
-
 		por::event::event const* store_event(std::unique_ptr<por::event::event>&& event) {
 			key_t key = std::make_tuple(event->tid(), event->depth(), event->kind());
 			return _events[std::move(key)].emplace_back(std::move(event)).get();
@@ -80,6 +77,9 @@ namespace por {
 				assert(removed > 0 && "infinite loop");
 			}
 		}
+
+		// NOTE: shallow compare, only compares pointers of predecessors
+		static bool compare_events(por::event::event const& a, por::event::event const& b);
 
 		deduplication_result deduplicate(std::unique_ptr<por::event::event>&& e) {
 			auto it = _events.find(std::make_tuple(e->tid(), e->depth(), e->kind()));

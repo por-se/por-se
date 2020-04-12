@@ -12,7 +12,7 @@ unfolding::unfolding() {
 	_root = store_event(std::make_unique<por::event::program_init>(por::event::program_init{}));
 }
 
-// NOTE: do not use for other purposes, only compares pointers of predecessors
+// NOTE: shallow compare, only compares pointers of predecessors
 bool unfolding::compare_events(por::event::event const& a, por::event::event const& b) {
 	if(&a == &b)
 		return true;
