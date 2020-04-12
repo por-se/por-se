@@ -223,21 +223,18 @@ std::vector<por::leaf> node::create_right_branches(std::vector<node*> B) {
 		if(n->_event->immediate_conflicts().empty()) {
 			continue;
 		}
-		libpor_check(n->_event->kind() != por::event::event_kind::thread_create);
-		libpor_check(n->_event->kind() != por::event::event_kind::thread_init);
-		libpor_check(n->_event->kind() != por::event::event_kind::lock_release);
 
-		if(n->_event->ends_atomic_operation()) {
-			// event always has to follow its predecessor, it can not be excluded independently
-			continue;
-		}
+		// the following event kinds should not be possible beyond this line because they should not have imm. conflicts
+		assert(n->_event->kind() != por::event::event_kind::thread_create);
+		assert(n->_event->kind() != por::event::event_kind::thread_init);
+		assert(n->_event->kind() != por::event::event_kind::thread_exit);
+		assert(n->_event->kind() != por::event::event_kind::lock_release);
+
+		// we should only have events ending an atomic operation that cannot have imm. conflicts
+		assert(!n->_event->ends_atomic_operation() && "must not exclude only part of an atomic operation");
+
 		if(n->_event->kind() == por::event::event_kind::local) {
 			// do not compute alternatives to local events, this is done by KLEE
-			continue;
-		}
-		if(n->_event->kind() == por::event::event_kind::thread_init) {
-			// thread_init always has to immediately succeed its thread_create
-			// there is no (unique) alternative to be found here
 			continue;
 		}
 
