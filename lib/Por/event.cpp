@@ -365,7 +365,7 @@ namespace por::event {
 		}
 	}
 
-	bool event::is_enabled(por::configuration const& configuration) const noexcept {
+	bool event::is_extension_of(por::configuration const& configuration) const noexcept {
 		por::cone C(configuration);
 		if(std::any_of(cone().begin(), cone().end(), [&C](auto& pair) {
 			por::event::event const* p = pair.second;
@@ -375,6 +375,8 @@ namespace por::event {
 			return p->depth() > C.at(p->tid())->depth();
 		})) {
 			// gap in depth between configuration and cone
+			// => there is at least one predecessor missing
+			// => event cannot be an extension
 			return false;
 		}
 
@@ -383,6 +385,8 @@ namespace por::event {
 			por::event::event const* e = C.at(p->tid());
 			while(e != p) {
 				if(e == nullptr) {
+					// imm. predecessor could not be found
+					// => event cannot be an extension
 					return false;
 				}
 				e = e->thread_predecessor();

@@ -5513,7 +5513,7 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
           continue; // go to next event
         }
         // d is excluded
-        if (d->is_enabled(C)) {
+        if (d->is_extension_of(C)) {
           bool isJustified = false;
           if (d->lid()) {
             if (C.lock_heads().count(d->lid()) == 0 && d->lock_predecessor() != nullptr) {

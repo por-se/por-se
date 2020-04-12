@@ -455,7 +455,7 @@ namespace por::event {
 			return (&rhs == this) || is_less_than(rhs);
 		}
 
-		bool is_enabled(configuration const&) const noexcept;
+		bool is_extension_of(configuration const&) const noexcept;
 
 		std::size_t mark_as_cutoff() const noexcept;
 
