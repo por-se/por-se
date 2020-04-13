@@ -3635,7 +3635,7 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
   if (maximalConfiguration) {
     for (auto &[tid, thread] : state.threads) {
       if (thread.isRunnable(cfg)) {
-        continue; // FIXME: incompleteness
+        continue;
       }
       if (thread.state == ThreadState::Waiting) {
         por::event::lock_id_t lid;
