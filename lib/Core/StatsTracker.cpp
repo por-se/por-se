@@ -571,7 +571,7 @@ void StatsTracker::updateStateStatistics(uint64_t addend) {
       continue;
     const InstructionInfo &ii = *state->pc()->info;
     theStatisticManager->incrementIndexedValue(stats::states, ii.id, addend);
-    if (UseCallPaths) {
+    if (UseCallPaths && !state->stack().empty()) { // FIXME: check this
       state->stackFrame().callPathNode->statistics.incrementValue(stats::states, addend);
     }
   }
