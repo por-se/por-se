@@ -725,6 +725,11 @@ Executor::setModule(std::vector<std::unique_ptr<llvm::Module>> &modules,
 
   specialFunctionHandler->bind();
 
+  if (userSearcherRequiresMD2U()) {
+    // FIXME: future work
+    klee_warning("Searchers requiring coverage information are not expected to work as of yet.");
+  }
+
   if (StatsTracker::useStatistics() || userSearcherRequiresMD2U()) {
     statsTracker = 
       new StatsTracker(*this,
