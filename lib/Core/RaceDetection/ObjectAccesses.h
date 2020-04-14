@@ -18,18 +18,11 @@ namespace klee {
         std::map<AccessMetaData::Offset, AccessMetaData> concrete;
         std::multimap<ref<Expr>, AccessMetaData> symbolic;
 
-        const void* owner = nullptr;
-
-        // Both methods receive a `from` parameter that indicates which @class{ObjectAccesses}
-        // is accessing the list. If we have to make changes to the list and the owner and the
-        // from field are not matching, then we have to make a copy of the list.
-        // -> In that case we return a shared ptr to the copy/fork of the list with the updated data
-
-        std::shared_ptr<OperationList> registerMemoryOperation(MemoryOperation&& incoming, const void* from);
+        static void registerMemoryOperation(std::shared_ptr<OperationList>& self, MemoryOperation&& incoming);
 
       private:
-        static void registerConcreteMemoryOperation(Acquisition& self, AccessMetaData::Offset const incomingOffset, MemoryOperation&& incoming);
-        static void registerSymbolicMemoryOperation(Acquisition& self, MemoryOperation&& incoming);
+        static void registerConcreteMemoryOperation(Acquisition self, AccessMetaData::Offset const incomingOffset, MemoryOperation&& incoming);
+        static void registerSymbolicMemoryOperation(Acquisition self, MemoryOperation&& incoming);
       };
 
       // Small optimization: we can save the whole overhead of maintaining the list and

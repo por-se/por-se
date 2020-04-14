@@ -224,43 +224,26 @@ DataRaceDetection::SolverPath(const por::node& node,
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         assert(!accessed->isAllocOrFree() && "Should have caused a datarace on the fastpath");
 
-        if (dyn_cast<ConstantExpr>(operation.offset.get())) {
+        if (isa<ConstantExpr>(operation.offset)) {
           // Any operation that happens at a concrete offset will have been checked against all other concrete operations
           // on the fastpath pass. Thus, we can omit iterating over `accessed->getConcreteAccesses`.
 
           for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
-            // not a data race
-            if (operation.isRead() && access.isRead()) {
-              continue;
+            if (operation.isWrite() || access.isWrite()) {
+              accessesToCheck.emplace_back(tid, accessOffset, access);
             }
-
-            // assert(operation.offset != accessOffset && "operation has a concrete offset and access has a symbolic offset");
-
-            accessesToCheck.emplace_back(tid, accessOffset, access);
           }
         } else {
           for (const auto& [accessOffset, access] : accessed->getConcreteAccesses()) {
-            // not a data race
-            if (operation.isRead() && access.isRead()) {
-              continue;
+            if (operation.isWrite() || access.isWrite()) {
+              accessesToCheck.emplace_back(tid, Expr::createPointer(accessOffset), access);
             }
-            
-            // assert(operation.offset != accessOffset && "operation has a symbolic offset and access has a concrete offset");
-
-            accessesToCheck.emplace_back(tid, Expr::createPointer(accessOffset), access);
           }
           for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
-            // not a data race
-            if (operation.isRead() && access.isRead()) {
-              continue;
+            if (operation.isWrite() || access.isWrite()) {
+              assert(operation.offset != accessOffset && "checked in fastpath");
+              accessesToCheck.emplace_back(tid, accessOffset, access);
             }
-
-            // is checked in the fastpath
-            if (operation.offset == accessOffset) {
-              continue;
-            }
-
-            accessesToCheck.emplace_back(tid, accessOffset, access);
           }
         }
       }
@@ -363,7 +346,9 @@ DataRaceDetection::FastPath(const por::node& node,
 
   auto incomingIsAllocOrFree = operation.isAlloc() || operation.isFree();
 
-  RaceDetectionResult result;
+  std::optional<RaceDetectionResult> result{std::in_place_t{}};
+  result->isRace = false;
+  result->hasNewConstraints = false;
 
   for (auto const &pair : threadsToCheck) {
     ThreadId const& tid = pair.first;
@@ -398,32 +383,34 @@ DataRaceDetection::FastPath(const por::node& node,
       const auto& memAccesses = accessListIt->second;
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
+          result.emplace();
           // We race with every other access, therefore simply pick the first
-          result.racingInstruction = accessed->isAllocOrFree()
+          result->racingInstruction = accessed->isAllocOrFree()
                                     ? accessed->getAllocFreeInstruction()
                                     : accessed->getAnyAccess().instruction;
 
-          result.racingThread = tid;
-          result.isRace = true;
-          result.canBeSafe = false;
+          result->racingThread = tid;
+          result->isRace = true;
+          result->canBeSafe = false;
           return result;
         }
 
         // So we now know for sure that only standard accesses are inside here
-        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset.get())) {
+        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset)) {
           auto operationOffset = operationOffsetExpr->getZExtValue();
           // for operations with concrete offset, we can only check against other concrete offsets
-          auto it = accessed->getConcreteAccesses().upper_bound(operationOffset);
+          auto it = accessed->getConcreteAccesses().lower_bound(operationOffset);
           if (!(it != accessed->getConcreteAccesses().end() && it->first == operationOffset) 
             && it != accessed->getConcreteAccesses().begin()) {
             auto prev = std::prev(it);
             if (operation.isWrite() || prev->second.isWrite()) {
               // assert(prev->first < operationOffset);
               if(prev->first + prev->second.numBytes > operationOffset) {
-                result.racingInstruction = prev->second.instruction;
-                result.racingThread = tid;
-                result.isRace = true;
-                result.canBeSafe = false;
+                result.emplace();
+                result->racingInstruction = prev->second.instruction;
+                result->racingThread = tid;
+                result->isRace = true;
+                result->canBeSafe = false;
                 return result;
               }
             }
@@ -432,16 +419,22 @@ DataRaceDetection::FastPath(const por::node& node,
             && it->first < operationOffset + operation.numBytes; ++it) {
             // assert(it->first >= operationOffset);
             if (operation.isWrite() || it->second.isWrite()) {
-              result.racingInstruction = it->second.instruction;
-              result.racingThread = tid;
-              result.isRace = true;
-              result.canBeSafe = false;
+              result.emplace();
+              result->racingInstruction = it->second.instruction;
+              result->racingThread = tid;
+              result->isRace = true;
+              result->canBeSafe = false;
               return result;
             }
           }
 
-          if (!accessed->getSymbolicAccesses().empty()) {
-            return {};
+          if (result.has_value()) {
+            for (auto &[accessOffset, access] : accessed->getSymbolicAccesses()) {
+              if (operation.isWrite() || access.isWrite()) {
+                result.reset();
+                break;
+              }
+            }
           }
         } else {
           auto [begin, end] = accessed->getSymbolicAccesses().equal_range(operation.offset);
@@ -455,25 +448,42 @@ DataRaceDetection::FastPath(const por::node& node,
             // and they always have more than one byte each
             // assert(offset == incoming.offset);
             // assert(incoming.numBytes > 0 && operation.numBytes > 0);
-            result.racingInstruction = access.instruction;
-            result.racingThread = tid;
-            result.isRace = true;
-            result.canBeSafe = false;
+            result.emplace();
+            result->racingInstruction = access.instruction;
+            result->racingThread = tid;
+            result->isRace = true;
+            result->canBeSafe = false;
             return result;
           }
-          if (begin != accessed->getSymbolicAccesses().begin() || end != accessed->getSymbolicAccesses().end()) {
-            return {};
+          if (result.has_value()) {
+            for (auto &[accessOffset, access] : util::make_iterator_range(accessed->getSymbolicAccesses().begin(), begin)) {
+              if (operation.isWrite() || access.isWrite()) {
+                result.reset();
+                break;
+              }
+            }
           }
-
-          if (!accessed->getConcreteAccesses().empty()) {
-            return {};
+          if (result.has_value()) {
+            for (auto &[accessOffset, access] : util::make_iterator_range(end, accessed->getSymbolicAccesses().end())) {
+              if (operation.isWrite() || access.isWrite()) {
+                result.reset();
+                break;
+              }
+            }
+          }
+          
+          if (result.has_value()) {
+            for (auto &[accessOffset, access] : accessed->getConcreteAccesses()) {
+              if (operation.isWrite() || access.isWrite()) {
+                result.reset();
+                break;
+              }
+            }
           }
         }
       }
     }
   }
 
-  result.isRace = false;
-  result.hasNewConstraints = false;
   return result;
 }

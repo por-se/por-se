@@ -34,9 +34,6 @@ namespace klee {
       Stats stats;
 
     public:
-      DataRaceDetection() = default;
-      DataRaceDetection(const DataRaceDetection& drd) = default;
-
       void trackAccess(const por::node& node, MemoryOperation&& operation);
 
       std::optional<RaceDetectionResult>
