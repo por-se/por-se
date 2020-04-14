@@ -39,18 +39,7 @@ namespace klee {
 
     Type type = Type::UNKNOWN;
 
-    ref<Expr> offset;
-
     Offset numBytes = 0;
-
-    [[nodiscard]] ref<Expr> getOffsetOfLastAccessedByte() const {
-      assert(!isAlloc() && !isFree());
-
-      // We have to subtract 1 from the num of bytes since we want to check the accessed bytes
-      // numBytes == 1 -> only the byte at `offset` was accessed, therefore the last accessed one is:
-      //   offset + (numBytes - 1) = offset
-      return AddExpr::create(Expr::createZExtToPointerWidth(offset), Expr::createPointer(numBytes - 1));
-    };
 
     [[nodiscard]] bool isWrite() const {
       return type == Type::WRITE;
@@ -88,6 +77,8 @@ namespace klee {
 
     // On what memory object
     const MemoryObject* object;
+
+    ref<Expr> offset;
   };
 
   struct RaceDetectionResult {

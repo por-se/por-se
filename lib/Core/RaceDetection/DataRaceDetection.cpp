@@ -8,10 +8,11 @@
 
 #include "llvm/Support/CommandLine.h"
 
-#include <iostream>
 #include <iomanip>
 #include <chrono>
 #include <utility>
+#include <tuple>
+#include <vector>
 
 using namespace klee;
 
@@ -187,7 +188,7 @@ DataRaceDetection::SolverPath(const por::node& node,
   assert(it != threadsToCheck.end());
   auto* curEventOfOperatingThread = it->second;
 
-  std::vector<std::pair<ThreadId, const AccessMetaData&>> accessesToCheck;
+  std::vector<std::tuple<ThreadId, ref<Expr>, const AccessMetaData&>> accessesToCheck;
 
   for (auto const &pair : threadsToCheck) {
     ThreadId const& tid = pair.first;
@@ -223,45 +224,43 @@ DataRaceDetection::SolverPath(const por::node& node,
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         assert(!accessed->isAllocOrFree() && "Should have caused a datarace on the fastpath");
 
-        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset)) {
-          auto operationOffset = operationOffsetExpr->getZExtValue();
-          static_cast<void>(operationOffset); // we will need this value to be available for the next step
+        if (dyn_cast<ConstantExpr>(operation.offset.get())) {
           // Any operation that happens at a concrete offset will have been checked against all other concrete operations
           // on the fastpath pass. Thus, we can omit iterating over `accessed->getConcreteAccesses`.
 
-          for (const auto& [offset, access] : accessed->getSymbolicAccesses()) {
+          for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
             // not a data race
             if (operation.isRead() && access.isRead()) {
               continue;
             }
 
-            // assert(operation.offset != access.offset && "operation has a concrete offset and access has a symbolic offset");
+            // assert(operation.offset != accessOffset && "operation has a concrete offset and access has a symbolic offset");
 
-            accessesToCheck.emplace_back(tid, access);
+            accessesToCheck.emplace_back(tid, accessOffset, access);
           }
         } else {
-          for (const auto& [offset, access] : accessed->getConcreteAccesses()) {
+          for (const auto& [accessOffset, access] : accessed->getConcreteAccesses()) {
             // not a data race
             if (operation.isRead() && access.isRead()) {
               continue;
             }
             
-            // assert(operation.offset != access.offset && "operation has a symbolic offset and access has a concrete offset");
+            // assert(operation.offset != accessOffset && "operation has a symbolic offset and access has a concrete offset");
 
-            accessesToCheck.emplace_back(tid, access);
+            accessesToCheck.emplace_back(tid, Expr::createPointer(accessOffset), access);
           }
-          for (const auto& [offset, access] : accessed->getSymbolicAccesses()) {
+          for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
             // not a data race
             if (operation.isRead() && access.isRead()) {
               continue;
             }
 
             // is checked in the fastpath
-            if (operation.offset == access.offset) {
+            if (operation.offset == accessOffset) {
               continue;
             }
 
-            accessesToCheck.emplace_back(tid, access);
+            accessesToCheck.emplace_back(tid, accessOffset, access);
           }
         }
       }
@@ -272,7 +271,8 @@ DataRaceDetection::SolverPath(const por::node& node,
 
   // So now we have to assemble a big query to only call the solver once
   ref<Expr> queryIsSafeForAll = ConstantExpr::create(1, Expr::Bool);
-  for (auto& candidate : accessesToCheck) {
+  auto endOfOp = AddExpr::create(Expr::createZExtToPointerWidth(operation.offset), Expr::createPointer(operation.numBytes - 1));
+  for (auto& [tid, accessOffset, access] : accessesToCheck) {
     // So the only way how the accesses can be safe if the bounds of these accesses are
     // not overlapping (e.g. the bounds are placed before or after another)
     // Either: operation: -xxx-------
@@ -281,13 +281,12 @@ DataRaceDetection::SolverPath(const por::node& node,
     //     Or: operation: ------xxxx-
     //         candidate: -xxx-------
 
-    auto endOfOp = operation.getOffsetOfLastAccessedByte();
-    auto endOfCand = candidate.second.getOffsetOfLastAccessedByte();
+    auto endOfAccess = AddExpr::create(Expr::createZExtToPointerWidth(accessOffset), Expr::createPointer(access.numBytes - 1));
 
-    auto opBeforeCand = UltExpr::create(endOfOp, candidate.second.offset);
-    auto candBeforeOp = UltExpr::create(endOfCand, operation.offset);
+    auto opBeforeCand = UltExpr::create(endOfOp, Expr::createZExtToPointerWidth(accessOffset));
+    auto accBeforeOp = UltExpr::create(endOfAccess, Expr::createZExtToPointerWidth(operation.offset));
 
-    auto condition = OrExpr::create(opBeforeCand, candBeforeOp);
+    auto condition = OrExpr::create(opBeforeCand, accBeforeOp);
     queryIsSafeForAll = AndExpr::create(queryIsSafeForAll, condition);
   }
 
@@ -327,14 +326,13 @@ DataRaceDetection::SolverPath(const por::node& node,
   }
 
   // Now find the actual racing instruction, we know that at least one exists
-  for (const auto& candidate : accessesToCheck) {
-    auto endOfOp = operation.getOffsetOfLastAccessedByte();
-    auto endOfCand = candidate.second.getOffsetOfLastAccessedByte();
+  for (auto& [tid, accessOffset, access] : accessesToCheck) {
+    auto endOfAccess = AddExpr::create(Expr::createZExtToPointerWidth(accessOffset), Expr::createPointer(access.numBytes - 1));
 
-    auto opBeforeCand = UltExpr::create(endOfOp, candidate.second.offset);
-    auto candBeforeOp = UltExpr::create(endOfCand, operation.offset);
+    auto opBeforeCand = UltExpr::create(endOfOp, Expr::createZExtToPointerWidth(accessOffset));
+    auto accBeforeOp = UltExpr::create(endOfAccess, Expr::createZExtToPointerWidth(operation.offset));
 
-    auto notOverlapping = OrExpr::create(opBeforeCand, candBeforeOp);
+    auto notOverlapping = OrExpr::create(opBeforeCand, accBeforeOp);
 
     const auto& offsetsMatching = interface.mayBeFalse(notOverlapping);
     if (!offsetsMatching.has_value()) {
@@ -343,8 +341,8 @@ DataRaceDetection::SolverPath(const por::node& node,
     }
 
     if (offsetsMatching.value()) {
-      result.racingThread = candidate.first;
-      result.racingInstruction = candidate.second.instruction;
+      result.racingThread = tid;
+      result.racingInstruction = access.instruction;
 
       return result;
     }
@@ -414,7 +412,7 @@ DataRaceDetection::FastPath(const por::node& node,
         }
 
         // So we now know for sure that only standard accesses are inside here
-        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset)) {
+        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset.get())) {
           auto operationOffset = operationOffsetExpr->getZExtValue();
           // for operations with concrete offset, we can only check against other concrete offsets
           auto it = accessed->getConcreteAccesses().upper_bound(operationOffset);

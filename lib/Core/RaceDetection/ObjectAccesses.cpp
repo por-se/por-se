@@ -95,7 +95,6 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
         node = self.mut()->concrete.extract(it);
         self.mut()->concrete.emplace_hint(next, incomingBegin, std::move(incoming));
         node.key() = incomingEnd;
-        node.mapped().offset = Expr::createPointer(incomingEnd);
         self.mut()->concrete.insert(next, std::move(node));
         return;
       }
@@ -140,10 +139,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           it = next;
         } else {
           assert(itEnd > incomingEnd);
-          if (incomingOffset != incomingBegin) {
-            incoming.offset = Expr::createPointer(incomingBegin);
-            incoming.numBytes = incomingEnd - incomingBegin;
-          }
+          incoming.numBytes = incomingEnd - incomingBegin;
           auto next = std::next(it);
           auto node2 = self.mut()->concrete.extract(it);
           if (node.empty()) {
@@ -154,7 +150,6 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
             self.mut()->concrete.insert(next, std::move(node));
           }
           node.key() = incomingEnd;
-          node.mapped().offset = Expr::createPointer(incomingEnd);
           self.mut()->concrete.insert(next, std::move(node));
           return;
         }
@@ -169,10 +164,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           it = next;
         } else {
           assert(itEnd > incomingEnd);
-          if (incomingOffset != incomingBegin) {
-            incoming.offset = Expr::createPointer(incomingBegin);
-            incoming.numBytes = incomingEnd - incomingBegin;
-          }
+          incoming.numBytes = incomingEnd - incomingBegin;
           if (node.empty()) {
             self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(incoming));
           } else {
@@ -183,15 +175,11 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           auto next = std::next(it);
           node = self.mut()->concrete.extract(it);
           node.key() = incomingEnd;
-          node.mapped().offset = Expr::createPointer(incomingEnd);
           self.mut()->concrete.insert(next, std::move(node));
           return;
         }
       } else {
         if (itEnd >= incomingEnd) {
-          if (incomingOffset != incomingBegin) {
-            incoming.offset = Expr::createPointer(incomingBegin);
-          }
           incoming.numBytes = itBegin - incomingBegin;
           if (node.empty()) {
             self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(incoming));
@@ -203,9 +191,6 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           return;
         } else {
           auto acc = incoming;
-          if (incomingOffset != incomingBegin) {
-            acc.offset = Expr::createPointer(incomingBegin);
-          }
           acc.numBytes = itBegin - incomingBegin;
           if (node.empty()) {
             self.mut()->concrete.emplace_hint(it, incomingBegin, std::move(acc));
@@ -244,7 +229,7 @@ void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
   decltype(self->symbolic)::node_type node;
   auto [it, end] = self->symbolic.equal_range(incoming.offset);
   while (it != end) {
-    assert(it->second.offset == incoming.offset && it->first == incoming.offset);
+    // assert(it->first == incoming.offset);
     if (it->second.numBytes >= incoming.numBytes && (it->second.isWrite() || incoming.isRead())) {
       return;
     }
@@ -265,14 +250,13 @@ void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
 
   if (self.acquire()) {
     assert(node.empty());
-    self.mut()->symbolic.emplace(incoming.offset, std::move(incoming));
+    self.mut()->symbolic.emplace(std::move(incoming.offset), std::move(static_cast<AccessMetaData&>(incoming)));
   } else {
     if (node.empty()) {
-      auto offset = incoming.offset;
-      self.mut()->symbolic.emplace_hint(end, std::move(offset), std::move(incoming));
+      self.mut()->symbolic.emplace_hint(end, std::move(incoming.offset), std::move(static_cast<AccessMetaData&>(incoming)));
     } else {
-      node.key() = incoming.offset;
-      node.mapped() = std::move(incoming);
+      node.key() = std::move(incoming.offset);
+      node.mapped() = std::move(static_cast<AccessMetaData&>(incoming));
       self.mut()->symbolic.insert(end, std::move(node));
     }
   }
