@@ -315,7 +315,6 @@ DataRaceDetection::SolverPath(const por::node& node,
   // First check if we race every time (e.g. there is no assignment to symbolic values where the offsets are unequal)
   const auto& canBeSafe = interface.mayBeTrue(queryIsSafeForAll);
   if (!canBeSafe.has_value()) {
-  assert(false);
     return {};
   }
 
@@ -350,7 +349,6 @@ DataRaceDetection::SolverPath(const por::node& node,
 
   // Fall through, so we cannot exactly tell if this is actually a race since the solver could not
   // tell us a second time whether there is a race
-  assert(false);
   return {};
 }
 
@@ -416,7 +414,8 @@ DataRaceDetection::FastPath(const por::node& node,
           auto operationOffset = operationOffsetExpr->getZExtValue();
           // for operations with concrete offset, we can only check against other concrete offsets
           auto it = accessed->getConcreteAccesses().upper_bound(operationOffset);
-          if (it != accessed->getConcreteAccesses().begin()) {
+          if (!(it != accessed->getConcreteAccesses().end() && it->first == operationOffset) 
+            && it != accessed->getConcreteAccesses().begin()) {
             auto prev = std::prev(it);
             if (operation.isWrite() || prev->second.isWrite()) {
               // assert(prev->first < operationOffset);
