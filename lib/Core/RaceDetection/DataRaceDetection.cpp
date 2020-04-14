@@ -223,7 +223,9 @@ DataRaceDetection::SolverPath(const por::node& node,
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
         assert(!accessed->isAllocOrFree() && "Should have caused a datarace on the fastpath");
 
-        if (operation.isConstantOffset()) {
+        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset)) {
+          auto operationOffset = operationOffsetExpr->getZExtValue();
+          static_cast<void>(operationOffset); // we will need this value to be available for the next step
           // Any operation that happens at a concrete offset will have been checked against all other concrete operations
           // on the fastpath pass. Thus, we can omit iterating over `accessed->getConcreteAccesses`.
 
@@ -233,7 +235,7 @@ DataRaceDetection::SolverPath(const por::node& node,
               continue;
             }
 
-            assert(operation.offset != access.offset && "operation has a concrete offset and access has a symbolic offset");
+            // assert(operation.offset != access.offset && "operation has a concrete offset and access has a symbolic offset");
 
             accessesToCheck.emplace_back(tid, access);
           }
@@ -244,7 +246,7 @@ DataRaceDetection::SolverPath(const por::node& node,
               continue;
             }
             
-            assert(operation.offset != access.offset && "operation has a symbolic offset and access has a concrete offset");
+            // assert(operation.offset != access.offset && "operation has a symbolic offset and access has a concrete offset");
 
             accessesToCheck.emplace_back(tid, access);
           }
@@ -412,14 +414,15 @@ DataRaceDetection::FastPath(const por::node& node,
         }
 
         // So we now know for sure that only standard accesses are inside here
-        if (operation.isConstantOffset()) {
+        if (auto operationOffsetExpr = dyn_cast<ConstantExpr>(operation.offset)) {
+          auto operationOffset = operationOffsetExpr->getZExtValue();
           // for operations with concrete offset, we can only check against other concrete offsets
-          auto it = accessed->getConcreteAccesses().upper_bound(operation.offsetConst);
+          auto it = accessed->getConcreteAccesses().upper_bound(operationOffset);
           if (it != accessed->getConcreteAccesses().begin()) {
             auto prev = std::prev(it);
             if (operation.isWrite() || prev->second.isWrite()) {
-              // assert(prev->first < operation.offsetConst);
-              if(prev->first + prev->second.numBytes > operation.offsetConst) {
+              // assert(prev->first < operationOffset);
+              if(prev->first + prev->second.numBytes > operationOffset) {
                 result.racingInstruction = prev->second.instruction;
                 result.racingThread = tid;
                 result.isRace = true;
@@ -429,8 +432,8 @@ DataRaceDetection::FastPath(const por::node& node,
             }
           }
           for (; it != accessed->getConcreteAccesses().end()
-            && it->first < operation.offsetConst + operation.numBytes; ++it) {
-            // assert(it->first >= operation.offsetConst);
+            && it->first < operationOffset + operation.numBytes; ++it) {
+            // assert(it->first >= operationOffset);
             if (operation.isWrite() || it->second.isWrite()) {
               result.racingInstruction = it->second.instruction;
               result.racingThread = tid;
@@ -451,18 +454,15 @@ DataRaceDetection::FastPath(const por::node& node,
               continue;
             }
 
-            auto isOverlapping = operation.isOverlappingWith(access);
-            // assert((operation.offset != access.offset || isOverlapping != AccessMetaData::OverlapResult::UNKNOWN)
-            //  && "solverpath assumes condition that does not hold: "
-            //    "symbolic/symbolic conflicts are always handled on the fastpath when the offsets are structurally equal");
-
-            if (isOverlapping == AccessMetaData::OverlapResult::OVERLAP) {
-              result.racingInstruction = access.instruction;
-              result.racingThread = tid;
-              result.isRace = true;
-              result.canBeSafe = false;
-              return result;
-            }
+            // all operations overlap at this point, as their offset expressions are equal
+            // and they always have more than one byte each
+            // assert(offset == incoming.offset);
+            // assert(incoming.numBytes > 0 && operation.numBytes > 0);
+            result.racingInstruction = access.instruction;
+            result.racingThread = tid;
+            result.isRace = true;
+            result.canBeSafe = false;
+            return result;
           }
           if (begin != accessed->getSymbolicAccesses().begin() || end != accessed->getSymbolicAccesses().end()) {
             return {};

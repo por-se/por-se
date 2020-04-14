@@ -56,14 +56,14 @@ public:
 };
 
 void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
-        Acquisition& self, MemoryOperation &&incoming) {
+        Acquisition& self, AccessMetaData::Offset const incomingOffset, MemoryOperation &&incoming) {
   if (self->concrete.empty()) {
     self.acquire();
-    self.mut()->concrete.emplace(incoming.offsetConst, std::move(incoming));
+    self.mut()->concrete.emplace(incomingOffset, std::move(incoming));
     return;
   }
 
-  auto incomingBegin = incoming.offsetConst;
+  auto incomingBegin = incomingOffset;
   auto incomingEnd = incomingBegin + incoming.numBytes;
   decltype(self->concrete)::node_type node;
   auto it = self->concrete.lower_bound(incomingBegin);
@@ -95,7 +95,6 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
         node = self.mut()->concrete.extract(it);
         self.mut()->concrete.emplace_hint(next, incomingBegin, std::move(incoming));
         node.key() = incomingEnd;
-        node.mapped().offsetConst = incomingEnd;
         node.mapped().offset = Expr::createPointer(incomingEnd);
         self.mut()->concrete.insert(next, std::move(node));
         return;
@@ -141,8 +140,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           it = next;
         } else {
           assert(itEnd > incomingEnd);
-          if (incoming.offsetConst != incomingBegin) {
-            incoming.offsetConst = incomingBegin;
+          if (incomingOffset != incomingBegin) {
             incoming.offset = Expr::createPointer(incomingBegin);
             incoming.numBytes = incomingEnd - incomingBegin;
           }
@@ -156,7 +154,6 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
             self.mut()->concrete.insert(next, std::move(node));
           }
           node.key() = incomingEnd;
-          node.mapped().offsetConst = incomingEnd;
           node.mapped().offset = Expr::createPointer(incomingEnd);
           self.mut()->concrete.insert(next, std::move(node));
           return;
@@ -172,8 +169,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           it = next;
         } else {
           assert(itEnd > incomingEnd);
-          if (incoming.offsetConst != incomingBegin) {
-            incoming.offsetConst = incomingBegin;
+          if (incomingOffset != incomingBegin) {
             incoming.offset = Expr::createPointer(incomingBegin);
             incoming.numBytes = incomingEnd - incomingBegin;
           }
@@ -187,15 +183,13 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           auto next = std::next(it);
           node = self.mut()->concrete.extract(it);
           node.key() = incomingEnd;
-          node.mapped().offsetConst = incomingEnd;
           node.mapped().offset = Expr::createPointer(incomingEnd);
           self.mut()->concrete.insert(next, std::move(node));
           return;
         }
       } else {
         if (itEnd >= incomingEnd) {
-          if (incoming.offsetConst != incomingBegin) {
-            incoming.offsetConst = incomingBegin;
+          if (incomingOffset != incomingBegin) {
             incoming.offset = Expr::createPointer(incomingBegin);
           }
           incoming.numBytes = itBegin - incomingBegin;
@@ -209,8 +203,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
           return;
         } else {
           auto acc = incoming;
-          if (acc.offsetConst != incomingBegin) {
-            acc.offsetConst = incomingBegin;
+          if (incomingOffset != incomingBegin) {
             acc.offset = Expr::createPointer(incomingBegin);
           }
           acc.numBytes = itBegin - incomingBegin;
@@ -228,8 +221,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
     }
   }
 
-  if (incoming.offsetConst != incomingBegin) {
-    incoming.offsetConst = incomingBegin;
+  if (incomingOffset != incomingBegin) {
     incoming.offset = Expr::createPointer(incomingBegin);
     incoming.numBytes = incomingEnd - incomingBegin;
   }
@@ -291,8 +283,9 @@ std::shared_ptr<ObjectAccesses::OperationList> ObjectAccesses::OperationList::re
   assert(incoming.isRead() || incoming.isWrite());
 
   Acquisition self(this, from);
-  if (incoming.isConstantOffset()) {
-    registerConcreteMemoryOperation(self, std::move(incoming));
+  if(auto incomingOffsetExpr = dyn_cast<ConstantExpr>(incoming.offset)) {
+    auto incomingOffset = incomingOffsetExpr->getZExtValue();
+    registerConcreteMemoryOperation(self, incomingOffset, std::move(incoming));
   } else {
     registerSymbolicMemoryOperation(self, std::move(incoming));
   }

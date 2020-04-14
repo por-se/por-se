@@ -28,7 +28,7 @@ namespace klee {
         std::shared_ptr<OperationList> registerMemoryOperation(MemoryOperation&& incoming, const void* from);
 
       private:
-        static void registerConcreteMemoryOperation(Acquisition& self, MemoryOperation&& incoming);
+        static void registerConcreteMemoryOperation(Acquisition& self, AccessMetaData::Offset const incomingOffset, MemoryOperation&& incoming);
         static void registerSymbolicMemoryOperation(Acquisition& self, MemoryOperation&& incoming);
       };
 

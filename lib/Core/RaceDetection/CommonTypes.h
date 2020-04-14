@@ -35,83 +35,13 @@ namespace klee {
 
     using Offset = std::size_t;
 
-    static const Offset NO_CONST_OFFSET = static_cast<Offset>(-1);
-
     KInstruction* instruction = nullptr;
 
     Type type = Type::UNKNOWN;
 
     ref<Expr> offset;
-    Offset offsetConst = NO_CONST_OFFSET;
 
     Offset numBytes = 0;
-
-    [[nodiscard]] bool isConstantOffset() const {
-      return offsetConst != NO_CONST_OFFSET;
-    }
-
-    /// Only returns `true` if `*this` is a subrange of `data` that starts at the same offset
-    /// Note: This is an incomplete check that may return `false` even if the condition is met.
-    [[nodiscard]] bool isExtendedBy(const AccessMetaData& data) const {
-      assert(!isAlloc() && !isFree() && !data.isAlloc() && !data.isFree());
-
-      return numBytes <= data.numBytes && ((isConstantOffset() && offsetConst == data.offsetConst) || offset == data.offset);
-    };
-
-    /// Only returns `true` if `*this` is a subrange of `data`
-    /// Note: This is an incomplete check that may return `false` even if the condition is met.
-    [[nodiscard]] bool isEmbeddedIn(const AccessMetaData& data) const {
-      assert(!isAlloc() && !isFree() && !data.isAlloc() && !data.isFree());
-
-      if (!isConstantOffset() && !data.isConstantOffset()) {
-        return offset == data.offset && numBytes <= data.numBytes;
-      }
-
-      if (!isConstantOffset() || !data.isConstantOffset()) {
-        return false;
-      }
-
-      auto boundEnd1 = offsetConst + numBytes;
-      auto boundEnd2 = data.offsetConst + data.numBytes;
-
-      return offsetConst >= data.offsetConst && boundEnd1 <= boundEnd2;
-    };
-
-    /// Returns `OverlapResult::OVERLAP` if `*this` shares at least one byte with `data`.
-    /// Returns `Overlap::NO_OVERLAP` if `*this` shares at least one byte with `data`.
-    /// If the check cannot be determined (cheaply), `OverlapResult::UNKNOWN` is returned.
-    [[nodiscard]] OverlapResult isOverlappingWith(const AccessMetaData& data) const {
-      assert(!isAlloc() && !isFree() && !data.isAlloc() && !data.isFree());
-
-      if (isConstantOffset()) {
-        if (offsetConst == data.offsetConst) {
-          assert(numBytes > 0);
-          return OverlapResult::OVERLAP;
-        }
-        if (!data.isConstantOffset()) {
-          return OverlapResult::UNKNOWN;
-        }
-
-        // Both overlap if one is not completely placed before the other
-        // Note that we cannot overflow since these bytes have to be accessed and we currently
-        // do not support pointer addresses with more than 64 bits
-        auto boundEnd1 = offsetConst + numBytes;
-        auto boundEnd2 = data.offsetConst + data.numBytes;
-
-        return offsetConst < boundEnd2 && data.offsetConst < boundEnd1 ? OverlapResult::OVERLAP : OverlapResult::NO_OVERLAP;
-      } else {
-        if (data.isConstantOffset()) {
-          return OverlapResult::UNKNOWN;
-        }
-
-        if (offset == data.offset) {
-          assert(numBytes > 0);
-          return OverlapResult::OVERLAP;
-        } else {
-          return OverlapResult::UNKNOWN;
-        }
-      }
-    };
 
     [[nodiscard]] ref<Expr> getOffsetOfLastAccessedByte() const {
       assert(!isAlloc() && !isFree());
