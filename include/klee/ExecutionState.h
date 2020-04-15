@@ -263,6 +263,10 @@ public:
   void cutoffThread(Thread &thread);
   void cutoffThread() { cutoffThread(thread()); }
 
+  /// @brief will mark the referenced thread as exceeded
+  void exceededThread(Thread &thread);
+  void exceededThread() { exceededThread(thread()); }
+
   Thread::waiting_t runThread(Thread &thread);
 
   void blockThread(Thread &thread, Thread::waiting_t blockOn);

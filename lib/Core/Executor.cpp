@@ -4017,6 +4017,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
   updateStatesJSON(nullptr, state, ktest, TerminateReasonNames[termReason]);
   terminateState(state);
 
+  ++stats::maxConfigurations;
   ++stats::errorConfigurations;
 
   if (shouldExitOn(termReason))
@@ -4955,13 +4956,15 @@ void Executor::runFunctionAsMain(Function *f,
     llvm::outs() << "\n";
     llvm::outs() << "KLEE: done: instructions during catch-up = " << stats::catchUpInstructions << "\n";
     llvm::outs() << "KLEE: done: standby states = " << stats::standbyStates << "\n";
-    llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
     llvm::outs() << "KLEE: done: cutoff events = " << stats::cutoffEvents << "\n";
-    llvm::outs() << "KLEE: done: deadlocked executions = " << stats::deadlockedExecutions << "\n";
-    llvm::outs() << "KLEE: done: cutoff executions = " << stats::cutoffConfigurations << "\n";
-    llvm::outs() << "KLEE: done: exited executions = " << stats::exitedConfigurations << "\n";
-    llvm::outs() << "KLEE: done: error executions = " << stats::errorConfigurations << "\n";
-    llvm::outs() << "KLEE: done: datarace executions = " << stats::dataraceConfigurations << "\n";
+    llvm::outs() << "KLEE: done: maximal configurations = " << stats::maxConfigurations << "\n";
+    llvm::outs() << "KLEE: done: cutoff configurations = " << stats::cutoffConfigurations << "\n";
+    llvm::outs() << "KLEE: done: exceeding configurations = " << stats::exceedingConfigurations << "\n";
+    llvm::outs() << "KLEE: done: exited configurations = " << stats::exitedConfigurations << "\n";
+    llvm::outs() << "KLEE: done: disabled configurations = " << stats::disabledConfigurations << "\n";
+    llvm::outs() << "KLEE: done: error configurations = " << stats::errorConfigurations << "\n";
+    llvm::outs() << "KLEE: done: deadlocked configurations = " << stats::deadlockedConfigurations << "\n";
+    llvm::outs() << "KLEE: done: datarace configurations = " << stats::dataraceConfigurations << "\n";
     llvm::outs() << "KLEE: done: cex above csd limit = " << stats::cexAboveCsdLimit << "\n";
     llvm::outs() << "KLEE: done: threads above csd = " << stats::csdThreads << "\n";
     llvm::outs() << "KLEE: done: cutoff threads = " << stats::cutoffThreads << "\n";
@@ -5421,7 +5424,7 @@ void Executor::terminateStateOnDeadlock(ExecutionState &state) {
   os << "Traces:\n";
   state.dumpAllThreadStacks(os);
 
-  ++stats::deadlockedExecutions;
+  ++stats::deadlockedConfigurations;
 
   terminateStateOnError(state, "all non-exited threads are waiting on resources",
                         Deadlock, nullptr, os.str());
@@ -5456,7 +5459,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
       tid = peekTid;
 
       Thread& nextThread = peekThread.value().get();
-      assert(nextThread.state != ThreadState::Cutoff);
+      assert(nextThread.state != ThreadState::Cutoff && nextThread.state != ThreadState::Exceeded);
       if (nextThread.state == ThreadState::Waiting && nextThread.isRunnable(cfg)) {
         if (!scheduleNextThread(state, tid)) {
           terminateStateSilently(state);
@@ -5579,24 +5582,35 @@ std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state
     }
   }
 
-  // Another point of we cannot schedule any other thread
   if (runnable.empty()) {
     bool allExited = true;
     bool cutoffPresent = false;
+    bool exceedingLimit = false;
 
-    for (auto& threadIt : state.threads) {
-      if (threadIt.second.state != ThreadState::Exited && threadIt.second.state != ThreadState::Cutoff) {
+    for (auto& [_, t] : state.threads) {
+      if (t.state != ThreadState::Exited) {
         allExited = false;
-      } else if (threadIt.second.state == ThreadState::Cutoff) {
+      }
+
+      if (t.state == ThreadState::Cutoff) {
         cutoffPresent = true;
+      } else if (t.state == ThreadState::Exceeded) {
+        exceedingLimit = true;
       }
     }
 
-    if (allExited || cutoffPresent || state.calledExit) {
+    if (allExited || cutoffPresent || exceedingLimit || state.calledExit) {
       if (cutoffPresent) {
         ++stats::cutoffConfigurations;
-      } else if (allExited) {
+      }
+      if (exceedingLimit) {
+        ++stats::exceedingConfigurations;
+      }
+      if (allExited) {
         ++stats::exitedConfigurations;
+      }
+      if (disabledThread && !wasEmpty && !cutoffPresent && !exceedingLimit) {
+        ++stats::disabledConfigurations;
       }
       terminateStateOnExit(state);
     } else {

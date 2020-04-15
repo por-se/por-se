@@ -931,7 +931,7 @@ void SpecialFunctionHandler::handleExitThread(klee::ExecutionState &state,
     return;
   }
 
-  if (state.threadState() != ThreadState::Cutoff) {
+  if (state.threadState() != ThreadState::Cutoff && state.threadState() != ThreadState::Exceeded) {
     executor.exitCurrentThread(state, false);
     if (!executor.porEventManager.registerThreadExit(state, ownTid, true)) {
       executor.terminateStateSilently(state);
@@ -1124,7 +1124,7 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
     if (!signal->is_lost()) {
       assert(state.getThreadById(signal->notified_thread()));
       auto &thread = state.getThreadById(signal->notified_thread()).value().get();
-      if (state.threadState(thread) != ThreadState::Cutoff) {
+      if (state.threadState(thread) != ThreadState::Cutoff && state.threadState(thread) != ThreadState::Exceeded) {
         state.blockThread(thread, Thread::wait_cv_2_t{signal->cid(), signal->wait_predecessor()->lid()});
       }
       choice = signal->notified_thread();
@@ -1133,7 +1133,7 @@ void SpecialFunctionHandler::handleCondSignal(ExecutionState &state,
     for (auto &[tid, thread] : state.threads) {
       auto w = thread.isWaitingOn<Thread::wait_cv_1_t>();
       if (w && w->cond == cid) {
-        if (state.threadState(thread) != ThreadState::Cutoff) {
+        if (state.threadState(thread) != ThreadState::Cutoff && state.threadState(thread) != ThreadState::Exceeded) {
           state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
         }
         choice = tid;
@@ -1178,7 +1178,7 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     for (const auto &wait1 : broadcast->wait_predecessors()) {
       assert(state.getThreadById(wait1->tid()));
       auto &thread = state.getThreadById(wait1->tid()).value().get();
-      if (state.threadState(thread) != ThreadState::Cutoff) {
+      if (state.threadState(thread) != ThreadState::Cutoff && state.threadState(thread) != ThreadState::Exceeded) {
         state.blockThread(thread, Thread::wait_cv_2_t{wait1->cid(), wait1->lid()});
       }
       notifiedThreads.push_back(wait1->tid());
@@ -1187,7 +1187,7 @@ void SpecialFunctionHandler::handleCondBroadcast(ExecutionState &state,
     for (auto &[tid, thread] : state.threads) {
       auto w = thread.isWaitingOn<Thread::wait_cv_1_t>();
       if (w && w->cond == cid) {
-        if (state.threadState(thread) != ThreadState::Cutoff) {
+        if (state.threadState(thread) != ThreadState::Cutoff && state.threadState(thread) != ThreadState::Exceeded) {
           state.blockThread(thread, Thread::wait_cv_2_t{w->cond, w->lock});
         }
         notifiedThreads.push_back(tid);

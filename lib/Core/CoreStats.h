@@ -49,12 +49,14 @@ namespace stats {
 
   extern Statistic catchUpInstructions;
   extern Statistic standbyStates;
-  extern Statistic maxConfigurations;
   extern Statistic cutoffEvents;
-  extern Statistic deadlockedExecutions;
+  extern Statistic maxConfigurations;
   extern Statistic cutoffConfigurations;
+  extern Statistic exceedingConfigurations;
   extern Statistic exitedConfigurations;
+  extern Statistic disabledConfigurations;
   extern Statistic errorConfigurations;
+  extern Statistic deadlockedConfigurations;
   extern Statistic dataraceConfigurations;
   extern Statistic cexAboveCsdLimit;
   extern Statistic csdThreads;

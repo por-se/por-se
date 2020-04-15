@@ -30,12 +30,14 @@ Statistic stats::uncoveredInstructions("UncoveredInstructions", "Iuncov");
 
 Statistic stats::catchUpInstructions("CatchUpInstructions", "Icup");
 Statistic stats::standbyStates("StandbyStates", "Standby");
-Statistic stats::maxConfigurations("MaximalConfigurations", "Mconf");
 Statistic stats::cutoffEvents("CutoffEvents", "coE");
-Statistic stats::deadlockedExecutions("DeadlockedExecutions", "Dl");
-Statistic stats::cutoffConfigurations("CutoffConfigurations", "coConf");
-Statistic stats::exitedConfigurations("ExitedConfigurations", "eConf");
+Statistic stats::maxConfigurations("MaximalConfigurations", "maxConf");
+Statistic stats::cutoffConfigurations("CutoffConfigurations", "cutConf");
+Statistic stats::exceedingConfigurations("ExceedingConfigurations", "exceedConf");
+Statistic stats::exitedConfigurations("ExitedConfigurations", "exitConf");
+Statistic stats::disabledConfigurations("DisabledConfigurations", "disablConf");
 Statistic stats::errorConfigurations("ErrorConfigurations", "errConf");
+Statistic stats::deadlockedConfigurations("DeadlockedConfigurations", "dlConf");
 Statistic stats::dataraceConfigurations("DataraceConfigurations", "drConf");
 Statistic stats::cexAboveCsdLimit("CexAboveCsdLimit", "cexCsd");
 Statistic stats::csdThreads("CsdThreads", "csdTh");

@@ -204,6 +204,15 @@ void ExecutionState::cutoffThread(Thread &thread) {
   needsThreadScheduling = true;
 }
 
+void ExecutionState::exceededThread(Thread &thread) {
+  if (DebugThreadTransitions) {
+    llvm::errs() << "[state id: " << id << "] Exceeding thread " << current->getThreadId().to_string() << "\n";
+  }
+
+  thread.state = ThreadState::Exceeded;
+  needsThreadScheduling = true;
+}
+
 void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
   if (DebugThreadTransitions) {
     llvm::errs() << "[state id: " << id << "] Blocking thread " << thread.getThreadId().to_string() << " on ";
@@ -229,7 +238,7 @@ void ExecutionState::blockThread(Thread &thread, Thread::waiting_t blockOn) {
   assert(thread.state == ThreadState::Runnable || thread.state == ThreadState::Waiting);
 
   if (auto cv_2 = std::get_if<Thread::wait_cv_2_t>(&blockOn)) {
-    assert(thread.state != ThreadState::Cutoff);
+    assert(thread.state != ThreadState::Cutoff && thread.state != ThreadState::Exceeded);
     assert(thread.state == ThreadState::Waiting);
     auto cv_1 = std::get<Thread::wait_cv_1_t>(thread.waiting);
     assert(cv_1.cond == cv_2->cond);
@@ -292,12 +301,13 @@ std::set<ThreadId> ExecutionState::runnableThreads() {
       bool isCutoff = cfg.last_of_tid(tid)->is_cutoff();
       if (isCutoff || overCsd) {
         if (!needsCatchUp()) {
-          if (overCsd) {
-            ++stats::csdThreads;
-          } else if (isCutoff) {
+          if (isCutoff) {
             ++stats::cutoffThreads;
+            cutoffThread(thread);
+          } else if (overCsd) {
+            ++stats::csdThreads;
+            exceededThread(thread);
           }
-          cutoffThread(thread);
         }
       } else {
         runnable.insert(tid);
@@ -351,6 +361,8 @@ void ExecutionState::dumpSchedulingInfo(llvm::raw_ostream &out) const {
       out << "runnable";
     } else if (thread.state == ThreadState::Cutoff) {
       out << "cutoff";
+    } else if (thread.state == ThreadState::Exceeded) {
+      out << "exceeded";
     } else if (thread.state == ThreadState::Exited) {
       out << "exited";
     } else {

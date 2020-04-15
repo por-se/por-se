@@ -64,7 +64,8 @@ namespace klee {
     Waiting,
     Runnable,
     Exited,
-    Cutoff
+    Cutoff,
+    Exceeded // e.g. over max-csd
   };
 
   // Threads do only store their own stack
