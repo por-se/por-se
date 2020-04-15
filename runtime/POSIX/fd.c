@@ -1362,6 +1362,7 @@ int fcntl(int fd, int cmd, ...) {
         // We can acutally properly support O_NONBLOCK for pipes
         if ((f->pipe || f->socket) && (arg & O_NONBLOCK) != 0 && (arg & ~O_NONBLOCK) == 0) {
           f->flags |= eNonBlock;
+          kpr_release_runtime_lock();
           return 0;
         }
       }
