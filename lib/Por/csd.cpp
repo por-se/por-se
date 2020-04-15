@@ -3,9 +3,10 @@
 #include "por/thread_id.h"
 #include "por/event/event.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
-#include <algorithm>
+#include <vector>
 
 namespace por {
 	namespace {
@@ -161,5 +162,28 @@ namespace por {
 		}
 
 		return csd_limit_search(initial_advancement, initial_thread, 1, limit);
+	}
+
+	csd_t compute_csd(por::event::event const& local_configuration) {
+		por::event::event const& event = local_configuration; // shorter name
+		csd_t upperLimit = event.local_configuration_size();
+		if(upperLimit > 30) {
+			// FIXME: This is a hardcoded limit that needs to be enforced using is_above_csd_limit(..., 30);
+			upperLimit = 30;
+		}
+		++upperLimit;
+		// FIXME: hacky, do not actually allocate anything for this
+		std::vector<csd_t> v;
+		v.reserve(upperLimit);
+		for(csd_t i = 0; i < upperLimit; ++i) {
+			v.push_back(i + 1);
+		}
+		auto it = std::lower_bound(v.begin(), v.end(), 0, [&event](csd_t candidate, csd_t _) {
+			return por::is_above_csd_limit(event, candidate);
+		});
+		if(it != v.end()) {
+			return *it;
+		}
+		return 0;
 	}
 }

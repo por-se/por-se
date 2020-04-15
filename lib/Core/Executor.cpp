@@ -3974,19 +3974,8 @@ void Executor::terminateStateOnError(ExecutionState &state,
       const por::node *n = state.porNode ? state.porNode : state.lastPorNode;
       if (n && n->last_included_event()) {
         por::event::event const& event = *n->last_included_event();
-        std::size_t upperLimit = MaxContextSwitchDegree ? MaxContextSwitchDegree : event.local_configuration_size();
-        ++upperLimit;
-        // FIXME: hacky, do not actually allocate anything for this
-        std::vector<std::uint64_t> v;
-        v.reserve(upperLimit);
-        for (std::size_t i = 0; i < upperLimit; ++i) {
-          v.push_back(i + 1);
-        }
-        auto it = std::lower_bound(v.begin(), v.end(), 0, [&event](std::uint64_t candidate, std::uint64_t zero) {
-          return por::is_above_csd_limit(event, candidate);
-        });
-        if (it != v.end()) {
-          std::size_t csd = *it;
+        auto csd = por::compute_csd(event);
+        if (csd != 0) {
           msg << "Context Switch Degree: " << csd << "\n";
           llvm::errs() << "CSD: " << csd << "\n";
           assert(por::is_above_csd_limit(event, csd - 1));
