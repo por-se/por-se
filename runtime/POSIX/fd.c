@@ -36,6 +36,7 @@
 #include <sys/mtio.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -1956,4 +1957,13 @@ int pipe2(int pipefd[2], int flags) {
 
 int pipe(int pipefds[2]) {
   return pipe2(pipefds, 0);
+}
+
+
+int getrlimit(__rlimit_resource_t resource, struct rlimit *rlim) {
+  if (resource == RLIMIT_NOFILE) {
+    rlim->rlim_cur = MAX_FDS;
+    rlim->rlim_max = MAX_FDS;
+  }
+  return 0;
 }
