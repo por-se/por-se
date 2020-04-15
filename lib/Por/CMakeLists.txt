@@ -12,6 +12,7 @@ klee_add_component(kleePor
   configuration.cpp
   comb.cpp
   csd.cpp
+  csd2.cpp
   erv.cpp
   event.cpp
   node.cpp

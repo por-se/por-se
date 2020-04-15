@@ -4,8 +4,6 @@
 #include "por/event/event.h"
 
 #include <algorithm>
-#include <cassert>
-#include <cstdlib>
 #include <deque>
 #include <map>
 #include <vector>
@@ -13,13 +11,6 @@
 namespace por {
 	namespace {
 		using por::event::event;
-		using por::event::thread_join;
-		using por::event::thread_init;
-		using por::event::lock_acquire;
-		using por::event::wait1;
-		using por::event::wait2;
-		using por::event::signal;
-		using por::event::broadcast;
 		using por::event::event_kind;
 		using depth_t = por::event::event::depth_t;
 
@@ -62,75 +53,24 @@ namespace por {
 			return events;
 		}
 
-		bool has_run(
-			std::map<thread_id, std::pair<std::deque<event const*> const*, std::size_t>> const& advancement,
-			event const* ev
-		) {
-			auto const& [thread_events, thread_advancement] = advancement.at(ev->tid());
-			return thread_advancement > 0 && (*thread_events)[thread_advancement - 1]->depth() >= ev->depth();
-		}
-
 		bool event_is_enabled(
 			std::map<thread_id, std::pair<std::deque<event const*> const*, std::size_t>> const& advancement,
 			event const* ev
 		) {
 			libpor_check(ev == advancement.at(ev->tid()).first->at(advancement.at(ev->tid()).second));
-			switch(ev->kind()) {
-				case event_kind::local: return true;
-				case event_kind::program_init: {
-					libpor_check(false && "program_init events should never be checked for enabled-ness");
-					return true;
-				} break;
-				case event_kind::thread_create: return true;
-				case event_kind::thread_join: {
-					auto* joined_pred = static_cast<thread_join const*>(ev)->joined_thread_predecessor();
-					return has_run(advancement, joined_pred);
-				} break;
-				case event_kind::thread_init: {
-					auto* creation_pred = static_cast<thread_init const*>(ev)->thread_creation_predecessor();
-					return creation_pred->kind() == event_kind::program_init || has_run(advancement, creation_pred);
-				} break;
-				case event_kind::thread_exit: return true;
-				case event_kind::lock_create: return true;
-				case event_kind::lock_destroy: return true; // race otherwise
-				case event_kind::lock_acquire: {
-					auto* lock_pred = static_cast<lock_acquire const*>(ev)->lock_predecessor();
-					return !lock_pred || lock_pred->tid() == ev->tid() || has_run(advancement, lock_pred);
-				} break;
-				case event_kind::lock_release: return true; // lock is always owned by the releasing thread
-				case event_kind::condition_variable_create: return true;
-				case event_kind::condition_variable_destroy: return true; // race otherwise
-				case event_kind::wait1: {
-					// lock is always owned by the releasing thread
-					auto cond_preds = static_cast<wait1 const*>(ev)->condition_variable_predecessors();
-					return std::all_of(cond_preds.begin(), cond_preds.end(), [&advancement](event const* ev) {
-						return has_run(advancement, ev);
-					});
-				} break;
-				case event_kind::wait2: {
-					// the notifying_predecessor is always on another thread and is always nonnull
-					if(!has_run(advancement, static_cast<wait2 const*>(ev)->notifying_predecessor())) {
+			for(event const* pred : ev->predecessors()) {
+				assert(!!pred);
+				if(pred->tid() != ev->tid() && pred->kind() != event_kind::program_init) {
+					auto const& pred_advancement = advancement.at(pred->tid());
+					if(pred_advancement.second <= 0) {
 						return false;
 					}
-					auto* lock_pred = static_cast<wait2 const*>(ev)->lock_predecessor();
-					// wait2 locks must always exist, as they must have been previously released by the wait1
-					return lock_pred->tid() == ev->tid() || has_run(advancement, lock_pred);
-				} break;
-				case event_kind::signal: {
-					auto cond_preds = static_cast<signal const*>(ev)->condition_variable_predecessors();
-					return std::all_of(cond_preds.begin(), cond_preds.end(), [&advancement](event const* ev) {
-						return has_run(advancement, ev);
-					});
-				} break;
-				case event_kind::broadcast: {
-					auto cond_preds = static_cast<broadcast const*>(ev)->condition_variable_predecessors();
-					return std::all_of(cond_preds.begin(), cond_preds.end(), [&advancement](event const* ev) {
-						return has_run(advancement, ev);
-					});
-				} break;
+					if((*pred_advancement.first)[pred_advancement.second - 1]->depth() < pred->depth()) {
+						return false;
+					}
+				}
 			}
-			assert(false && "unreachable");
-			std::abort();
+			return true;
 		}
 
 		inline void advance_current_thread(
@@ -203,7 +143,7 @@ namespace por {
 		csd_t csd_search(
 			std::map<thread_id, std::pair<std::deque<event const*> const*, std::size_t>> advancement,
 			thread_id const& current_thread,
-			csd_t csd_budget
+			csd_t csd_limit
 		) {
 			auto& self_advancement = advancement.at(current_thread);
 			// step 1: advance current thread as far as possible
@@ -218,49 +158,31 @@ namespace por {
 			}
 			if(active_threads == 0) {
 				return 0; // no additional context switches are needed
-			} else if(active_threads > csd_budget) {
+			} else if(active_threads > csd_limit) {
 			 // the current thread is blocked, so we need at leaast `k` context switches
 			 // to visit `k` remaining threads (if the current thread is still active we
 			 // will have to revisit it once its current blocker is resolved)
-				return csd_budget + 1;
+				return csd_limit + 1;
 			}
 
 			// step 3: recurse by checking alternatives
-			csd_t csd = csd_budget + 1;
-			#ifndef NDEBUG
-			bool has_enabled_events = false;
-			#endif
+			csd_t csd = (std::numeric_limits<csd_t>::max)();
 			for(auto const& p : advancement) {
 				if(p.first != current_thread && p.second.second < p.second.first->size()) {
 					if(event_is_enabled(advancement, p.second.first->at(p.second.second))) {
-						#ifndef NDEBUG
-						has_enabled_events = true;
-						#endif
-						// The next step has a limit that is *two* below our current best solution,
-						// as we will need to increment it by one due to the context switch that we
-						// are currently trying to choose, and still want to find an improvement
-						// (of at least one) over the current best solution (tying with the best is
-						// a waste of time, since we are just checking existence).
-						// Note that the initial "best" is one above the limit, meaning that we will
-						// begin looking for a context switch that will just fulfill the limit (be
-						// one the value that is one above the limit)
-						auto next_csd = csd_search(advancement, p.first, csd - 2) + 1;
-						if(next_csd <= 1) {
-							assert(csd > 0 && csd <= csd_budget + 1);
-							return next_csd;
-						} else if(next_csd < csd) {
+						auto next_csd = csd_search(advancement, p.first, csd_limit - 1) + 1;
+						if(next_csd < csd) {
 							csd = next_csd;
 						}
 					}
 				}
 			}
-			assert(has_enabled_events);
-			assert(csd > 0 && csd <= csd_budget + 1);
+			assert(csd > 0 && csd <= csd_limit);
 			return csd;
 		}
 	}
 
-	bool is_above_csd_limit_1(por::event::event const& local_configuration, csd_t limit) {
+	bool is_above_csd_limit_2(por::event::event const& local_configuration, csd_t limit) {
 		using por::event::event;
 
 		if(auto thread_count = compute_thread_count(local_configuration); thread_count <= 1) {
@@ -280,7 +202,7 @@ namespace por {
 		return csd_limit_search(initial_advancement, events.begin()->first, 0, limit);
 	}
 
-	csd_t compute_csd_1(por::event::event const& local_configuration) {
+	csd_t compute_csd_2(por::event::event const& local_configuration) {
 		using por::event::event;
 
 		if(auto const thread_count = compute_thread_count(local_configuration); thread_count <= 1) {

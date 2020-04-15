@@ -3978,8 +3978,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
         if (csd != 0) {
           msg << "Context Switch Degree: " << csd << "\n";
           llvm::errs() << "CSD: " << csd << "\n";
-          assert(por::is_above_csd_limit(event, csd - 1));
-          assert(!por::is_above_csd_limit(event, csd));
         }
       }
     }
