@@ -41,8 +41,6 @@ public:
   }
 
   bool operator==(const VerifiedMemoryFingerprintValue<hashT> &other) const {
-    if (hash == other.hash)
-      assert(stringSet == other.stringSet);
     return hash == other.hash && stringSet == other.stringSet;
   }
 
