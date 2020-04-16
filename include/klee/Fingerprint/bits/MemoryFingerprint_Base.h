@@ -269,7 +269,11 @@ valueT MemoryFingerprintT<D, S, valueT>::getFingerprint(std::vector<ref<Expr>> &
   MemoryFingerprintDelta temp;
   if (!arraysReferenced.empty()) {
     getDerived().updateUint8(10);
-    for (auto v : arraysReferenced) {
+    std::vector<const Array*> arrSet(arraysReferenced.begin(), arraysReferenced.end());
+    std::sort(arrSet.begin(), arrSet.end(), [](const Array *a, const Array *b) {
+      return a->getName() < b->getName();
+    });
+    for (auto v : arrSet) {
       auto it = constraintsMap.find(v);
       if (it == constraintsMap.end()) {
         continue;
