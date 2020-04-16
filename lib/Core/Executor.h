@@ -235,7 +235,7 @@ private:
 
   void exploreSchedules(ExecutionState &state, bool maximalConfiguration = false);
 
-  std::optional<ThreadId> selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable);
+  std::optional<ThreadId> selectThreadForScheduling(ExecutionState &state, std::set<ThreadId> &runnable);
 
   bool scheduleNextThread(ExecutionState &state, const ThreadId &tid);
 

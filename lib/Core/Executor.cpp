@@ -5474,7 +5474,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
     }
 
     if (!state.needsCatchUp()) {
-      auto res = selectStateForScheduling(state, runnable);
+      auto res = selectThreadForScheduling(state, runnable);
       if (!res) {
         return;
       }
@@ -5495,7 +5495,7 @@ void Executor::scheduleThreads(ExecutionState &state) {
   }
 }
 
-std::optional<ThreadId> Executor::selectStateForScheduling(ExecutionState &state, std::set<ThreadId> &runnable) {
+std::optional<ThreadId> Executor::selectThreadForScheduling(ExecutionState &state, std::set<ThreadId> &runnable) {
   bool disabledThread = false;
   bool wasEmpty = runnable.empty();
 
