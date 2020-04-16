@@ -13,7 +13,12 @@ inline llvm::cl::opt<bool> EnableCutoffEvents("cutoff-events",
                                               llvm::cl::cat(MultithreadingCat));
 
 inline llvm::cl::opt<bool> DebugCutoffEvents("debug-cutoff-events",
-                                             llvm::cl::desc("Log information about fingerprinting and cutoff events to stderr (default=off)"),
+                                             llvm::cl::desc("Log information about cutoff events to stderr (default=off)"),
+                                             llvm::cl::init(false),
+                                             llvm::cl::cat(DebugCat));
+
+inline llvm::cl::opt<bool> DebugFingerprints("debug-fingerprints",
+                                             llvm::cl::desc("Log information about fingerprinting to stderr (default=off)"),
                                              llvm::cl::init(false),
                                              llvm::cl::cat(DebugCat));
 

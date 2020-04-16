@@ -85,7 +85,7 @@ class MemoryState {
   void updateDisableMemoryState() {
     disableMemoryState = libraryFunction.entered || memoryFunction.entered || globalDisableMemoryState;
 
-    if (DebugCutoffEvents) {
+    if (DebugFingerprints) {
       llvm::errs() << "MemoryState: updating disableMemoryState: "
                    << "(libraryFunction: " << libraryFunction.entered << " || "
                    << "memoryFunction: " << memoryFunction.entered << " || "
