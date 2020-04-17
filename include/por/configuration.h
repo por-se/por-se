@@ -1159,33 +1159,6 @@ namespace por {
 					}
 				}
 
-				// compute map from each w1 to its (non-lost) notification in comb
-				std::map<por::event::event const*, por::event::event const*> notification;
-				for(auto& [tid, tooth] : comb.threads()) {
-					for(auto& n : tooth) {
-						if(n->kind() != por::event::event_kind::signal && n->kind() != por::event::event_kind::broadcast)
-							continue;
-
-						if(n->kind() == por::event::event_kind::signal) {
-							auto sig = static_cast<por::event::signal const*>(n);
-							if(sig->is_lost())
-								continue;
-
-							notification.emplace(sig->wait_predecessor(), n);
-						}
-
-						if(n->kind() == por::event::event_kind::broadcast) {
-							auto bro = static_cast<por::event::broadcast const*>(n);
-							if(bro->is_lost())
-								continue;
-
-							for(auto& w : bro->wait_predecessors()) {
-								notification.emplace(w, n);
-							}
-						}
-					}
-				}
-
 				for(auto& w : W) {
 					if(w == sig->wait_predecessor())
 						continue;
