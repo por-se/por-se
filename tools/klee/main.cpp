@@ -308,7 +308,8 @@ private:
   unsigned m_numGeneratedTests; // Number of tests successfully generated
   unsigned m_pathsExplored; // number of paths explored so far
   std::uint64_t m_maxThreadsCreated = 0; // maximum number of threads created per path
-  std::uint64_t m_maxConcurrentThreads = 1; // maximum number of concurrently active threads
+  std::uint64_t m_maxCoexistingThreads = 1; // maximum number of simultaneously existing threads (non-exited)
+  std::uint64_t m_maxConcurrentThreads = 1; // maximum number of concurrently runnable threads
 
   // used for writing .ktest files
   int m_argc;
@@ -324,9 +325,13 @@ public:
   unsigned getNumPathsExplored() { return m_pathsExplored; }
   void incPathsExplored() { m_pathsExplored++; }
   std::uint64_t getNumMaxThreadsCreated() { return m_maxThreadsCreated; }
+  std::uint64_t getNumMaxCoexistingThreads() { return m_maxCoexistingThreads; }
   std::uint64_t getNumMaxConcurrentThreads() { return m_maxConcurrentThreads; }
   void updateMaxThreadsCreated(std::uint64_t count) {
     m_maxThreadsCreated = std::max(count, m_maxThreadsCreated);
+  }
+  void updateMaxCoexistingThreads(std::uint64_t count) {
+    m_maxCoexistingThreads = std::max(count, m_maxCoexistingThreads);
   }
   void updateMaxConcurrentThreads(std::uint64_t count) {
     m_maxConcurrentThreads = std::max(count, m_maxConcurrentThreads);
@@ -1592,6 +1597,8 @@ int main(int argc, char **argv, char **envp) {
         << handler->getNumPathsExplored() << "\n";
   stats << "KLEE: done: max number of threads created = "
         << handler->getNumMaxThreadsCreated() << "\n";
+  stats << "KLEE: done: max number of coexisting threads = "
+        << handler->getNumMaxCoexistingThreads() << "\n";
   stats << "KLEE: done: max number of concurrent threads = "
         << handler->getNumMaxConcurrentThreads() << "\n";
   stats << "KLEE: done: generated tests = "

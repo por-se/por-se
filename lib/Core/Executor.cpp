@@ -4954,7 +4954,7 @@ void Executor::runFunctionAsMain(Function *f,
     llvm::outs() << "KLEE: done: cex above csd limit = " << stats::cexAboveCsdLimit << "\n";
     llvm::outs() << "KLEE: done: threads above csd = " << stats::csdThreads << "\n";
     llvm::outs() << "KLEE: done: cutoff threads = " << stats::cutoffThreads << "\n";
-    llvm::outs() << "KLEE: done: states: " << states.size() << "\n";
+    llvm::outs() << "KLEE: done: states = " << states.size() << "\n";
     llvm::outs().flush();
   }
 }
@@ -5249,7 +5249,11 @@ bool Executor::createThread(ExecutionState &state,
   }
 
   interpreterHandler->updateMaxThreadsCreated(state.threadsCreated);
-  interpreterHandler->updateMaxConcurrentThreads(state.threads.size());
+  interpreterHandler->updateMaxCoexistingThreads(
+    std::count_if(state.threads.begin(), state.threads.end(), [](auto const &t) {
+      return t.second.state != ThreadState::Exited;
+    }
+  ));
 
   return true;
 }
@@ -5605,6 +5609,8 @@ std::optional<ThreadId> Executor::selectThreadForScheduling(ExecutionState &stat
 
     return {};
   }
+
+  interpreterHandler->updateMaxConcurrentThreads(runnable.size());
 
   // pick thread according to policy by default
   ThreadId tid;

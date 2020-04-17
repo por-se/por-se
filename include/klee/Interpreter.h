@@ -42,6 +42,7 @@ public:
 
   virtual void incPathsExplored() = 0;
   virtual void updateMaxThreadsCreated(std::uint64_t count) = 0;
+  virtual void updateMaxCoexistingThreads(std::uint64_t count) = 0;
   virtual void updateMaxConcurrentThreads(std::uint64_t count) = 0;
 
   virtual std::string processTestCase(const ExecutionState &state,
