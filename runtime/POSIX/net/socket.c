@@ -771,16 +771,6 @@ ssize_t kpr_write_socket(exe_file_t* f, int flags, const void *buf, size_t count
     if (tcp->peer->faked_packet) {
       // So we can send as much as we want to this
       // socket
-
-      fprintf(stderr, "KLEE: received [target port=%d, count=%zu]", tcp->peer->faked_packet->port, count);
-
-      if (write(STDERR_FILENO, buf, count) > 0) {
-        char c = '\n';
-        write(STDERR_FILENO, &c, 1);
-      }
-
-      fflush(stderr);
-
       return count;
     }
 
