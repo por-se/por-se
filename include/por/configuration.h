@@ -1239,15 +1239,8 @@ namespace por {
 					if(outstanding.empty())
 						return false;
 
-					// create set of cond predecessors (which is exactly M)
-					// because here, it is guaranteed that contained signals do not notify any of the wait1s
-					std::vector<por::event::event const*> N;
-					N.reserve(M.size());
-					for(auto& m : M) {
-						N.push_back(m);
-					}
-
-					result.emplace_back(_unfolding->deduplicate(por::event::broadcast::alloc(e.tid(), cid, *et, N)));
+					// cond predecessors are exactly M, as it is guaranteed that contained signals do not notify any of the wait1s
+					result.emplace_back(_unfolding->deduplicate(por::event::broadcast::alloc(e.tid(), cid, *et, M)));
 					_unfolding->stats_inc_event_created(por::event::event_kind::broadcast);
 					return false; // result of concurrent_combinations not needed
 				});
