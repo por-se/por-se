@@ -80,11 +80,9 @@ namespace {
 		std::vector<parikh_vector> fnf;
 
 	public:
-		foata_normal_form(parikh_vector const& pv) {
-			por::comb C(pv.begin(), pv.end());
+		foata_normal_form(por::event::event const& event) {
+			por::comb C(event.local_configuration());
 			C.sort();
-
-			fnf.reserve(pv.size());
 
 			while(!C.empty()) {
 				fnf.emplace_back(C.min());
