@@ -5,6 +5,7 @@
 
 #include "por/thread_id.h"
 
+#include <cstddef>
 #include <map>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace por {
 			klee::MemoryFingerprintValue fingerprint;
 			klee::MemoryFingerprintDelta thread_delta;
 			std::map<por::thread_id, std::vector<const klee::MemoryObject*>> pending_frees;
+			std::size_t id;
 		};
 
 		inline bool operator==(metadata const& a, metadata const& b) noexcept {

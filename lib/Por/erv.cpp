@@ -40,8 +40,8 @@ namespace {
 		} else if(a->tid() != b->tid()) {
 			return a->tid() < b->tid() ? -1 : 1;
 		}
-		// memory address as tie breaker: total order
-		return a < b ? -1 : 1; // we already checked a == b
+		// unique id as tie breaker: total order
+		return a->metadata().id < b->metadata().id ? -1 : 1; // we already checked a == b
 	}
 
 	class parikh_vector {

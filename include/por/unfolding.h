@@ -40,7 +40,11 @@ namespace por {
 
 		por::event::event const* store_event(std::unique_ptr<por::event::event>&& event) {
 			key_t key = std::make_tuple(event->tid(), event->depth(), event->kind());
-			return _events[std::move(key)].emplace_back(std::move(event)).get();
+			auto ptr = _events[std::move(key)].emplace_back(std::move(event)).get();
+			stats_inc_unique_event(ptr->kind());
+			++_size;
+			ptr->_metadata.id = _size;
+			return ptr;
 		}
 
 	public:
@@ -98,8 +102,6 @@ namespace por {
 				}
 			}
 			// new event
-			stats_inc_unique_event(e->kind());
-			++_size;
 			auto ptr = store_event(std::move(e));
 			ptr->add_to_successors();
 
