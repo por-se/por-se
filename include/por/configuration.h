@@ -1221,8 +1221,10 @@ namespace por {
 
 						if(m->kind() == por::event::event_kind::signal) {
 							auto* sig = static_cast<por::event::signal const*>(m);
-							if(sig->is_lost())
+							if(sig->is_lost()) {
 								return false;
+							}
+							continue;
 						}
 
 						return false;
