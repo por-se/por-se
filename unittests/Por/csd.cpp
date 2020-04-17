@@ -13,7 +13,7 @@ namespace {
 		configuration.acquire_lock(thread1, 1).commit(configuration);
 		configuration.release_lock(thread1, 1).commit(configuration);
 
-		ASSERT_EQ(por::compute_csd(*configuration.thread_heads().at(thread1)), 0u);
+		ASSERT_EQ(por::compute_csd_2(*configuration.thread_heads().at(thread1)), 0u);
 		ASSERT_FALSE(por::is_above_csd_limit(*configuration.thread_heads().at(thread1), 0));
 	}
 
@@ -29,7 +29,7 @@ namespace {
 		configuration.acquire_lock(thread2, 1).commit(configuration);
 
 		// the csd is 0, as the context switch away from t1 was not preemptive due to t1 running out of events
-		ASSERT_EQ(por::compute_csd(*configuration.thread_heads().at(thread2)), 0u);
+		ASSERT_EQ(por::compute_csd_2(*configuration.thread_heads().at(thread2)), 0u);
 		ASSERT_FALSE(por::is_above_csd_limit(*configuration.thread_heads().at(thread2), 0u));
 	}
 
@@ -46,7 +46,7 @@ namespace {
 		configuration.exit_thread(thread2).commit(configuration);
 		configuration.join_thread(thread1, thread2).commit(configuration);
 
-		ASSERT_EQ(por::compute_csd(*configuration.thread_heads().at(thread1)), 0u);
+		ASSERT_EQ(por::compute_csd_2(*configuration.thread_heads().at(thread1)), 0u);
 		ASSERT_FALSE(por::is_above_csd_limit(*configuration.thread_heads().at(thread1), 0u));
 	}
 
@@ -64,7 +64,7 @@ namespace {
 		configuration.exit_thread(thread2).commit(configuration);
 		configuration.join_thread(thread1, thread2).commit(configuration);
 
-		ASSERT_EQ(por::compute_csd(*configuration.thread_heads().at(thread1)), 1u);
+		ASSERT_EQ(por::compute_csd_2(*configuration.thread_heads().at(thread1)), 1u);
 		ASSERT_FALSE(por::is_above_csd_limit(*configuration.thread_heads().at(thread1), 1u));
 		ASSERT_TRUE(por::is_above_csd_limit(*configuration.thread_heads().at(thread1), 0u));
 	}

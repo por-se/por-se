@@ -3974,11 +3974,10 @@ void Executor::terminateStateOnError(ExecutionState &state,
       const por::node *n = state.porNode ? state.porNode : state.lastPorNode;
       if (n && n->last_included_event()) {
         por::event::event const& event = *n->last_included_event();
-        auto csd = por::compute_csd(event);
-        if (csd != 0) {
-          msg << "Context Switch Degree: " << csd << "\n";
-          llvm::errs() << "CSD: " << csd << "\n";
-        }
+        auto csd1 = por::compute_csd_1(event);
+        auto csd2 = por::compute_csd_2(event);
+        msg << "Context Switch Degree: " << csd2 << " with " << csd1 << " context switches\n";
+        llvm::errs() << "CSD: " << csd2 <<  " with " << csd1 << " context switches\n";
       }
     }
 

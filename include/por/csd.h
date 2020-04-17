@@ -19,8 +19,4 @@ namespace por {
 	inline auto is_above_csd_limit(V&&... args) {
 		return is_above_csd_limit_2(std::forward<V>(args)...);
 	}
-	template<typename... V>
-	inline auto compute_csd(V&&... args) {
-		return compute_csd_2(std::forward<V>(args)...);
-	}
 }
