@@ -508,7 +508,7 @@ void PorEventManager::attachMetadata(ExecutionState &state, por::event::event &e
   MemoryFingerprintDelta delta;
   std::tie(fingerprint, delta) = computeFingerprintAndDelta(state, event);
 
-  event.set_metadata({std::move(fingerprint), std::move(delta), state.thread().flushUnsynchronizedFrees()});
+  event.set_metadata({std::move(fingerprint), std::move(delta), state.thread().flushUnsynchronizedFrees(), 0});
 }
 
 std::pair<MemoryFingerprintValue, MemoryFingerprintDelta>
