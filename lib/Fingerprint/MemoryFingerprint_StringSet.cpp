@@ -1,6 +1,7 @@
 #include "klee/Fingerprint/MemoryFingerprint.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
+#include "klee/OptionCategories.h"
 
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DebugLoc.h"
@@ -11,7 +12,8 @@
 namespace {
 llvm::cl::opt<bool>ShowMemoryOperations("verified-fingerprints-show-memory",
   llvm::cl::init(false),
-  llvm::cl::desc("Show individual (per byte) memory operations in verified fingerprints (default=on)")
+  llvm::cl::desc("Show individual (per byte) memory operations in verified fingerprints (default=off)"),
+  llvm::cl::cat(klee::DebugCat)
 );
 } // namespace
 
