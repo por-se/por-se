@@ -24,8 +24,14 @@ inline llvm::cl::opt<bool> DebugFingerprints("debug-fingerprints",
 
 inline llvm::cl::opt<std::size_t> MaxContextSwitchDegree(
   "max-csd",
-  llvm::cl::desc("Only explore alternatives with context swtch degree up to this limit.  Set to 0 to disable (default=10)"),
+  llvm::cl::desc("Only explore events with context switch degree up to this limit (default=10)"),
   llvm::cl::init(10),
+  llvm::cl::cat(MultithreadingCat));
+
+inline llvm::cl::opt<bool> UnlimitedContextSwitchDegree(
+  "max-csd-unlimited",
+  llvm::cl::desc("Do not limit context switch degree (default=off)"),
+  llvm::cl::init(false),
   llvm::cl::cat(MultithreadingCat));
 
 }

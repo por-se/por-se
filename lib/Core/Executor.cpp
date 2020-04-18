@@ -3659,7 +3659,7 @@ void Executor::exploreSchedules(ExecutionState &state, bool maximalConfiguration
 
   for (por::event::event const *cex : conflicting_extensions) {
     assert(!cex->is_cutoff());
-    if (MaxContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
+    if (!UnlimitedContextSwitchDegree && por::is_above_csd_limit(*cex, MaxContextSwitchDegree)) {
       ++stats::cexAboveCsdLimit;
       //klee_warning("Context Switch Degree of conflicting extension above limit.");
       cfg.unfolding()->remove_event(*cex);
@@ -4871,6 +4871,10 @@ void Executor::runFunctionAsMain(Function *f,
 
   if (statsTracker) {
     statsTracker->framePushed(&state->stackFrame(), 0);
+  }
+
+  if (UnlimitedContextSwitchDegree && MaxContextSwitchDegree.getNumOccurrences() > 0) {
+    klee_error("-max-csd cannot be used with -max-csd-unlimited");
   }
 
   assert(arguments.size() == f->arg_size() && "wrong number of arguments");
