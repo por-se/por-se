@@ -1,6 +1,7 @@
+// REQUIRES: posix-runtime
 // RUN: %clang %s -emit-llvm %O0opt -c -o %t1.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --exit-on-error --optimize --libc=uclibc %t1.bc
+// RUN: %klee --output-dir=%t.klee-out --exit-on-error --posix-runtime --optimize --libc=uclibc %t1.bc
 
 #include <string.h>
 #include <assert.h>

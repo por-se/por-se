@@ -1,8 +1,9 @@
 // REQUIRES: libcxx
 // REQUIRES: uclibc
+// REQUIRES: posix-runtime
 // RUN: %clangxx %s -emit-llvm %O0opt -c -std=c++11 -I "%libcxx_include" -g -nostdinc++ -o %t1.bc
 // RUN: rm -rf %t.klee-out
-// RUN: %klee --output-dir=%t.klee-out --exit-on-error --libc=uclibc --libcxx %t1.bc 2>&1 | FileCheck %s
+// RUN: %klee --output-dir=%t.klee-out --exit-on-error --posix-runtime --libc=uclibc --libcxx %t1.bc 2>&1 | FileCheck %s
 //
 // CHECK: KLEE: done: completed paths = 1
 
