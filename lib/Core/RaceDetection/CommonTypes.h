@@ -16,62 +16,61 @@ namespace klee {
       virtual ~SolverInterface() = default;
   };
 
-  struct AccessMetaData {
-    enum class OverlapResult : std::uint8_t {
-      UNKNOWN = 0,
-      OVERLAP = 1,
-      NO_OVERLAP = 2
-    };
+  enum class AccessType : std::uint8_t {
+    UNKNOWN = 0,
 
-    enum class Type : std::uint8_t {
-      UNKNOWN = 0,
+    WRITE,
+    READ,
 
-      WRITE,
-      READ,
+    ALLOC,
+    FREE
+  };
 
-      ALLOC,
-      FREE
-    };
+  [[nodiscard]] inline bool isWrite(AccessType type) noexcept {
+    return type == AccessType::WRITE;
+  }
 
+  [[nodiscard]] inline bool isRead(AccessType type) noexcept {
+    return type == AccessType::READ;
+  }
+
+  [[nodiscard]] inline bool isAlloc(AccessType type) noexcept {
+    return type == AccessType::ALLOC;
+  }
+
+  [[nodiscard]] inline bool isFree(AccessType type) noexcept {
+    return type == AccessType::FREE;
+  }
+
+  [[nodiscard]] inline bool isAllocOrFree(AccessType type) noexcept {
+    return type == AccessType::ALLOC || type == AccessType::FREE;
+  }
+
+  template<typename S>
+  S& operator<<(S& out, AccessType type) {
+    if (type == AccessType::UNKNOWN) {
+      out << "un";
+    } else if (type == AccessType::WRITE) {
+      out << "w";
+    } else if (type == AccessType::READ) {
+      out << "r";
+    } else if (type == AccessType::ALLOC) {
+      out << "a";
+    } else if (type == AccessType::FREE) {
+      out << "f";
+    } else {
+      out << "-";
+    }
+    return out;
+  }
+
+  struct MemoryOperation {
     using Offset = std::size_t;
 
     KInstruction* instruction = nullptr;
 
-    Type type = Type::UNKNOWN;
+    AccessType type = AccessType::UNKNOWN;
 
-    Offset numBytes = 0;
-
-    [[nodiscard]] bool isWrite() const {
-      return type == Type::WRITE;
-    }
-
-    [[nodiscard]] bool isRead() const {
-      return type == Type::READ;
-    }
-
-    [[nodiscard]] bool isAlloc() const {
-      return type == Type::ALLOC;
-    }
-
-    [[nodiscard]] bool isFree() const {
-      return type == Type::FREE;
-    }
-
-    [[nodiscard]] std::string getTypeString() const {
-      switch (type) {
-        case Type::UNKNOWN: return "un";
-        case Type::WRITE: return "w";
-        case Type::READ: return "r";
-
-        case Type::ALLOC: return "a";
-        case Type::FREE: return "f";
-      }
-
-      return "-";
-    }
-  };
-
-  struct MemoryOperation : public AccessMetaData {
     // Operation by whom
     ThreadId tid;
 
@@ -79,6 +78,7 @@ namespace klee {
     const MemoryObject* object;
 
     ref<Expr> offset;
+    Offset numBytes = 0;
   };
 
   struct RaceDetectionResult {

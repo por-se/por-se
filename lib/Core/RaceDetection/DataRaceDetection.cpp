@@ -64,9 +64,9 @@ const DataRaceDetection::Stats& DataRaceDetection::getStats() const {
 void DataRaceDetection::trackAccess(const por::node& node, MemoryOperation&& op) {
   assert(op.instruction != nullptr);
   assert(op.object != nullptr);
-  assert(op.type != MemoryOperation::Type::UNKNOWN);
+  assert(op.type != AccessType::UNKNOWN);
   assert(op.tid);
-  assert(op.isAlloc() || op.isFree() || (op.numBytes != 0 && op.offset.get() != nullptr));
+  assert(isAllocOrFree(op.type) || (op.numBytes != 0 && op.offset.get() != nullptr));
 
   auto evtIt = node.configuration().thread_heads().find(op.tid);
   assert(evtIt != node.configuration().thread_heads().end());
@@ -77,14 +77,14 @@ void DataRaceDetection::trackAccess(const por::node& node, MemoryOperation&& op)
     llvm::errs() << "DRD: @" << evtIt->second->kind()
                  << " track> mo=" << getDebugInfo(op.object)
                  << " tid=" << op.tid
-                 << " type=" << op.getTypeString()
+                 << " type=" << op.type
                  << "\n";
   }
 
   // in the case that a memory object is freed by KLEE, then we will not receive
   // any further operations on that object since the object won't be found (out of bound access)
   // -> we can prune all data that we tracked for that object
-  if (op.isFree()) {
+  if (isFree(op.type)) {
     acc.pruneDataForMemoryObject(op.object);
   } else {
     acc.trackMemoryOperation(std::move(op));
@@ -117,7 +117,7 @@ DataRaceDetection::isDataRace(const por::node& node,
       llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
-                   << " type=" << operation.getTypeString()
+                   << " type=" << operation.type
                    << " race=" << r.isRace << " [fast-path]"
                    << "\n";
     }
@@ -154,21 +154,21 @@ DataRaceDetection::isDataRace(const por::node& node,
       llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
-                   << " type=" << operation.getTypeString()
+                   << " type=" << operation.type
                    << " race=unknown (solver failure)"
                    << "\n";
     } else if (!solverResult->isRace) {
       llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
-                   << " type=" << operation.getTypeString()
+                   << " type=" << operation.type
                    << " race=0 [solver]"
                    << "\n";
     } else {
       llvm::errs() << "DRD: @" << node.configuration().size()
                    << " check> mo=" << getDebugInfo(operation.object)
                    << " tid=" << operation.tid
-                   << " type=" << operation.getTypeString()
+                   << " type=" << operation.type
                    << " race=symbolic-dependent [solver]"
                    << " canBeSafe=" << solverResult->canBeSafe
                    << "\n";
@@ -188,7 +188,7 @@ DataRaceDetection::SolverPath(const por::node& node,
   assert(it != threadsToCheck.end());
   auto* curEventOfOperatingThread = it->second;
 
-  std::vector<std::tuple<ThreadId, ref<Expr>, const AccessMetaData&>> accessesToCheck;
+  std::vector<std::tuple<ThreadId, ref<Expr>, MemoryOperation::Offset, KInstruction*>> accessesToCheck;
 
   for (auto const &pair : threadsToCheck) {
     ThreadId const& tid = pair.first;
@@ -229,20 +229,20 @@ DataRaceDetection::SolverPath(const por::node& node,
           // on the fastpath pass. Thus, we can omit iterating over `accessed->getConcreteAccesses`.
 
           for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
-            if (operation.isWrite() || access.isWrite()) {
-              accessesToCheck.emplace_back(tid, accessOffset, access);
+            if (isWrite(operation.type) || isWrite(access.type)) {
+              accessesToCheck.emplace_back(tid, accessOffset, access.numBytes, access.instruction);
             }
           }
         } else {
           for (const auto& [accessOffset, access] : accessed->getConcreteAccesses()) {
-            if (operation.isWrite() || access.isWrite()) {
-              accessesToCheck.emplace_back(tid, Expr::createPointer(accessOffset), access);
+            if (isWrite(operation.type) || isWrite(access.type)) {
+              accessesToCheck.emplace_back(tid, Expr::createPointer(accessOffset), access.numBytes, access.instruction);
             }
           }
           for (const auto& [accessOffset, access] : accessed->getSymbolicAccesses()) {
-            if (operation.isWrite() || access.isWrite()) {
+            if (isWrite(operation.type) || isWrite(access.type)) {
               assert(operation.offset != accessOffset && "checked in fastpath");
-              accessesToCheck.emplace_back(tid, accessOffset, access);
+              accessesToCheck.emplace_back(tid, accessOffset, access.numBytes, access.instruction);
             }
           }
         }
@@ -254,8 +254,10 @@ DataRaceDetection::SolverPath(const por::node& node,
 
   // So now we have to assemble a big query to only call the solver once
   ref<Expr> queryIsSafeForAll = ConstantExpr::create(1, Expr::Bool);
+  auto beginOfOp = Expr::createZExtToPointerWidth(operation.offset);
   auto endOfOp = AddExpr::create(Expr::createZExtToPointerWidth(operation.offset), Expr::createPointer(operation.numBytes - 1));
-  for (auto& [tid, accessOffset, access] : accessesToCheck) {
+  
+  for (auto& [tid, accessOffset, numBytes, instruction] : accessesToCheck) {
     // So the only way how the accesses can be safe if the bounds of these accesses are
     // not overlapping (e.g. the bounds are placed before or after another)
     // Either: operation: -xxx-------
@@ -264,10 +266,11 @@ DataRaceDetection::SolverPath(const por::node& node,
     //     Or: operation: ------xxxx-
     //         candidate: -xxx-------
 
-    auto endOfAccess = AddExpr::create(Expr::createZExtToPointerWidth(accessOffset), Expr::createPointer(access.numBytes - 1));
+    auto beginOfAccess = Expr::createZExtToPointerWidth(accessOffset);
+    auto endOfAccess = AddExpr::create(beginOfAccess, Expr::createPointer(numBytes - 1));
 
-    auto opBeforeCand = UltExpr::create(endOfOp, Expr::createZExtToPointerWidth(accessOffset));
-    auto accBeforeOp = UltExpr::create(endOfAccess, Expr::createZExtToPointerWidth(operation.offset));
+    auto opBeforeCand = UltExpr::create(endOfOp, beginOfAccess);
+    auto accBeforeOp = UltExpr::create(endOfAccess, beginOfOp);
 
     auto condition = OrExpr::create(opBeforeCand, accBeforeOp);
     queryIsSafeForAll = AndExpr::create(queryIsSafeForAll, condition);
@@ -308,11 +311,13 @@ DataRaceDetection::SolverPath(const por::node& node,
   }
 
   // Now find the actual racing instruction, we know that at least one exists
-  for (auto& [tid, accessOffset, access] : accessesToCheck) {
-    auto endOfAccess = AddExpr::create(Expr::createZExtToPointerWidth(accessOffset), Expr::createPointer(access.numBytes - 1));
+  // FIXME: No need to recreate all expressions
+  for (auto& [tid, accessOffset, numBytes, instruction] : accessesToCheck) {
+    auto beginOfAccess = Expr::createZExtToPointerWidth(accessOffset);
+    auto endOfAccess = AddExpr::create(beginOfAccess, Expr::createPointer(numBytes - 1));
 
-    auto opBeforeCand = UltExpr::create(endOfOp, Expr::createZExtToPointerWidth(accessOffset));
-    auto accBeforeOp = UltExpr::create(endOfAccess, Expr::createZExtToPointerWidth(operation.offset));
+    auto opBeforeCand = UltExpr::create(endOfOp, beginOfAccess);
+    auto accBeforeOp = UltExpr::create(endOfAccess, beginOfOp);
 
     auto notOverlapping = OrExpr::create(opBeforeCand, accBeforeOp);
 
@@ -324,7 +329,7 @@ DataRaceDetection::SolverPath(const por::node& node,
 
     if (offsetsMatching.value()) {
       result.racingThread = tid;
-      result.racingInstruction = access.instruction;
+      result.racingInstruction = instruction;
 
       return result;
     }
@@ -343,8 +348,6 @@ DataRaceDetection::FastPath(const por::node& node,
   auto it = threadsToCheck.find(operation.tid);
   assert(it != threadsToCheck.end());
   auto& curEventOfOperatingThread = it->second;
-
-  auto incomingIsAllocOrFree = operation.isAlloc() || operation.isFree();
 
   std::optional<RaceDetectionResult> result{std::in_place_t{}};
   result->isRace = false;
@@ -382,12 +385,14 @@ DataRaceDetection::FastPath(const por::node& node,
 
       const auto& memAccesses = accessListIt->second;
       if (auto* accessed = memAccesses.getMemoryAccessesOfThread(operation.object)) {
-        if (incomingIsAllocOrFree || accessed->isAllocOrFree()) {
+        if (isAllocOrFree(operation.type) || accessed->isAllocOrFree()) {
           result.emplace();
           // We race with every other access, therefore simply pick the first
           result->racingInstruction = accessed->isAllocOrFree()
                                     ? accessed->getAllocFreeInstruction()
-                                    : accessed->getAnyAccess().instruction;
+                                    : !accessed->getConcreteAccesses().empty()
+                                      ? accessed->getConcreteAccesses().begin()->second.instruction
+                                      : accessed->getSymbolicAccesses().begin()->second.instruction;
 
           result->racingThread = tid;
           result->isRace = true;
@@ -403,7 +408,7 @@ DataRaceDetection::FastPath(const por::node& node,
           if (!(it != accessed->getConcreteAccesses().end() && it->first == operationOffset) 
             && it != accessed->getConcreteAccesses().begin()) {
             auto prev = std::prev(it);
-            if (operation.isWrite() || prev->second.isWrite()) {
+            if (isWrite(operation.type) || isWrite(prev->second.type)) {
               // assert(prev->first < operationOffset);
               if(prev->first + prev->second.numBytes > operationOffset) {
                 result.emplace();
@@ -418,7 +423,7 @@ DataRaceDetection::FastPath(const por::node& node,
           for (; it != accessed->getConcreteAccesses().end()
             && it->first < operationOffset + operation.numBytes; ++it) {
             // assert(it->first >= operationOffset);
-            if (operation.isWrite() || it->second.isWrite()) {
+            if (isWrite(operation.type) || isWrite(it->second.type)) {
               result.emplace();
               result->racingInstruction = it->second.instruction;
               result->racingThread = tid;
@@ -430,7 +435,7 @@ DataRaceDetection::FastPath(const por::node& node,
 
           if (result.has_value()) {
             for (auto &[accessOffset, access] : accessed->getSymbolicAccesses()) {
-              if (operation.isWrite() || access.isWrite()) {
+              if (isWrite(operation.type) || isWrite(access.type)) {
                 result.reset();
                 break;
               }
@@ -440,7 +445,7 @@ DataRaceDetection::FastPath(const por::node& node,
           auto [begin, end] = accessed->getSymbolicAccesses().equal_range(operation.offset);
           // for operations with symbolic offset, we can only check against other symbolic offsets
           for (const auto& [offset, access] : util::make_iterator_range(begin, end)) {
-            if (operation.isRead() && access.isRead()) {
+            if (isRead(operation.type) && isRead(access.type)) {
               continue;
             }
 
@@ -457,7 +462,7 @@ DataRaceDetection::FastPath(const por::node& node,
           }
           if (result.has_value()) {
             for (auto &[accessOffset, access] : util::make_iterator_range(accessed->getSymbolicAccesses().begin(), begin)) {
-              if (operation.isWrite() || access.isWrite()) {
+              if (isWrite(operation.type) || isWrite(access.type)) {
                 result.reset();
                 break;
               }
@@ -465,7 +470,7 @@ DataRaceDetection::FastPath(const por::node& node,
           }
           if (result.has_value()) {
             for (auto &[accessOffset, access] : util::make_iterator_range(end, accessed->getSymbolicAccesses().end())) {
-              if (operation.isWrite() || access.isWrite()) {
+              if (isWrite(operation.type) || isWrite(access.type)) {
                 result.reset();
                 break;
               }
@@ -474,7 +479,7 @@ DataRaceDetection::FastPath(const por::node& node,
           
           if (result.has_value()) {
             for (auto &[accessOffset, access] : accessed->getConcreteAccesses()) {
-              if (operation.isWrite() || access.isWrite()) {
+              if (isWrite(operation.type) || isWrite(access.type)) {
                 result.reset();
                 break;
               }

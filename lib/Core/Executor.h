@@ -479,7 +479,7 @@ private:
                                        KInstruction *racingInstruction);
 
   bool processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref <Expr> offset, std::size_t numBytes,
-                           MemoryOperation::Type type);
+                           AccessType type);
 
   void registerForkInProcessTree(ExecutionState &existing, ExecutionState &fork);
   void registerFork(ExecutionState &state, ExecutionState* fork);

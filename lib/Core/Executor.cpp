@@ -1923,7 +1923,7 @@ void Executor::executeCall(ExecutionState &state,
       }
 
       if (mo) {
-        processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::ALLOC);
+        processMemoryAccess(state, mo, nullptr, 0, AccessType::ALLOC);
 
         if ((WordSize == Expr::Int64) && (mo->address & 15) &&
             requires16ByteAlignment) {
@@ -2078,7 +2078,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // When we pop the stack frame, we free the memory regions
       // this means that we need to check these memory accesses
       for (auto mo : state.stackFrame().allocas) {
-        processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
+        processMemoryAccess(state, mo, nullptr, 0, AccessType::FREE);
       }
 
       state.popFrameOfThread();
@@ -4176,7 +4176,7 @@ void Executor::callExternalFunction(ExecutionState &state,
           &mo,
           ConstantExpr::alloc(i, 64),
           end - i,
-          MemoryOperation::Type::WRITE
+          AccessType::WRITE
         );
 
         if (!safe) {
@@ -4270,7 +4270,7 @@ void Executor::executeAlloc(ExecutionState &state,
       bindLocal(target, state, 
                 ConstantExpr::alloc(0, Context::get().getPointerWidth()));
     } else {
-      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::ALLOC);
+      processMemoryAccess(state, mo, nullptr, 0, AccessType::ALLOC);
 
       ObjectState *os = bindObjectInState(state, mo, isLocal);
       if (zeroMemory) {
@@ -4290,7 +4290,7 @@ void Executor::executeAlloc(ExecutionState &state,
         // free previous allocation
         const MemoryObject *reallocatedObject = reallocFrom->getObject();
 
-        processMemoryAccess(state, reallocatedObject, nullptr, 0, MemoryOperation::Type::FREE);
+        processMemoryAccess(state, reallocatedObject, nullptr, 0, AccessType::FREE);
 
         if (EnableCutoffEvents) {
           state.memoryState.unregisterWrite(*reallocatedObject, *reallocFrom);
@@ -4430,7 +4430,7 @@ void Executor::executeFree(ExecutionState &state,
         }
 
         // A free operation should be tracked as well
-        processMemoryAccess(*it->second, mo, nullptr, 0, MemoryOperation::Type::FREE);
+        processMemoryAccess(*it->second, mo, nullptr, 0, AccessType::FREE);
 
         if (it->second != &state) {
           // reset porNode to be updated after executeInstruction()
@@ -4606,7 +4606,7 @@ void Executor::executeMemoryWrite(ExecutionState& state,
     return;
   }
 
-  processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::WRITE);
+  processMemoryAccess(state, mo, offset, bytes, AccessType::WRITE);
 
   auto* wos = state.addressSpace.getWriteable(mo, os);
 
@@ -4634,7 +4634,7 @@ ref<Expr> Executor::executeMemoryRead(ExecutionState& state,
   assert(os != nullptr);
 
   ref<Expr> result = os->read(offset, bitWidth);
-  processMemoryAccess(state, mo, offset, bytes, MemoryOperation::Type::READ);
+  processMemoryAccess(state, mo, offset, bytes, AccessType::READ);
 
   return result;
 }
@@ -4700,7 +4700,7 @@ void Executor::executeMakeSymbolic(ExecutionState &state,
   // Create a new object state for the memory object (instead of a copy).
   if (!replayKTest) {
 
-    if (!processMemoryAccess(state, mo, ConstantExpr::alloc(0, Expr::Int64), mo->size, MemoryOperation::Type::WRITE)) {
+    if (!processMemoryAccess(state, mo, ConstantExpr::alloc(0, Expr::Int64), mo->size, AccessType::WRITE)) {
       return;
     }
 
@@ -5281,7 +5281,7 @@ bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
     if (v->isThreadLocal()) {
       auto mo = memory->lookupGlobalMemoryObject(v, state.tid());
 
-      processMemoryAccess(state, mo, nullptr, 0, MemoryOperation::Type::FREE);
+      processMemoryAccess(state, mo, nullptr, 0, AccessType::FREE);
 
       if (EnableCutoffEvents) {
         auto os = state.addressSpace.findObject(mo);
@@ -5297,7 +5297,7 @@ bool Executor::exitCurrentThread(ExecutionState &state, bool callToExit) {
 
 bool
 Executor::processMemoryAccess(ExecutionState &state, const MemoryObject *mo, ref<Expr> offset,
-                              std::size_t numBytes, MemoryOperation::Type type) {
+                              std::size_t numBytes, AccessType type) {
   if (!EnableDataRaceDetection || state.threads.size() == 1) {
     // These accesses are always safe and do not need to be tracked
     return true;

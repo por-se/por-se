@@ -44,7 +44,7 @@ public:
 };
 
 void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
-        Acquisition self, AccessMetaData::Offset incomingBegin, MemoryOperation &&incoming) {
+        Acquisition self, Address incomingBegin, MemoryOperation &&incoming) {
   auto incomingEnd = incomingBegin + incoming.numBytes;
   auto it = self->concrete.lower_bound(incomingBegin);
 
@@ -54,7 +54,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
     auto const prevBegin = prev->first;
     auto const prevEnd = prevBegin + prev->second.numBytes;
     if (prevEnd > incomingBegin) {
-      if (prev->second.isWrite() || incoming.isRead()) {
+      if (prev->second.isWrite() || isRead(incoming.type)) {
         if (prevEnd >= incomingEnd) {
           return;
         } else {
@@ -86,7 +86,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
     auto itEnd = itBegin + it->second.numBytes;
 
     if (itBegin == incomingBegin) {
-      if (incoming.isRead() || it->second.isWrite()) {
+      if (isRead(incoming.type) || it->second.isWrite()) {
         if (itEnd >= incomingEnd) {
           return;
         } else {
@@ -122,7 +122,7 @@ void ObjectAccesses::OperationList::registerConcreteMemoryOperation(
       }
     } else {
       assert(itBegin > incomingBegin);
-      if (incoming.isWrite() || it->second.isRead()) {
+      if (isWrite(incoming.type) || it->second.isRead()) {
         self.acquire([&it](auto* self) { it = self->concrete.find(it->first); });
         if (itEnd <= incomingEnd) {
           auto next = std::next(it);
@@ -194,11 +194,11 @@ void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
   auto [it, end] = self->symbolic.equal_range(incoming.offset);
   while (it != end) {
     // assert(it->first == incoming.offset);
-    if (it->second.numBytes >= incoming.numBytes && (it->second.isWrite() || incoming.isRead())) {
+    if (it->second.numBytes >= incoming.numBytes && (it->second.isWrite() || isRead(incoming.type))) {
       return;
     }
 
-    if (it->second.numBytes <= incoming.numBytes && (it->second.isRead() || incoming.isWrite())) {
+    if (it->second.numBytes <= incoming.numBytes && (it->second.isRead() || isWrite(incoming.type))) {
       if (self.acquire()) {
         // sadly, we need to restart iteration, as there is no reasonable way to translate the iterators
         std::tie(it, end) = self->symbolic.equal_range(incoming.offset);
@@ -214,13 +214,13 @@ void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
 
   if (self.acquire()) {
     assert(node.empty());
-    self.mut()->symbolic.emplace(std::move(incoming.offset), std::move(static_cast<AccessMetaData&>(incoming)));
+    self.mut()->symbolic.emplace(std::move(incoming.offset), std::move(incoming));
   } else {
     if (node.empty()) {
-      self.mut()->symbolic.emplace_hint(end, std::move(incoming.offset), std::move(static_cast<AccessMetaData&>(incoming)));
+      self.mut()->symbolic.emplace_hint(end, std::move(incoming.offset), std::move(incoming));
     } else {
       // assert(node.key() == incoming.offset && "All sources of `node` have the same offset as the incoming operation");
-      node.mapped() = std::move(static_cast<AccessMetaData&>(incoming));
+      node.mapped() = std::move(incoming);
       self.mut()->symbolic.insert(end, std::move(node));
     }
   }
@@ -228,7 +228,7 @@ void ObjectAccesses::OperationList::registerSymbolicMemoryOperation(
 
 void ObjectAccesses::OperationList::registerMemoryOperation(
         std::shared_ptr<OperationList>& self, MemoryOperation &&incoming) {
-  assert(incoming.isRead() || incoming.isWrite());
+  assert(isRead(incoming.type) || isWrite(incoming.type));
 
   if(auto incomingOffsetExpr = dyn_cast<ConstantExpr>(incoming.offset)) {
     auto incomingOffset = incomingOffsetExpr->getZExtValue();
@@ -239,14 +239,14 @@ void ObjectAccesses::OperationList::registerMemoryOperation(
 }
 
 void ObjectAccesses::trackMemoryOperation(MemoryOperation&& mop) {
-  assert(mop.type != AccessMetaData::Type::UNKNOWN);
+  assert(mop.type != AccessType::UNKNOWN);
 
   if (allocFreeInstruction != nullptr) {
     // No other access can be better than the one that we currently track
     return;
   }
 
-  if (mop.isAlloc() || mop.isFree()) {
+  if (klee::isAllocOrFree(mop.type)) {
     // This is the best access to track as it races with every other one
     accesses = nullptr;
     allocFreeInstruction = mop.instruction;
