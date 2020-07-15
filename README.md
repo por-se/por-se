@@ -22,4 +22,8 @@ During our evaluation, we found the following previously undiscovered software d
 
 If you use (or want to refer to) this tool in your own work, please cite the following paper:
 
-[1] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. *Symbolic Liveness Analysis of Real-World Software*. In Proceedings of the 32nd International Conference on Computer Aided Verification (CAV'20), July 2020 (*accepted*, to appear)
+[1] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. *Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*. In Proceedings of the 32nd International Conference on Computer Aided Verification (CAV'20), July 2020 (*accepted*, to appear)
+
+In addition to the above paper we also present its extended version:
+
+[2] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. [*Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*](https://arxiv.org/abs/2005.06688). [arXiv:2005.06688](https://arxiv.org/abs/2005.06688) [cs], May 2020.
