@@ -9,6 +9,8 @@ For a more detailed description of our technique, please refer to [1].
 
 We recommend building this tool using our [workspace](https://www.github.com/por-se/workspace/).
 
+Alternatively, you can use the [CAV 2020 artifact](https://doi.org/10.5281/zenodo.5771251).
+
 ## Bugs Found
 
 During our evaluation, we found the following previously undiscovered software defects:
@@ -22,8 +24,12 @@ During our evaluation, we found the following previously undiscovered software d
 
 If you use (or want to refer to) this tool in your own work, please cite the following paper:
 
-[1] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. *Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*. In Proceedings of the 32nd International Conference on Computer Aided Verification (CAV'20), July 2020 (*accepted*, to appear)
+[1] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. *Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*. In Proceedings of the 32nd International Conference on Computer Aided Verification (CAV'20), July 2020
 
 In addition to the above paper we also present its extended version:
 
 [2] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. [*Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*](https://arxiv.org/abs/2005.06688). [arXiv:2005.06688](https://arxiv.org/abs/2005.06688) [cs], May 2020.
+
+## Artifacts
+
+[1] Daniel Schemmel, Julian Büning, César Rodríguez, David Laprell and Klaus Wehrle. *Artifact for the CAV 2020 Paper: Symbolic Partial-Order Execution for Testing Multi-Threaded Programs*. [10.5281/zenodo.5771251](https://doi.org/10.5281/zenodo.5771251)
